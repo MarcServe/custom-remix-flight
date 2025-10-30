@@ -1,5 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -137,7 +136,7 @@ Return ONLY the JSON array.`;
     console.error("Sequence generation error:", error);
     return new Response(
       JSON.stringify({
-        error: error.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
       }),
       {
         status: 500,
