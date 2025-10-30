@@ -20,8 +20,13 @@ Deno.serve(async (req) => {
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
     if (!EXA_API_KEY || !OPENAI_API_KEY) {
+      console.error("Missing API keys - EXA:", !!EXA_API_KEY, "OPENAI:", !!OPENAI_API_KEY);
       throw new Error("Missing API keys");
     }
+
+    // Ensure keys are clean strings
+    const exaKey = String(EXA_API_KEY).trim();
+    const openaiKey = String(OPENAI_API_KEY).trim();
 
     // Search for companies using Exa API
     const exaQuery = `${industry} companies in ${geography} with ${size} employees`;
@@ -31,7 +36,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": EXA_API_KEY,
+        "x-api-key": exaKey,
       },
       body: JSON.stringify({
         query: exaQuery,
@@ -73,7 +78,7 @@ Return ONLY the JSON array, nothing else.`;
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          "Authorization": `Bearer ${openaiKey}`,
         },
         body: JSON.stringify({
           model: "gpt-4o-mini",

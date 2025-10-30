@@ -22,6 +22,9 @@ Deno.serve(async (req) => {
       throw new Error("Missing OpenAI API key");
     }
 
+    // Ensure key is clean string
+    const openaiKey = String(OPENAI_API_KEY).trim();
+
     const sequencePrompt = `Generate a ${steps}-step cold email outreach sequence for reaching out to ${industry} companies in ${geography} with ${size} employees.
 
 Tone: ${tone}
@@ -41,7 +44,7 @@ Return ONLY the JSON array.`;
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          "Authorization": `Bearer ${openaiKey}`,
         },
         body: JSON.stringify({
           model: "gpt-4o-mini",
