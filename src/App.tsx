@@ -8,6 +8,8 @@ import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import Deals from "./pages/Deals";
 import People from "./pages/People";
+import LeadFinder from "./pages/LeadFinder";
+import Pipeline from "./pages/Pipeline";
 import Sequences from "./pages/Sequences";
 import NotFound from "./pages/NotFound";
 
@@ -27,6 +29,8 @@ const App = () => (
               <Route path="/companies" element={<Companies />} />
               <Route path="/deals" element={<Deals />} />
               <Route path="/people" element={<People />} />
+              <Route path="/lead-finder" element={<LeadFinder />} />
+              <Route path="/pipeline" element={<Pipeline />} />
               <Route path="/sequences" element={<Sequences />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

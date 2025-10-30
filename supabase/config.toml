@@ -1,1 +1,7 @@
 project_id = "kgndpwzqohepotahnfeo"
+
+[functions.lead-finder]
+verify_jwt = false
+
+[functions.generate-sequence]
+verify_jwt = false
