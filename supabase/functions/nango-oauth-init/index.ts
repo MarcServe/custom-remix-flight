@@ -22,6 +22,14 @@ serve(async (req) => {
       );
     }
 
+    // Map frontend provider names to Nango integration IDs
+    const integrationIdMap: Record<string, string> = {
+      'gmail': 'google-mail',
+      'outlook': 'outlook', // Update this if your Nango integration ID is different
+    };
+
+    const integrationId = integrationIdMap[provider];
+
     // Get authenticated user
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -67,7 +75,7 @@ serve(async (req) => {
           id: user.id,
           email: user.email,
         },
-        allowed_integrations: [provider],
+        allowed_integrations: [integrationId],
       }),
     });
 
