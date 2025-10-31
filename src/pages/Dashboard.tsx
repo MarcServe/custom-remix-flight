@@ -1,13 +1,30 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Building2, Users, DollarSign, TrendingUp, Sparkles, Search, Mail, BarChart3, ArrowUpRight } from "lucide-react";
+import { Building2, Users, DollarSign, TrendingUp, Sparkles, Search, Mail, BarChart3, ArrowUpRight, Calendar as CalendarIcon, Clock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EventCard } from "@/components/EventCard";
 import { useNavigate } from "react-router-dom";
+import { useEvents } from "@/hooks/use-events";
+import { format, isToday, isTomorrow, isFuture } from "date-fns";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { data: eventsData } = useEvents();
+  const events = (eventsData?.data || []) as Array<{
+    id: string;
+    type: 'note' | 'call' | 'email' | 'meeting' | 'task' | 'reminder';
+    content: { title?: string; description?: string };
+    created_at: string;
+    due_at?: string;
+  }>;
+
+  const upcomingEvents = events
+    .filter(e => e.due_at && isFuture(new Date(e.due_at)))
+    .slice(0, 3);
+
+  const recentActivity = events.slice(0, 5);
 
   const { data: companies } = useQuery({
     queryKey: ["dashboard-companies-count"],
@@ -249,7 +266,71 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          {/* Recent Companies - Spans full width on larger screens */}
+          {/* Upcoming Events Widget */}
+          <Card className="lg:col-span-2 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-primary" />
+                  Upcoming Events
+                </h3>
+                <Button variant="ghost" size="sm" onClick={() => navigate("/events")}>
+                  View all
+                  <ArrowUpRight className="h-3 w-3 ml-1" />
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {upcomingEvents.length > 0 ? (
+                  upcomingEvents.map((event) => (
+                    <div key={event.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card/50 hover:bg-card transition-colors">
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <CalendarIcon className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{event.content.title || event.type}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {event.due_at && (
+                            isToday(new Date(event.due_at)) ? 'Today' :
+                            isTomorrow(new Date(event.due_at)) ? 'Tomorrow' :
+                            format(new Date(event.due_at), 'MMM d, h:mm a')
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No upcoming events</p>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* Recent Activity Feed - Spans full width */}
+          <Card className="lg:col-span-4 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <CalendarIcon className="h-5 w-5 text-primary" />
+                  Recent Activity
+                </h3>
+                <Button variant="ghost" size="sm" onClick={() => navigate("/events")}>
+                  View all
+                  <ArrowUpRight className="h-3 w-3 ml-1" />
+                </Button>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {recentActivity.length > 0 ? (
+                  recentActivity.slice(0, 3).map((event) => (
+                    <EventCard key={event.id} event={event} />
+                  ))
+                ) : (
+                  <p className="col-span-full text-sm text-muted-foreground text-center py-4">No recent activity</p>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* Recent Companies - Moved below activity */}
           <Card className="lg:col-span-4 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50 hover:shadow-primary/10 hover:shadow-xl">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">

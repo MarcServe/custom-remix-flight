@@ -3,12 +3,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { PersonalizeSequenceDialog } from "@/components/sequences/PersonalizeSequenceDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
+import { EventCard } from "@/components/EventCard";
+import { EventDialog } from "@/components/EventDialog";
 import { useDeleteCompany } from "@/hooks/use-companies";
+import { useCompanyEvents, useDeleteEvent } from "@/hooks/use-events";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface Contact {
@@ -77,6 +81,7 @@ export function CompanyDetailsDialog({
   const [personalizeDialogOpen, setPersonalizeDialogOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [emailRecipient, setEmailRecipient] = useState<{
     email: string;
     name: string;
@@ -84,6 +89,8 @@ export function CompanyDetailsDialog({
   } | null>(null);
   const { toast } = useToast();
   const deleteMutation = useDeleteCompany();
+  const { data: eventsData } = useCompanyEvents(company?.id || '');
+  const deleteEventMutation = useDeleteEvent();
 
   // Keyboard navigation
   useEffect(() => {
@@ -245,8 +252,15 @@ export function CompanyDetailsDialog({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 px-6 pb-6 max-h-[calc(90vh-200px)]">
-          <div className="space-y-6 pt-4">
+        <Tabs defaultValue="overview" className="flex-1">
+          <TabsList className="mx-6 mt-2">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="activity">Activity Timeline</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="mt-0">
+            <ScrollArea className="px-6 pb-6 max-h-[calc(90vh-260px)]">
+              <div className="space-y-6 pt-4">
             {/* Overview Section */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -540,10 +554,58 @@ export function CompanyDetailsDialog({
                 </Button>
               )}
             </div>
-          </div>
-        </ScrollArea>
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="activity" className="mt-0">
+            <ScrollArea className="px-6 pb-6 max-h-[calc(90vh-260px)]">
+              <div className="space-y-4 pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    Recent Activity
+                  </h3>
+                  <Button size="sm" onClick={() => setEventDialogOpen(true)}>
+                    <Plus className="h-3.5 w-3.5 mr-1.5" />
+                    Add Event
+                  </Button>
+                </div>
+
+                {eventsData?.data && eventsData.data.length > 0 ? (
+                  <div className="space-y-3">
+                    {(eventsData.data as Array<{
+                      id: string;
+                      type: 'note' | 'call' | 'email' | 'meeting' | 'task' | 'reminder';
+                      content: { title?: string; description?: string };
+                      created_at: string;
+                      due_at?: string;
+                    }>).map((event) => (
+                      <EventCard
+                        key={event.id}
+                        event={event}
+                        onDelete={async (id) => {
+                          if (confirm('Delete this event?')) {
+                            await deleteEventMutation.mutateAsync(id);
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <CalendarIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm">No activity yet</p>
+                    <p className="text-xs mt-1">Start tracking interactions with this company</p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
+
+      <EventDialog open={eventDialogOpen} onOpenChange={setEventDialogOpen} />
 
       <PersonalizeSequenceDialog
         open={personalizeDialogOpen}

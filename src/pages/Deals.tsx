@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DollarSign, Calendar } from "lucide-react";
+import { DealActivityIndicator } from "@/components/DealActivityIndicator";
 import { format } from "date-fns";
 
 export default function Deals() {
@@ -65,6 +66,7 @@ export default function Deals() {
                   Close: {format(new Date(deal.close_date), "MMM dd, yyyy")}
                 </div>
               )}
+              <DealActivityIndicator dealId={deal.id} />
             </CardContent>
           </Card>
         ))}
