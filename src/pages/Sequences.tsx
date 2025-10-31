@@ -4,14 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp } from "lucide-react";
+import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users } from "lucide-react";
 import { ProviderSelector } from "@/components/features/common/ProviderSelector";
 import { useGenerateSequence, useSequences, useDeleteSequence } from "@/hooks/use-sequences";
+import { useCompanySequences, useUpdateSequenceStatus, useDeleteCompanySequence } from "@/hooks/use-company-sequences";
 import { useProviderStore } from "@/stores/provider-store";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PersonalizedSequenceCard } from "@/components/sequences/PersonalizedSequenceCard";
 
 export default function Sequences() {
   const [size, setSize] = useState("");
@@ -39,6 +42,9 @@ export default function Sequences() {
   const generateMutation = useGenerateSequence();
   const { data: sequencesData, isLoading } = useSequences();
   const deleteMutation = useDeleteSequence();
+  const { data: companySequencesData, isLoading: isLoadingCompanySequences } = useCompanySequences();
+  const updateSequenceStatus = useUpdateSequenceStatus();
+  const deleteCompanySequence = useDeleteCompanySequence();
 
   const handleGenerate = async () => {
     const { data } = await generateMutation.mutateAsync({
@@ -85,6 +91,7 @@ export default function Sequences() {
   const isGenerating = generateMutation.isPending;
   const result = generateMutation.data?.data;
   const sequences = sequencesData?.data || [];
+  const companySequences = companySequencesData?.data || [];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">

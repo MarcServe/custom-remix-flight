@@ -2,12 +2,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search } from "lucide-react";
+import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { PersonalizeSequenceDialog } from "@/components/sequences/PersonalizeSequenceDialog";
 
 interface Contact {
+  id?: string;
   name: string;
   email?: string;
   emailVerified?: boolean;
@@ -19,6 +21,7 @@ interface Contact {
 }
 
 interface Company {
+  id: string;
   name: string;
   website?: string;
   description?: string;
@@ -44,6 +47,7 @@ interface CompanyDetailsDialogProps {
 
 export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching = false }: CompanyDetailsDialogProps) {
   const [isEnriching, setIsEnriching] = useState(false);
+  const [personalizeDialogOpen, setPersonalizeDialogOpen] = useState(false);
   const { toast } = useToast();
   
   if (!company) return null;
@@ -71,7 +75,8 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] p-0 gap-0">
         <DialogHeader className="px-6 pt-6 pb-4 bg-gradient-to-br from-primary/5 via-primary/3 to-transparent">
           <div className="flex items-start gap-4">
@@ -267,6 +272,14 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
                   {isEnriching ? "Finding..." : "Find Prospects"}
                 </Button>
               )}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setPersonalizeDialogOpen(true)}
+              >
+                <Wand2 className="h-3.5 w-3.5 mr-2" />
+                Personalize Sequence
+              </Button>
               {company.linkedinUrl && (
                 <Button variant="outline" size="sm" asChild>
                   <a href={company.linkedinUrl} target="_blank" rel="noopener noreferrer">
@@ -289,8 +302,17 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
               )}
             </div>
           </div>
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <PersonalizeSequenceDialog
+        open={personalizeDialogOpen}
+        onOpenChange={setPersonalizeDialogOpen}
+        companyId={company.id}
+        companyName={company.name}
+        contactId={hasContacts ? company.contacts?.[0]?.id : undefined}
+      />
+    </>
   );
 }
