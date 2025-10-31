@@ -202,7 +202,6 @@ export default function BusinessProfile() {
             <Button
               onClick={handleSave}
               disabled={saving || !profile.services_description}
-              className="bg-gradient-primary"
             >
               {saving ? (
                 <>

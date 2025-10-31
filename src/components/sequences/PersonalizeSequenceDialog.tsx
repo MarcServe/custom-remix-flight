@@ -97,7 +97,6 @@ export function PersonalizeSequenceDialog({
           <Button
             onClick={handlePersonalize}
             disabled={!selectedSequenceId || personalizeSequence.isPending}
-            className="bg-gradient-primary"
           >
             {personalizeSequence.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             Personalize & Create

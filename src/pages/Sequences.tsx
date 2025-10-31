@@ -213,7 +213,7 @@ export default function Sequences() {
                 <Button
                   onClick={handleGenerate}
                   disabled={!isFormValid || isGenerating}
-                  className="w-full h-12 text-base bg-gradient-primary hover:opacity-90 transition-opacity shadow-lg"
+                  className="w-full h-12 text-base"
                   size="lg"
                 >
                   {isGenerating ? (

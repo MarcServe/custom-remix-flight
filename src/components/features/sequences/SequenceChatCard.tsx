@@ -270,7 +270,7 @@ export const SequenceChatCard = () => {
               onClick={handleSend}
               disabled={!input.trim() || isStreaming}
               size="icon"
-              className="h-[60px] w-[60px] bg-gradient-primary hover:opacity-90"
+              className="h-[60px] w-[60px]"
             >
               {isStreaming ? (
                 <Loader2 className="h-5 w-5 animate-spin" />

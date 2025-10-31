@@ -266,7 +266,6 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
                   size="sm" 
                   onClick={handleFindProspects}
                   disabled={isEnriching}
-                  className="bg-gradient-primary"
                 >
                   <Search className="h-3.5 w-3.5 mr-2" />
                   {isEnriching ? "Finding..." : "Find Prospects"}

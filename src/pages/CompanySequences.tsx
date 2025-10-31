@@ -301,7 +301,6 @@ export default function CompanySequences() {
                             size="sm"
                             onClick={() => handleSendNext(sequence)}
                             disabled={sendEmailMutation.isPending}
-                            className="bg-gradient-primary"
                           >
                             <Send className="h-4 w-4 mr-2" />
                             Send Next
