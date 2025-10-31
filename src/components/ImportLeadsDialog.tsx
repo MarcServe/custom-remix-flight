@@ -128,7 +128,7 @@ export function ImportLeadsDialog({ open, onOpenChange }: ImportLeadsDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh]">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -147,7 +147,7 @@ export function ImportLeadsDialog({ open, onOpenChange }: ImportLeadsDialogProps
           </div>
         ) : contacts && contacts.length > 0 ? (
           <>
-            <div className="flex items-center justify-between py-2 border-b">
+            <div className="flex items-center justify-between py-2 border-b shrink-0">
               <div className="flex items-center gap-2">
                 <Checkbox
                   checked={selectedContacts.size === contacts.length}
@@ -159,7 +159,7 @@ export function ImportLeadsDialog({ open, onOpenChange }: ImportLeadsDialogProps
               </div>
             </div>
 
-            <ScrollArea className="h-[400px] pr-4">
+            <ScrollArea className="flex-1 min-h-0 max-h-[45vh] pr-4">
               <div className="space-y-2">
                 {contacts.map((contact) => (
                   <div
