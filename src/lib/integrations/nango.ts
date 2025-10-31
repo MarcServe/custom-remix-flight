@@ -16,9 +16,9 @@ export interface NangoConnection {
  */
 export const nangoClient = {
   /**
-   * Initialize OAuth flow for Gmail or Outlook
+   * Initialize OAuth flow for Gmail or Outlook in popup window
    */
-  async initiateOAuth(provider: 'gmail' | 'outlook') {
+  async initiateOAuth(provider: 'gmail' | 'outlook'): Promise<{ data: any; error: Error | null }> {
     try {
       const { data, error } = await apiClient.callFunction('nango-oauth-init', {
         provider,
@@ -26,9 +26,55 @@ export const nangoClient = {
 
       if (error) throw error;
 
-      // Redirect to Nango OAuth URL
+      // Open OAuth in popup window
       if (data?.authUrl) {
-        window.location.href = data.authUrl;
+        const width = 600;
+        const height = 700;
+        const left = (window.screen.width - width) / 2;
+        const top = (window.screen.height - height) / 2;
+
+        const popup = window.open(
+          data.authUrl,
+          'oauth',
+          `width=${width},height=${height},left=${left},top=${top},popup=yes`
+        );
+
+        if (!popup) {
+          return {
+            data: null,
+            error: new Error('Popup blocked. Please allow popups and try again.'),
+          };
+        }
+
+        // Return a promise that resolves when OAuth completes
+        return new Promise((resolve) => {
+          const messageHandler = (event: MessageEvent) => {
+            if (event.data.type === 'oauth-success') {
+              window.removeEventListener('message', messageHandler);
+              resolve({ data: { success: true }, error: null });
+            } else if (event.data.type === 'oauth-error') {
+              window.removeEventListener('message', messageHandler);
+              resolve({ 
+                data: null, 
+                error: new Error(event.data.error || 'OAuth failed') 
+              });
+            }
+          };
+
+          window.addEventListener('message', messageHandler);
+
+          // Check if popup was closed without completing
+          const checkClosed = setInterval(() => {
+            if (popup.closed) {
+              clearInterval(checkClosed);
+              window.removeEventListener('message', messageHandler);
+              resolve({ 
+                data: null, 
+                error: new Error('OAuth window closed') 
+              });
+            }
+          }, 500);
+        });
       }
 
       return { data, error: null };

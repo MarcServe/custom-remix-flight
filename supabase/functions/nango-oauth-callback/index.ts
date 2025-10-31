@@ -23,11 +23,28 @@ serve(async (req) => {
 
     if (error) {
       console.error('OAuth error:', error);
-      // Redirect to integrations page with error
-      return Response.redirect(
-        `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app')}/integrations?error=${encodeURIComponent(error)}`,
-        302
-      );
+      
+      // Return HTML with error message for popup
+      const errorHtml = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Authentication Failed</title></head>
+          <body>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({ type: 'oauth-error', error: '${error}' }, '*');
+                setTimeout(() => window.close(), 1000);
+              } else {
+                window.location.href = '${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app')}/integrations?error=${encodeURIComponent(error)}';
+              }
+            </script>
+          </body>
+        </html>
+      `;
+      
+      return new Response(errorHtml, {
+        headers: { ...corsHeaders, 'Content-Type': 'text/html' },
+      });
     }
 
     if (!connectionId || !integrationId || !code) {
@@ -102,11 +119,69 @@ serve(async (req) => {
 
     console.log('Connection stored successfully for user:', connectionId);
 
-    // Redirect to integrations page with success
-    return Response.redirect(
-      `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app')}/integrations?success=true`,
-      302
-    );
+    // Return HTML that closes popup and notifies parent
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Authentication Successful</title>
+          <style>
+            body {
+              font-family: system-ui, -apple-system, sans-serif;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              height: 100vh;
+              margin: 0;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+            }
+            .container {
+              text-align: center;
+              padding: 2rem;
+            }
+            .success-icon {
+              font-size: 4rem;
+              margin-bottom: 1rem;
+            }
+            h1 {
+              margin: 0 0 0.5rem 0;
+              font-size: 1.5rem;
+            }
+            p {
+              margin: 0;
+              opacity: 0.9;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="success-icon">✓</div>
+            <h1>Connected Successfully!</h1>
+            <p>You can close this window now.</p>
+          </div>
+          <script>
+            // Notify parent window and close popup
+            if (window.opener) {
+              window.opener.postMessage({ type: 'oauth-success' }, '*');
+              setTimeout(() => window.close(), 1000);
+            } else {
+              // Fallback: redirect to app
+              setTimeout(() => {
+                window.location.href = '${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app')}/integrations?success=true';
+              }, 2000);
+            }
+          </script>
+        </body>
+      </html>
+    `;
+
+    return new Response(html, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/html',
+      },
+    });
   } catch (error) {
     console.error('Error in nango-oauth-callback:', error);
     return Response.redirect(

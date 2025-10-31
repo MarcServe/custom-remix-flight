@@ -39,9 +39,19 @@ export function ConnectEmailDialog({
   const handleOAuthConnect = async () => {
     setLoading(true);
     try {
-      const { error } = await nangoClient.initiateOAuth(provider as 'gmail' | 'outlook');
+      const { data, error } = await nangoClient.initiateOAuth(provider as 'gmail' | 'outlook');
       if (error) {
-        toast.error(`Failed to connect ${provider}`);
+        if (error.message.includes('Popup blocked')) {
+          toast.error("Please allow popups and try again");
+        } else if (error.message.includes('closed')) {
+          toast.info("OAuth cancelled");
+        } else {
+          toast.error(`Failed to connect ${provider}: ${error.message}`);
+        }
+      } else if (data?.success) {
+        toast.success(`${provider} connected successfully`);
+        onSuccess();
+        onOpenChange(false);
       }
     } catch (error) {
       toast.error("Connection failed");
