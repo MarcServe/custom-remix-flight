@@ -219,12 +219,11 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="event-company">Link to Company (Optional)</Label>
-              <Select value={companyId} onValueChange={setCompanyId} disabled={companiesLoading}>
+              <Select value={companyId || undefined} onValueChange={setCompanyId} disabled={companiesLoading}>
                 <SelectTrigger id="event-company">
                   <SelectValue placeholder={companiesLoading ? "Loading..." : "Select company"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
                   {companies?.map((company) => (
                     <SelectItem key={company.id} value={company.id}>
                       {company.name}
@@ -236,12 +235,11 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
 
             <div className="space-y-2">
               <Label htmlFor="event-deal">Link to Deal (Optional)</Label>
-              <Select value={dealId} onValueChange={setDealId} disabled={dealsLoading}>
+              <Select value={dealId || undefined} onValueChange={setDealId} disabled={dealsLoading}>
                 <SelectTrigger id="event-deal">
                   <SelectValue placeholder={dealsLoading ? "Loading..." : "Select deal"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
                   {deals?.map((deal) => (
                     <SelectItem key={deal.id} value={deal.id}>
                       {deal.title}
