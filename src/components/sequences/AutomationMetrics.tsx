@@ -2,9 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Mail, TrendingUp, CheckCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Activity, Mail, TrendingUp, CheckCircle, ExternalLink, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export function AutomationMetrics() {
+  const navigate = useNavigate();
+  
   const { data: metrics, isLoading } = useQuery({
     queryKey: ['automation-metrics'],
     queryFn: async () => {
@@ -55,11 +59,25 @@ export function AutomationMetrics() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Activity className="h-5 w-5" />
-          Automation Metrics
-        </CardTitle>
-        <CardDescription>Real-time sequence performance</CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Automation Metrics
+            </CardTitle>
+            <CardDescription>Real-time sequence performance</CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/company-sequences')}
+            className="gap-2"
+          >
+            <Settings className="h-4 w-4" />
+            Manage Campaigns
+            <ExternalLink className="h-3 w-3" />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -107,9 +125,19 @@ export function AutomationMetrics() {
         </div>
 
         <div className="mt-4 pt-4 border-t">
-          <p className="text-xs text-muted-foreground">
-            Metrics update in real-time. Automation runs hourly via cron job.
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Metrics update in real-time. Automation runs hourly via cron job.
+            </p>
+            <Button
+              variant="link"
+              size="sm"
+              onClick={() => navigate('/company-sequences')}
+              className="text-xs h-auto p-0"
+            >
+              View all campaigns →
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

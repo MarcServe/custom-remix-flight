@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUpdateSequenceStatus, useSendSequenceEmail } from '@/hooks/use-company-sequences';
+import { CompanySequenceDetailsDialog } from '@/components/sequences/CompanySequenceDetailsDialog';
 
 interface CompanySequence {
   id: string;
@@ -57,6 +58,8 @@ export default function CompanySequences() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [industryFilter, setIndustryFilter] = useState<string>('all');
+  const [selectedSequence, setSelectedSequence] = useState<CompanySequence | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   
   const updateStatusMutation = useUpdateSequenceStatus();
   const sendEmailMutation = useSendSequenceEmail();
@@ -245,10 +248,10 @@ export default function CompanySequences() {
               return (
                 <Card 
                   key={sequence.id}
-                  className="border-2 hover:border-primary/50 transition-all shadow-lg hover:shadow-xl cursor-pointer"
+                  className="border-2 hover:border-primary/50 transition-all shadow-lg hover:shadow-xl cursor-pointer group"
                   onClick={() => {
-                    // Navigate to company details or show sequence details
-                    navigate(`/companies`); // Could be improved with a dedicated sequence details page
+                    setSelectedSequence(sequence);
+                    setDetailsDialogOpen(true);
                   }}
                 >
                   <CardContent className="p-6">
@@ -259,7 +262,10 @@ export default function CompanySequences() {
                         </div>
                         
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-lg font-semibold mb-1">{sequence.companies.name}</h3>
+                          <h3 className="text-lg font-semibold mb-1 flex items-center gap-2">
+                            {sequence.companies.name}
+                            <Eye className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </h3>
                           <p className="text-sm text-muted-foreground mb-2">
                             {sequence.email_sequences.name}
                           </p>
@@ -374,6 +380,15 @@ export default function CompanySequences() {
           )}
         </div>
       </div>
+
+      {/* Details Dialog */}
+      {selectedSequence && (
+        <CompanySequenceDetailsDialog
+          open={detailsDialogOpen}
+          onOpenChange={setDetailsDialogOpen}
+          sequence={selectedSequence}
+        />
+      )}
     </div>
   );
 }
