@@ -3,7 +3,11 @@ import { corsHeaders } from '../_shared/cors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
+const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+
+if (!LOVABLE_API_KEY) {
+  console.error('LOVABLE_API_KEY environment variable is not set');
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -64,6 +68,10 @@ Deno.serve(async (req) => {
 
     // Build AI prompt
     const prompt = buildEmailPrompt(businessProfile, companyData, contactData, recipientName);
+
+    if (!LOVABLE_API_KEY) {
+      throw new Error('AI email generation not configured. Please enable Lovable AI in project settings.');
+    }
 
     console.log('Calling AI to generate email...');
 

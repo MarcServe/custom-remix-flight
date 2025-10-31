@@ -65,8 +65,11 @@ serve(async (req) => {
 
     const nangoSecretKey = Deno.env.get('NANGO_SECRET_KEY');
     if (!nangoSecretKey) {
-      throw new Error('NANGO_SECRET_KEY not configured');
+      console.error('NANGO_SECRET_KEY environment variable is not set');
+      throw new Error('Email integration not configured. Please contact support to set up NANGO_SECRET_KEY.');
     }
+
+    console.log(`Attempting to send email via ${connection.provider} using connection ${connection.connection_id}`);
 
     // Send email via Nango
     const nangoResponse = await fetch('https://api.nango.dev/v1/gmail/messages', {

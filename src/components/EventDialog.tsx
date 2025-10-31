@@ -49,26 +49,48 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
   const createMutation = useCreateEvent();
 
   // Fetch companies for dropdown
-  const { data: companies } = useQuery({
+  const { data: companies, isLoading: companiesLoading, error: companiesError } = useQuery({
     queryKey: ['companies-for-events'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('companies')
-        .select('id, name')
-        .order('name');
-      return data || [];
+      try {
+        const { data, error } = await supabase
+          .from('companies')
+          .select('id, name')
+          .order('name');
+        
+        if (error) {
+          console.error('Error fetching companies:', error);
+          throw error;
+        }
+        
+        return data || [];
+      } catch (error) {
+        console.error('Failed to fetch companies:', error);
+        return [];
+      }
     },
   });
 
   // Fetch deals for dropdown
-  const { data: deals } = useQuery({
+  const { data: deals, isLoading: dealsLoading, error: dealsError } = useQuery({
     queryKey: ['deals-for-events'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('deals')
-        .select('id, title, companies(name)')
-        .order('title');
-      return data || [];
+      try {
+        const { data, error } = await supabase
+          .from('deals')
+          .select('id, title, companies(name)')
+          .order('title');
+        
+        if (error) {
+          console.error('Error fetching deals:', error);
+          throw error;
+        }
+        
+        return data || [];
+      } catch (error) {
+        console.error('Failed to fetch deals:', error);
+        return [];
+      }
     },
   });
 
@@ -84,10 +106,13 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
     e.preventDefault();
     
     if (!title.trim()) {
+      console.warn('Event title is required');
       return;
     }
 
     try {
+      console.log('Creating event:', { type, title, description, dueDate, companyId, dealId });
+      
       await createMutation.mutateAsync({
         type,
         content: {
@@ -99,6 +124,8 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
         deal_id: dealId || undefined,
       });
 
+      console.log('Event created successfully');
+
       // Reset form
       setType('note');
       setTitle('');
@@ -109,8 +136,12 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
       onOpenChange(false);
     } catch (error) {
       console.error('Failed to create event:', error);
+      // Keep dialog open so user can retry
     }
   };
+
+  const isLoading = companiesLoading || dealsLoading;
+  const hasErrors = companiesError || dealsError;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -121,6 +152,12 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
             Add a new activity to track your interactions
           </DialogDescription>
         </DialogHeader>
+
+        {hasErrors && (
+          <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md">
+            Error loading data. You can still create an event without linking to companies or deals.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -182,9 +219,9 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="event-company">Link to Company (Optional)</Label>
-              <Select value={companyId} onValueChange={setCompanyId}>
+              <Select value={companyId} onValueChange={setCompanyId} disabled={companiesLoading}>
                 <SelectTrigger id="event-company">
-                  <SelectValue placeholder="Select company" />
+                  <SelectValue placeholder={companiesLoading ? "Loading..." : "Select company"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">None</SelectItem>
@@ -199,9 +236,9 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
 
             <div className="space-y-2">
               <Label htmlFor="event-deal">Link to Deal (Optional)</Label>
-              <Select value={dealId} onValueChange={setDealId}>
+              <Select value={dealId} onValueChange={setDealId} disabled={dealsLoading}>
                 <SelectTrigger id="event-deal">
-                  <SelectValue placeholder="Select deal" />
+                  <SelectValue placeholder={dealsLoading ? "Loading..." : "Select deal"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">None</SelectItem>
@@ -220,13 +257,23 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={createMutation.isPending}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={createMutation.isPending}>
+            <Button 
+              type="submit" 
+              disabled={createMutation.isPending || isLoading || !title.trim()}
+            >
               {createMutation.isPending ? 'Creating...' : 'Create Event'}
             </Button>
           </div>
+
+          {createMutation.isError && (
+            <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md">
+              Failed to create event. Please try again.
+            </div>
+          )}
         </form>
       </DialogContent>
     </Dialog>

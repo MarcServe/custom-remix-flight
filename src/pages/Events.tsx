@@ -222,7 +222,16 @@ export default function Events() {
         </div>
       )}
 
-      <EventDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      {/* Event Dialog with error boundary */}
+      {dialogOpen && (
+        <EventDialog 
+          open={dialogOpen} 
+          onOpenChange={(open) => {
+            console.log('Event dialog state change:', open);
+            setDialogOpen(open);
+          }} 
+        />
+      )}
     </div>
   );
 }
