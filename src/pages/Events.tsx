@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Plus, Calendar, Filter } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -17,11 +19,44 @@ import { format, isToday, isYesterday, startOfDay } from 'date-fns';
 export default function Events() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [companyFilter, setCompanyFilter] = useState<string>('all');
+  const [dealFilter, setDealFilter] = useState<string>('all');
+  
+  // Build filters object
+  const filters = {
+    ...(typeFilter !== 'all' && { type: typeFilter }),
+    ...(companyFilter !== 'all' && { company_id: companyFilter }),
+    ...(dealFilter !== 'all' && { deal_id: dealFilter }),
+  };
   
   const { data: eventsData, isLoading } = useEvents(
-    typeFilter !== 'all' ? { type: typeFilter } : undefined
+    Object.keys(filters).length > 0 ? filters : undefined
   );
   const deleteMutation = useDeleteEvent();
+
+  // Fetch companies for filter
+  const { data: companies } = useQuery({
+    queryKey: ['companies-filter'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('companies')
+        .select('id, name')
+        .order('name');
+      return data || [];
+    },
+  });
+
+  // Fetch deals for filter
+  const { data: deals } = useQuery({
+    queryKey: ['deals-filter'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('deals')
+        .select('id, title')
+        .order('title');
+      return data || [];
+    },
+  });
 
   const events = (eventsData?.data || []) as Array<{
     id: string;
@@ -76,12 +111,22 @@ export default function Events() {
       {/* Filters and Actions */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Filters</span>
+              </div>
+              <Button onClick={() => setDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Event
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by type" />
+                <SelectTrigger>
+                  <SelectValue placeholder="All Types" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
@@ -93,12 +138,35 @@ export default function Events() {
                   <SelectItem value="reminder">📅 Reminders</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
 
-            <Button onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Event
-            </Button>
+              <Select value={companyFilter} onValueChange={setCompanyFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Companies" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Companies</SelectItem>
+                  {companies?.map((company) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={dealFilter} onValueChange={setDealFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Deals" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Deals</SelectItem>
+                  {deals?.map((deal) => (
+                    <SelectItem key={deal.id} value={deal.id}>
+                      {deal.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>

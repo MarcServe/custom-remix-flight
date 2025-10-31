@@ -605,7 +605,11 @@ export function CompanyDetailsDialog({
       </DialogContent>
     </Dialog>
 
-      <EventDialog open={eventDialogOpen} onOpenChange={setEventDialogOpen} />
+      <EventDialog 
+        open={eventDialogOpen} 
+        onOpenChange={setEventDialogOpen}
+        defaultCompanyId={company.id}
+      />
 
       <PersonalizeSequenceDialog
         open={personalizeDialogOpen}
