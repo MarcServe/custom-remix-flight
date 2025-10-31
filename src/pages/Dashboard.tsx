@@ -177,7 +177,7 @@ export default function Dashboard() {
                     <Mail className="h-5 w-5 text-orange-500" />
                   </div>
                   <span className="font-semibold text-sm">Sequences</span>
-                  <span className="text-xs text-muted-foreground mt-1">Email automation</span>
+                  <span className="text-[10px] text-muted-foreground mt-1 leading-tight">Email automation</span>
                 </Button>
 
                 <Button
@@ -189,7 +189,7 @@ export default function Dashboard() {
                     <Building2 className="h-5 w-5 text-purple-500" />
                   </div>
                   <span className="font-semibold text-sm">Companies</span>
-                  <span className="text-xs text-muted-foreground mt-1">Manage accounts</span>
+                  <span className="text-[10px] text-muted-foreground mt-1 leading-tight">Manage accounts</span>
                 </Button>
 
                 <Button
@@ -201,7 +201,7 @@ export default function Dashboard() {
                     <DollarSign className="h-5 w-5 text-green-500" />
                   </div>
                   <span className="font-semibold text-sm">Deals</span>
-                  <span className="text-xs text-muted-foreground mt-1">Track pipeline</span>
+                  <span className="text-[10px] text-muted-foreground mt-1 leading-tight">Track pipeline</span>
                 </Button>
               </div>
             </div>
