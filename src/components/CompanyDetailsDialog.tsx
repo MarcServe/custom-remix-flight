@@ -7,7 +7,7 @@ import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newsp
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { PersonalizeSequenceDialog } from "@/components/sequences/PersonalizeSequenceDialog";
+import { GenerateSequenceForCompanyDialog } from "@/components/sequences/GenerateSequenceForCompanyDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
 import { EventCard } from "@/components/EventCard";
 import { EventDialog } from "@/components/EventDialog";
@@ -78,7 +78,7 @@ export function CompanyDetailsDialog({
   onNavigate,
 }: CompanyDetailsDialogProps) {
   const [isEnriching, setIsEnriching] = useState(false);
-  const [personalizeDialogOpen, setPersonalizeDialogOpen] = useState(false);
+  const [generateSequenceDialogOpen, setGenerateSequenceDialogOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
@@ -524,12 +524,12 @@ export function CompanyDetailsDialog({
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={() => setPersonalizeDialogOpen(true)}
+                onClick={() => setGenerateSequenceDialogOpen(true)}
                 disabled={!company.id}
                 title={!company.id ? "Save company to CRM first to generate sequences" : undefined}
               >
                 <Wand2 className="h-3.5 w-3.5 mr-2" />
-                Personalize Sequence
+                Generate Sequence
               </Button>
               {company.linkedinUrl && (
                 <Button variant="outline" size="sm" asChild>
@@ -611,11 +611,15 @@ export function CompanyDetailsDialog({
         defaultCompanyId={company.id}
       />
 
-      <PersonalizeSequenceDialog
-        open={personalizeDialogOpen}
-        onOpenChange={setPersonalizeDialogOpen}
+      <GenerateSequenceForCompanyDialog
+        open={generateSequenceDialogOpen}
+        onOpenChange={setGenerateSequenceDialogOpen}
         companyId={company.id}
         companyName={company.name}
+        companyDescription={company.description}
+        companySize={company.size}
+        companyGeography={company.geography}
+        companyIndustry={company.industry}
       />
 
       {emailRecipient && (
