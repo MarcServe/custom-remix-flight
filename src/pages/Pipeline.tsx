@@ -1,10 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { TrendingUp } from "lucide-react";
-import { useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { TrendingUp, BarChart3, Kanban } from "lucide-react";
+import { KanbanBoard, KanbanItem } from "@/components/kanban/KanbanBoard";
+import { toast } from "sonner";
+import { companiesApi } from "@/lib/api/companies";
 
 const statusColors: Record<string, string> = {
   NEW: "hsl(var(--primary))",
@@ -17,6 +20,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function Pipeline() {
+  const [view, setView] = useState<"chart" | "kanban">("chart");
   const queryClient = useQueryClient();
 
   const { data: pipelineData, isLoading } = useQuery({
@@ -58,22 +62,85 @@ export default function Pipeline() {
     };
   }, [queryClient]);
 
+  const { data: companies } = useQuery({
+    queryKey: ["companies-kanban"],
+    queryFn: async () => {
+      const { data } = await companiesApi.getCompanies();
+      return data || [];
+    },
+  });
+
+  const updateCompanyStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      return await companiesApi.updateCompany(id, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["companies-kanban"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline-stats"] });
+      toast.success("Company status updated");
+    },
+    onError: () => {
+      toast.error("Failed to update company status");
+    },
+  });
+
   if (isLoading) {
     return <div className="flex items-center justify-center h-96">Loading pipeline...</div>;
   }
 
   const totalCompanies = pipelineData?.reduce((acc, curr) => acc + curr.count, 0) || 0;
 
+  const kanbanColumns = [
+    { id: "NEW", title: "New" },
+    { id: "QUALIFIED", title: "Qualified" },
+    { id: "CONTACTED", title: "Contacted" },
+    { id: "MEETING", title: "Meeting" },
+    { id: "PROPOSAL", title: "Proposal" },
+    { id: "WON", title: "Won" },
+    { id: "LOST", title: "Lost" },
+  ];
+
+  const kanbanItems: KanbanItem[] = (companies || []).map((company) => ({
+    id: company.id,
+    title: company.name,
+    status: company.status || "NEW",
+    company: company.industry,
+  }));
+
+  const handleStatusChange = (itemId: string, newStatus: string) => {
+    updateCompanyStatus.mutate({ id: itemId, status: newStatus });
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <TrendingUp className="h-8 w-8 text-primary" />
-          Sales Pipeline
-        </h1>
-        <p className="text-muted-foreground">
-          Real-time visualization of your company pipeline
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <TrendingUp className="h-8 w-8 text-primary" />
+            Sales Pipeline
+          </h1>
+          <p className="text-muted-foreground">
+            Real-time visualization of your company pipeline
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant={view === "chart" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setView("chart")}
+          >
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Chart
+          </Button>
+          <Button
+            variant={view === "kanban" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setView("kanban")}
+          >
+            <Kanban className="h-4 w-4 mr-2" />
+            Kanban
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -129,40 +196,51 @@ export default function Pipeline() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Pipeline Distribution</CardTitle>
-          <CardDescription>Company count by status</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={400}>
-            <BarChart data={pipelineData}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis
-                dataKey="status"
-                className="text-xs"
-                tick={{ fill: "hsl(var(--muted-foreground))" }}
-              />
-              <YAxis
-                className="text-xs"
-                tick={{ fill: "hsl(var(--muted-foreground))" }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
-                }}
-              />
-              <Bar dataKey="count" radius={[8, 8, 0, 0]}>
-                {pipelineData?.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={statusColors[entry.status]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+      {view === "kanban" ? (
+        <KanbanBoard
+          items={kanbanItems}
+          columns={kanbanColumns}
+          onStatusChange={handleStatusChange}
+          onItemClick={(item) => {
+            toast.info(`Clicked: ${item.title}`);
+          }}
+        />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Pipeline Distribution</CardTitle>
+            <CardDescription>Company count by status</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={400}>
+              <BarChart data={pipelineData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis
+                  dataKey="status"
+                  className="text-xs"
+                  tick={{ fill: "hsl(var(--muted-foreground))" }}
+                />
+                <YAxis
+                  className="text-xs"
+                  tick={{ fill: "hsl(var(--muted-foreground))" }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "8px",
+                  }}
+                />
+                <Bar dataKey="count" radius={[8, 8, 0, 0]}>
+                  {pipelineData?.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={statusColors[entry.status]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
