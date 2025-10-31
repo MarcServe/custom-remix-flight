@@ -137,7 +137,7 @@ export default function Sequences() {
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
-                <Mail className="h-6 w-6 text-white" />
+                <Mail className="h-6 w-6 text-purple-500" />
               </div>
               <div>
                 <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent">
