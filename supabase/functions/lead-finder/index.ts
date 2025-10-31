@@ -165,17 +165,17 @@ Return ONLY the JSON array now:`;
 
     console.log("Normalized leads:", leads.length);
 
-    // Enrich with Perplexity if requested
+    // Enrich with Perplexity if requested - Process in parallel for speed
     let enrichmentUsage = null;
     if (enrichWithPerplexity && leads.length > 0) {
       const enrichmentSpan = createSpan(trace, 'perplexity-enrichment', { leadCount: leads.length });
-      console.log("Starting Perplexity enrichment for", leads.length, "leads");
+      console.log("Starting Perplexity enrichment for", leads.length, "leads (parallel processing)");
 
-      let enrichedLeads = [];
       let totalEnrichmentTokens = 0;
       let totalEnrichmentCost = 0;
 
-      for (const lead of leads) {
+      // Process all leads in parallel with 10 second timeout per lead
+      const enrichmentPromises = leads.map(async (lead) => {
         try {
           const enrichmentPrompt = `Find detailed current information about ${lead.name}${lead.website ? ` (website: ${lead.website})` : ''}:
           
@@ -189,7 +189,11 @@ Return a JSON object with these fields:
 
 Return ONLY valid JSON, no markdown blocks.`;
 
-          const enrichResponse = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/ai-provider`, {
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Enrichment timeout')), 10000)
+          );
+
+          const enrichPromise = fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/ai-provider`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
@@ -213,29 +217,35 @@ Return ONLY valid JSON, no markdown blocks.`;
             }),
           });
 
+          const enrichResponse = await Promise.race([enrichPromise, timeoutPromise]) as Response;
+
           if (enrichResponse.ok) {
             const enrichResult = await enrichResponse.json();
-            let enrichedData;
+            let enrichedData: any = {};
             
-            // Clean and parse enrichment response
-            let cleanedEnrichText = enrichResult.content.trim();
-            if (cleanedEnrichText.startsWith("```json")) {
-              cleanedEnrichText = cleanedEnrichText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-            } else if (cleanedEnrichText.startsWith("```")) {
-              cleanedEnrichText = cleanedEnrichText.replace(/```\n?/g, "");
-            }
-            
+            // Clean and parse enrichment response with robust error handling
             try {
+              let cleanedEnrichText = enrichResult.content.trim();
+              
+              // Remove markdown code blocks
+              cleanedEnrichText = cleanedEnrichText
+                .replace(/```json\n?/g, "")
+                .replace(/```\n?/g, "")
+                .trim();
+              
+              // Try to extract JSON if wrapped in text
+              const jsonMatch = cleanedEnrichText.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                cleanedEnrichText = jsonMatch[0];
+              }
+              
               enrichedData = JSON.parse(cleanedEnrichText);
             } catch (e) {
-              console.error("Failed to parse enrichment for", lead.name, ":", e);
+              console.error("Failed to parse enrichment for", lead.name);
               enrichedData = {};
             }
 
-            totalEnrichmentTokens += enrichResult.usage.totalTokens;
-            totalEnrichmentCost += enrichResult.usage.estimatedCost;
-
-            enrichedLeads.push({
+            return {
               ...lead,
               description: enrichedData.description || lead.description,
               products: enrichedData.products,
@@ -244,16 +254,28 @@ Return ONLY valid JSON, no markdown blocks.`;
               employeeCount: enrichedData.employeeCount,
               geography: enrichedData.headquarters || lead.geography,
               wasEnriched: true,
-            });
+              usage: enrichResult.usage,
+            };
           } else {
             console.error("Enrichment failed for", lead.name);
-            enrichedLeads.push({ ...lead, wasEnriched: false });
+            return { ...lead, wasEnriched: false };
           }
         } catch (enrichError) {
           console.error("Enrichment error for", lead.name, ":", enrichError);
-          enrichedLeads.push({ ...lead, wasEnriched: false });
+          return { ...lead, wasEnriched: false };
         }
-      }
+      });
+
+      const enrichedLeads = await Promise.all(enrichmentPromises);
+      
+      // Calculate total usage
+      enrichedLeads.forEach(lead => {
+        if (lead.usage) {
+          totalEnrichmentTokens += lead.usage.totalTokens || 0;
+          totalEnrichmentCost += lead.usage.estimatedCost || 0;
+          delete lead.usage; // Remove usage from lead object
+        }
+      });
 
       leads = enrichedLeads;
       enrichmentUsage = {
