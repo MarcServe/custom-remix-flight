@@ -52,20 +52,74 @@ serve(async (req) => {
           continue;
         }
 
-        // Check if enough time has passed since last email
+        // Get last email activity
         const { data: lastActivity } = await supabase
           .from('email_activities')
-          .select('sent_at')
+          .select('*')
           .eq('company_sequence_id', sequence.id)
           .eq('step_number', sequence.current_step)
           .single();
 
-        if (lastActivity?.sent_at) {
+        if (!lastActivity?.sent_at) {
+          console.log(`Sequence ${sequence.id}: No activity found for current step`);
+          continue;
+        }
+
+        // Check automation rules if enabled
+        const automationRules = sequence.automation_rules || { enabled: true, rules: [] };
+        let shouldSendNext = false;
+        let triggerReason = '';
+
+        if (automationRules.enabled && automationRules.rules?.length > 0) {
+          const hoursSinceLastEmail = (Date.now() - new Date(lastActivity.sent_at).getTime()) / (1000 * 60 * 60);
+
+          for (const rule of automationRules.rules) {
+            const waitHours = rule.wait_hours || 48;
+
+            switch (rule.type) {
+              case 'no_open':
+                if (!lastActivity.opened_at && hoursSinceLastEmail >= waitHours) {
+                  shouldSendNext = true;
+                  triggerReason = `no_open (${waitHours}h elapsed)`;
+                }
+                break;
+
+              case 'opened_not_clicked':
+                if (lastActivity.opened_at && !lastActivity.metadata?.clicked && hoursSinceLastEmail >= waitHours) {
+                  shouldSendNext = true;
+                  triggerReason = `opened_not_clicked (${waitHours}h elapsed)`;
+                }
+                break;
+
+              case 'clicked_not_replied':
+                if (lastActivity.metadata?.clicked && !lastActivity.replied_at && hoursSinceLastEmail >= waitHours) {
+                  shouldSendNext = true;
+                  triggerReason = `clicked_not_replied (${waitHours}h elapsed)`;
+                }
+                break;
+
+              case 'no_reply_after_open':
+                if (lastActivity.opened_at && !lastActivity.replied_at && hoursSinceLastEmail >= waitHours) {
+                  shouldSendNext = true;
+                  triggerReason = `no_reply_after_open (${waitHours}h elapsed)`;
+                }
+                break;
+            }
+
+            if (shouldSendNext) break;
+          }
+        }
+
+        // Fallback to time-based delay if no behavioral rule triggered
+        if (!shouldSendNext) {
           const daysSinceLastEmail = Math.floor(
             (Date.now() - new Date(lastActivity.sent_at).getTime()) / (1000 * 60 * 60 * 24)
           );
 
-          if (daysSinceLastEmail < nextStep.delayDays) {
+          if (daysSinceLastEmail >= nextStep.delayDays) {
+            shouldSendNext = true;
+            triggerReason = `time_delay (${nextStep.delayDays} days elapsed)`;
+          } else {
             console.log(
               `Sequence ${sequence.id}: Not enough time passed (${daysSinceLastEmail}/${nextStep.delayDays} days)`
             );
@@ -73,25 +127,30 @@ serve(async (req) => {
           }
         }
 
-        // Send the next email
-        const sendResponse = await supabase.functions.invoke('send-sequence-email', {
-          body: {
-            companySequenceId: sequence.id,
+        if (shouldSendNext) {
+          console.log(`Sequence ${sequence.id}: Sending next step due to ${triggerReason}`);
+
+          // Send the next email
+          const sendResponse = await supabase.functions.invoke('send-sequence-email', {
+            body: {
+              companySequenceId: sequence.id,
+              stepNumber: nextStepNumber,
+            },
+          });
+
+          if (sendResponse.error) {
+            throw new Error(sendResponse.error.message);
+          }
+
+          processed.push({
+            sequenceId: sequence.id,
             stepNumber: nextStepNumber,
-          },
-        });
+            trigger: triggerReason,
+            result: sendResponse.data,
+          });
 
-        if (sendResponse.error) {
-          throw new Error(sendResponse.error.message);
+          console.log(`Processed sequence ${sequence.id}, sent step ${nextStepNumber}`);
         }
-
-        processed.push({
-          sequenceId: sequence.id,
-          stepNumber: nextStepNumber,
-          result: sendResponse.data,
-        });
-
-        console.log(`Processed sequence ${sequence.id}, sent step ${nextStepNumber}`);
       } catch (error) {
         console.error(`Error processing sequence ${sequence.id}:`, error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';

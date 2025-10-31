@@ -8,6 +8,7 @@ export interface SequenceRequest {
   tone?: 'professional' | 'casual' | 'technical';
   provider?: 'lovable' | 'openai' | 'perplexity';
   model?: string;
+  customInstructions?: string;
 }
 
 export interface SequenceResponse {

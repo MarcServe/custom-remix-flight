@@ -228,6 +228,7 @@ export type Database = {
       }
       company_sequences: {
         Row: {
+          automation_rules: Json | null
           company_id: string
           created_at: string
           current_step: number
@@ -239,6 +240,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          automation_rules?: Json | null
           company_id: string
           created_at?: string
           current_step?: number
@@ -250,6 +252,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          automation_rules?: Json | null
           company_id?: string
           created_at?: string
           current_step?: number
@@ -554,6 +557,7 @@ export type Database = {
         Row: {
           created_at: string | null
           created_by: string | null
+          custom_instructions: string | null
           id: string
           langfuse_trace_id: string | null
           model: string | null
@@ -566,6 +570,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           created_by?: string | null
+          custom_instructions?: string | null
           id?: string
           langfuse_trace_id?: string | null
           model?: string | null
@@ -578,6 +583,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           created_by?: string | null
+          custom_instructions?: string | null
           id?: string
           langfuse_trace_id?: string | null
           model?: string | null

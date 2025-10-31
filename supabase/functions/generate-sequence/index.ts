@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { size, geography, industry, steps = 3, tone = "professional", provider, model } = await req.json();
+    const { size, geography, industry, steps = 3, tone = "professional", provider, model, customInstructions } = await req.json();
 
     console.log("Sequence generation request:", { size, geography, industry, steps, tone, provider, model });
 
@@ -60,6 +60,8 @@ Create emails that connect YOUR business offerings to the prospect's needs in th
 Tone: ${tone}
 ${businessContext}
 
+${customInstructions ? `\nCUSTOM INSTRUCTIONS:\n${customInstructions}\n` : ''}
+
 Return ONLY a valid JSON array (no markdown, no code blocks) with exactly ${steps} objects, each having:
 - subject (string): Email subject line
 - body (string): Email body with placeholders like {{company_name}}, {{first_name}}
@@ -67,6 +69,7 @@ Return ONLY a valid JSON array (no markdown, no code blocks) with exactly ${step
 
 Make each email progressively more specific and value-focused. Keep emails concise and professional.
 ${businessContext ? 'Use the business context to make the emails relevant and show clear value alignment.' : ''}
+${customInstructions ? 'Follow the custom instructions provided above carefully.' : ''}
 
 Return ONLY the JSON array.`;
 
@@ -155,6 +158,7 @@ Return ONLY the JSON array.`;
         provider: aiResult.provider,
         model: aiResult.model,
         langfuse_trace_id: aiResult.traceId,
+        custom_instructions: customInstructions,
       })
       .select()
       .single();

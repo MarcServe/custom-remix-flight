@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users } from "lucide-react";
 import { ProviderSelector } from "@/components/features/common/ProviderSelector";
 import { useGenerateSequence, useSequences, useDeleteSequence } from "@/hooks/use-sequences";
@@ -16,6 +17,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonalizedSequenceCard } from "@/components/sequences/PersonalizedSequenceCard";
 import { SequenceChatCard } from "@/components/features/sequences/SequenceChatCard";
+import { AutomationMetrics } from "@/components/sequences/AutomationMetrics";
 
 export default function Sequences() {
   const [size, setSize] = useState("");
@@ -23,6 +25,7 @@ export default function Sequences() {
   const [industry, setIndustry] = useState("");
   const [steps, setSteps] = useState("3");
   const [tone, setTone] = useState<"professional" | "casual" | "technical">("professional");
+  const [customInstructions, setCustomInstructions] = useState("");
   const [expandedSteps, setExpandedSteps] = useState<number[]>([]);
   const { toast } = useToast();
 
@@ -56,6 +59,7 @@ export default function Sequences() {
       tone,
       provider: providerConfig.provider,
       model: providerConfig.model,
+      customInstructions: customInstructions || undefined,
     });
 
     if (data) {
@@ -65,6 +69,7 @@ export default function Sequences() {
       setSize("");
       setGeography("");
       setIndustry("");
+      setCustomInstructions("");
     }
   };
 
@@ -208,6 +213,23 @@ export default function Sequences() {
                       <SelectItem value="5">5 steps</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="seq-instructions" className="text-sm font-medium">
+                    Custom Instructions (Optional)
+                  </Label>
+                  <Textarea
+                    id="seq-instructions"
+                    placeholder="e.g., Focus on ROI and cost savings, mention our Q4 product launch, target CTOs and technical decision-makers, use case studies from financial sector..."
+                    value={customInstructions}
+                    onChange={(e) => setCustomInstructions(e.target.value)}
+                    className="min-h-[100px] resize-none"
+                    maxLength={500}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {customInstructions.length}/500 characters
+                  </p>
                 </div>
 
                 <Button
@@ -390,6 +412,9 @@ export default function Sequences() {
                 )}
               </>
             )}
+
+            {/* Automation Metrics */}
+            <AutomationMetrics />
 
             {/* Saved Sequences */}
             <div className="space-y-4">
