@@ -83,25 +83,33 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    await createMutation.mutateAsync({
-      type,
-      content: {
-        title,
-        description,
-      },
-      due_at: dueDate || undefined,
-      company_id: companyId || undefined,
-      deal_id: dealId || undefined,
-    });
+    if (!title.trim()) {
+      return;
+    }
 
-    // Reset form
-    setType('note');
-    setTitle('');
-    setDescription('');
-    setDueDate('');
-    setCompanyId('');
-    setDealId('');
-    onOpenChange(false);
+    try {
+      await createMutation.mutateAsync({
+        type,
+        content: {
+          title,
+          description,
+        },
+        due_at: dueDate || undefined,
+        company_id: companyId || undefined,
+        deal_id: dealId || undefined,
+      });
+
+      // Reset form
+      setType('note');
+      setTitle('');
+      setDescription('');
+      setDueDate('');
+      setCompanyId('');
+      setDealId('');
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Failed to create event:', error);
+    }
   };
 
   return (
