@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string | null
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          record_id: string
+          table_name: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          record_id: string
+          table_name: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          record_id?: string
+          table_name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       chat_conversations: {
         Row: {
           company_id: string | null
@@ -61,6 +94,9 @@ export type Database = {
           enriched_at: string | null
           enrichment_confidence: string | null
           enrichment_data: Json | null
+          enrichment_error: string | null
+          enrichment_model: string | null
+          enrichment_provider: string | null
           enrichment_status: string | null
           founded_year: number | null
           funding_stage: string | null
@@ -69,6 +105,7 @@ export type Database = {
           headquarters: string | null
           id: string
           industry: string | null
+          langfuse_trace_id: string | null
           linkedin_url: string | null
           name: string
           recent_news: string | null
@@ -86,6 +123,9 @@ export type Database = {
           enriched_at?: string | null
           enrichment_confidence?: string | null
           enrichment_data?: Json | null
+          enrichment_error?: string | null
+          enrichment_model?: string | null
+          enrichment_provider?: string | null
           enrichment_status?: string | null
           founded_year?: number | null
           funding_stage?: string | null
@@ -94,6 +134,7 @@ export type Database = {
           headquarters?: string | null
           id?: string
           industry?: string | null
+          langfuse_trace_id?: string | null
           linkedin_url?: string | null
           name: string
           recent_news?: string | null
@@ -111,6 +152,9 @@ export type Database = {
           enriched_at?: string | null
           enrichment_confidence?: string | null
           enrichment_data?: Json | null
+          enrichment_error?: string | null
+          enrichment_model?: string | null
+          enrichment_provider?: string | null
           enrichment_status?: string | null
           founded_year?: number | null
           funding_stage?: string | null
@@ -119,6 +163,7 @@ export type Database = {
           headquarters?: string | null
           id?: string
           industry?: string | null
+          langfuse_trace_id?: string | null
           linkedin_url?: string | null
           name?: string
           recent_news?: string | null
@@ -209,7 +254,10 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           id: string
+          langfuse_trace_id: string | null
+          model: string | null
           name: string
+          provider: string | null
           segment_filters: Json | null
           steps: string[] | null
           updated_at: string | null
@@ -218,7 +266,10 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           id?: string
+          langfuse_trace_id?: string | null
+          model?: string | null
           name: string
+          provider?: string | null
           segment_filters?: Json | null
           steps?: string[] | null
           updated_at?: string | null
@@ -227,7 +278,10 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           id?: string
+          langfuse_trace_id?: string | null
+          model?: string | null
           name?: string
+          provider?: string | null
           segment_filters?: Json | null
           steps?: string[] | null
           updated_at?: string | null
@@ -362,14 +416,55 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      search_companies: {
+        Args: { search_query: string }
+        Returns: {
+          geography: string
+          id: string
+          industry: string
+          name: string
+          rank: number
+          size: string
+          status: string
+          website: string
+        }[]
+      }
     }
     Enums: {
+      app_role: "admin" | "sales_rep" | "viewer"
       company_status:
         | "NEW"
         | "QUALIFIED"
@@ -512,6 +607,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "sales_rep", "viewer"],
       company_status: [
         "NEW",
         "QUALIFIED",

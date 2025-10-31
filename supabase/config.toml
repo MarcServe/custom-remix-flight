@@ -1,7 +1,10 @@
 project_id = "kgndpwzqohepotahnfeo"
 
+[functions.ai-provider]
+verify_jwt = true
+
 [functions.lead-finder]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-sequence]
-verify_jwt = false
+verify_jwt = true
