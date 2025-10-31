@@ -10,7 +10,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const { data: companies } = useQuery({
-    queryKey: ["companies"],
+    queryKey: ["dashboard-companies-count"],
     queryFn: async () => {
       const { count } = await supabase
         .from("companies")
@@ -20,7 +20,7 @@ export default function Dashboard() {
   });
 
   const { data: deals } = useQuery({
-    queryKey: ["deals"],
+    queryKey: ["dashboard-deals-stats"],
     queryFn: async () => {
       const { data } = await supabase
         .from("deals")
@@ -31,7 +31,7 @@ export default function Dashboard() {
   });
 
   const { data: people } = useQuery({
-    queryKey: ["people"],
+    queryKey: ["dashboard-people-count"],
     queryFn: async () => {
       const { count } = await supabase
         .from("people")
@@ -41,7 +41,7 @@ export default function Dashboard() {
   });
 
   const { data: recentCompanies } = useQuery({
-    queryKey: ["companies"],
+    queryKey: ["dashboard-recent-companies"],
     queryFn: async () => {
       const { data } = await supabase
         .from("companies")

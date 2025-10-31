@@ -24,6 +24,8 @@ export const useCompaniesRealtime = () => {
           
           // Invalidate all company-related queries
           queryClient.invalidateQueries({ queryKey: ['companies'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard-companies-count'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard-recent-companies'] });
           queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] });
           
           // If it's a specific company update, invalidate that too
@@ -63,6 +65,7 @@ export const useDealsRealtime = () => {
           console.log('Deals realtime update:', payload.eventType);
           
           queryClient.invalidateQueries({ queryKey: ['deals'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard-deals-stats'] });
           queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] });
           
           if (payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
@@ -138,6 +141,7 @@ export const usePeopleRealtime = () => {
           console.log('People realtime update:', payload.eventType);
           
           queryClient.invalidateQueries({ queryKey: ['people'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard-people-count'] });
           
           if (payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
             const personId = payload.old?.id;
