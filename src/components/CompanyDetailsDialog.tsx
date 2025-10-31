@@ -276,6 +276,8 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
                 variant="outline" 
                 size="sm" 
                 onClick={() => setPersonalizeDialogOpen(true)}
+                disabled={!company.id}
+                title={!company.id ? "Save company to CRM first to generate sequences" : undefined}
               >
                 <Wand2 className="h-3.5 w-3.5 mr-2" />
                 Personalize Sequence
@@ -306,13 +308,15 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
         </DialogContent>
       </Dialog>
 
-      <PersonalizeSequenceDialog
-        open={personalizeDialogOpen}
-        onOpenChange={setPersonalizeDialogOpen}
-        companyId={company.id}
-        companyName={company.name}
-        contactId={hasContacts ? company.contacts?.[0]?.id : undefined}
-      />
+      {company.id && (
+        <PersonalizeSequenceDialog
+          open={personalizeDialogOpen}
+          onOpenChange={setPersonalizeDialogOpen}
+          companyId={company.id}
+          companyName={company.name}
+          contactId={hasContacts ? company.contacts?.[0]?.id : undefined}
+        />
+      )}
     </>
   );
 }
