@@ -145,7 +145,7 @@ export default function LeadFinder() {
                     onValueChange={(value: any) => setProviderConfig({
                       provider: value,
                       model: value === 'lovable' ? 'google/gemini-2.5-flash' : 
-                             value === 'perplexity' ? 'llama-3.1-sonar-small-128k-online' : 
+                             value === 'perplexity' ? 'sonar' : 
                              'gpt-4o-mini'
                     })}
                   >
@@ -185,9 +185,8 @@ export default function LeadFinder() {
                       )}
                       {providerConfig.provider === 'perplexity' && (
                         <>
-                          <SelectItem value="llama-3.1-sonar-small-128k-online">Sonar Small</SelectItem>
-                          <SelectItem value="llama-3.1-sonar-large-128k-online">Sonar Large</SelectItem>
-                          <SelectItem value="llama-3.1-sonar-huge-128k-online">Sonar Huge</SelectItem>
+                          <SelectItem value="sonar">Sonar</SelectItem>
+                          <SelectItem value="sonar-pro">Sonar Pro</SelectItem>
                         </>
                       )}
                     </SelectContent>

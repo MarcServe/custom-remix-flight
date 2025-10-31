@@ -27,9 +27,8 @@ const MODELS: Record<string, Array<{ value: string; label: string; description: 
     { value: 'gpt-4o', label: 'GPT-4o', description: 'Most capable' },
   ],
   perplexity: [
-    { value: 'llama-3.1-sonar-small-128k-online', label: 'Sonar Small', description: 'Fast with online search' },
-    { value: 'llama-3.1-sonar-large-128k-online', label: 'Sonar Large', description: 'More capable with search' },
-    { value: 'llama-3.1-sonar-huge-128k-online', label: 'Sonar Huge', description: 'Most powerful with search' },
+    { value: 'sonar', label: 'Sonar', description: 'Fast with online search' },
+    { value: 'sonar-pro', label: 'Sonar Pro', description: 'Most capable with search' },
   ],
 };
 
@@ -37,7 +36,7 @@ export function ProviderSelector({ value, onChange, showCost = false }: Provider
   const currentModels = MODELS[value.provider];
   const getDefaultModel = (provider: 'lovable' | 'openai' | 'perplexity') => {
     if (provider === 'lovable') return 'google/gemini-2.5-flash';
-    if (provider === 'perplexity') return 'llama-3.1-sonar-small-128k-online';
+    if (provider === 'perplexity') return 'sonar';
     return 'gpt-4o-mini';
   };
   const defaultModel = getDefaultModel(value.provider);

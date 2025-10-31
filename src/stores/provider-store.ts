@@ -20,7 +20,7 @@ export const useProviderStore = create<ProviderStore>()(
       defaultModels: {
         lovable: 'google/gemini-2.5-flash',
         openai: 'gpt-4o-mini',
-        perplexity: 'llama-3.1-sonar-small-128k-online',
+        perplexity: 'sonar',
       },
       
       setDefaultProvider: (provider) => set({ defaultProvider: provider }),

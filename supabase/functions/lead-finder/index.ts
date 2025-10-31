@@ -180,7 +180,7 @@ Return ONLY valid JSON, no markdown blocks.`;
             },
             body: JSON.stringify({
               provider: 'perplexity',
-              model: 'llama-3.1-sonar-small-128k-online',
+              model: 'sonar',
               messages: [
                 {
                   role: 'system',

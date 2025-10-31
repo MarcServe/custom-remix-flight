@@ -44,9 +44,8 @@ function calculateCost(provider: string, tokens: number, model?: string): number
       'gpt-5-mini': (tokens / 1_000_000) * 0.300,
     },
     perplexity: {
-      'llama-3.1-sonar-small-128k-online': (tokens / 1_000_000) * 0.20,
-      'llama-3.1-sonar-large-128k-online': (tokens / 1_000_000) * 1.00,
-      'llama-3.1-sonar-huge-128k-online': (tokens / 1_000_000) * 5.00,
+      'sonar': (tokens / 1_000_000) * 1.00,
+      'sonar-pro': (tokens / 1_000_000) * 3.00,
     },
   };
   
@@ -200,7 +199,7 @@ async function handlePerplexity(config: AIProviderRequest): Promise<AIProviderRe
   // Trim the API key to remove any whitespace or newlines
   const cleanApiKey = PERPLEXITY_API_KEY.trim();
 
-  const model = config.model || 'llama-3.1-sonar-small-128k-online';
+  const model = config.model || 'sonar';
   
   const response = await fetch('https://api.perplexity.ai/chat/completions', {
     method: 'POST',
