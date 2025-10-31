@@ -16,6 +16,7 @@ import BusinessProfile from "./pages/BusinessProfile";
 import Pipeline from "./pages/Pipeline";
 import Sequences from "./pages/Sequences";
 import CompanySequences from "./pages/CompanySequences";
+import Events from "./pages/Events";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -54,6 +55,7 @@ const App = () => (
                           <Route path="/pipeline" element={<Pipeline />} />
                           <Route path="/sequences" element={<Sequences />} />
                           <Route path="/company-sequences" element={<CompanySequences />} />
+                          <Route path="/events" element={<Events />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </main>
