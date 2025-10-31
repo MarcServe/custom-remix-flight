@@ -19,6 +19,7 @@ export default function Auth() {
   const { signIn, signUp, resetPassword, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showReset, setShowReset] = useState(false);
 
   const mode = searchParams.get('mode') || 'signin';
 
@@ -112,47 +113,87 @@ export default function Auth() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue={mode} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign In</TabsTrigger>
               <TabsTrigger value="signup">Sign Up</TabsTrigger>
-              <TabsTrigger value="reset">Reset</TabsTrigger>
             </TabsList>
 
             <TabsContent value="signin">
-              <form onSubmit={handleSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signin-email">Email</Label>
-                  <Input
-                    id="signin-email"
-                    name="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    required
-                    onChange={(e) => validateField('email', e.target.value)}
-                  />
-                  {errors.email && (
-                    <p className="text-sm text-destructive">{errors.email}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signin-password">Password</Label>
-                  <Input
-                    id="signin-password"
-                    name="password"
-                    type="password"
-                    placeholder="••••••••"
-                    required
-                    onChange={(e) => validateField('password', e.target.value)}
-                  />
-                  {errors.password && (
-                    <p className="text-sm text-destructive">{errors.password}</p>
-                  )}
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Sign In
-                </Button>
-              </form>
+              {!showReset ? (
+                <form onSubmit={handleSignIn} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signin-email">Email</Label>
+                    <Input
+                      id="signin-email"
+                      name="email"
+                      type="email"
+                      placeholder="you@example.com"
+                      required
+                      onChange={(e) => validateField('email', e.target.value)}
+                    />
+                    {errors.email && (
+                      <p className="text-sm text-destructive">{errors.email}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signin-password">Password</Label>
+                    <Input
+                      id="signin-password"
+                      name="password"
+                      type="password"
+                      placeholder="••••••••"
+                      required
+                      onChange={(e) => validateField('password', e.target.value)}
+                    />
+                    {errors.password && (
+                      <p className="text-sm text-destructive">{errors.password}</p>
+                    )}
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowReset(true)}
+                      className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Sign In
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={handleResetPassword} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="reset-email">Email</Label>
+                    <Input
+                      id="reset-email"
+                      name="email"
+                      type="email"
+                      placeholder="you@example.com"
+                      required
+                      onChange={(e) => validateField('email', e.target.value)}
+                    />
+                    {errors.email && (
+                      <p className="text-sm text-destructive">{errors.email}</p>
+                    )}
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Send Reset Link
+                  </Button>
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowReset(false)}
+                      className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      Back to Sign In
+                    </button>
+                  </div>
+                </form>
+              )}
             </TabsContent>
 
             <TabsContent value="signup">
@@ -206,28 +247,6 @@ export default function Auth() {
               </form>
             </TabsContent>
 
-            <TabsContent value="reset">
-              <form onSubmit={handleResetPassword} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="reset-email">Email</Label>
-                  <Input
-                    id="reset-email"
-                    name="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    required
-                    onChange={(e) => validateField('email', e.target.value)}
-                  />
-                  {errors.email && (
-                    <p className="text-sm text-destructive">{errors.email}</p>
-                  )}
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Send Reset Link
-                </Button>
-              </form>
-            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
