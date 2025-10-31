@@ -8,71 +8,81 @@ import { EventCard } from "@/components/EventCard";
 import { useNavigate } from "react-router-dom";
 import { useEvents } from "@/hooks/use-events";
 import { format, isToday, isTomorrow, isFuture } from "date-fns";
-
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { data: eventsData } = useEvents();
+  const {
+    data: eventsData
+  } = useEvents();
   const events = (eventsData?.data || []) as Array<{
     id: string;
     type: 'note' | 'call' | 'email' | 'meeting' | 'task' | 'reminder';
-    content: { title?: string; description?: string };
+    content: {
+      title?: string;
+      description?: string;
+    };
     created_at: string;
     due_at?: string;
   }>;
-
-  const upcomingEvents = events
-    .filter(e => e.due_at && isFuture(new Date(e.due_at)))
-    .slice(0, 3);
-
+  const upcomingEvents = events.filter(e => e.due_at && isFuture(new Date(e.due_at))).slice(0, 3);
   const recentActivity = events.slice(0, 5);
-
-  const { data: companies } = useQuery({
+  const {
+    data: companies
+  } = useQuery({
     queryKey: ["dashboard-companies-count"],
     queryFn: async () => {
-      const { count } = await supabase
-        .from("companies")
-        .select("*", { count: "exact", head: true });
+      const {
+        count
+      } = await supabase.from("companies").select("*", {
+        count: "exact",
+        head: true
+      });
       return count || 0;
-    },
+    }
   });
-
-  const { data: deals } = useQuery({
+  const {
+    data: deals
+  } = useQuery({
     queryKey: ["dashboard-deals-stats"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("deals")
-        .select("amount, stage");
+      const {
+        data
+      } = await supabase.from("deals").select("amount, stage");
       const total = data?.reduce((sum, deal) => sum + (deal.amount || 0), 0) || 0;
-      return { count: data?.length || 0, total };
-    },
+      return {
+        count: data?.length || 0,
+        total
+      };
+    }
   });
-
-  const { data: people } = useQuery({
+  const {
+    data: people
+  } = useQuery({
     queryKey: ["dashboard-people-count"],
     queryFn: async () => {
-      const { count } = await supabase
-        .from("people")
-        .select("*", { count: "exact", head: true });
+      const {
+        count
+      } = await supabase.from("people").select("*", {
+        count: "exact",
+        head: true
+      });
       return count || 0;
-    },
+    }
   });
-
-  const { data: recentCompanies } = useQuery({
+  const {
+    data: recentCompanies
+  } = useQuery({
     queryKey: ["dashboard-recent-companies"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("companies")
-        .select("name, industry, status, created_at")
-        .order("created_at", { ascending: false })
-        .limit(5);
+      const {
+        data
+      } = await supabase.from("companies").select("name, industry, status, created_at").order("created_at", {
+        ascending: false
+      }).limit(5);
       return data || [];
-    },
+    }
   });
-
   const revenue = (deals?.total || 0) / 1000;
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+  return <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
       {/* Hero Section */}
       <div className="relative overflow-hidden border-b bg-gradient-to-br from-primary/10 via-primary/5 to-transparent backdrop-blur-sm">
         <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
@@ -101,8 +111,9 @@ export default function Dashboard() {
         {/* Hero Find Leads Section */}
         <div className="mb-8">
           <Card className="relative overflow-hidden border-2 hover:border-primary transition-all shadow-2xl bg-gradient-to-br from-blue-500/10 via-primary/5 to-purple-500/10 animate-pulse-glow">
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-primary/10 to-purple-500/10 animate-shimmer opacity-50" 
-                 style={{ backgroundSize: '200% 100%' }} />
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-primary/10 to-purple-500/10 animate-shimmer opacity-50" style={{
+            backgroundSize: '200% 100%'
+          }} />
             <div className="relative p-8 md:p-12">
               <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                 <div className="flex-1 space-y-4">
@@ -124,11 +135,7 @@ export default function Dashboard() {
                     </p>
                   </div>
                 </div>
-                <Button
-                  size="lg"
-                  onClick={() => navigate("/lead-finder")}
-                  className="relative h-14 px-8 text-lg font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl transition-all hover:scale-105 group"
-                >
+                <Button size="lg" onClick={() => navigate("/lead-finder")} className="relative h-14 px-8 text-lg font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl transition-all hover:scale-105 group">
                   <Search className="mr-3 h-6 w-6 group-hover:rotate-12 transition-transform" />
                   Find Leads Now
                   <ArrowUpRight className="ml-2 h-5 w-5" />
@@ -213,13 +220,10 @@ export default function Dashboard() {
                 Quick Actions
               </h3>
               <div className="grid grid-cols-2 gap-3">
-                <Button
-                  variant="outline"
-                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group hover:shadow-lg hover:shadow-blue-500/20 relative overflow-hidden"
-                  onClick={() => navigate("/lead-finder")}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/10 to-blue-500/0 group-hover:animate-shimmer" 
-                       style={{ backgroundSize: '200% 100%' }} />
+                <Button variant="outline" className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group hover:shadow-lg hover:shadow-blue-500/20 relative overflow-hidden" onClick={() => navigate("/lead-finder")}>
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/10 to-blue-500/0 group-hover:animate-shimmer" style={{
+                  backgroundSize: '200% 100%'
+                }} />
                   <div className="relative w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center mb-3 group-hover:scale-110 group-hover:rotate-6 transition-all">
                     <Search className="h-5 w-5 text-blue-500" />
                   </div>
@@ -227,11 +231,7 @@ export default function Dashboard() {
                   <span className="relative text-[10px] text-muted-foreground mt-1 leading-tight">AI-powered discovery</span>
                 </Button>
 
-                <Button
-                  variant="outline"
-                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group hover:shadow-lg hover:shadow-orange-500/20"
-                  onClick={() => navigate("/sequences")}
-                >
+                <Button variant="outline" className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group hover:shadow-lg hover:shadow-orange-500/20" onClick={() => navigate("/sequences")}>
                   <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center mb-3 group-hover:scale-110 group-hover:rotate-6 transition-all">
                     <Mail className="h-5 w-5 text-orange-500" />
                   </div>
@@ -239,11 +239,7 @@ export default function Dashboard() {
                   <span className="text-[10px] text-muted-foreground mt-1 leading-tight">Email automation</span>
                 </Button>
 
-                <Button
-                  variant="outline"
-                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group hover:shadow-lg hover:shadow-purple-500/20"
-                  onClick={() => navigate("/companies")}
-                >
+                <Button variant="outline" className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group hover:shadow-lg hover:shadow-purple-500/20" onClick={() => navigate("/companies")}>
                   <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center mb-3 group-hover:scale-110 group-hover:rotate-6 transition-all">
                     <Building2 className="h-5 w-5 text-purple-500" />
                   </div>
@@ -251,11 +247,7 @@ export default function Dashboard() {
                   <span className="text-[10px] text-muted-foreground mt-1 leading-tight">Manage accounts</span>
                 </Button>
 
-                <Button
-                  variant="outline"
-                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group hover:shadow-lg hover:shadow-green-500/20"
-                  onClick={() => navigate("/deals")}
-                >
+                <Button variant="outline" className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group hover:shadow-lg hover:shadow-green-500/20" onClick={() => navigate("/deals")}>
                   <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center mb-3 group-hover:scale-110 group-hover:rotate-6 transition-all">
                     <DollarSign className="h-5 w-5 text-green-500" />
                   </div>
@@ -280,55 +272,23 @@ export default function Dashboard() {
                 </Button>
               </div>
               <div className="space-y-3">
-                {upcomingEvents.length > 0 ? (
-                  upcomingEvents.map((event) => (
-                    <div key={event.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card/50 hover:bg-card transition-colors">
+                {upcomingEvents.length > 0 ? upcomingEvents.map(event => <div key={event.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card/50 hover:bg-card transition-colors">
                       <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                         <CalendarIcon className="h-5 w-5 text-primary" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{event.content.title || event.type}</p>
                         <p className="text-xs text-muted-foreground">
-                          {event.due_at && (
-                            isToday(new Date(event.due_at)) ? 'Today' :
-                            isTomorrow(new Date(event.due_at)) ? 'Tomorrow' :
-                            format(new Date(event.due_at), 'MMM d, h:mm a')
-                          )}
+                          {event.due_at && (isToday(new Date(event.due_at)) ? 'Today' : isTomorrow(new Date(event.due_at)) ? 'Tomorrow' : format(new Date(event.due_at), 'MMM d, h:mm a'))}
                         </p>
                       </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">No upcoming events</p>
-                )}
+                    </div>) : <p className="text-sm text-muted-foreground text-center py-4">No upcoming events</p>}
               </div>
             </div>
           </Card>
 
           {/* Recent Activity Feed - Spans full width */}
-          <Card className="lg:col-span-4 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <CalendarIcon className="h-5 w-5 text-primary" />
-                  Recent Activity
-                </h3>
-                <Button variant="ghost" size="sm" onClick={() => navigate("/events")}>
-                  View all
-                  <ArrowUpRight className="h-3 w-3 ml-1" />
-                </Button>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {recentActivity.length > 0 ? (
-                  recentActivity.slice(0, 3).map((event) => (
-                    <EventCard key={event.id} event={event} />
-                  ))
-                ) : (
-                  <p className="col-span-full text-sm text-muted-foreground text-center py-4">No recent activity</p>
-                )}
-              </div>
-            </div>
-          </Card>
+          
 
           {/* Recent Companies - Moved below activity */}
           <Card className="lg:col-span-4 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50 hover:shadow-primary/10 hover:shadow-xl">
@@ -344,12 +304,7 @@ export default function Dashboard() {
                 </Button>
               </div>
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {recentCompanies?.slice(0, 3).map((company, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-4 p-4 rounded-xl border-2 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/20 transition-all bg-gradient-to-br from-card to-primary/5 cursor-pointer group"
-                    onClick={() => navigate("/companies")}
-                  >
+                {recentCompanies?.slice(0, 3).map((company, i) => <div key={i} className="flex items-center gap-4 p-4 rounded-xl border-2 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/20 transition-all bg-gradient-to-br from-card to-primary/5 cursor-pointer group" onClick={() => navigate("/companies")}>
                     <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm group-hover:scale-110 group-hover:rotate-6 transition-all">
                       <Building2 className="h-5 w-5 text-white" />
                     </div>
@@ -360,13 +315,11 @@ export default function Dashboard() {
                         {company.status}
                       </Badge>
                     </div>
-                  </div>
-                ))}
+                  </div>)}
               </div>
             </div>
           </Card>
         </div>
       </div>
-    </div>
-  );
+    </div>;
 }
