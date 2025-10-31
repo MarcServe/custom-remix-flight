@@ -188,7 +188,7 @@ Return a JSON object with these fields:
 - headquarters: headquarters location
 - companyPhone: main public phone number if available (format: international with country code)
 - generalEmail: general inquiry email (e.g., info@, contact@, hello@, sales@)
-- socialProfiles: object with twitter, facebook, instagram, youtube URLs if available
+- socialProfiles: object with linkedin, twitter, facebook, instagram, youtube URLs if available
 - keyExecutives: array of top 2-3 executives with name and title (e.g., [{name: "John Doe", title: "CEO"}])
 
 Return ONLY valid JSON, no markdown blocks.`;

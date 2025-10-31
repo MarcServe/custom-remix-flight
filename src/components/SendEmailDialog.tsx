@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Send, Sparkles } from "lucide-react";
 
 interface SendEmailDialogProps {
   open: boolean;
@@ -28,7 +28,42 @@ export function SendEmailDialog({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
+
+  const handleGenerateWithAI = async () => {
+    setIsGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-email-with-ai", {
+        body: {
+          recipientName,
+          recipientEmail,
+          companyId,
+          contactId,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.subject && data?.body) {
+        setSubject(data.subject);
+        setBody(data.body);
+        toast({
+          title: "Email Generated",
+          description: "AI has drafted an email based on your business profile and the prospect's information",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error generating email:", error);
+      toast({
+        title: "Failed to Generate Email",
+        description: error.message || "An error occurred while generating the email",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const handleSend = async () => {
     if (!subject.trim() || !body.trim()) {
@@ -94,6 +129,29 @@ export function SendEmailDialog({
             />
           </div>
 
+          <div className="flex justify-between items-center mb-2">
+            <Label>Email Content</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleGenerateWithAI}
+              disabled={isGenerating || isSending}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-3 w-3" />
+                  Generate with AI
+                </>
+              )}
+            </Button>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="subject">Subject</Label>
             <Input
@@ -101,7 +159,7 @@ export function SendEmailDialog({
               placeholder="Enter email subject"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              disabled={isSending}
+              disabled={isSending || isGenerating}
             />
           </div>
 
@@ -112,7 +170,7 @@ export function SendEmailDialog({
               placeholder="Write your message here..."
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              disabled={isSending}
+              disabled={isSending || isGenerating}
               rows={10}
               className="resize-none"
             />

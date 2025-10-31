@@ -38,6 +38,7 @@ interface Company {
   companyPhone?: string;
   generalEmail?: string;
   socialProfiles?: {
+    linkedin?: string;
     twitter?: string;
     facebook?: string;
     instagram?: string;
@@ -364,6 +365,13 @@ export function CompanyDetailsDialog({
                       <h3 className="text-sm font-semibold">Social Profiles</h3>
                     </div>
                     <div className="flex flex-wrap gap-2 pl-10">
+                      {company.socialProfiles.linkedin && (
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={company.socialProfiles.linkedin} target="_blank" rel="noopener noreferrer">
+                            LinkedIn
+                          </a>
+                        </Button>
+                      )}
                       {company.socialProfiles.twitter && (
                         <Button variant="outline" size="sm" asChild>
                           <a href={company.socialProfiles.twitter} target="_blank" rel="noopener noreferrer">
