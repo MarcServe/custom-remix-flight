@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import { z } from 'zod';
+import genieImage from '@/assets/genie.png';
 
 const emailSchema = z.string().email('Invalid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
@@ -103,15 +104,37 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-accent/10 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold">LeadGeni CRM</CardTitle>
-          <CardDescription>
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden p-4">
+      {/* Animated gradient background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/10 animate-fade-in" />
+      
+      {/* Genie image - positioned absolutely and animated */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <img 
+          src={genieImage} 
+          alt="AI Genie Assistant" 
+          className="w-full max-w-2xl h-auto opacity-10 animate-scale-in"
+          style={{ 
+            animationDelay: '0.2s',
+            filter: 'blur(1px)'
+          }}
+        />
+      </div>
+
+      {/* Floating elements for additional flair */}
+      <div className="absolute top-20 left-10 w-20 h-20 bg-primary/10 rounded-full blur-xl animate-pulse" />
+      <div className="absolute bottom-20 right-10 w-32 h-32 bg-accent/10 rounded-full blur-xl animate-pulse" style={{ animationDelay: '1s' }} />
+      
+      <Card className="w-full max-w-md relative z-10 animate-fade-in shadow-2xl backdrop-blur-sm bg-card/95" style={{ animationDelay: '0.3s' }}>
+        <CardHeader className="text-center space-y-3">
+          <CardTitle className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-fade-in" style={{ animationDelay: '0.4s' }}>
+            LeadGeni CRM
+          </CardTitle>
+          <CardDescription className="text-base animate-fade-in" style={{ animationDelay: '0.5s' }}>
             AI-Powered Lead Generation & Enrichment
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="animate-fade-in" style={{ animationDelay: '0.6s' }}>
           <Tabs defaultValue={mode} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign In</TabsTrigger>

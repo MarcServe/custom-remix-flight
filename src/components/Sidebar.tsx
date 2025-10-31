@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { usePendingCounts } from "@/hooks/use-pending-counts";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: BarChart3 },
@@ -33,6 +35,7 @@ export const Sidebar = () => {
   const { user, signOut } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const { data: pendingCounts } = usePendingCounts();
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -112,12 +115,22 @@ export const Sidebar = () => {
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {
           const isActive = location.pathname === item.href;
+          
+          // Get pending count for this menu item
+          let pendingCount = 0;
+          if (pendingCounts) {
+            if (item.href === '/deals') pendingCount = pendingCounts.deals;
+            else if (item.href === '/sequences') pendingCount = pendingCounts.sequences;
+            else if (item.href === '/company-sequences') pendingCount = pendingCounts.campaigns;
+            else if (item.href === '/events') pendingCount = pendingCounts.events;
+          }
+          
           const linkContent = (
             <Link
               key={item.name}
               to={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors relative",
                 isActive
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -125,7 +138,18 @@ export const Sidebar = () => {
               )}
             >
               <item.icon className="h-5 w-5 shrink-0" />
-              {!isCollapsed && <span>{item.name}</span>}
+              {!isCollapsed && <span className="flex-1">{item.name}</span>}
+              {pendingCount > 0 && !isCollapsed && (
+                <Badge 
+                  variant="secondary" 
+                  className="h-5 min-w-5 px-1 text-xs font-semibold bg-destructive text-destructive-foreground animate-pulse"
+                >
+                  {pendingCount > 99 ? '99+' : pendingCount}
+                </Badge>
+              )}
+              {pendingCount > 0 && isCollapsed && (
+                <span className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full border-2 border-sidebar animate-pulse" />
+              )}
             </Link>
           );
 
