@@ -175,6 +175,57 @@ export type Database = {
         }
         Relationships: []
       }
+      company_sequences: {
+        Row: {
+          company_id: string
+          created_at: string
+          current_step: number
+          id: string
+          metadata: Json | null
+          personalized_emails: Json | null
+          sequence_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          current_step?: number
+          id?: string
+          metadata?: Json | null
+          personalized_emails?: Json | null
+          sequence_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          current_step?: number
+          id?: string
+          metadata?: Json | null
+          personalized_emails?: Json | null
+          sequence_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_sequences_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_sequences_sequence_id_fkey"
+            columns: ["sequence_id"]
+            isOneToOne: false
+            referencedRelation: "email_sequences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           company_id: string | null
@@ -224,6 +275,86 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_connections: {
+        Row: {
+          connection_id: string
+          created_at: string
+          id: string
+          last_sync_at: string | null
+          metadata: Json | null
+          provider: string
+          scopes: string[] | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          connection_id: string
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          metadata?: Json | null
+          provider: string
+          scopes?: string[] | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          connection_id?: string
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          metadata?: Json | null
+          provider?: string
+          scopes?: string[] | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      crm_sync_state: {
+        Row: {
+          connection_id: string
+          created_at: string
+          entity_type: string
+          error_message: string | null
+          id: string
+          last_sync_token: string | null
+          last_synced_at: string | null
+          sync_status: string
+        }
+        Insert: {
+          connection_id: string
+          created_at?: string
+          entity_type: string
+          error_message?: string | null
+          id?: string
+          last_sync_token?: string | null
+          last_synced_at?: string | null
+          sync_status?: string
+        }
+        Update: {
+          connection_id?: string
+          created_at?: string
+          entity_type?: string
+          error_message?: string | null
+          id?: string
+          last_sync_token?: string | null
+          last_synced_at?: string | null
+          sync_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_sync_state_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "crm_connections"
             referencedColumns: ["id"]
           },
         ]
@@ -298,6 +429,72 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_activities: {
+        Row: {
+          body: string | null
+          bounced_at: string | null
+          company_sequence_id: string
+          contact_id: string | null
+          created_at: string
+          external_message_id: string | null
+          id: string
+          metadata: Json | null
+          opened_at: string | null
+          replied_at: string | null
+          sent_at: string | null
+          status: string
+          step_number: number
+          subject: string | null
+        }
+        Insert: {
+          body?: string | null
+          bounced_at?: string | null
+          company_sequence_id: string
+          contact_id?: string | null
+          created_at?: string
+          external_message_id?: string | null
+          id?: string
+          metadata?: Json | null
+          opened_at?: string | null
+          replied_at?: string | null
+          sent_at?: string | null
+          status?: string
+          step_number: number
+          subject?: string | null
+        }
+        Update: {
+          body?: string | null
+          bounced_at?: string | null
+          company_sequence_id?: string
+          contact_id?: string | null
+          created_at?: string
+          external_message_id?: string | null
+          id?: string
+          metadata?: Json | null
+          opened_at?: string | null
+          replied_at?: string | null
+          sent_at?: string | null
+          status?: string
+          step_number?: number
+          subject?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_activities_company_sequence_id_fkey"
+            columns: ["company_sequence_id"]
+            isOneToOne: false
+            referencedRelation: "company_sequences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_activities_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
         ]
