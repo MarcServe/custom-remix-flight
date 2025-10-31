@@ -46,7 +46,7 @@ const App = () => (
                   <ProtectedRoute>
                     <div className="flex h-screen overflow-hidden">
                       <Sidebar />
-                      <main className="flex-1 overflow-auto bg-gradient-to-br from-background to-muted/20 p-4 md:p-6 lg:p-8">
+                      <main className="flex-1 overflow-auto bg-gradient-to-br from-background to-muted/20 p-4 pt-16 md:p-6 lg:p-8">
                         <Routes>
                           <Route path="/" element={<Dashboard />} />
                           <Route path="/companies" element={<Companies />} />
