@@ -65,7 +65,7 @@ export default function Dashboard() {
               <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
                 <BarChart3 className="h-5 w-5 text-white" />
               </div>
-              <Badge className="bg-gradient-primary text-sm px-3 py-1">
+              <Badge className="bg-primary text-primary-foreground text-sm px-3 py-1">
                 <Sparkles className="h-3 w-3 mr-1" />
                 Live
               </Badge>
