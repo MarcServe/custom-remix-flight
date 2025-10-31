@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
 import { nangoClient } from "@/lib/integrations/nango";
+import { NangoSetupInstructions } from "./NangoSetupInstructions";
 
 interface ConnectEmailDialogProps {
   open: boolean;
@@ -29,6 +30,7 @@ export function ConnectEmailDialog({
   onSuccess,
 }: ConnectEmailDialogProps) {
   const [loading, setLoading] = useState(false);
+  const [showSetupInstructions, setShowSetupInstructions] = useState(false);
   const [smtpConfig, setSMTPConfig] = useState({
     host: "",
     port: 587,
@@ -47,10 +49,15 @@ export function ConnectEmailDialog({
           toast.error("Please allow popups in your browser and try again");
         } else if (error.message.includes('closed')) {
           toast.info("OAuth cancelled");
-        } else if (error.message.includes('Nango not configured')) {
-          toast.error("Email integration not configured. Please contact support.");
-        } else if (error.message.includes('authentication session')) {
-          toast.error(`OAuth setup error: ${error.message}. Please check the integration configuration.`);
+        } else if (error.message.includes('Nango not configured') || 
+                   error.message.includes('NANGO_SECRET_KEY') ||
+                   error.message.includes('integration not configured')) {
+          toast.error("Email integration needs configuration");
+          setShowSetupInstructions(true);
+        } else if (error.message.includes('authentication session') ||
+                   error.message.includes('allowed_integrations')) {
+          toast.error("Integration not found in Nango dashboard");
+          setShowSetupInstructions(true);
         } else {
           toast.error(`Failed to connect ${provider}: ${error.message}`);
         }
@@ -186,22 +193,36 @@ export function ConnectEmailDialog({
           </div>
         ) : (
           <div className="space-y-4">
-            <Alert className="border-blue-500/50 bg-blue-500/10">
-              <Info className="h-4 w-4 text-blue-500" />
-              <AlertDescription className="text-sm">
-                You'll be redirected to {provider === 'gmail' ? 'Google' : 'Microsoft'} to authorize access. 
-                Make sure to allow the required permissions for sending emails.
-              </AlertDescription>
-            </Alert>
+            {showSetupInstructions ? (
+              <NangoSetupInstructions provider={provider as 'gmail' | 'outlook'} />
+            ) : (
+              <>
+                <Alert className="border-blue-500/50 bg-blue-500/10">
+                  <Info className="h-4 w-4 text-blue-500" />
+                  <AlertDescription className="text-sm">
+                    You'll be redirected to {provider === 'gmail' ? 'Google' : 'Microsoft'} to authorize access. 
+                    Make sure to allow the required permissions for sending emails.
+                  </AlertDescription>
+                </Alert>
 
-            <Button
-              onClick={handleOAuthConnect}
-              disabled={loading}
-              className="w-full"
-            >
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Continue with {provider === 'gmail' ? 'Google' : 'Microsoft'}
-            </Button>
+                <Button
+                  onClick={handleOAuthConnect}
+                  disabled={loading}
+                  className="w-full"
+                >
+                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Continue with {provider === 'gmail' ? 'Google' : 'Microsoft'}
+                </Button>
+
+                <Button
+                  variant="link"
+                  onClick={() => setShowSetupInstructions(true)}
+                  className="w-full text-xs text-muted-foreground"
+                >
+                  Having trouble connecting? View setup instructions
+                </Button>
+              </>
+            )}
           </div>
         )}
       </DialogContent>

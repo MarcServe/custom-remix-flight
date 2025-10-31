@@ -56,9 +56,24 @@ serve(async (req) => {
 
     const nangoSecretKey = Deno.env.get('NANGO_SECRET_KEY');
     if (!nangoSecretKey) {
-      console.error('NANGO_SECRET_KEY not configured');
+      console.error('NANGO_SECRET_KEY not configured in Supabase secrets');
       return new Response(
-        JSON.stringify({ error: 'Nango not configured' }),
+        JSON.stringify({ 
+          error: 'NANGO_SECRET_KEY not configured',
+          details: 'Please add NANGO_SECRET_KEY to Supabase Edge Function secrets'
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate that the Nango key format is correct
+    if (!nangoSecretKey.startsWith('sk-')) {
+      console.error('NANGO_SECRET_KEY appears to be invalid (should start with sk-)');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid NANGO_SECRET_KEY format',
+          details: 'The secret key should start with "sk-"'
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -81,12 +96,43 @@ serve(async (req) => {
 
     if (!sessionResponse.ok) {
       const errorText = await sessionResponse.text();
-      console.error('Failed to create Nango session:', sessionResponse.status, errorText);
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { message: errorText };
+      }
+      
+      console.error('Failed to create Nango session:', {
+        status: sessionResponse.status,
+        error: errorData,
+        integrationId,
+        provider
+      });
+
+      // Provide specific error messages based on common issues
+      let userMessage = 'Failed to create authentication session';
+      let details = errorText;
+
+      if (sessionResponse.status === 401) {
+        userMessage = 'Invalid NANGO_SECRET_KEY';
+        details = 'The NANGO_SECRET_KEY is incorrect or expired. Please check your Nango dashboard.';
+      } else if (sessionResponse.status === 400) {
+        if (errorText.includes('allowed_integrations') || errorText.includes('integration')) {
+          userMessage = `The ${integrationId} integration is not configured in Nango`;
+          details = `Please set up the ${integrationId} integration in your Nango dashboard with the required OAuth credentials and scopes.`;
+        }
+      } else if (sessionResponse.status === 404) {
+        userMessage = 'Nango integration not found';
+        details = `The ${integrationId} integration doesn't exist in your Nango project. Please create it first.`;
+      }
+
       return new Response(
         JSON.stringify({ 
-          error: 'Failed to create authentication session',
-          details: errorText,
-          status: sessionResponse.status
+          error: userMessage,
+          details,
+          status: sessionResponse.status,
+          integrationId
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
