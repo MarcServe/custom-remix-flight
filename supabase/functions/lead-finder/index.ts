@@ -289,112 +289,98 @@ Return ONLY valid JSON, no markdown blocks.`;
       await endSpan(enrichmentSpan, { enrichedCount: enrichedLeads.filter(l => l.wasEnriched).length });
     }
 
-    // Contact enrichment with GetProspect
+    // Contact enrichment with GetProspect - Optimized with parallel processing
     const GETPROSPECT_API_KEY = Deno.env.get("GETPROSPECT_API_KEY");
     
     if (GETPROSPECT_API_KEY && leads.length > 0) {
       const contactSpan = createSpan(trace, 'getprospect-contact-enrichment', { leadCount: leads.length });
-      console.log("Starting GetProspect contact enrichment for", leads.length, "leads");
+      console.log("Starting GetProspect contact enrichment for", leads.length, "leads (parallel)");
 
-      for (const lead of leads) {
+      // Process all leads in parallel with 15 second timeout per lead
+      const contactPromises = leads.map(async (lead) => {
         try {
-          const contacts: any[] = [];
-          
-          // Strategy 1: Search by company LinkedIn URL if available
-          if (lead.linkedinUrl) {
-            try {
-              const response = await fetch(
-                `https://api.getprospect.com/public/v1/insights/contact?linkedinUrl=${encodeURIComponent(lead.linkedinUrl)}&apiKey=${GETPROSPECT_API_KEY}`
-              );
-              
-              if (response.ok) {
-                const data = await response.json();
-                if (data.contacts && Array.isArray(data.contacts)) {
-                  contacts.push(...data.contacts.map((c: any) => ({
-                    name: c.name || 'Unknown',
-                    email: c.email,
-                    emailVerified: c.emailStatus === 'valid',
-                    linkedinUrl: c.linkedinUrl,
-                    title: c.title,
-                    department: c.department,
-                    phone: c.phone,
-                    companyName: lead.name
-                  })));
-                }
-              }
-            } catch (err) {
-              console.error(`LinkedIn contact search failed for ${lead.name}:`, err);
-            }
-          }
-          
-          // Strategy 2: Search by email for common roles if we don't have enough contacts
-          if (contacts.length < 3 && lead.name) {
-            const commonRoles = ['Sales Director', 'Customer Success Manager', 'CEO', 'Business Development Manager'];
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Contact enrichment timeout')), 15000)
+          );
+
+          const enrichPromise = (async () => {
+            const contacts: any[] = [];
             
-            for (const role of commonRoles.slice(0, 3 - contacts.length)) {
+            // Strategy: Search by LinkedIn URL OR search for one key role only
+            if (lead.linkedinUrl) {
               try {
-                // Find email
+                const response = await fetch(
+                  `https://api.getprospect.com/public/v1/insights/contact?linkedinUrl=${encodeURIComponent(lead.linkedinUrl)}&apiKey=${GETPROSPECT_API_KEY}`,
+                  { signal: AbortSignal.timeout(5000) }
+                );
+                
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data.contacts && Array.isArray(data.contacts)) {
+                    contacts.push(...data.contacts.slice(0, 3).map((c: any) => ({
+                      name: c.name || 'Unknown',
+                      email: c.email,
+                      emailVerified: c.emailStatus === 'valid',
+                      linkedinUrl: c.linkedinUrl,
+                      title: c.title,
+                      department: c.department,
+                      phone: c.phone,
+                      companyName: lead.name
+                    })));
+                  }
+                }
+              } catch (err) {
+                console.error(`LinkedIn contact search failed for ${lead.name}`);
+              }
+            }
+            
+            // If no contacts found, try ONE primary role
+            if (contacts.length === 0 && lead.name) {
+              const role = 'Sales Director'; // Focus on one high-value role
+              
+              try {
                 const findResponse = await fetch(
-                  `https://api.getprospect.com/public/v1/email/find?name=${encodeURIComponent(role)}&company=${encodeURIComponent(lead.name)}&apiKey=${GETPROSPECT_API_KEY}`
+                  `https://api.getprospect.com/public/v1/email/find?name=${encodeURIComponent(role)}&company=${encodeURIComponent(lead.name)}&apiKey=${GETPROSPECT_API_KEY}`,
+                  { signal: AbortSignal.timeout(5000) }
                 );
                 
                 if (findResponse.ok) {
                   const findData = await findResponse.json();
                   if (findData.email) {
-                    // Verify email
-                    const verifyResponse = await fetch(
-                      `https://api.getprospect.com/public/v1/email/verify?email=${encodeURIComponent(findData.email)}&apiKey=${GETPROSPECT_API_KEY}`
-                    );
-                    
-                    let verified = false;
-                    if (verifyResponse.ok) {
-                      const verifyData = await verifyResponse.json();
-                      verified = verifyData.status === 'valid';
-                    }
-                    
                     contacts.push({
                       name: findData.name || role,
                       email: findData.email,
-                      emailVerified: verified,
+                      emailVerified: false, // Skip verification to save time
                       title: role,
                       companyName: lead.name
                     });
                   }
                 }
-                
-                // Rate limit protection
-                await new Promise(resolve => setTimeout(resolve, 500));
               } catch (err) {
-                console.error(`Email search failed for ${role} at ${lead.name}:`, err);
+                console.error(`Email search failed for ${lead.name}`);
               }
             }
-          }
-          
-          // Prioritize contacts - prefer sales, customer service, support
-          let primaryContact = null;
-          if (contacts.length > 0) {
-            const priorities = ['sales', 'customer', 'support', 'business development', 'account'];
-            for (const keyword of priorities) {
-              const match = contacts.find(c => 
-                c.title?.toLowerCase().includes(keyword) || 
-                c.department?.toLowerCase().includes(keyword)
-              );
-              if (match) {
-                primaryContact = match;
-                break;
-              }
-            }
-            if (!primaryContact) primaryContact = contacts[0];
-          }
-          
-          lead.contacts = contacts;
-          lead.primaryContact = primaryContact;
+            
+            // Set primary contact (first one)
+            const primaryContact = contacts.length > 0 ? contacts[0] : null;
+            
+            return { contacts, primaryContact };
+          })();
+
+          const result = await Promise.race([enrichPromise, timeoutPromise]) as { contacts: any[], primaryContact: any };
+          lead.contacts = result.contacts;
+          lead.primaryContact = result.primaryContact;
           
         } catch (error) {
-          console.error(`Contact enrichment failed for ${lead.name}:`, error);
+          console.error(`Contact enrichment timeout for ${lead.name}`);
           lead.contacts = [];
+          lead.primaryContact = null;
         }
-      }
+        
+        return lead;
+      });
+
+      await Promise.all(contactPromises);
       
       console.log("Contact enrichment complete");
       await endSpan(contactSpan);
