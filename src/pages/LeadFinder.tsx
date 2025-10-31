@@ -315,7 +315,7 @@ export default function LeadFinder() {
               </div>
 
               {/* Company List */}
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-[calc(100vh-16rem)] overflow-y-auto pr-1">
                 {results.leads.map((company: any, idx: number) => (
                   <div
                     key={idx}
