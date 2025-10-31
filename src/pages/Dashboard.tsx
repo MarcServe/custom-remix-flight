@@ -86,7 +86,7 @@ export default function Dashboard() {
       {/* Hero Section */}
       <div className="relative overflow-hidden border-b bg-gradient-to-br from-primary/10 via-primary/5 to-transparent backdrop-blur-sm">
         <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
-        <div className="relative px-6 py-16">
+        <div className="relative px-6 py-8">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
