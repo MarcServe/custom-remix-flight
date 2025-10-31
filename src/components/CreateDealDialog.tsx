@@ -154,12 +154,11 @@ export function CreateDealDialog({ open, onOpenChange }: CreateDealDialogProps) 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="company">Company</Label>
-              <Select value={companyId} onValueChange={setCompanyId}>
+              <Select value={companyId || undefined} onValueChange={setCompanyId}>
                 <SelectTrigger id="company">
                   <SelectValue placeholder="Select company" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
                   {companies?.map((company) => (
                     <SelectItem key={company.id} value={company.id}>
                       {company.name}
