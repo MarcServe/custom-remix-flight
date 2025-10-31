@@ -42,10 +42,15 @@ export function ConnectEmailDialog({
     try {
       const { data, error } = await nangoClient.initiateOAuth(provider as 'gmail' | 'outlook');
       if (error) {
+        console.error('OAuth error:', error);
         if (error.message.includes('Popup blocked') || error.message.includes('popup')) {
           toast.error("Please allow popups in your browser and try again");
         } else if (error.message.includes('closed')) {
           toast.info("OAuth cancelled");
+        } else if (error.message.includes('Nango not configured')) {
+          toast.error("Email integration not configured. Please contact support.");
+        } else if (error.message.includes('authentication session')) {
+          toast.error(`OAuth setup error: ${error.message}. Please check the integration configuration.`);
         } else {
           toast.error(`Failed to connect ${provider}: ${error.message}`);
         }

@@ -81,9 +81,13 @@ serve(async (req) => {
 
     if (!sessionResponse.ok) {
       const errorText = await sessionResponse.text();
-      console.error('Failed to create Nango session:', errorText);
+      console.error('Failed to create Nango session:', sessionResponse.status, errorText);
       return new Response(
-        JSON.stringify({ error: 'Failed to create authentication session' }),
+        JSON.stringify({ 
+          error: 'Failed to create authentication session',
+          details: errorText,
+          status: sessionResponse.status
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
