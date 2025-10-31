@@ -65,7 +65,8 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
   if (!company) return null;
 
   const hasContacts = company.contacts && company.contacts.length > 0;
-  const showFindProspectsButton = !hasContacts && !isSearching;
+  const hasBeenSaved = !!company.id;
+  const showFindProspectsButton = !hasContacts && !isSearching && hasBeenSaved && company.linkedinUrl;
 
   const handleFindProspects = async () => {
     if (!company.linkedinUrl) {
@@ -380,6 +381,11 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
             {/* Actions Section */}
             <Separator />
             <div className="flex gap-2">
+              {!hasBeenSaved && !hasContacts && (
+                <div className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-lg">
+                  💡 Save this company to CRM first to find prospects
+                </div>
+              )}
               {showFindProspectsButton && (
                 <Button 
                   variant="default" 
