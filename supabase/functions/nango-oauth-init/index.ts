@@ -92,8 +92,8 @@ serve(async (req) => {
     console.log('Nango session response:', JSON.stringify(sessionData));
     console.log('Created Nango session for provider:', provider, 'user:', user.id);
 
-    // Nango returns the token in different fields depending on the version
-    const token = sessionData.token || sessionData.sessionToken || sessionData.data?.token;
+    // Nango returns the token in data.token
+    const token = sessionData.data?.token;
     
     if (!token) {
       console.error('No token found in Nango response:', sessionData);
