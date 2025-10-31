@@ -8,3 +8,6 @@ verify_jwt = true
 
 [functions.generate-sequence]
 verify_jwt = true
+
+[functions.personalize-sequence]
+verify_jwt = true
