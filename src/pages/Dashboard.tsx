@@ -165,7 +165,7 @@ export default function Dashboard() {
                     <Search className="h-5 w-5 text-blue-500" />
                   </div>
                   <span className="font-semibold text-sm">Find Leads</span>
-                  <span className="text-xs text-muted-foreground mt-1">AI-powered discovery</span>
+                  <span className="text-[10px] text-muted-foreground mt-1 leading-tight">AI-powered discovery</span>
                 </Button>
 
                 <Button
