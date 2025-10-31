@@ -3,11 +3,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { PersonalizeSequenceDialog } from "@/components/sequences/PersonalizeSequenceDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
+import { useDeleteCompany } from "@/hooks/use-companies";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface Contact {
   id?: string;
@@ -74,12 +76,14 @@ export function CompanyDetailsDialog({
   const [isEnriching, setIsEnriching] = useState(false);
   const [personalizeDialogOpen, setPersonalizeDialogOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [emailRecipient, setEmailRecipient] = useState<{
     email: string;
     name: string;
     contactId?: string;
   } | null>(null);
   const { toast } = useToast();
+  const deleteMutation = useDeleteCompany();
 
   // Keyboard navigation
   useEffect(() => {
@@ -524,6 +528,17 @@ export function CompanyDetailsDialog({
                   </a>
                 </Button>
               )}
+              {company.id && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setDeleteDialogOpen(true)}
+                  className="ml-auto text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-2" />
+                  Delete
+                </Button>
+              )}
             </div>
           </div>
         </ScrollArea>
@@ -547,6 +562,33 @@ export function CompanyDetailsDialog({
           contactId={emailRecipient.contactId}
         />
       )}
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Company</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{company.name}</strong>? This will also delete all associated contacts, deals, and events. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                try {
+                  await deleteMutation.mutateAsync(company.id);
+                  onOpenChange(false);
+                } catch (error) {
+                  console.error('Delete error:', error);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
