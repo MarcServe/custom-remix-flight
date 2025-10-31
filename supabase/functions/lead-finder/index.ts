@@ -46,6 +46,12 @@ Deno.serve(async (req) => {
         numResults: 5,
         useAutoprompt: true,
         type: "keyword",
+        contents: {
+          text: {
+            maxCharacters: 1000,
+            includeHtmlTags: false,
+          },
+        },
       }),
     });
 
