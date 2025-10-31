@@ -6,7 +6,7 @@ export interface SequenceRequest {
   industry: string;
   steps?: number;
   tone?: 'professional' | 'casual' | 'technical';
-  provider?: 'lovable' | 'openai';
+  provider?: 'lovable' | 'openai' | 'perplexity';
   model?: string;
 }
 

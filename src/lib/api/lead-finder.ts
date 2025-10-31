@@ -5,7 +5,7 @@ export interface LeadFinderRequest {
   geography: string;
   industry: string;
   dryRun?: boolean;
-  provider?: 'lovable' | 'openai';
+  provider?: 'lovable' | 'openai' | 'perplexity';
   model?: string;
 }
 
