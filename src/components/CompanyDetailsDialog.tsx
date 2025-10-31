@@ -2,8 +2,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail } from "lucide-react";
+import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 interface Contact {
   name: string;
@@ -37,10 +39,36 @@ interface CompanyDetailsDialogProps {
   company: Company | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  isSearching?: boolean;
 }
 
-export function CompanyDetailsDialog({ company, open, onOpenChange }: CompanyDetailsDialogProps) {
+export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching = false }: CompanyDetailsDialogProps) {
+  const [isEnriching, setIsEnriching] = useState(false);
+  const { toast } = useToast();
+  
   if (!company) return null;
+
+  const hasContacts = company.contacts && company.contacts.length > 0;
+  const showFindProspectsButton = !hasContacts && !isSearching;
+
+  const handleFindProspects = async () => {
+    setIsEnriching(true);
+    toast({
+      title: "Finding prospects",
+      description: `Searching for contacts at ${company.name}...`,
+    });
+
+    // TODO: Implement contact enrichment for single company
+    // This would call an edge function to enrich just this company
+    
+    setTimeout(() => {
+      setIsEnriching(false);
+      toast({
+        title: "Feature coming soon",
+        description: "Contact enrichment for individual companies will be available shortly.",
+      });
+    }, 2000);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -227,6 +255,18 @@ export function CompanyDetailsDialog({ company, open, onOpenChange }: CompanyDet
             {/* Actions Section */}
             <Separator />
             <div className="flex gap-2">
+              {showFindProspectsButton && (
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  onClick={handleFindProspects}
+                  disabled={isEnriching}
+                  className="bg-gradient-primary"
+                >
+                  <Search className="h-3.5 w-3.5 mr-2" />
+                  {isEnriching ? "Finding..." : "Find Prospects"}
+                </Button>
+              )}
               {company.linkedinUrl && (
                 <Button variant="outline" size="sm" asChild>
                   <a href={company.linkedinUrl} target="_blank" rel="noopener noreferrer">

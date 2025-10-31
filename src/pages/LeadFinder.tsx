@@ -457,6 +457,7 @@ export default function LeadFinder() {
         company={selectedCompany}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
+        isSearching={isLoading}
       />
     </div>
   );
