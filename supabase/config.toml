@@ -35,3 +35,9 @@ verify_jwt = true
 
 [functions.send-sequence-emails]
 verify_jwt = true
+
+[functions.nango-oauth-init]
+verify_jwt = true
+
+[functions.nango-oauth-callback]
+verify_jwt = false  # OAuth callback from Nango doesn't have JWT
