@@ -17,14 +17,17 @@ export default function LeadFinder() {
   const [geography, setGeography] = useState("");
   const [industry, setIndustry] = useState("");
   const [dryRun, setDryRun] = useState(true);
-  const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(false);
+  const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(true);
   const [selectedCompany, setSelectedCompany] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   
   const { defaultProvider, defaultModels } = useProviderStore();
-  const [providerConfig, setProviderConfig] = useState({
-    provider: defaultProvider,
-    model: defaultModels[defaultProvider] as string | undefined,
+  const [providerConfig, setProviderConfig] = useState<{
+    provider: 'lovable' | 'openai' | 'perplexity';
+    model: string | undefined;
+  }>({
+    provider: 'openai',
+    model: 'gpt-4o-mini',
   });
 
   // Sync provider config with store changes
