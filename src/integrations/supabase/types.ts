@@ -42,7 +42,15 @@ export type Database = {
           title?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "chat_conversations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       companies: {
         Row: {
@@ -52,6 +60,8 @@ export type Database = {
           employee_count: number | null
           enriched_at: string | null
           enrichment_confidence: string | null
+          enrichment_data: Json | null
+          enrichment_status: string | null
           founded_year: number | null
           funding_stage: string | null
           funding_total: string | null
@@ -75,6 +85,8 @@ export type Database = {
           employee_count?: number | null
           enriched_at?: string | null
           enrichment_confidence?: string | null
+          enrichment_data?: Json | null
+          enrichment_status?: string | null
           founded_year?: number | null
           funding_stage?: string | null
           funding_total?: string | null
@@ -98,6 +110,8 @@ export type Database = {
           employee_count?: number | null
           enriched_at?: string | null
           enrichment_confidence?: string | null
+          enrichment_data?: Json | null
+          enrichment_status?: string | null
           founded_year?: number | null
           funding_stage?: string | null
           funding_total?: string | null
@@ -321,6 +335,33 @@ export type Database = {
           },
         ]
       }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -329,7 +370,21 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      company_status:
+        | "NEW"
+        | "QUALIFIED"
+        | "CONTACTED"
+        | "MEETING"
+        | "PROPOSAL"
+        | "WON"
+        | "LOST"
+      deal_stage:
+        | "LEAD"
+        | "QUALIFIED"
+        | "PROPOSAL"
+        | "NEGOTIATION"
+        | "WON"
+        | "LOST"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -456,6 +511,24 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      company_status: [
+        "NEW",
+        "QUALIFIED",
+        "CONTACTED",
+        "MEETING",
+        "PROPOSAL",
+        "WON",
+        "LOST",
+      ],
+      deal_stage: [
+        "LEAD",
+        "QUALIFIED",
+        "PROPOSAL",
+        "NEGOTIATION",
+        "WON",
+        "LOST",
+      ],
+    },
   },
 } as const
