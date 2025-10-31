@@ -6,10 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Loader2, Building2, Save, User } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { nangoClient } from "@/lib/integrations/nango";
+import { Loader2, Building2, Save, User, Mail } from "lucide-react";
 
 export default function Profile() {
   const { toast } = useToast();
@@ -23,6 +26,14 @@ export default function Profile() {
     target_audience: "",
     value_proposition: "",
     tone_preference: "professional",
+  });
+
+  const { data: connections } = useQuery({
+    queryKey: ['nango-connections'],
+    queryFn: async () => {
+      const { data } = await nangoClient.getConnections();
+      return data || [];
+    },
   });
 
   useEffect(() => {
@@ -122,9 +133,10 @@ export default function Profile() {
       </div>
 
       <Tabs defaultValue="account" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="business">Business Profile</TabsTrigger>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
 
         <TabsContent value="account" className="space-y-4">
@@ -279,6 +291,57 @@ export default function Profile() {
                   )}
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="integrations" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-primary" />
+                <CardTitle>Email Connections</CardTitle>
+              </div>
+              <CardDescription>
+                Manage your connected email accounts
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {connections && connections.length > 0 ? (
+                <div className="space-y-3">
+                  {connections.map((connection) => (
+                    <div
+                      key={connection.connection_id}
+                      className="flex items-center justify-between p-3 border rounded-lg"
+                    >
+                      <div className="space-y-1">
+                        <p className="font-medium capitalize">{connection.provider}</p>
+                        {connection.metadata?.email && (
+                          <p className="text-sm text-muted-foreground">
+                            {connection.metadata.email}
+                          </p>
+                        )}
+                      </div>
+                      <Badge
+                        variant={connection.status === 'active' ? 'default' : 'secondary'}
+                      >
+                        {connection.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No email accounts connected yet.
+                </p>
+              )}
+              <Button
+                variant="outline"
+                onClick={() => (window.location.href = '/integrations')}
+                className="w-full"
+              >
+                Manage Integrations
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
