@@ -20,3 +20,6 @@ verify_jwt = false  # Allow cron jobs to call this
 
 [functions.email-webhook]
 verify_jwt = false  # Webhooks from email providers don't have JWT
+
+[functions.sequence-chat]
+verify_jwt = true

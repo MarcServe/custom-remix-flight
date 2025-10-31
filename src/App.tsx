@@ -14,6 +14,7 @@ import People from "./pages/People";
 import LeadFinder from "./pages/LeadFinder";
 import Pipeline from "./pages/Pipeline";
 import Sequences from "./pages/Sequences";
+import CompanySequences from "./pages/CompanySequences";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -50,6 +51,7 @@ const App = () => (
                           <Route path="/lead-finder" element={<LeadFinder />} />
                           <Route path="/pipeline" element={<Pipeline />} />
                           <Route path="/sequences" element={<Sequences />} />
+                          <Route path="/company-sequences" element={<CompanySequences />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </main>

@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonalizedSequenceCard } from "@/components/sequences/PersonalizedSequenceCard";
+import { SequenceChatCard } from "@/components/features/sequences/SequenceChatCard";
 
 export default function Sequences() {
   const [size, setSize] = useState("");
@@ -478,8 +479,14 @@ export default function Sequences() {
             </div>
           </div>
 
-          {/* Provider Selector */}
-          <div className="lg:sticky lg:top-6 h-fit">
+          {/* Chat Interface & Provider Selector */}
+          <div className="space-y-6">
+            {/* AI Chat Card */}
+            <div className="lg:sticky lg:top-6 h-[600px]">
+              <SequenceChatCard />
+            </div>
+            
+            {/* Provider Selector */}
             <ProviderSelector
               value={providerConfig}
               onChange={(config) => setProviderConfig(config as any)}
