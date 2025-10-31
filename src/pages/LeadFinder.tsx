@@ -72,8 +72,8 @@ export default function LeadFinder() {
               <Search className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold tracking-tight">AI Lead Finder</h1>
-              <p className="text-xs text-muted-foreground">Intelligent company discovery</p>
+              <h1 className="text-lg font-semibold tracking-tight">AI Lead Finder</h1>
+              <p className="text-sm text-muted-foreground">Intelligent company discovery</p>
             </div>
           </div>
           
