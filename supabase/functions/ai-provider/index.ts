@@ -121,8 +121,8 @@ async function handleLovableAI(config: AIProviderRequest): Promise<AIProviderRes
 async function handleOpenAI(config: AIProviderRequest): Promise<AIProviderResponse> {
   const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
   
-  if (!OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY not configured');
+  if (!OPENAI_API_KEY || OPENAI_API_KEY.trim() === '') {
+    throw new Error('OPENAI_API_KEY not configured. Please add it in Supabase Edge Function Secrets.');
   }
 
   const model = config.model || 'gpt-4o-mini';
