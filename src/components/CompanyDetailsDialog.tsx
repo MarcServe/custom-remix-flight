@@ -187,8 +187,8 @@ export function CompanyDetailsDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] p-0 gap-0">
-        <DialogHeader className="px-6 pt-6 pb-4 bg-gradient-to-br from-primary/5 via-primary/3 to-transparent">
+      <DialogContent className="max-w-3xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-4 bg-gradient-to-br from-primary/5 via-primary/3 to-transparent shrink-0">
           <div className="flex items-start gap-4">
             <div className="w-16 h-16 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg shrink-0">
               <Building2 className="h-8 w-8 text-white" />
@@ -252,14 +252,14 @@ export function CompanyDetailsDialog({
           </div>
         </DialogHeader>
 
-        <Tabs defaultValue="overview" className="flex-1">
-          <TabsList className="mx-6 mt-2">
+        <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden">
+          <TabsList className="mx-6 mt-2 shrink-0">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="activity">Activity Timeline</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="mt-0">
-            <ScrollArea className="px-6 pb-6 max-h-[calc(90vh-260px)]">
+          <TabsContent value="overview" className="mt-0 flex-1 overflow-hidden">
+            <ScrollArea className="h-full px-6 pb-6">
               <div className="space-y-6 pt-4">
             {/* Overview Section */}
             <div className="space-y-3">
@@ -558,8 +558,8 @@ export function CompanyDetailsDialog({
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="activity" className="mt-0">
-            <ScrollArea className="px-6 pb-6 max-h-[calc(90vh-260px)]">
+          <TabsContent value="activity" className="mt-0 flex-1 overflow-hidden">
+            <ScrollArea className="h-full px-6 pb-6">
               <div className="space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
