@@ -16,6 +16,36 @@ export interface Company {
   enriched_at?: string;
   created_at?: string;
   updated_at?: string;
+  company_phone?: string;
+  general_email?: string;
+  social_profiles?: {
+    twitter?: string;
+    facebook?: string;
+    instagram?: string;
+    youtube?: string;
+    linkedin?: string;
+  };
+  key_executives?: Array<{
+    name: string;
+    title: string;
+  }>;
+  headquarters?: string;
+  employee_count?: number;
+  founded_year?: number;
+  funding_stage?: string;
+  funding_total?: string;
+  tech_stack?: string[];
+  recent_news?: string;
+  ceo_name?: string;
+  enrichment_data?: any;
+  enrichment_status?: string;
+  enrichment_confidence?: string;
+  enrichment_error?: string;
+  // Relations
+  people?: any[];
+  contacts?: any[];
+  deals?: any[];
+  events?: any[];
 }
 
 export interface CompanyFilters {
@@ -60,7 +90,7 @@ export const companiesApi = {
   async getCompany(id: string) {
     const { data, error } = await apiClient.supabase
       .from('companies')
-      .select('*, people(*), deals(*), events(*)')
+      .select('*, people(*), contacts(*), deals(*), events(*)')
       .eq('id', id)
       .maybeSingle();
 

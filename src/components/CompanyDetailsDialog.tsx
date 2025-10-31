@@ -1,12 +1,13 @@
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2 } from "lucide-react";
+import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { PersonalizeSequenceDialog } from "@/components/sequences/PersonalizeSequenceDialog";
+import { SendEmailDialog } from "@/components/SendEmailDialog";
 
 interface Contact {
   id?: string;
@@ -55,18 +56,73 @@ interface CompanyDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isSearching?: boolean;
+  allCompanies?: Company[];
+  currentIndex?: number;
+  onNavigate?: (direction: 'prev' | 'next') => void;
 }
 
-export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching = false }: CompanyDetailsDialogProps) {
+export function CompanyDetailsDialog({ 
+  company, 
+  open, 
+  onOpenChange, 
+  isSearching = false,
+  allCompanies,
+  currentIndex,
+  onNavigate,
+}: CompanyDetailsDialogProps) {
   const [isEnriching, setIsEnriching] = useState(false);
   const [personalizeDialogOpen, setPersonalizeDialogOpen] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailRecipient, setEmailRecipient] = useState<{
+    email: string;
+    name: string;
+    contactId?: string;
+  } | null>(null);
   const { toast } = useToast();
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (!open || !onNavigate) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && currentIndex !== undefined && currentIndex > 0) {
+        onNavigate('prev');
+      } else if (e.key === 'ArrowRight' && allCompanies && currentIndex !== undefined && currentIndex < allCompanies.length - 1) {
+        onNavigate('next');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onNavigate, currentIndex, allCompanies]);
   
   if (!company) return null;
 
   const hasContacts = company.contacts && company.contacts.length > 0;
   const hasBeenSaved = !!company.id;
   const showFindProspectsButton = !hasContacts && !isSearching && hasBeenSaved && company.linkedinUrl;
+  
+  const showNavigation = allCompanies && currentIndex !== undefined && onNavigate;
+  const canGoPrev = showNavigation && currentIndex > 0;
+  const canGoNext = showNavigation && allCompanies && currentIndex < allCompanies.length - 1;
+
+  const handleSendEmailToContact = (contact: Contact) => {
+    if (!contact.email) {
+      toast({
+        title: "No Email",
+        description: "This contact doesn't have an email address",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setEmailRecipient({
+      email: contact.email,
+      name: contact.name,
+      contactId: contact.id,
+    });
+    setEmailDialogOpen(true);
+  };
 
   const handleFindProspects = async () => {
     if (!company.linkedinUrl) {
@@ -126,7 +182,34 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
               <Building2 className="h-8 w-8 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <DialogTitle className="text-2xl font-bold mb-2">{company.name}</DialogTitle>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <DialogTitle className="text-2xl font-bold">{company.name}</DialogTitle>
+                
+                {showNavigation && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onNavigate!('prev')}
+                      disabled={!canGoPrev}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground min-w-[60px] text-center">
+                      {currentIndex! + 1} of {allCompanies!.length}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onNavigate!('next')}
+                      disabled={!canGoNext}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+              
               {company.website && (
                 <a
                   href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
@@ -331,16 +414,31 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
                     {company.contacts.map((contact, idx) => (
                       <div key={idx} className="p-3 rounded-lg border bg-card/50 space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-medium text-sm">{contact.name}</span>
-                          {contact.emailVerified && (
-                            <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
-                              Verified
-                            </Badge>
-                          )}
-                          {contact === company.primaryContact && (
-                            <Badge className="text-xs bg-primary/10 text-primary border-primary/20">
-                              Primary
-                            </Badge>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{contact.name}</span>
+                            {contact.emailVerified && (
+                              <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
+                                Verified
+                              </Badge>
+                            )}
+                            {contact === company.primaryContact && (
+                              <Badge className="text-xs bg-primary/10 text-primary border-primary/20">
+                                Primary
+                              </Badge>
+                            )}
+                          </div>
+                          {contact.email && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSendEmailToContact(contact);
+                              }}
+                            >
+                              <Mail className="h-4 w-4 mr-1" />
+                              Email
+                            </Button>
                           )}
                         </div>
                         
@@ -409,37 +507,36 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
               </Button>
               {company.linkedinUrl && (
                 <Button variant="outline" size="sm" asChild>
-                  <a href={company.linkedinUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="h-3.5 w-3.5 mr-2" />
-                    LinkedIn
-                  </a>
-                </Button>
-              )}
-              {company.website && (
-                <Button variant="outline" size="sm" asChild>
-                  <a 
-                    href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-                    target="_blank" 
+                  <a
+                    href={company.linkedinUrl}
+                    target="_blank"
                     rel="noopener noreferrer"
                   >
-                    <Globe className="h-3.5 w-3.5 mr-2" />
-                    Visit Website
+                    View LinkedIn
                   </a>
                 </Button>
               )}
             </div>
           </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
 
-      {company.id && (
-        <PersonalizeSequenceDialog
-          open={personalizeDialogOpen}
-          onOpenChange={setPersonalizeDialogOpen}
+      <PersonalizeSequenceDialog
+        open={personalizeDialogOpen}
+        onOpenChange={setPersonalizeDialogOpen}
+        companyId={company.id}
+        companyName={company.name}
+      />
+
+      {emailRecipient && (
+        <SendEmailDialog
+          open={emailDialogOpen}
+          onOpenChange={setEmailDialogOpen}
+          recipientEmail={emailRecipient.email}
+          recipientName={emailRecipient.name}
           companyId={company.id}
-          companyName={company.name}
-          contactId={hasContacts ? company.contacts?.[0]?.id : undefined}
+          contactId={emailRecipient.contactId}
         />
       )}
     </>
