@@ -62,7 +62,7 @@ export const companiesApi = {
       .from('companies')
       .select('*, people(*), deals(*), events(*)')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
     return { data, error };
   },
@@ -75,7 +75,7 @@ export const companiesApi = {
       .from('companies')
       .insert([company as any])
       .select()
-      .single();
+      .maybeSingle();
 
     return { data, error };
   },
@@ -89,7 +89,7 @@ export const companiesApi = {
       .update(updates)
       .eq('id', id)
       .select()
-      .single();
+      .maybeSingle();
 
     return { data, error };
   },

@@ -60,7 +60,7 @@ export const sequencesApi = {
       .from('email_sequences')
       .select('*')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
     return { data, error };
   },
