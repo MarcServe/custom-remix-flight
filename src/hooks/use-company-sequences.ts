@@ -112,3 +112,52 @@ export const useDeleteCompanySequence = () => {
     },
   });
 };
+
+/**
+ * Hook to send next email in sequence
+ */
+export const useSendSequenceEmail = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: ({ companySequenceId, stepNumber }: { companySequenceId: string; stepNumber: number }) =>
+      companySequencesApi.sendSequenceEmail(companySequenceId, stepNumber),
+    onSuccess: (response, variables) => {
+      if (response.error) {
+        toast({
+          title: 'Error',
+          description: response.error.message,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['company-sequences'] });
+      queryClient.invalidateQueries({ queryKey: ['email-activities', variables.companySequenceId] });
+      
+      toast({
+        title: 'Email sent!',
+        description: `Step ${variables.stepNumber + 1} sent successfully`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+};
+
+/**
+ * Hook to fetch email activities for a sequence
+ */
+export const useEmailActivities = (companySequenceId: string) => {
+  return useQuery({
+    queryKey: ['email-activities', companySequenceId],
+    queryFn: () => companySequencesApi.getEmailActivities(companySequenceId),
+    enabled: !!companySequenceId,
+  });
+};

@@ -11,3 +11,12 @@ verify_jwt = true
 
 [functions.personalize-sequence]
 verify_jwt = true
+
+[functions.send-sequence-email]
+verify_jwt = true
+
+[functions.process-sequence-steps]
+verify_jwt = false  # Allow cron jobs to call this
+
+[functions.email-webhook]
+verify_jwt = false  # Webhooks from email providers don't have JWT

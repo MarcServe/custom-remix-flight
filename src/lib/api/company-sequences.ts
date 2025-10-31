@@ -95,4 +95,27 @@ export const companySequencesApi = {
 
     return { error };
   },
+
+  /**
+   * Send next email in sequence
+   */
+  async sendSequenceEmail(companySequenceId: string, stepNumber: number) {
+    return apiClient.callFunction('send-sequence-email', {
+      companySequenceId,
+      stepNumber,
+    });
+  },
+
+  /**
+   * Get email activities for a sequence
+   */
+  async getEmailActivities(companySequenceId: string) {
+    const { data, error } = await apiClient.supabase
+      .from('email_activities')
+      .select('*')
+      .eq('company_sequence_id', companySequenceId)
+      .order('step_number', { ascending: true });
+
+    return { data, error };
+  },
 };
