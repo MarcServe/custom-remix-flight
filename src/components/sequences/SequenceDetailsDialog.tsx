@@ -73,7 +73,7 @@ export function SequenceDetailsDialog({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 overflow-auto">
+        <ScrollArea className="flex-1">
           <div className="px-6 py-4 space-y-6">
             {/* Sequence Metadata */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

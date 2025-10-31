@@ -258,9 +258,9 @@ export function CompanyDetailsDialog({
             <TabsTrigger value="activity">Activity Timeline</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="mt-0 flex-1 overflow-hidden">
-            <ScrollArea className="flex-1 h-full px-6 pb-6">
-              <div className="space-y-6 pt-4">
+          <TabsContent value="overview" className="mt-0 data-[state=active]:flex data-[state=active]:flex-col overflow-hidden flex-1">
+            <ScrollArea className="flex-1">
+              <div className="px-6 pb-6 space-y-6 pt-4">
             {/* Overview Section */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -542,25 +542,25 @@ export function CompanyDetailsDialog({
                   </a>
                 </Button>
               )}
-              {company.id && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setDeleteDialogOpen(true)}
-                  className="ml-auto text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-2" />
-                  Delete
-                </Button>
-              )}
-            </div>
+               {company.id && (
+                 <Button 
+                   variant="outline" 
+                   size="sm" 
+                   onClick={() => setDeleteDialogOpen(true)}
+                   className="ml-auto text-destructive hover:text-destructive"
+                 >
+                   <Trash2 className="h-3.5 w-3.5 mr-2" />
+                   Delete
+                 </Button>
+               )}
+             </div>
               </div>
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="activity" className="mt-0 flex-1 overflow-hidden">
-            <ScrollArea className="flex-1 h-full px-6 pb-6">
-              <div className="space-y-4 pt-4">
+          <TabsContent value="activity" className="mt-0 data-[state=active]:flex data-[state=active]:flex-col overflow-hidden flex-1">
+            <ScrollArea className="flex-1">
+              <div className="px-6 pb-6 space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                     Recent Activity
