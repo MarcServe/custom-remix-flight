@@ -179,12 +179,11 @@ export default function Sequences() {
                     <Users className="h-4 w-4 text-primary" />
                     Select Company (Optional - Auto-fills fields)
                   </Label>
-                  <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+                  <Select value={selectedCompanyId || undefined} onValueChange={setSelectedCompanyId}>
                     <SelectTrigger id="seq-company" className="h-10">
                       <SelectValue placeholder="Choose a company from your CRM" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None - Manual Entry</SelectItem>
                       {companiesData?.map((company) => (
                         <SelectItem key={company.id} value={company.id}>
                           {company.name}
