@@ -10,7 +10,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const { data: companies } = useQuery({
-    queryKey: ["companies-count"],
+    queryKey: ["companies"],
     queryFn: async () => {
       const { count } = await supabase
         .from("companies")
@@ -20,7 +20,7 @@ export default function Dashboard() {
   });
 
   const { data: deals } = useQuery({
-    queryKey: ["deals-stats"],
+    queryKey: ["deals"],
     queryFn: async () => {
       const { data } = await supabase
         .from("deals")
@@ -31,7 +31,7 @@ export default function Dashboard() {
   });
 
   const { data: people } = useQuery({
-    queryKey: ["people-count"],
+    queryKey: ["people"],
     queryFn: async () => {
       const { count } = await supabase
         .from("people")
@@ -41,7 +41,7 @@ export default function Dashboard() {
   });
 
   const { data: recentCompanies } = useQuery({
-    queryKey: ["recent-companies"],
+    queryKey: ["companies"],
     queryFn: async () => {
       const { data } = await supabase
         .from("companies")
@@ -81,10 +81,50 @@ export default function Dashboard() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Hero Find Leads Section */}
+        <div className="mb-8">
+          <Card className="relative overflow-hidden border-2 hover:border-primary transition-all shadow-2xl bg-gradient-to-br from-blue-500/10 via-primary/5 to-purple-500/10 animate-pulse-glow">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-primary/10 to-purple-500/10 animate-shimmer opacity-50" 
+                 style={{ backgroundSize: '200% 100%' }} />
+            <div className="relative p-8 md:p-12">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex-1 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-lg animate-float">
+                      <Search className="h-8 w-8 text-white" />
+                    </div>
+                    <Badge className="bg-gradient-primary text-base px-4 py-2 shadow-lg">
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      AI-Powered
+                    </Badge>
+                  </div>
+                  <div>
+                    <h2 className="text-3xl md:text-4xl font-bold tracking-tight bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text text-transparent mb-2">
+                      Discover Your Next Leads
+                    </h2>
+                    <p className="text-muted-foreground text-lg">
+                      Let AI find the perfect companies for your business in seconds
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="lg"
+                  onClick={() => navigate("/lead-finder")}
+                  className="relative h-14 px-8 text-lg font-semibold bg-gradient-primary hover:opacity-90 shadow-xl transition-all hover:scale-105 group"
+                >
+                  <Search className="mr-3 h-6 w-6 group-hover:rotate-12 transition-transform" />
+                  Find Leads Now
+                  <ArrowUpRight className="ml-2 h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+
         {/* Bento Grid Layout */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Large Revenue Card - Spans 2 columns */}
-          <Card className="lg:col-span-2 lg:row-span-2 border-2 hover:border-primary/50 transition-all shadow-xl bg-gradient-to-br from-primary via-primary to-primary/80 text-white overflow-hidden group">
+          <Card className="lg:col-span-2 lg:row-span-2 border-2 hover:border-primary/50 transition-all shadow-xl bg-gradient-to-br from-primary via-primary to-primary/80 text-white overflow-hidden group animate-pulse-glow">
             <div className="absolute inset-0 bg-grid-white/[0.05] pointer-events-none" />
             <div className="relative p-8 h-full flex flex-col justify-between">
               <div>
@@ -111,7 +151,7 @@ export default function Dashboard() {
           </Card>
 
           {/* Companies Card */}
-          <Card className="border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-blue-500/5 overflow-hidden group">
+          <Card className="border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-blue-500/5 overflow-hidden group hover:shadow-blue-500/20 hover:shadow-2xl">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -130,7 +170,7 @@ export default function Dashboard() {
           </Card>
 
           {/* Contacts Card */}
-          <Card className="border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-purple-500/5 overflow-hidden group">
+          <Card className="border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-purple-500/5 overflow-hidden group hover:shadow-purple-500/20 hover:shadow-2xl">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center">
@@ -149,31 +189,33 @@ export default function Dashboard() {
           </Card>
 
           {/* Quick Actions - Spans 2 columns */}
-          <Card className="lg:col-span-2 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50">
+          <Card className="lg:col-span-2 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50 hover:shadow-primary/10 hover:shadow-xl">
             <div className="p-6">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary" />
+                <Sparkles className="h-5 w-5 text-primary animate-pulse" />
                 Quick Actions
               </h3>
               <div className="grid grid-cols-2 gap-3">
                 <Button
                   variant="outline"
-                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group"
+                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group hover:shadow-lg hover:shadow-blue-500/20 relative overflow-hidden"
                   onClick={() => navigate("/lead-finder")}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/10 to-blue-500/0 group-hover:animate-shimmer" 
+                       style={{ backgroundSize: '200% 100%' }} />
+                  <div className="relative w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center mb-3 group-hover:scale-110 group-hover:rotate-6 transition-all">
                     <Search className="h-5 w-5 text-blue-500" />
                   </div>
-                  <span className="font-semibold text-sm">Find Leads</span>
-                  <span className="text-[10px] text-muted-foreground mt-1 leading-tight">AI-powered discovery</span>
+                  <span className="relative font-semibold text-sm">Find Leads</span>
+                  <span className="relative text-[10px] text-muted-foreground mt-1 leading-tight">AI-powered discovery</span>
                 </Button>
 
                 <Button
                   variant="outline"
-                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group"
+                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group hover:shadow-lg hover:shadow-orange-500/20"
                   onClick={() => navigate("/sequences")}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center mb-3 group-hover:scale-110 group-hover:rotate-6 transition-all">
                     <Mail className="h-5 w-5 text-orange-500" />
                   </div>
                   <span className="font-semibold text-sm">Sequences</span>
@@ -182,10 +224,10 @@ export default function Dashboard() {
 
                 <Button
                   variant="outline"
-                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group"
+                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group hover:shadow-lg hover:shadow-purple-500/20"
                   onClick={() => navigate("/companies")}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center mb-3 group-hover:scale-110 group-hover:rotate-6 transition-all">
                     <Building2 className="h-5 w-5 text-purple-500" />
                   </div>
                   <span className="font-semibold text-sm">Companies</span>
@@ -194,10 +236,10 @@ export default function Dashboard() {
 
                 <Button
                   variant="outline"
-                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group"
+                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group hover:shadow-lg hover:shadow-green-500/20"
                   onClick={() => navigate("/deals")}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center mb-3 group-hover:scale-110 group-hover:rotate-6 transition-all">
                     <DollarSign className="h-5 w-5 text-green-500" />
                   </div>
                   <span className="font-semibold text-sm">Deals</span>
@@ -208,7 +250,7 @@ export default function Dashboard() {
           </Card>
 
           {/* Recent Companies - Spans full width on larger screens */}
-          <Card className="lg:col-span-4 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50">
+          <Card className="lg:col-span-4 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50 hover:shadow-primary/10 hover:shadow-xl">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -224,10 +266,10 @@ export default function Dashboard() {
                 {recentCompanies?.slice(0, 3).map((company, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-4 p-4 rounded-xl border-2 hover:border-primary/50 hover:shadow-md transition-all bg-gradient-to-br from-card to-primary/5 cursor-pointer group"
+                    className="flex items-center gap-4 p-4 rounded-xl border-2 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/20 transition-all bg-gradient-to-br from-card to-primary/5 cursor-pointer group"
                     onClick={() => navigate("/companies")}
                   >
-                    <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                    <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm group-hover:scale-110 group-hover:rotate-6 transition-all">
                       <Building2 className="h-5 w-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">

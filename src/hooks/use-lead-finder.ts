@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { leadFinderApi, LeadFinderRequest } from '@/lib/api/lead-finder';
 import { useToast } from '@/hooks/use-toast';
 
@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
  */
 export const useLeadFinder = () => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (request: LeadFinderRequest) => leadFinderApi.findLeads(request),
@@ -21,6 +22,12 @@ export const useLeadFinder = () => {
       }
 
       if (response.data) {
+        // Invalidate companies queries if companies were inserted
+        if (!response.data.dryRun && response.data.inserted > 0) {
+          queryClient.invalidateQueries({ queryKey: ['companies'] });
+          queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] });
+        }
+        
         toast({
           title: 'Success',
           description: `Found ${response.data.leads.length} leads. ${

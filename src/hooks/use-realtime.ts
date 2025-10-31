@@ -119,10 +119,86 @@ export const useSequencesRealtime = () => {
 };
 
 /**
+ * Hook to subscribe to real-time updates for people table
+ */
+export const usePeopleRealtime = () => {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('people-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'people',
+        },
+        (payload: RealtimePostgresChangesPayload<any>) => {
+          console.log('People realtime update:', payload.eventType);
+          
+          queryClient.invalidateQueries({ queryKey: ['people'] });
+          
+          if (payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
+            const personId = payload.old?.id;
+            if (personId) {
+              queryClient.invalidateQueries({ queryKey: ['person', personId] });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+};
+
+/**
+ * Hook to subscribe to real-time updates for company_sequences table
+ */
+export const useCompanySequencesRealtime = () => {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('company-sequences-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'company_sequences',
+        },
+        (payload: RealtimePostgresChangesPayload<any>) => {
+          console.log('Company sequences realtime update:', payload.eventType);
+          
+          queryClient.invalidateQueries({ queryKey: ['company-sequences'] });
+          
+          if (payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
+            const sequenceId = payload.old?.id;
+            if (sequenceId) {
+              queryClient.invalidateQueries({ queryKey: ['company-sequence', sequenceId] });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+};
+
+/**
  * Combined hook for all real-time subscriptions
  */
 export const useAllRealtime = () => {
   useCompaniesRealtime();
   useDealsRealtime();
   useSequencesRealtime();
+  usePeopleRealtime();
+  useCompanySequencesRealtime();
 };
