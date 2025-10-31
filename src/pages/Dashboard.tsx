@@ -148,7 +148,10 @@ export default function Dashboard() {
         {/* Bento Grid Layout */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Large Revenue Card - Spans 2 columns */}
-          <Card className="lg:col-span-2 lg:row-span-2 border-2 hover:border-primary/50 transition-all shadow-xl bg-gradient-to-br from-primary via-primary to-primary/80 text-white overflow-hidden group animate-pulse-glow">
+          <Card 
+            className="lg:col-span-2 lg:row-span-2 border-2 hover:border-primary/50 transition-all shadow-xl bg-gradient-to-br from-primary via-primary to-primary/80 text-white overflow-hidden group animate-pulse-glow cursor-pointer"
+            onClick={() => navigate("/deals")}
+          >
             <div className="absolute inset-0 bg-grid-white/[0.05] pointer-events-none" />
             <div className="relative p-8 h-full flex flex-col justify-between">
               <div>
@@ -175,7 +178,10 @@ export default function Dashboard() {
           </Card>
 
           {/* Companies Card */}
-          <Card className="border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-blue-500/5 overflow-hidden group hover:shadow-blue-500/20 hover:shadow-2xl">
+          <Card 
+            className="border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-blue-500/5 overflow-hidden group hover:shadow-blue-500/20 hover:shadow-2xl cursor-pointer"
+            onClick={() => navigate("/companies")}
+          >
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -194,7 +200,10 @@ export default function Dashboard() {
           </Card>
 
           {/* Contacts Card */}
-          <Card className="border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-purple-500/5 overflow-hidden group hover:shadow-purple-500/20 hover:shadow-2xl">
+          <Card 
+            className="border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-purple-500/5 overflow-hidden group hover:shadow-purple-500/20 hover:shadow-2xl cursor-pointer"
+            onClick={() => navigate("/people")}
+          >
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center">

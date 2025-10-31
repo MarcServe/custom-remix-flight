@@ -18,6 +18,7 @@ interface EventCardProps {
     deals?: { title: string };
   };
   onDelete?: (id: string) => void;
+  onClick?: () => void;
 }
 
 const eventIcons = {
@@ -38,11 +39,14 @@ const eventColors = {
   reminder: 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
 };
 
-export function EventCard({ event, onDelete }: EventCardProps) {
+export function EventCard({ event, onDelete, onClick }: EventCardProps) {
   const Icon = eventIcons[event.type];
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card 
+      className="hover:shadow-md transition-shadow cursor-pointer"
+      onClick={onClick}
+    >
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <div className={`p-2 rounded-lg ${eventColors[event.type]}`}>
@@ -67,7 +71,10 @@ export function EventCard({ event, onDelete }: EventCardProps) {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => onDelete(event.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(event.id);
+                  }}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>

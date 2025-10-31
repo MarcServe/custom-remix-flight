@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DollarSign, Calendar, LayoutGrid, Kanban } from "lucide-react";
 import { DealActivityIndicator } from "@/components/DealActivityIndicator";
+import { DealDetailsDialog } from "@/components/DealDetailsDialog";
 import { format } from "date-fns";
 import { useDeals, useUpdateDealStage } from "@/hooks/use-deals";
 import { KanbanBoard, KanbanItem } from "@/components/kanban/KanbanBoard";
@@ -11,7 +12,9 @@ import { toast } from "sonner";
 
 export default function Deals() {
   const [view, setView] = useState<"grid" | "kanban">("grid");
-  const { data: deals, isLoading } = useDeals();
+  const [selectedDeal, setSelectedDeal] = useState<any>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const { data: deals, isLoading, refetch } = useDeals();
   const updateDealStage = useUpdateDealStage();
 
   if (isLoading) {
@@ -51,6 +54,11 @@ export default function Deals() {
     updateDealStage.mutate({ id: itemId, stage: newStatus });
   };
 
+  const handleDealClick = (deal: any) => {
+    setSelectedDeal(deal);
+    setDetailsDialogOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -84,7 +92,8 @@ export default function Deals() {
           columns={kanbanColumns}
           onStatusChange={handleStatusChange}
           onItemClick={(item) => {
-            toast.info(`Clicked: ${item.title}`);
+            const deal = deals?.find((d) => d.id === item.id);
+            if (deal) handleDealClick(deal);
           }}
         />
       ) : (
@@ -93,7 +102,7 @@ export default function Deals() {
             <Card 
               key={deal.id} 
               className="transition-all hover:shadow-md cursor-pointer"
-              onClick={() => toast.info(`Clicked: ${deal.title}`)}
+              onClick={() => handleDealClick(deal)}
             >
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -126,6 +135,15 @@ export default function Deals() {
             </Card>
           ))}
         </div>
+      )}
+
+      {selectedDeal && (
+        <DealDetailsDialog
+          deal={selectedDeal}
+          open={detailsDialogOpen}
+          onOpenChange={setDetailsDialogOpen}
+          onUpdate={refetch}
+        />
       )}
     </div>
   );

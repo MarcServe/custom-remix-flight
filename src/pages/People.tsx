@@ -6,11 +6,14 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Mail, Phone, Briefcase, Linkedin, Upload, Users } from "lucide-react";
 import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
+import { PersonDetailsDialog } from "@/components/PersonDetailsDialog";
 
 export default function People() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState<any>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   
-  const { data: people, isLoading } = useQuery({
+  const { data: people, isLoading, refetch } = useQuery({
     queryKey: ["people"],
     queryFn: async () => {
       const { data } = await supabase
@@ -53,7 +56,14 @@ export default function People() {
       {people && people.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {people.map((person) => (
-            <Card key={person.id} className="transition-all hover:shadow-md border-2">
+            <Card 
+              key={person.id} 
+              className="transition-all hover:shadow-md border-2 cursor-pointer"
+              onClick={() => {
+                setSelectedPerson(person);
+                setDetailsDialogOpen(true);
+              }}
+            >
               <CardHeader>
                 <div className="flex items-start gap-4">
                   <Avatar className="h-12 w-12">
@@ -131,6 +141,15 @@ export default function People() {
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
       />
+
+      {selectedPerson && (
+        <PersonDetailsDialog
+          person={selectedPerson}
+          open={detailsDialogOpen}
+          onOpenChange={setDetailsDialogOpen}
+          onUpdate={refetch}
+        />
+      )}
     </div>
   );
 }

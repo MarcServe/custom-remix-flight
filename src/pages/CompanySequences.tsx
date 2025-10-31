@@ -245,7 +245,11 @@ export default function CompanySequences() {
               return (
                 <Card 
                   key={sequence.id}
-                  className="border-2 hover:border-primary/50 transition-all shadow-lg hover:shadow-xl"
+                  className="border-2 hover:border-primary/50 transition-all shadow-lg hover:shadow-xl cursor-pointer"
+                  onClick={() => {
+                    // Navigate to company details or show sequence details
+                    navigate(`/companies`); // Could be improved with a dedicated sequence details page
+                  }}
                 >
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between mb-4">
@@ -273,7 +277,7 @@ export default function CompanySequences() {
                         </div>
                       </div>
 
-                      <div className="flex gap-2">
+                      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                         {sequence.status === 'active' && (
                           <Button
                             size="sm"

@@ -209,6 +209,11 @@ export default function Events() {
                     key={event.id}
                     event={event}
                     onDelete={handleDelete}
+                    onClick={() => {
+                      const eventTitle = event.content.title || event.type;
+                      const eventDesc = event.content.description || 'No description';
+                      alert(`${eventTitle}\n\n${eventDesc}\n\n${event.companies?.name || ''} ${event.deals?.title || ''}`);
+                    }}
                   />
                 ))}
               </div>
