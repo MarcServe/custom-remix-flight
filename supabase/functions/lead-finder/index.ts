@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createTrace, createSpan, endSpan } from '../_shared/langfuse.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,23 +13,25 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { size, geography, industry, dryRun } = await req.json();
+    const { size, geography, industry, dryRun, provider, model } = await req.json();
 
-    console.log("Lead Finder request:", { size, geography, industry, dryRun });
+    console.log("Lead Finder request:", { size, geography, industry, dryRun, provider, model });
+
+    // Create trace for observability
+    const trace = createTrace('lead-finder', undefined, { size, geography, industry });
 
     const EXA_API_KEY = Deno.env.get("EXA_API_KEY");
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
-    if (!EXA_API_KEY || !OPENAI_API_KEY) {
-      console.error("Missing API keys - EXA:", !!EXA_API_KEY, "OPENAI:", !!OPENAI_API_KEY);
-      throw new Error("Missing API keys");
+    if (!EXA_API_KEY) {
+      console.error("Missing EXA_API_KEY");
+      throw new Error("Missing Exa API key");
     }
 
-    // Ensure keys are clean strings
     const exaKey = String(EXA_API_KEY).trim();
-    const openaiKey = String(OPENAI_API_KEY).trim();
 
-    // Search for companies using Exa API
+    // Exa search span
+    const exaSpan = createSpan(trace, 'exa-api-search', { query: `${industry} companies in ${geography} with ${size} employees` });
+
     const exaQuery = `${industry} companies in ${geography} with ${size} employees`;
     console.log("Exa search query:", exaQuery);
 
@@ -49,13 +52,16 @@ Deno.serve(async (req) => {
     if (!exaResponse.ok) {
       const errorText = await exaResponse.text();
       console.error("Exa API error:", errorText);
+      await endSpan(exaSpan, undefined, new Error(`Exa API error: ${exaResponse.statusText}`));
       throw new Error(`Exa API error: ${exaResponse.statusText}`);
     }
 
     const exaData = await exaResponse.json();
     console.log("Exa results:", exaData.results?.length || 0);
+    
+    await endSpan(exaSpan, { resultCount: exaData.results?.length || 0 });
 
-    // Extract and normalize company data using OpenAI
+    // Call AI provider for data extraction
     const extractionPrompt = `Extract company information from the following search results and return ONLY a valid JSON array of objects (no markdown, no code blocks, just the JSON array).
 
 Each object must have these exact fields:
@@ -72,40 +78,42 @@ ${JSON.stringify(exaData.results, null, 2)}
 
 Return ONLY the JSON array, nothing else.`;
 
-    const openaiResponse = await fetch(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${openaiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a data extraction assistant. Return only valid JSON arrays, no markdown or explanations.",
-            },
-            {
-              role: "user",
-              content: extractionPrompt,
-            },
-          ],
-          temperature: 0.3,
-        }),
-      }
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    // Call ai-provider function
+    const aiProviderResponse = await fetch(`${supabaseUrl}/functions/v1/ai-provider`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        provider: provider || 'lovable',
+        model: model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a data extraction assistant. Return only valid JSON arrays, no markdown or explanations.',
+          },
+          {
+            role: 'user',
+            content: extractionPrompt,
+          },
+        ],
+        temperature: 0.3,
+        traceId: trace.id,
+      }),
+    });
 
-    if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      console.error("OpenAI API error:", errorText);
-      throw new Error(`OpenAI API error: ${openaiResponse.statusText}`);
+    if (!aiProviderResponse.ok) {
+      const errorText = await aiProviderResponse.text();
+      console.error("AI Provider error:", errorText);
+      throw new Error(`AI Provider error: ${aiProviderResponse.statusText}`);
     }
 
-    const openaiData = await openaiResponse.json();
-    const extractedText = openaiData.choices[0].message.content.trim();
+    const aiResult = await aiProviderResponse.json();
+    const extractedText = aiResult.content.trim();
     
     // Clean up the response - remove markdown code blocks if present
     let cleanedText = extractedText;
@@ -116,6 +124,8 @@ Return ONLY the JSON array, nothing else.`;
     }
     
     console.log("Extracted text (cleaned):", cleanedText);
+    console.log("AI Provider used:", aiResult.provider, "Model:", aiResult.model);
+    console.log("Usage:", aiResult.usage);
 
     let leads;
     try {
@@ -135,9 +145,10 @@ Return ONLY the JSON array, nothing else.`;
     // If not dry run, insert into database
     let insertedCount = 0;
     if (!dryRun) {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      const dbSpan = createSpan(trace, 'database-upsert');
+      
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
       for (const lead of leads) {
         try {
@@ -152,6 +163,9 @@ Return ONLY the JSON array, nothing else.`;
               linkedin_url: lead.linkedinUrl || null,
               status: "NEW",
               enriched_at: new Date().toISOString(),
+              enrichment_provider: aiResult.provider,
+              enrichment_model: aiResult.model,
+              langfuse_trace_id: aiResult.traceId,
             },
             {
               onConflict: "website",
@@ -170,6 +184,7 @@ Return ONLY the JSON array, nothing else.`;
       }
 
       console.log("Inserted companies:", insertedCount);
+      await endSpan(dbSpan, { insertedCount });
     }
 
     return new Response(
@@ -177,6 +192,10 @@ Return ONLY the JSON array, nothing else.`;
         leads,
         inserted: insertedCount,
         dryRun,
+        provider: aiResult.provider,
+        model: aiResult.model,
+        usage: aiResult.usage,
+        traceUrl: aiResult.traceUrl,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

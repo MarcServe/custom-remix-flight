@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createTrace, createSpan, endSpan } from '../_shared/langfuse.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,18 +13,12 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { size, geography, industry, steps = 3, tone = "professional" } = await req.json();
+    const { size, geography, industry, steps = 3, tone = "professional", provider, model } = await req.json();
 
-    console.log("Sequence generation request:", { size, geography, industry, steps, tone });
+    console.log("Sequence generation request:", { size, geography, industry, steps, tone, provider, model });
 
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-
-    if (!OPENAI_API_KEY) {
-      throw new Error("Missing OpenAI API key");
-    }
-
-    // Ensure key is clean string
-    const openaiKey = String(OPENAI_API_KEY).trim();
+    // Create trace for observability
+    const trace = createTrace('generate-sequence', undefined, { size, geography, industry, steps, tone });
 
     const sequencePrompt = `Generate a ${steps}-step cold email outreach sequence for reaching out to ${industry} companies in ${geography} with ${size} employees.
 
@@ -38,39 +33,42 @@ Make each email progressively more specific and value-focused. Keep emails conci
 
 Return ONLY the JSON array.`;
 
-    const openaiResponse = await fetch(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${openaiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content: "You are an expert sales copywriter. Return only valid JSON arrays, no markdown.",
-            },
-            {
-              role: "user",
-              content: sequencePrompt,
-            },
-          ],
-          temperature: 0.7,
-        }),
-      }
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    // Call ai-provider function
+    const aiProviderResponse = await fetch(`${supabaseUrl}/functions/v1/ai-provider`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        provider: provider || 'lovable',
+        model: model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert sales copywriter. Return only valid JSON arrays, no markdown.',
+          },
+          {
+            role: 'user',
+            content: sequencePrompt,
+          },
+        ],
+        temperature: 0.7,
+        traceId: trace.id,
+      }),
+    });
 
-    if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      console.error("OpenAI API error:", errorText);
-      throw new Error(`OpenAI API error: ${openaiResponse.statusText}`);
+    if (!aiProviderResponse.ok) {
+      const errorText = await aiProviderResponse.text();
+      console.error("AI Provider error:", errorText);
+      throw new Error(`AI Provider error: ${aiProviderResponse.statusText}`);
     }
 
-    const openaiData = await openaiResponse.json();
-    const generatedText = openaiData.choices[0].message.content.trim();
+    const aiResult = await aiProviderResponse.json();
+    const generatedText = aiResult.content.trim();
 
     // Clean up markdown code blocks
     let cleanedText = generatedText;
@@ -81,6 +79,8 @@ Return ONLY the JSON array.`;
     }
 
     console.log("Generated sequence (cleaned):", cleanedText);
+    console.log("AI Provider used:", aiResult.provider, "Model:", aiResult.model);
+    console.log("Usage:", aiResult.usage);
 
     let sequence;
     try {
@@ -98,9 +98,10 @@ Return ONLY the JSON array.`;
     console.log("Generated sequence steps:", sequence.length);
 
     // Save the sequence to the database
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const dbSpan = createSpan(trace, 'database-insert');
+    
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const sequenceName = `${industry} in ${geography} (${size}) - ${tone}`;
 
@@ -114,22 +115,31 @@ Return ONLY the JSON array.`;
           geography,
           industry,
         },
+        provider: aiResult.provider,
+        model: aiResult.model,
+        langfuse_trace_id: aiResult.traceId,
       })
       .select()
       .single();
 
     if (sequenceError) {
       console.error("Error saving sequence:", sequenceError);
+      await endSpan(dbSpan, undefined, sequenceError);
       throw sequenceError;
     }
 
     console.log("Saved sequence:", savedSequence.id);
+    await endSpan(dbSpan, { sequenceId: savedSequence.id });
 
     return new Response(
       JSON.stringify({
         sequence,
         sequenceId: savedSequence.id,
         name: sequenceName,
+        provider: aiResult.provider,
+        model: aiResult.model,
+        usage: aiResult.usage,
+        traceUrl: aiResult.traceUrl,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
