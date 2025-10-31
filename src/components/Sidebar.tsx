@@ -1,4 +1,5 @@
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase } from "lucide-react";
+import { useState } from "react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: BarChart3 },
@@ -28,6 +30,7 @@ const navigation = [
 export const Sidebar = () => {
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const getUserInitials = () => {
     if (!user?.email) return 'U';
@@ -42,16 +45,33 @@ export const Sidebar = () => {
   };
 
   return (
-    <div className="flex h-full w-64 flex-col border-r bg-card">
-      <div className="flex h-16 items-center border-b px-6">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-          LeadGeni
-        </h1>
+    <div className={cn(
+      "flex h-full flex-col border-r bg-card transition-all duration-300",
+      isCollapsed ? "w-16" : "w-64"
+    )}>
+      <div className="flex h-16 items-center border-b px-3 justify-between">
+        {!isCollapsed && (
+          <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+            LeadGeni
+          </h1>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="h-8 w-8"
+        >
+          {isCollapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
+        </Button>
       </div>
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {
           const isActive = location.pathname === item.href;
-          return (
+          const linkContent = (
             <Link
               key={item.name}
               to={item.href}
@@ -59,13 +79,29 @@ export const Sidebar = () => {
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 isActive
                   ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                isCollapsed && "justify-center"
               )}
             >
-              <item.icon className="h-5 w-5" />
-              {item.name}
+              <item.icon className="h-5 w-5 shrink-0" />
+              {!isCollapsed && <span>{item.name}</span>}
             </Link>
           );
+
+          if (isCollapsed) {
+            return (
+              <Tooltip key={item.name} delayDuration={0}>
+                <TooltipTrigger asChild>
+                  {linkContent}
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>{item.name}</p>
+                </TooltipContent>
+              </Tooltip>
+            );
+          }
+
+          return linkContent;
         })}
       </nav>
       
@@ -73,18 +109,26 @@ export const Sidebar = () => {
         <div className="border-t p-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start gap-3 h-auto p-3">
-                <Avatar className="h-8 w-8">
+              <Button 
+                variant="ghost" 
+                className={cn(
+                  "w-full h-auto p-3",
+                  isCollapsed ? "justify-center" : "justify-start gap-3"
+                )}
+              >
+                <Avatar className="h-8 w-8 shrink-0">
                   <AvatarFallback className="bg-primary text-primary-foreground">
                     {getUserInitials()}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex flex-col items-start text-sm">
-                  <span className="font-medium">{getUserDisplayName()}</span>
-                  <span className="text-xs text-muted-foreground truncate max-w-[150px]">
-                    {user.email}
-                  </span>
-                </div>
+                {!isCollapsed && (
+                  <div className="flex flex-col items-start text-sm">
+                    <span className="font-medium">{getUserDisplayName()}</span>
+                    <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+                      {user.email}
+                    </span>
+                  </div>
+                )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
