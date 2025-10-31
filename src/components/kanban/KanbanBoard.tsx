@@ -18,6 +18,8 @@ export interface KanbanItem {
   company?: string;
   amount?: number;
   closeDate?: string;
+  tags?: string[];
+  priority?: string;
 }
 
 interface KanbanBoardProps {
@@ -92,6 +94,8 @@ export function KanbanBoard({
                   company={item.company}
                   amount={item.amount}
                   closeDate={item.closeDate}
+                  tags={item.tags}
+                  priority={item.priority}
                   onClick={() => onItemClick?.(item)}
                 />
               ))}
@@ -108,6 +112,8 @@ export function KanbanBoard({
             company={activeItem.company}
             amount={activeItem.amount}
             closeDate={activeItem.closeDate}
+            tags={activeItem.tags}
+            priority={activeItem.priority}
           />
         ) : null}
       </DragOverlay>

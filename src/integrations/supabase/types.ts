@@ -452,8 +452,12 @@ export type Database = {
           close_date: string | null
           company_id: string | null
           created_at: string | null
+          follow_up_date: string | null
           id: string
+          notes: string | null
+          priority: string | null
           stage: string | null
+          tags: string[] | null
           title: string
           updated_at: string | null
         }
@@ -462,8 +466,12 @@ export type Database = {
           close_date?: string | null
           company_id?: string | null
           created_at?: string | null
+          follow_up_date?: string | null
           id?: string
+          notes?: string | null
+          priority?: string | null
           stage?: string | null
+          tags?: string[] | null
           title: string
           updated_at?: string | null
         }
@@ -472,8 +480,12 @@ export type Database = {
           close_date?: string | null
           company_id?: string | null
           created_at?: string | null
+          follow_up_date?: string | null
           id?: string
+          notes?: string | null
+          priority?: string | null
           stage?: string | null
+          tags?: string[] | null
           title?: string
           updated_at?: string | null
         }

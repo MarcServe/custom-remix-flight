@@ -16,7 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   DollarSign, Calendar, Building2, Pencil, 
-  Trash2, TrendingUp 
+  Trash2, TrendingUp, Clock, Tag as TagIcon, 
+  X, Plus, AlertCircle
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -51,8 +52,26 @@ export function DealDetailsDialog({
   onUpdate,
 }: DealDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState(deal);
+  const [formData, setFormData] = useState<any>(deal);
   const [loading, setLoading] = useState(false);
+  const [tagInput, setTagInput] = useState("");
+
+  const handleAddTag = () => {
+    if (tagInput.trim() && !formData.tags?.includes(tagInput.trim())) {
+      setFormData({ 
+        ...formData, 
+        tags: [...(formData.tags || []), tagInput.trim()] 
+      });
+      setTagInput("");
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setFormData({
+      ...formData,
+      tags: (formData.tags || []).filter((tag: string) => tag !== tagToRemove),
+    });
+  };
 
   const handleSave = async () => {
     setLoading(true);
@@ -64,6 +83,10 @@ export function DealDetailsDialog({
           stage: formData.stage,
           amount: formData.amount,
           close_date: formData.close_date,
+          follow_up_date: formData.follow_up_date,
+          priority: formData.priority,
+          notes: formData.notes,
+          tags: formData.tags,
         })
         .eq("id", deal.id);
 
@@ -164,25 +187,46 @@ export function DealDetailsDialog({
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="stage">Stage</Label>
-                  <Select
-                    value={formData.stage || "NEW"}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, stage: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DEAL_STAGES.map((stage) => (
-                        <SelectItem key={stage} value={stage}>
-                          {stage}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="stage">Stage</Label>
+                    <Select
+                      value={formData.stage || "NEW"}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, stage: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DEAL_STAGES.map((stage) => (
+                          <SelectItem key={stage} value={stage}>
+                            {stage}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="priority">Priority</Label>
+                    <Select
+                      value={formData.priority || "medium"}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, priority: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -197,15 +241,78 @@ export function DealDetailsDialog({
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="close_date">Expected Close Date</Label>
+                    <Input
+                      id="close_date"
+                      type="date"
+                      value={formData.close_date?.split("T")[0] || ""}
+                      onChange={(e) =>
+                        setFormData({ ...formData, close_date: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="follow_up_date">Follow-up Date</Label>
+                    <Input
+                      id="follow_up_date"
+                      type="datetime-local"
+                      value={formData.follow_up_date?.substring(0, 16) || ""}
+                      onChange={(e) =>
+                        setFormData({ ...formData, follow_up_date: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="close_date">Expected Close Date</Label>
-                  <Input
-                    id="close_date"
-                    type="date"
-                    value={formData.close_date?.split("T")[0] || ""}
+                  <Label htmlFor="tags">Tags</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="tags"
+                      placeholder="Add a tag"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddTag();
+                        }
+                      }}
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={handleAddTag}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {formData.tags && formData.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {formData.tags.map((tag: string, idx: number) => (
+                        <Badge key={idx} variant="secondary" className="gap-1">
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTag(tag)}
+                            className="ml-1 hover:text-destructive"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    value={formData.notes || ""}
                     onChange={(e) =>
-                      setFormData({ ...formData, close_date: e.target.value })
+                      setFormData({ ...formData, notes: e.target.value })
                     }
+                    rows={4}
                   />
                 </div>
 
@@ -226,7 +333,7 @@ export function DealDetailsDialog({
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm text-muted-foreground">Stage</CardTitle>
@@ -235,6 +342,24 @@ export function DealDetailsDialog({
                       <Badge>{deal.stage}</Badge>
                     </CardContent>
                   </Card>
+
+                  {(deal as any).priority && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm text-muted-foreground">Priority</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <Badge variant="outline" className={
+                          (deal as any).priority === 'high' ? 'bg-red-500/10 text-red-600 border-red-500/20' :
+                          (deal as any).priority === 'low' ? 'bg-green-500/10 text-green-600 border-green-500/20' :
+                          'bg-yellow-500/10 text-yellow-600 border-yellow-500/20'
+                        }>
+                          <AlertCircle className="h-3 w-3 mr-1" />
+                          {(deal as any).priority}
+                        </Badge>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {deal.amount && (
                     <Card>
@@ -251,6 +376,26 @@ export function DealDetailsDialog({
                   )}
                 </div>
 
+                {(deal as any).tags && (deal as any).tags.length > 0 && (
+                  <Card className="bg-muted/50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <TagIcon className="h-4 w-4" />
+                        Tags
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {(deal as any).tags.map((tag: string, idx: number) => (
+                          <Badge key={idx} variant="secondary">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {deal.companies?.name && (
                   <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
                     <Building2 className="h-5 w-5 text-muted-foreground" />
@@ -261,16 +406,43 @@ export function DealDetailsDialog({
                   </div>
                 )}
 
-                {deal.close_date && (
-                  <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-                    <Calendar className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">
-                        {format(new Date(deal.close_date), "MMMM dd, yyyy")}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Expected Close Date</p>
+                <div className="grid grid-cols-2 gap-4">
+                  {deal.close_date && (
+                    <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+                      <Calendar className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">
+                          {format(new Date(deal.close_date), "MMMM dd, yyyy")}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Expected Close</p>
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {(deal as any).follow_up_date && (
+                    <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+                      <Clock className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">
+                          {format(new Date((deal as any).follow_up_date), "MMM dd, h:mm a")}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Follow-up</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {(deal as any).notes && (
+                  <Card className="bg-muted/50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm">Notes</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                        {(deal as any).notes}
+                      </p>
+                    </CardContent>
+                  </Card>
                 )}
 
                 {deal.created_at && (
