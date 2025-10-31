@@ -259,7 +259,7 @@ export function CompanyDetailsDialog({
           </TabsList>
 
           <TabsContent value="overview" className="mt-0 flex-1 overflow-hidden">
-            <ScrollArea className="h-full px-6 pb-6">
+            <ScrollArea className="flex-1 h-full px-6 pb-6">
               <div className="space-y-6 pt-4">
             {/* Overview Section */}
             <div className="space-y-3">
@@ -559,7 +559,7 @@ export function CompanyDetailsDialog({
           </TabsContent>
 
           <TabsContent value="activity" className="mt-0 flex-1 overflow-hidden">
-            <ScrollArea className="h-full px-6 pb-6">
+            <ScrollArea className="flex-1 h-full px-6 pb-6">
               <div className="space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">

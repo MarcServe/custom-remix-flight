@@ -58,8 +58,8 @@ export function SequenceDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader className="shrink-0">
+      <DialogContent className="max-w-4xl h-[90vh] flex flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center">
               <Mail className="h-6 w-6 text-white" />
@@ -73,8 +73,8 @@ export function SequenceDetailsDialog({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 overflow-auto pr-4 h-full">
-          <div className="space-y-6 py-4">
+        <ScrollArea className="flex-1 overflow-auto">
+          <div className="px-6 py-4 space-y-6">
             {/* Sequence Metadata */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {sequence.segment_filters?.industry && (
