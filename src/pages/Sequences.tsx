@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users } from "lucide-react";
+import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users, Eye } from "lucide-react";
 import { useGenerateSequence, useSequences, useDeleteSequence } from "@/hooks/use-sequences";
 import { useCompanySequences, useUpdateSequenceStatus, useDeleteCompanySequence } from "@/hooks/use-company-sequences";
 import { useProviderStore } from "@/stores/provider-store";
@@ -17,6 +17,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonalizedSequenceCard } from "@/components/sequences/PersonalizedSequenceCard";
 import { SequenceChatCard } from "@/components/features/sequences/SequenceChatCard";
 import { AutomationMetrics } from "@/components/sequences/AutomationMetrics";
+import { SequenceDetailsDialog } from "@/components/sequences/SequenceDetailsDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 export default function Sequences() {
   const [size, setSize] = useState("");
@@ -26,6 +29,9 @@ export default function Sequences() {
   const [tone, setTone] = useState<"professional" | "casual" | "technical">("professional");
   const [customInstructions, setCustomInstructions] = useState("");
   const [expandedSteps, setExpandedSteps] = useState<number[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
+  const [selectedSequence, setSelectedSequence] = useState<any>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const { toast } = useToast();
 
   const { defaultProvider, defaultModels } = useProviderStore();
@@ -48,6 +54,30 @@ export default function Sequences() {
   const { data: companySequencesData, isLoading: isLoadingCompanySequences } = useCompanySequences();
   const updateSequenceStatus = useUpdateSequenceStatus();
   const deleteCompanySequence = useDeleteCompanySequence();
+
+  // Fetch companies for selector
+  const { data: companiesData } = useQuery({
+    queryKey: ['companies-for-sequence'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('companies')
+        .select('id, name, industry, geography, size')
+        .order('name');
+      return data || [];
+    },
+  });
+
+  // Auto-fill when company is selected
+  useEffect(() => {
+    if (selectedCompanyId && companiesData) {
+      const company = companiesData.find(c => c.id === selectedCompanyId);
+      if (company) {
+        if (company.industry) setIndustry(company.industry);
+        if (company.geography) setGeography(company.geography);
+        if (company.size) setSize(company.size);
+      }
+    }
+  }, [selectedCompanyId, companiesData]);
 
   const handleGenerate = async () => {
     const { data } = await generateMutation.mutateAsync({
@@ -143,6 +173,34 @@ export default function Sequences() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-5">
+                {/* Company Selector */}
+                <div className="space-y-2">
+                  <Label htmlFor="seq-company" className="text-sm font-medium flex items-center gap-2">
+                    <Users className="h-4 w-4 text-primary" />
+                    Select Company (Optional - Auto-fills fields)
+                  </Label>
+                  <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+                    <SelectTrigger id="seq-company" className="h-10">
+                      <SelectValue placeholder="Choose a company from your CRM" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">None - Manual Entry</SelectItem>
+                      {companiesData?.map((company) => (
+                        <SelectItem key={company.id} value={company.id}>
+                          {company.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedCompanyId && (
+                    <p className="text-xs text-muted-foreground">
+                      Company details will auto-fill below. You can still modify them.
+                    </p>
+                  )}
+                </div>
+
+                <Separator />
+
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="seq-size" className="text-sm font-medium flex items-center gap-2">
@@ -521,7 +579,11 @@ export default function Sequences() {
                   {sequences.map((sequence: any) => (
                     <Card 
                       key={sequence.id} 
-                      className="group transition-all hover:shadow-xl hover:scale-[1.02] border-2 hover:border-primary/50 bg-gradient-to-br from-card to-card/50 overflow-hidden"
+                      className="group transition-all hover:shadow-xl hover:scale-[1.02] border-2 hover:border-primary/50 bg-gradient-to-br from-card to-card/50 overflow-hidden cursor-pointer"
+                      onClick={() => {
+                        setSelectedSequence(sequence);
+                        setDetailsDialogOpen(true);
+                      }}
                     >
                       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-primary" />
                       <CardHeader className="pb-3">
@@ -530,8 +592,9 @@ export default function Sequences() {
                             <Mail className="h-6 w-6 text-white" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <CardTitle className="text-base truncate mb-1">
+                            <CardTitle className="text-base truncate mb-1 flex items-center gap-2">
                               {sequence.name}
+                              <Eye className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </CardTitle>
                             {sequence.segment_filters && (
                               <div className="flex flex-wrap gap-1.5">
@@ -555,7 +618,10 @@ export default function Sequences() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => handleDelete(sequence.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(sequence.id);
+                            }}
                             disabled={deleteMutation.isPending}
                             className="h-8 hover:bg-destructive/10 hover:text-destructive"
                           >
@@ -584,6 +650,15 @@ export default function Sequences() {
           </div>
         </div>
       </div>
+
+      {/* Sequence Details Dialog */}
+      {selectedSequence && (
+        <SequenceDetailsDialog
+          open={detailsDialogOpen}
+          onOpenChange={setDetailsDialogOpen}
+          sequence={selectedSequence}
+        />
+      )}
     </div>
   );
 }
