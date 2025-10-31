@@ -1,12 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { StatCard } from "@/components/StatCard";
-import { QuickActions } from "@/components/QuickActions";
-import { Building2, Users, DollarSign, TrendingUp } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Building2, Users, DollarSign, TrendingUp, Sparkles, Search, Mail, BarChart3, ArrowUpRight } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+
   const { data: companies } = useQuery({
     queryKey: ["companies-count"],
     queryFn: async () => {
@@ -50,73 +52,198 @@ export default function Dashboard() {
     },
   });
 
+  const revenue = (deals?.total || 0) / 1000;
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground mt-2">Welcome to your sales overview</p>
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+      {/* Hero Section */}
+      <div className="relative overflow-hidden border-b bg-gradient-to-br from-primary/10 via-primary/5 to-transparent backdrop-blur-sm">
+        <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
+        <div className="relative px-6 py-16">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
+                <BarChart3 className="h-5 w-5 text-white" />
+              </div>
+              <Badge className="bg-gradient-primary text-sm px-3 py-1">
+                <Sparkles className="h-3 w-3 mr-1" />
+                Live
+              </Badge>
+            </div>
+            <h1 className="text-5xl font-bold tracking-tight bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent mb-2">
+              Sales Dashboard
+            </h1>
+            <p className="text-muted-foreground text-lg">
+              Your real-time sales performance overview
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Companies"
-          value={companies || 0}
-          icon={Building2}
-          trend={{ value: "+12.5%", isPositive: true }}
-        />
-        <StatCard
-          title="Active Deals"
-          value={deals?.count || 0}
-          icon={DollarSign}
-          trend={{ value: "+8.2%", isPositive: true }}
-        />
-        <StatCard
-          title="Total Contacts"
-          value={people || 0}
-          icon={Users}
-          trend={{ value: "+4.1%", isPositive: true }}
-        />
-        <StatCard
-          title="Revenue"
-          value={`$${((deals?.total || 0) / 1000).toFixed(0)}k`}
-          icon={TrendingUp}
-          trend={{ value: "+15.3%", isPositive: true }}
-        />
-      </div>
-
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-        <QuickActions />
-      </div>
-
-      <Card className="border-0 shadow-md">
-        <CardHeader className="border-b bg-muted/30">
-          <CardTitle className="text-xl">Recent Companies</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-6">
-          <div className="space-y-4">
-            {recentCompanies?.map((company, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between p-4 rounded-lg hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
-                    <Building2 className="h-6 w-6 text-primary" />
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Bento Grid Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Large Revenue Card - Spans 2 columns */}
+          <Card className="lg:col-span-2 lg:row-span-2 border-2 hover:border-primary/50 transition-all shadow-xl bg-gradient-to-br from-primary via-primary to-primary/80 text-white overflow-hidden group">
+            <div className="absolute inset-0 bg-grid-white/[0.05] pointer-events-none" />
+            <div className="relative p-8 h-full flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="w-14 h-14 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg">
+                    <DollarSign className="h-7 w-7 text-white" />
                   </div>
-                  <div>
-                    <p className="font-semibold text-foreground">{company.name}</p>
-                    <p className="text-sm text-muted-foreground">{company.industry}</p>
-                  </div>
+                  <Badge className="bg-white/20 backdrop-blur-sm text-white border-white/30">
+                    <TrendingUp className="h-3 w-3 mr-1" />
+                    +15.3%
+                  </Badge>
                 </div>
-                <Badge variant="secondary" className="text-xs font-medium px-3 py-1">
-                  {company.status}
+                <h3 className="text-lg font-medium text-white/80 mb-2">Total Revenue</h3>
+              </div>
+              <div>
+                <p className="text-6xl font-bold mb-4 group-hover:scale-105 transition-transform">
+                  ${revenue.toFixed(0)}k
+                </p>
+                <p className="text-white/70 text-sm">
+                  {deals?.count || 0} active deals in pipeline
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Companies Card */}
+          <Card className="border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-blue-500/5 overflow-hidden group">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <Building2 className="h-6 w-6 text-blue-500" />
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  <ArrowUpRight className="h-3 w-3 mr-1" />
+                  +12.5%
                 </Badge>
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              <h3 className="text-sm text-muted-foreground mb-2">Total Companies</h3>
+              <p className="text-4xl font-bold group-hover:scale-105 transition-transform">
+                {companies || 0}
+              </p>
+            </div>
+          </Card>
+
+          {/* Contacts Card */}
+          <Card className="border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-purple-500/5 overflow-hidden group">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                  <Users className="h-6 w-6 text-purple-500" />
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  <ArrowUpRight className="h-3 w-3 mr-1" />
+                  +4.1%
+                </Badge>
+              </div>
+              <h3 className="text-sm text-muted-foreground mb-2">Total Contacts</h3>
+              <p className="text-4xl font-bold group-hover:scale-105 transition-transform">
+                {people || 0}
+              </p>
+            </div>
+          </Card>
+
+          {/* Quick Actions - Spans 2 columns */}
+          <Card className="lg:col-span-2 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                Quick Actions
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  variant="outline"
+                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group"
+                  onClick={() => navigate("/lead-finder")}
+                >
+                  <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                    <Search className="h-5 w-5 text-blue-500" />
+                  </div>
+                  <span className="font-semibold text-sm">Find Leads</span>
+                  <span className="text-xs text-muted-foreground mt-1">AI-powered discovery</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group"
+                  onClick={() => navigate("/sequences")}
+                >
+                  <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                    <Mail className="h-5 w-5 text-orange-500" />
+                  </div>
+                  <span className="font-semibold text-sm">Sequences</span>
+                  <span className="text-xs text-muted-foreground mt-1">Email automation</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group"
+                  onClick={() => navigate("/companies")}
+                >
+                  <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                    <Building2 className="h-5 w-5 text-purple-500" />
+                  </div>
+                  <span className="font-semibold text-sm">Companies</span>
+                  <span className="text-xs text-muted-foreground mt-1">Manage accounts</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="h-auto flex-col items-start p-4 hover:bg-primary/10 hover:border-primary transition-all group"
+                  onClick={() => navigate("/deals")}
+                >
+                  <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                    <DollarSign className="h-5 w-5 text-green-500" />
+                  </div>
+                  <span className="font-semibold text-sm">Deals</span>
+                  <span className="text-xs text-muted-foreground mt-1">Track pipeline</span>
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          {/* Recent Companies - Spans full width on larger screens */}
+          <Card className="lg:col-span-4 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  Recent Activity
+                </h3>
+                <Button variant="ghost" size="sm" onClick={() => navigate("/companies")}>
+                  View all
+                  <ArrowUpRight className="h-3 w-3 ml-1" />
+                </Button>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {recentCompanies?.slice(0, 3).map((company, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-4 p-4 rounded-xl border-2 hover:border-primary/50 hover:shadow-md transition-all bg-gradient-to-br from-card to-primary/5 cursor-pointer group"
+                    onClick={() => navigate("/companies")}
+                  >
+                    <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                      <Building2 className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate">{company.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{company.industry}</p>
+                      <Badge variant="secondary" className="text-xs mt-1">
+                        {company.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
