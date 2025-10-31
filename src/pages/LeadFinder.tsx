@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,7 @@ import { useProviderStore } from "@/stores/provider-store";
 import { useUIStore } from "@/stores/ui-store";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 
 export default function LeadFinder() {
   const [size, setSize] = useState("");
@@ -17,12 +18,22 @@ export default function LeadFinder() {
   const [industry, setIndustry] = useState("");
   const [dryRun, setDryRun] = useState(true);
   const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState<any>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   
   const { defaultProvider, defaultModels } = useProviderStore();
   const [providerConfig, setProviderConfig] = useState({
     provider: defaultProvider,
     model: defaultModels[defaultProvider] as string | undefined,
   });
+
+  // Sync provider config with store changes
+  useEffect(() => {
+    setProviderConfig({
+      provider: defaultProvider,
+      model: defaultModels[defaultProvider] as string | undefined,
+    });
+  }, [defaultProvider, defaultModels]);
 
   const { leadFinderResults, setLeadFinderResults } = useUIStore();
   const leadFinderMutation = useLeadFinder();
@@ -291,7 +302,11 @@ export default function LeadFinder() {
                 {results.leads.map((company: any, idx: number) => (
                   <div
                     key={idx}
-                    className="group relative rounded-lg border bg-card hover:shadow-sm transition-all p-4"
+                    className="group relative rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all p-4 cursor-pointer"
+                    onClick={() => {
+                      setSelectedCompany(company);
+                      setDialogOpen(true);
+                    }}
                   >
                     <div className="flex gap-4">
                       {/* Company Icon */}
@@ -431,6 +446,12 @@ export default function LeadFinder() {
           )}
         </div>
       </div>
+
+      <CompanyDetailsDialog 
+        company={selectedCompany}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+      />
     </div>
   );
 }
