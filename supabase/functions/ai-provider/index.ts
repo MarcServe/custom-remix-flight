@@ -56,16 +56,19 @@ function calculateCost(provider: string, tokens: number, model?: string): number
 async function handleLovableAI(config: AIProviderRequest): Promise<AIProviderResponse> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   
-  if (!LOVABLE_API_KEY) {
+  if (!LOVABLE_API_KEY || LOVABLE_API_KEY.trim() === '') {
     throw new Error('LOVABLE_API_KEY not configured');
   }
+
+  // Trim the API key to remove any whitespace or newlines
+  const cleanApiKey = LOVABLE_API_KEY.trim();
 
   const model = config.model || 'google/gemini-2.5-flash';
   
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+      'Authorization': `Bearer ${cleanApiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -130,12 +133,15 @@ async function handleOpenAI(config: AIProviderRequest): Promise<AIProviderRespon
     throw new Error('OPENAI_API_KEY not configured. Please add it in Supabase Edge Function Secrets.');
   }
 
+  // Trim the API key to remove any whitespace or newlines
+  const cleanApiKey = OPENAI_API_KEY.trim();
+
   const model = config.model || 'gpt-4o-mini';
   
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Authorization': `Bearer ${cleanApiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -191,12 +197,15 @@ async function handlePerplexity(config: AIProviderRequest): Promise<AIProviderRe
     throw new Error('PERPLEXITY_API_KEY not configured. Please add it in Supabase Edge Function Secrets.');
   }
 
+  // Trim the API key to remove any whitespace or newlines
+  const cleanApiKey = PERPLEXITY_API_KEY.trim();
+
   const model = config.model || 'llama-3.1-sonar-small-128k-online';
   
   const response = await fetch('https://api.perplexity.ai/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+      'Authorization': `Bearer ${cleanApiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
