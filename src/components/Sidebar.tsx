@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,6 +32,23 @@ export const Sidebar = () => {
   const location = useLocation();
   const { user, signOut } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [location.pathname]);
+
+  // Close mobile menu on window resize to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsMobileOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const getUserInitials = () => {
     if (!user?.email) return 'U';
@@ -46,11 +63,34 @@ export const Sidebar = () => {
   };
 
   return (
-    <div className={cn(
-      "flex h-full flex-col border-r bg-card transition-all duration-300",
-      isCollapsed ? "w-16" : "w-64"
-    )}>
-      <div className="flex h-16 items-center border-b px-3 justify-between">
+    <>
+      {/* Mobile Menu Button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="fixed top-4 left-4 z-50 md:hidden"
+        onClick={() => setIsMobileOpen(!isMobileOpen)}
+      >
+        {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+      </Button>
+
+      {/* Mobile Overlay */}
+      {isMobileOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div className={cn(
+        "flex h-full flex-col border-r bg-card transition-all duration-300",
+        "fixed md:relative inset-y-0 left-0 z-40",
+        isCollapsed ? "w-16" : "w-64",
+        // Mobile: hidden by default, slide in when open
+        isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      )}>
+        <div className="flex h-16 items-center border-b px-3 justify-between">
         {!isCollapsed && (
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
             LeadGeni
@@ -60,7 +100,7 @@ export const Sidebar = () => {
           variant="ghost"
           size="icon"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="h-8 w-8"
+          className="h-8 w-8 hidden md:flex"
         >
           {isCollapsed ? (
             <ChevronRight className="h-4 w-4" />
@@ -150,6 +190,7 @@ export const Sidebar = () => {
           </DropdownMenu>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
