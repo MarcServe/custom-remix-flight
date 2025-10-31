@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, AlertTriangle, Info } from "lucide-react";
+import { Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
 import { nangoClient } from "@/lib/integrations/nango";
 
@@ -29,7 +29,6 @@ export function ConnectEmailDialog({
   onSuccess,
 }: ConnectEmailDialogProps) {
   const [loading, setLoading] = useState(false);
-  const [isFirefox, setIsFirefox] = useState(false);
   const [smtpConfig, setSMTPConfig] = useState({
     host: "",
     port: 587,
@@ -38,23 +37,13 @@ export function ConnectEmailDialog({
     secure: true,
   });
 
-  // Detect if user is on Firefox
-  useEffect(() => {
-    const isFF = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
-    setIsFirefox(isFF);
-  }, []);
-
   const handleOAuthConnect = async () => {
     setLoading(true);
     try {
       const { data, error } = await nangoClient.initiateOAuth(provider as 'gmail' | 'outlook');
       if (error) {
         if (error.message.includes('Popup blocked') || error.message.includes('popup')) {
-          if (isFirefox) {
-            toast.error("Popup blocked! Click the shield icon in the address bar and allow popups for this site.");
-          } else {
-            toast.error("Please allow popups and try again");
-          }
+          toast.error("Please allow popups in your browser and try again");
         } else if (error.message.includes('closed')) {
           toast.info("OAuth cancelled");
         } else {
@@ -192,19 +181,6 @@ export function ConnectEmailDialog({
           </div>
         ) : (
           <div className="space-y-4">
-            {isFirefox && (
-              <Alert className="border-orange-500/50 bg-orange-500/10">
-                <AlertTriangle className="h-4 w-4 text-orange-500" />
-                <AlertDescription className="text-sm">
-                  <strong>Firefox Users:</strong> Popups are required for OAuth. If blocked, click the shield icon 
-                  <span className="inline-flex items-center mx-1 px-1 py-0.5 bg-muted rounded">
-                    🛡️
-                  </span> 
-                  in your address bar and select "Disable Blocking For This Site".
-                </AlertDescription>
-              </Alert>
-            )}
-            
             <Alert className="border-blue-500/50 bg-blue-500/10">
               <Info className="h-4 w-4 text-blue-500" />
               <AlertDescription className="text-sm">
