@@ -26,14 +26,14 @@ export default function Pipeline() {
   const { data: pipelineData, isLoading } = useQuery({
     queryKey: ["pipeline-stats"],
     queryFn: async () => {
-      const statuses = ["NEW", "QUALIFIED", "CONTACTED", "MEETING", "PROPOSAL", "WON", "LOST"];
+      const stages = ["NEW", "QUALIFIED", "CONTACTED", "MEETING", "PROPOSAL", "WON", "LOST"];
       const results = await Promise.all(
-        statuses.map(async (status) => {
+        stages.map(async (stage) => {
           const { count } = await supabase
-            .from("companies")
+            .from("deals")
             .select("*", { count: "exact", head: true })
-            .eq("status", status);
-          return { status, count: count || 0 };
+            .eq("stage", stage);
+          return { status: stage, count: count || 0 };
         })
       );
       return results;
@@ -49,7 +49,7 @@ export default function Pipeline() {
         {
           event: "*",
           schema: "public",
-          table: "companies",
+          table: "deals",
         },
         () => {
           queryClient.invalidateQueries({ queryKey: ["pipeline-stats"] });
@@ -62,25 +62,33 @@ export default function Pipeline() {
     };
   }, [queryClient]);
 
-  const { data: companies } = useQuery({
-    queryKey: ["companies-kanban"],
+  const { data: deals } = useQuery({
+    queryKey: ["deals-kanban"],
     queryFn: async () => {
-      const { data } = await companiesApi.getCompanies();
+      const { data } = await supabase
+        .from('deals')
+        .select('*, companies(name)')
+        .order('created_at', { ascending: false });
       return data || [];
     },
   });
 
-  const updateCompanyStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      return await companiesApi.updateCompany(id, { status });
+  const updateDealStage = useMutation({
+    mutationFn: async ({ id, stage }: { id: string; stage: string }) => {
+      const { error } = await supabase
+        .from('deals')
+        .update({ stage })
+        .eq('id', id);
+      if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["companies-kanban"] });
+      queryClient.invalidateQueries({ queryKey: ["deals-kanban"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline-stats"] });
-      toast.success("Company status updated");
+      queryClient.invalidateQueries({ queryKey: ["deals"] });
+      toast.success("Deal stage updated");
     },
     onError: () => {
-      toast.error("Failed to update company status");
+      toast.error("Failed to update deal stage");
     },
   });
 
@@ -88,7 +96,7 @@ export default function Pipeline() {
     return <div className="flex items-center justify-center h-96">Loading pipeline...</div>;
   }
 
-  const totalCompanies = pipelineData?.reduce((acc, curr) => acc + curr.count, 0) || 0;
+  const totalDeals = pipelineData?.reduce((acc, curr) => acc + curr.count, 0) || 0;
 
   const kanbanColumns = [
     { id: "NEW", title: "New" },
@@ -100,15 +108,16 @@ export default function Pipeline() {
     { id: "LOST", title: "Lost" },
   ];
 
-  const kanbanItems: KanbanItem[] = (companies || []).map((company) => ({
-    id: company.id,
-    title: company.name,
-    status: company.status || "NEW",
-    company: company.industry,
+  const kanbanItems: KanbanItem[] = (deals || []).map((deal: any) => ({
+    id: deal.id,
+    title: deal.title,
+    status: deal.stage || "NEW",
+    company: deal.companies?.name || "No company",
+    amount: deal.amount,
   }));
 
   const handleStatusChange = (itemId: string, newStatus: string) => {
-    updateCompanyStatus.mutate({ id: itemId, status: newStatus });
+    updateDealStage.mutate({ id: itemId, stage: newStatus });
   };
 
   return (
@@ -120,7 +129,7 @@ export default function Pipeline() {
             Sales Pipeline
           </h1>
           <p className="text-muted-foreground">
-            Real-time visualization of your company pipeline
+            Real-time visualization of your deal pipeline
           </p>
         </div>
         <div className="flex gap-2">
@@ -146,10 +155,10 @@ export default function Pipeline() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Companies</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Deals</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalCompanies}</div>
+            <div className="text-2xl font-bold">{totalDeals}</div>
           </CardContent>
         </Card>
 
@@ -183,10 +192,10 @@ export default function Pipeline() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {totalCompanies > 0
+              {totalDeals > 0
                 ? Math.round(
                     ((pipelineData?.find((s) => s.status === "WON")?.count || 0) /
-                      totalCompanies) *
+                      totalDeals) *
                       100
                   )
                 : 0}
@@ -209,7 +218,7 @@ export default function Pipeline() {
         <Card>
           <CardHeader>
             <CardTitle>Pipeline Distribution</CardTitle>
-            <CardDescription>Company count by status</CardDescription>
+            <CardDescription>Deal count by stage</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={400}>
