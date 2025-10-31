@@ -17,6 +17,7 @@ export default function LeadFinder() {
   const [geography, setGeography] = useState("");
   const [industry, setIndustry] = useState("");
   const [dryRun, setDryRun] = useState(true);
+  const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(false);
   
   const { defaultProvider, defaultModels } = useProviderStore();
   const [providerConfig, setProviderConfig] = useState({
@@ -35,6 +36,7 @@ export default function LeadFinder() {
       dryRun,
       provider: providerConfig.provider,
       model: providerConfig.model,
+      enrichWithPerplexity,
     });
 
     if (data) {
@@ -106,18 +108,38 @@ export default function LeadFinder() {
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2 pt-2">
-                <Checkbox
-                  id="dryRun"
-                  checked={dryRun}
-                  onCheckedChange={(checked) => setDryRun(checked as boolean)}
-                />
-                <Label
-                  htmlFor="dryRun"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                >
-                  Dry run (preview only, don't insert to CRM)
-                </Label>
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="dryRun"
+                    checked={dryRun}
+                    onCheckedChange={(checked) => setDryRun(checked as boolean)}
+                  />
+                  <Label
+                    htmlFor="dryRun"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    Dry run (preview only, don't insert to CRM)
+                  </Label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="enrichWithPerplexity"
+                    checked={enrichWithPerplexity}
+                    onCheckedChange={(checked) => setEnrichWithPerplexity(checked as boolean)}
+                  />
+                  <Label
+                    htmlFor="enrichWithPerplexity"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                    Enrich with Perplexity
+                    <span className="text-xs text-muted-foreground font-normal ml-1">
+                      (adds detailed company info with real-time search)
+                    </span>
+                  </Label>
+                </div>
               </div>
 
               <Button
@@ -147,60 +169,106 @@ export default function LeadFinder() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>Results ({results.leads.length} companies)</CardTitle>
+                      <CardTitle className="flex items-center gap-2">
+                        Results ({results.leads.length} companies)
+                        {results.wasEnriched && (
+                          <Badge variant="default" className="bg-gradient-primary">
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            Enriched
+                          </Badge>
+                        )}
+                      </CardTitle>
                       <CardDescription className="mt-1">
                         {dryRun
                           ? "Preview mode - these companies won't be added to your CRM"
                           : `Successfully added ${results.inserted} companies to your CRM`}
                       </CardDescription>
                     </div>
-                    {results.usage && (
-                      <Badge variant="secondary" className="ml-2">
-                        ${results.usage.estimatedCost.toFixed(4)}
-                      </Badge>
-                    )}
+                    <div className="flex gap-2">
+                      {results.usage && (
+                        <Badge variant="secondary">
+                          ${(results.usage.estimatedCost + (results.enrichmentUsage?.estimatedCost || 0)).toFixed(4)}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {results.leads.map((company: any, idx: number) => (
                       <div
                         key={idx}
-                        className="flex items-start gap-4 rounded-lg border p-4 transition-colors hover:bg-accent/50"
+                        className="relative rounded-xl border bg-card p-5 transition-all hover:shadow-md"
                       >
-                        <div className="rounded-lg bg-primary/10 p-3">
-                          <Building2 className="h-5 w-5 text-primary" />
-                        </div>
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-start justify-between">
-                            <h3 className="font-semibold">{company.name}</h3>
+                        <div className="flex items-start gap-4">
+                          <div className="rounded-xl bg-gradient-primary p-4 shadow-sm">
+                            <Building2 className="h-6 w-6 text-white" />
                           </div>
-                          {company.website && (
-                            <a
-                              href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm text-primary hover:underline inline-flex items-center gap-1"
-                            >
-                              {company.website}
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          )}
-                          {company.description && (
-                            <p className="text-sm text-muted-foreground line-clamp-2">
-                              {company.description}
-                            </p>
-                          )}
-                          <div className="flex flex-wrap gap-2">
-                            {company.industry && (
-                              <Badge variant="default">{company.industry}</Badge>
+                          <div className="flex-1 space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h3 className="text-lg font-semibold mb-1">{company.name}</h3>
+                                {company.website && (
+                                  <a
+                                    href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sm text-primary hover:underline inline-flex items-center gap-1 font-medium"
+                                  >
+                                    {company.website}
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </a>
+                                )}
+                              </div>
+                              {company.wasEnriched && (
+                                <Badge variant="default" className="bg-gradient-primary shrink-0">
+                                  <Sparkles className="h-3 w-3 mr-1" />
+                                  Enriched
+                                </Badge>
+                              )}
+                            </div>
+
+                            {company.description && (
+                              <p className="text-sm text-muted-foreground leading-relaxed">
+                                {company.description}
+                              </p>
                             )}
-                            {company.size && (
-                              <Badge variant="secondary">{company.size}</Badge>
+
+                            {company.products && (
+                              <div className="text-sm">
+                                <span className="font-medium text-foreground">Products: </span>
+                                <span className="text-muted-foreground">{company.products}</span>
+                              </div>
                             )}
-                            {company.geography && (
-                              <Badge variant="outline">{company.geography}</Badge>
+
+                            {company.recentNews && (
+                              <div className="text-sm">
+                                <span className="font-medium text-foreground">Recent News: </span>
+                                <span className="text-muted-foreground">{company.recentNews}</span>
+                              </div>
                             )}
+
+                            {company.fundingInfo && (
+                              <div className="text-sm">
+                                <span className="font-medium text-foreground">Funding: </span>
+                                <span className="text-muted-foreground">{company.fundingInfo}</span>
+                              </div>
+                            )}
+
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              {company.industry && (
+                                <Badge variant="default">{company.industry}</Badge>
+                              )}
+                              {company.size && (
+                                <Badge variant="secondary">{company.size}</Badge>
+                              )}
+                              {company.employeeCount && (
+                                <Badge variant="secondary">{company.employeeCount} employees</Badge>
+                              )}
+                              {company.geography && (
+                                <Badge variant="outline">{company.geography}</Badge>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -214,34 +282,74 @@ export default function LeadFinder() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <TrendingUp className="h-5 w-5" />
-                      Request Details
+                      Usage Details
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <div className="text-muted-foreground">Provider</div>
-                        <div className="font-medium capitalize">{results.provider}</div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Model</div>
-                        <div className="font-medium text-xs">{results.model}</div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Tokens Used</div>
-                        <div className="font-medium">{results.usage.totalTokens.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Cost</div>
-                        <div className="font-medium">${results.usage.estimatedCost.toFixed(4)}</div>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <div className="text-sm font-medium mb-2">Search & Extraction</div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <div className="text-muted-foreground">Provider</div>
+                          <div className="font-medium capitalize">{results.provider}</div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground">Model</div>
+                          <div className="font-medium text-xs">{results.model}</div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground">Tokens</div>
+                          <div className="font-medium">{results.usage.totalTokens.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground">Cost</div>
+                          <div className="font-medium">${results.usage.estimatedCost.toFixed(4)}</div>
+                        </div>
                       </div>
                     </div>
+
+                    {results.enrichmentUsage && (
+                      <div className="pt-4 border-t">
+                        <div className="text-sm font-medium mb-2 flex items-center gap-1">
+                          <Sparkles className="h-4 w-4 text-primary" />
+                          Perplexity Enrichment
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <div className="text-muted-foreground">Provider</div>
+                            <div className="font-medium">Perplexity</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Model</div>
+                            <div className="font-medium text-xs">Sonar Small</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Tokens</div>
+                            <div className="font-medium">{results.enrichmentUsage.totalTokens.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Cost</div>
+                            <div className="font-medium">${results.enrichmentUsage.estimatedCost.toFixed(4)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="pt-4 border-t">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-semibold">Total Cost</span>
+                        <span className="text-lg font-bold">
+                          ${(results.usage.estimatedCost + (results.enrichmentUsage?.estimatedCost || 0)).toFixed(4)}
+                        </span>
+                      </div>
+                    </div>
+
                     {results.traceUrl && (
                       <a
                         href={results.traceUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm text-primary hover:underline inline-flex items-center gap-1 mt-3"
+                        className="text-sm text-primary hover:underline inline-flex items-center gap-1 pt-2"
                       >
                         View trace in Langfuse
                         <ExternalLink className="h-3 w-3" />

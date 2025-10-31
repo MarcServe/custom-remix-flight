@@ -13,9 +13,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { size, geography, industry, dryRun, provider, model } = await req.json();
+    const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity } = await req.json();
 
-    console.log("Lead Finder request:", { size, geography, industry, dryRun, provider, model });
+    console.log("Lead Finder request:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity });
 
     // Create trace for observability
     const trace = createTrace('lead-finder', undefined, { size, geography, industry });
@@ -148,6 +148,108 @@ Return ONLY the JSON array, nothing else.`;
 
     console.log("Normalized leads:", leads.length);
 
+    // Enrich with Perplexity if requested
+    let enrichmentUsage = null;
+    if (enrichWithPerplexity && leads.length > 0) {
+      const enrichmentSpan = createSpan(trace, 'perplexity-enrichment', { leadCount: leads.length });
+      console.log("Starting Perplexity enrichment for", leads.length, "leads");
+
+      let enrichedLeads = [];
+      let totalEnrichmentTokens = 0;
+      let totalEnrichmentCost = 0;
+
+      for (const lead of leads) {
+        try {
+          const enrichmentPrompt = `Find detailed current information about ${lead.name}${lead.website ? ` (website: ${lead.website})` : ''}:
+          
+Return a JSON object with these fields:
+- description: detailed company overview (2-3 sentences)
+- products: key products or services (brief)
+- recentNews: latest significant news or developments (brief)
+- fundingInfo: recent funding information if available
+- employeeCount: current employee count estimate (number)
+- headquarters: headquarters location
+
+Return ONLY valid JSON, no markdown blocks.`;
+
+          const enrichResponse = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/ai-provider`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              provider: 'perplexity',
+              model: 'llama-3.1-sonar-small-128k-online',
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are a company research assistant. Return only valid JSON objects, no markdown.',
+                },
+                {
+                  role: 'user',
+                  content: enrichmentPrompt,
+                },
+              ],
+              temperature: 0.2,
+              traceId: trace.id,
+            }),
+          });
+
+          if (enrichResponse.ok) {
+            const enrichResult = await enrichResponse.json();
+            let enrichedData;
+            
+            // Clean and parse enrichment response
+            let cleanedEnrichText = enrichResult.content.trim();
+            if (cleanedEnrichText.startsWith("```json")) {
+              cleanedEnrichText = cleanedEnrichText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+            } else if (cleanedEnrichText.startsWith("```")) {
+              cleanedEnrichText = cleanedEnrichText.replace(/```\n?/g, "");
+            }
+            
+            try {
+              enrichedData = JSON.parse(cleanedEnrichText);
+            } catch (e) {
+              console.error("Failed to parse enrichment for", lead.name, ":", e);
+              enrichedData = {};
+            }
+
+            totalEnrichmentTokens += enrichResult.usage.totalTokens;
+            totalEnrichmentCost += enrichResult.usage.estimatedCost;
+
+            enrichedLeads.push({
+              ...lead,
+              description: enrichedData.description || lead.description,
+              products: enrichedData.products,
+              recentNews: enrichedData.recentNews,
+              fundingInfo: enrichedData.fundingInfo,
+              employeeCount: enrichedData.employeeCount,
+              geography: enrichedData.headquarters || lead.geography,
+              wasEnriched: true,
+            });
+          } else {
+            console.error("Enrichment failed for", lead.name);
+            enrichedLeads.push({ ...lead, wasEnriched: false });
+          }
+        } catch (enrichError) {
+          console.error("Enrichment error for", lead.name, ":", enrichError);
+          enrichedLeads.push({ ...lead, wasEnriched: false });
+        }
+      }
+
+      leads = enrichedLeads;
+      enrichmentUsage = {
+        promptTokens: 0,
+        completionTokens: totalEnrichmentTokens,
+        totalTokens: totalEnrichmentTokens,
+        estimatedCost: totalEnrichmentCost,
+      };
+
+      console.log("Enrichment complete. Total cost:", totalEnrichmentCost);
+      await endSpan(enrichmentSpan, { enrichedCount: enrichedLeads.filter(l => l.wasEnriched).length });
+    }
+
     // If not dry run, insert into database
     let insertedCount = 0;
     if (!dryRun) {
@@ -201,6 +303,8 @@ Return ONLY the JSON array, nothing else.`;
         provider: aiResult.provider,
         model: aiResult.model,
         usage: aiResult.usage,
+        enrichmentUsage,
+        wasEnriched: enrichWithPerplexity,
         traceUrl: aiResult.traceUrl,
       }),
       {

@@ -7,6 +7,7 @@ export interface LeadFinderRequest {
   dryRun?: boolean;
   provider?: 'lovable' | 'openai' | 'perplexity';
   model?: string;
+  enrichWithPerplexity?: boolean;
 }
 
 export interface LeadFinderResponse {
@@ -18,6 +19,11 @@ export interface LeadFinderResponse {
     size?: string;
     geography?: string;
     linkedinUrl?: string;
+    wasEnriched?: boolean;
+    products?: string;
+    recentNews?: string;
+    fundingInfo?: string;
+    employeeCount?: number;
   }>;
   inserted: number;
   dryRun: boolean;
@@ -29,6 +35,13 @@ export interface LeadFinderResponse {
     totalTokens: number;
     estimatedCost: number;
   };
+  enrichmentUsage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    estimatedCost: number;
+  };
+  wasEnriched?: boolean;
   traceUrl: string;
 }
 
