@@ -93,7 +93,7 @@ export default function Dashboard() {
                     <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-lg animate-float">
                       <Search className="h-8 w-8 text-white" />
                     </div>
-                    <Badge className="bg-gradient-primary text-base px-4 py-2 shadow-lg">
+                    <Badge className="bg-primary hover:bg-primary/90 text-primary-foreground text-base px-4 py-2 shadow-lg transition-colors">
                       <Sparkles className="h-4 w-4 mr-2" />
                       AI-Powered
                     </Badge>
