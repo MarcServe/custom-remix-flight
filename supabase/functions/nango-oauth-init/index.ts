@@ -89,10 +89,22 @@ serve(async (req) => {
     }
 
     const sessionData = await sessionResponse.json();
+    console.log('Nango session response:', JSON.stringify(sessionData));
     console.log('Created Nango session for provider:', provider, 'user:', user.id);
 
+    // Nango returns the token in different fields depending on the version
+    const token = sessionData.token || sessionData.sessionToken || sessionData.data?.token;
+    
+    if (!token) {
+      console.error('No token found in Nango response:', sessionData);
+      return new Response(
+        JSON.stringify({ error: 'Invalid session response from Nango' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ sessionToken: sessionData.token }),
+      JSON.stringify({ sessionToken: token }),
       {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
