@@ -39,13 +39,15 @@ export default function LeadFinder() {
   const leadFinderMutation = useLeadFinder();
 
   const handleSearch = async (options?: { forceSave?: boolean }) => {
-    const saveToDb = options?.forceSave ? false : dryRun; // If forceSave, set dryRun to false
+    // If forceSave is true, we want to save to DB (dryRun: false)
+    // Otherwise, use the dryRun checkbox value
+    const shouldDryRun = options?.forceSave ? false : dryRun;
     
     const { data } = await leadFinderMutation.mutateAsync({
       size,
       geography,
       industry,
-      dryRun: saveToDb,
+      dryRun: shouldDryRun,
       provider: providerConfig.provider,
       model: providerConfig.model,
       enrichWithPerplexity,

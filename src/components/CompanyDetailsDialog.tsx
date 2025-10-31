@@ -34,6 +34,18 @@ interface Company {
   recentNews?: string;
   fundingInfo?: string;
   employeeCount?: number;
+  companyPhone?: string;
+  generalEmail?: string;
+  socialProfiles?: {
+    twitter?: string;
+    facebook?: string;
+    instagram?: string;
+    youtube?: string;
+  };
+  keyExecutives?: Array<{
+    name: string;
+    title: string;
+  }>;
   contacts?: Contact[];
   primaryContact?: Contact;
 }
@@ -56,22 +68,51 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
   const showFindProspectsButton = !hasContacts && !isSearching;
 
   const handleFindProspects = async () => {
+    if (!company.linkedinUrl) {
+      toast({
+        title: "LinkedIn URL required",
+        description: "This company needs a LinkedIn URL to find prospects.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsEnriching(true);
     toast({
       title: "Finding prospects",
       description: `Searching for contacts at ${company.name}...`,
     });
 
-    // TODO: Implement contact enrichment for single company
-    // This would call an edge function to enrich just this company
-    
-    setTimeout(() => {
-      setIsEnriching(false);
-      toast({
-        title: "Feature coming soon",
-        description: "Contact enrichment for individual companies will be available shortly.",
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { data, error } = await supabase.functions.invoke('find-linkedin-prospects', {
+        body: {
+          companyId: company.id,
+          linkedinUrl: company.linkedinUrl,
+          companyName: company.name,
+        }
       });
-    }, 2000);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `Found ${data.inserted} prospects with contact details`,
+      });
+
+      // Close and reopen dialog to refresh data
+      onOpenChange(false);
+      setTimeout(() => onOpenChange(true), 100);
+    } catch (error) {
+      console.error("Find prospects error:", error);
+      toast({
+        title: "Error finding prospects",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEnriching(false);
+    }
   };
 
   return (
@@ -142,6 +183,24 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
                     <span className="text-muted-foreground">{company.employeeCount}</span>
                   </div>
                 )}
+                {company.companyPhone && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Phone:</span>
+                    <a href={`tel:${company.companyPhone}`} className="text-primary hover:underline">
+                      {company.companyPhone}
+                    </a>
+                  </div>
+                )}
+                {company.generalEmail && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Email:</span>
+                    <a href={`mailto:${company.generalEmail}`} className="text-primary hover:underline">
+                      {company.generalEmail}
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -189,6 +248,67 @@ export function CompanyDetailsDialog({ company, open, onOpenChange, isSearching 
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
                       {company.fundingInfo}
                     </p>
+                  </div>
+                )}
+
+                {company.keyExecutives && company.keyExecutives.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                        <Users className="h-4 w-4 text-amber-500" />
+                      </div>
+                      <h3 className="text-sm font-semibold">Key Executives</h3>
+                    </div>
+                    <div className="space-y-2 pl-10">
+                      {company.keyExecutives.map((exec, idx) => (
+                        <div key={idx} className="text-sm">
+                          <span className="font-medium text-foreground">{exec.name}</span>
+                          {" - "}
+                          <span className="text-muted-foreground">{exec.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {company.socialProfiles && Object.keys(company.socialProfiles).length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center">
+                        <Globe className="h-4 w-4 text-pink-500" />
+                      </div>
+                      <h3 className="text-sm font-semibold">Social Profiles</h3>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pl-10">
+                      {company.socialProfiles.twitter && (
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={company.socialProfiles.twitter} target="_blank" rel="noopener noreferrer">
+                            Twitter
+                          </a>
+                        </Button>
+                      )}
+                      {company.socialProfiles.facebook && (
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={company.socialProfiles.facebook} target="_blank" rel="noopener noreferrer">
+                            Facebook
+                          </a>
+                        </Button>
+                      )}
+                      {company.socialProfiles.instagram && (
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={company.socialProfiles.instagram} target="_blank" rel="noopener noreferrer">
+                            Instagram
+                          </a>
+                        </Button>
+                      )}
+                      {company.socialProfiles.youtube && (
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={company.socialProfiles.youtube} target="_blank" rel="noopener noreferrer">
+                            YouTube
+                          </a>
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
               </>

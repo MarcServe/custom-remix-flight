@@ -35,6 +35,18 @@ export interface LeadFinderResponse {
     recentNews?: string;
     fundingInfo?: string;
     employeeCount?: number;
+    companyPhone?: string;
+    generalEmail?: string;
+    socialProfiles?: {
+      twitter?: string;
+      facebook?: string;
+      instagram?: string;
+      youtube?: string;
+    };
+    keyExecutives?: Array<{
+      name: string;
+      title: string;
+    }>;
     contacts?: Contact[];
     primaryContact?: Contact;
   }>;

@@ -127,6 +127,7 @@ export type Database = {
       companies: {
         Row: {
           ceo_name: string | null
+          company_phone: string | null
           created_at: string | null
           description: string | null
           employee_count: number | null
@@ -140,15 +141,18 @@ export type Database = {
           founded_year: number | null
           funding_stage: string | null
           funding_total: string | null
+          general_email: string | null
           geography: string | null
           headquarters: string | null
           id: string
           industry: string | null
+          key_executives: Json | null
           langfuse_trace_id: string | null
           linkedin_url: string | null
           name: string
           recent_news: string | null
           size: string | null
+          social_profiles: Json | null
           status: string | null
           tech_stack: string[] | null
           updated_at: string | null
@@ -156,6 +160,7 @@ export type Database = {
         }
         Insert: {
           ceo_name?: string | null
+          company_phone?: string | null
           created_at?: string | null
           description?: string | null
           employee_count?: number | null
@@ -169,15 +174,18 @@ export type Database = {
           founded_year?: number | null
           funding_stage?: string | null
           funding_total?: string | null
+          general_email?: string | null
           geography?: string | null
           headquarters?: string | null
           id?: string
           industry?: string | null
+          key_executives?: Json | null
           langfuse_trace_id?: string | null
           linkedin_url?: string | null
           name: string
           recent_news?: string | null
           size?: string | null
+          social_profiles?: Json | null
           status?: string | null
           tech_stack?: string[] | null
           updated_at?: string | null
@@ -185,6 +193,7 @@ export type Database = {
         }
         Update: {
           ceo_name?: string | null
+          company_phone?: string | null
           created_at?: string | null
           description?: string | null
           employee_count?: number | null
@@ -198,15 +207,18 @@ export type Database = {
           founded_year?: number | null
           funding_stage?: string | null
           funding_total?: string | null
+          general_email?: string | null
           geography?: string | null
           headquarters?: string | null
           id?: string
           industry?: string | null
+          key_executives?: Json | null
           langfuse_trace_id?: string | null
           linkedin_url?: string | null
           name?: string
           recent_news?: string | null
           size?: string | null
+          social_profiles?: Json | null
           status?: string | null
           tech_stack?: string[] | null
           updated_at?: string | null
