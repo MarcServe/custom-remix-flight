@@ -13,9 +13,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SendEmailDialog } from "@/components/SendEmailDialog";
 import { 
   User, Mail, Phone, Briefcase, MapPin, 
-  Linkedin, Twitter, Calendar, Pencil, Trash2 
+  Linkedin, Twitter, Calendar, Pencil, Trash2, Send
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -53,6 +54,7 @@ export function PersonDetailsDialog({
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState(person);
   const [loading, setLoading] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
 
   const handleSave = async () => {
     setLoading(true);
@@ -120,6 +122,16 @@ export function PersonDetailsDialog({
             </div>
             {!isEditing && (
               <div className="flex gap-2">
+                {person.email && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => setEmailDialogOpen(true)}
+                  >
+                    <Send className="h-4 w-4 mr-1" />
+                    Send Email
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -335,6 +347,17 @@ export function PersonDetailsDialog({
           </TabsContent>
         </Tabs>
       </DialogContent>
+
+      {person.email && (
+        <SendEmailDialog
+          open={emailDialogOpen}
+          onOpenChange={setEmailDialogOpen}
+          recipientEmail={person.email}
+          recipientName={fullName}
+          companyId={person.company_id}
+          contactId={person.id}
+        />
+      )}
     </Dialog>
   );
 }
