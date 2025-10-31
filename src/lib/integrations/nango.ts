@@ -16,68 +16,48 @@ export interface NangoConnection {
  */
 export const nangoClient = {
   /**
-   * Initialize OAuth flow for Gmail or Outlook in popup window
+   * Initialize OAuth flow for Gmail or Outlook using Nango Connect UI
    */
   async initiateOAuth(provider: 'gmail' | 'outlook'): Promise<{ data: any; error: Error | null }> {
     try {
-      const { data, error } = await apiClient.callFunction('nango-oauth-init', {
+      // Get session token from our edge function
+      const { data: sessionData, error: sessionError } = await apiClient.callFunction('nango-oauth-init', {
         provider,
       });
 
-      if (error) throw error;
-
-      // Open OAuth in popup window
-      if (data?.authUrl) {
-        const width = 600;
-        const height = 700;
-        const left = (window.screen.width - width) / 2;
-        const top = (window.screen.height - height) / 2;
-
-        const popup = window.open(
-          data.authUrl,
-          'oauth',
-          `width=${width},height=${height},left=${left},top=${top},popup=yes`
-        );
-
-        if (!popup) {
-          return {
-            data: null,
-            error: new Error('Popup blocked. Please allow popups and try again.'),
-          };
-        }
-
-        // Return a promise that resolves when OAuth completes
-        return new Promise((resolve) => {
-          const messageHandler = (event: MessageEvent) => {
-            if (event.data.type === 'oauth-success') {
-              window.removeEventListener('message', messageHandler);
-              resolve({ data: { success: true }, error: null });
-            } else if (event.data.type === 'oauth-error') {
-              window.removeEventListener('message', messageHandler);
-              resolve({ 
-                data: null, 
-                error: new Error(event.data.error || 'OAuth failed') 
-              });
-            }
-          };
-
-          window.addEventListener('message', messageHandler);
-
-          // Check if popup was closed without completing
-          const checkClosed = setInterval(() => {
-            if (popup.closed) {
-              clearInterval(checkClosed);
-              window.removeEventListener('message', messageHandler);
-              resolve({ 
-                data: null, 
-                error: new Error('OAuth window closed') 
-              });
-            }
-          }, 500);
-        });
+      if (sessionError) throw sessionError;
+      if (!sessionData?.sessionToken) {
+        throw new Error('No session token received');
       }
 
-      return { data, error: null };
+      // Dynamically import Nango frontend SDK
+      const { default: Nango } = await import('@nangohq/frontend');
+      const nango = new Nango();
+
+      // Open Nango Connect UI and wait for completion
+      return new Promise((resolve) => {
+        const connect = nango.openConnectUI({
+          onEvent: (event: any) => {
+            if (event.type === 'close') {
+              resolve({
+                data: null,
+                error: new Error('Authentication window was closed'),
+              });
+            } else if (event.type === 'connect') {
+              resolve({ 
+                data: { 
+                  success: true,
+                  connectionId: event.payload?.connectionId 
+                }, 
+                error: null 
+              });
+            }
+          },
+        });
+
+        // Set the session token to start the flow
+        connect.setSessionToken(sessionData.sessionToken);
+      });
     } catch (error) {
       return {
         data: null,

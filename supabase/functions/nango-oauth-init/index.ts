@@ -46,28 +46,45 @@ serve(async (req) => {
       );
     }
 
-    const nangoProjectId = Deno.env.get('NANGO_PROJECT_ID');
-    const callbackUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/nango-oauth-callback`;
-
-    if (!nangoProjectId) {
-      console.error('NANGO_PROJECT_ID not configured');
+    const nangoSecretKey = Deno.env.get('NANGO_SECRET_KEY');
+    if (!nangoSecretKey) {
+      console.error('NANGO_SECRET_KEY not configured');
       return new Response(
         JSON.stringify({ error: 'Nango not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Generate Nango authorization URL
-    // Nango uses a simple URL format for OAuth initialization
-    const authUrl = `https://api.nango.dev/oauth/connect/${nangoProjectId}?` +
-      `integration_id=${provider}&` +
-      `connection_id=${user.id}&` +
-      `redirect_uri=${encodeURIComponent(callbackUrl)}`;
+    // Create a session token using Nango API
+    const sessionResponse = await fetch('https://api.nango.dev/connect/sessions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${nangoSecretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        end_user: {
+          id: user.id,
+          email: user.email,
+        },
+        allowed_integrations: [provider],
+      }),
+    });
 
-    console.log('Generated auth URL for provider:', provider, 'user:', user.id);
+    if (!sessionResponse.ok) {
+      const errorText = await sessionResponse.text();
+      console.error('Failed to create Nango session:', errorText);
+      return new Response(
+        JSON.stringify({ error: 'Failed to create authentication session' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const sessionData = await sessionResponse.json();
+    console.log('Created Nango session for provider:', provider, 'user:', user.id);
 
     return new Response(
-      JSON.stringify({ authUrl }),
+      JSON.stringify({ sessionToken: sessionData.token }),
       {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
