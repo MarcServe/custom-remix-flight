@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe } from "lucide-react";
+import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail } from "lucide-react";
 import { useLeadFinder } from "@/hooks/use-lead-finder";
 import { useProviderStore } from "@/stores/provider-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -378,6 +378,12 @@ export default function LeadFinder() {
 
                         {/* Meta Badges */}
                         <div className="flex flex-wrap gap-1.5 pt-1">
+                          {company.primaryContact && (
+                            <Badge variant="outline" className="h-5 text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
+                              <Mail className="h-3 w-3 mr-1" />
+                              Contact Available
+                            </Badge>
+                          )}
                           {company.industry && (
                             <Badge variant="outline" className="h-5 text-xs font-mono">
                               {company.industry}

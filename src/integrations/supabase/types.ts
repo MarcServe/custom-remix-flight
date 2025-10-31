@@ -175,6 +175,59 @@ export type Database = {
         }
         Relationships: []
       }
+      contacts: {
+        Row: {
+          company_id: string | null
+          created_at: string | null
+          department: string | null
+          email: string | null
+          email_verified: boolean | null
+          id: string
+          is_primary_contact: boolean | null
+          linkedin_url: string | null
+          name: string
+          phone: string | null
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string | null
+          department?: string | null
+          email?: string | null
+          email_verified?: boolean | null
+          id?: string
+          is_primary_contact?: boolean | null
+          linkedin_url?: string | null
+          name: string
+          phone?: string | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string | null
+          department?: string | null
+          email?: string | null
+          email_verified?: boolean | null
+          id?: string
+          is_primary_contact?: boolean | null
+          linkedin_url?: string | null
+          name?: string
+          phone?: string | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deal_contacts: {
         Row: {
           created_at: string | null

@@ -1,5 +1,16 @@
 import { apiClient } from './client';
 
+export interface Contact {
+  name: string;
+  email?: string;
+  emailVerified?: boolean;
+  linkedinUrl?: string;
+  title?: string;
+  department?: string;
+  phone?: string;
+  companyName: string;
+}
+
 export interface LeadFinderRequest {
   size: string;
   geography: string;
@@ -24,6 +35,8 @@ export interface LeadFinderResponse {
     recentNews?: string;
     fundingInfo?: string;
     employeeCount?: number;
+    contacts?: Contact[];
+    primaryContact?: Contact;
   }>;
   inserted: number;
   dryRun: boolean;

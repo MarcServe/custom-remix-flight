@@ -2,8 +2,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, X } from "lucide-react";
+import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+interface Contact {
+  name: string;
+  email?: string;
+  emailVerified?: boolean;
+  linkedinUrl?: string;
+  title?: string;
+  department?: string;
+  phone?: string;
+  companyName: string;
+}
 
 interface Company {
   name: string;
@@ -18,6 +29,8 @@ interface Company {
   recentNews?: string;
   fundingInfo?: string;
   employeeCount?: number;
+  contacts?: Contact[];
+  primaryContact?: Contact;
 }
 
 interface CompanyDetailsDialogProps {
@@ -145,6 +158,69 @@ export function CompanyDetailsDialog({ company, open, onOpenChange }: CompanyDet
                     </p>
                   </div>
                 )}
+              </>
+            )}
+
+            {/* Team Contacts Section */}
+            {company.contacts && company.contacts.length > 0 && (
+              <>
+                <Separator />
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+                      <Users className="h-4 w-4 text-cyan-500" />
+                    </div>
+                    <h3 className="text-sm font-semibold">Team Contacts</h3>
+                  </div>
+                  
+                  <div className="space-y-3 pl-10">
+                    {company.contacts.map((contact, idx) => (
+                      <div key={idx} className="p-3 rounded-lg border bg-card/50 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm">{contact.name}</span>
+                          {contact.emailVerified && (
+                            <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
+                              Verified
+                            </Badge>
+                          )}
+                          {contact === company.primaryContact && (
+                            <Badge className="text-xs bg-primary/10 text-primary border-primary/20">
+                              Primary
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        {contact.title && (
+                          <p className="text-xs text-muted-foreground">{contact.title}</p>
+                        )}
+                        
+                        {contact.email && (
+                          <a 
+                            href={`mailto:${contact.email}`}
+                            className="text-xs text-primary hover:underline font-mono inline-flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Mail className="h-3 w-3" />
+                            {contact.email}
+                          </a>
+                        )}
+                        
+                        {contact.linkedinUrl && (
+                          <a 
+                            href={contact.linkedinUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            LinkedIn Profile
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </>
             )}
 

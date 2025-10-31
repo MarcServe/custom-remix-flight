@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         query: exaQuery,
-        numResults: 5,
+        numResults: 10, // Increased from 5 to get more results
         useAutoprompt: true,
         type: "keyword",
         contents: {
@@ -68,21 +68,26 @@ Deno.serve(async (req) => {
     await endSpan(exaSpan, { resultCount: exaData.results?.length || 0 });
 
     // Call AI provider for data extraction
-    const extractionPrompt = `Extract company information from the following search results and return ONLY a valid JSON array of objects (no markdown, no code blocks, just the JSON array).
+    const extractionPrompt = `Extract company information from the following search results and return ONLY a valid JSON array of objects.
+
+CRITICAL RULES:
+1. Extract ALL companies mentioned in the results, even if data is incomplete
+2. If a field is missing, use null (don't skip the company)
+3. Return ONLY the JSON array - NO markdown, NO explanations, NO code blocks
 
 Each object must have these exact fields:
 - name (string, required)
-- website (string, optional)
-- description (string, optional)
+- website (string or null)
+- description (string or null)
 - industry (string, use "${industry}")
 - size (string, use "${size}")
 - geography (string, use "${geography}")
-- linkedinUrl (string, optional)
+- linkedinUrl (string or null)
 
 Search results:
 ${JSON.stringify(exaData.results, null, 2)}
 
-Return ONLY the JSON array, nothing else.`;
+Return ONLY the JSON array now:`;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -136,10 +141,22 @@ Return ONLY the JSON array, nothing else.`;
     let leads;
     try {
       leads = JSON.parse(cleanedText);
+      console.log(`Successfully parsed ${leads.length} leads`);
+      
+      // Log each lead for debugging
+      leads.forEach((lead: any, idx: number) => {
+        console.log(`Lead ${idx + 1}:`, {
+          name: lead.name,
+          hasWebsite: !!lead.website,
+          hasLinkedIn: !!lead.linkedinUrl
+        });
+      });
     } catch (parseError) {
       console.error("JSON parse error:", parseError);
-      console.error("Raw text:", extractedText);
-      throw new Error("Failed to parse AI response as JSON");
+      console.error("Raw AI response:", extractedText);
+      console.error("Cleaned text:", cleanedText);
+      const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
+      throw new Error(`Failed to parse AI response: ${errorMessage}`);
     }
 
     if (!Array.isArray(leads)) {
@@ -250,6 +267,117 @@ Return ONLY valid JSON, no markdown blocks.`;
       await endSpan(enrichmentSpan, { enrichedCount: enrichedLeads.filter(l => l.wasEnriched).length });
     }
 
+    // Contact enrichment with GetProspect
+    const GETPROSPECT_API_KEY = Deno.env.get("GETPROSPECT_API_KEY");
+    
+    if (GETPROSPECT_API_KEY && leads.length > 0) {
+      const contactSpan = createSpan(trace, 'getprospect-contact-enrichment', { leadCount: leads.length });
+      console.log("Starting GetProspect contact enrichment for", leads.length, "leads");
+
+      for (const lead of leads) {
+        try {
+          const contacts: any[] = [];
+          
+          // Strategy 1: Search by company LinkedIn URL if available
+          if (lead.linkedinUrl) {
+            try {
+              const response = await fetch(
+                `https://api.getprospect.com/public/v1/insights/contact?linkedinUrl=${encodeURIComponent(lead.linkedinUrl)}&apiKey=${GETPROSPECT_API_KEY}`
+              );
+              
+              if (response.ok) {
+                const data = await response.json();
+                if (data.contacts && Array.isArray(data.contacts)) {
+                  contacts.push(...data.contacts.map((c: any) => ({
+                    name: c.name || 'Unknown',
+                    email: c.email,
+                    emailVerified: c.emailStatus === 'valid',
+                    linkedinUrl: c.linkedinUrl,
+                    title: c.title,
+                    department: c.department,
+                    phone: c.phone,
+                    companyName: lead.name
+                  })));
+                }
+              }
+            } catch (err) {
+              console.error(`LinkedIn contact search failed for ${lead.name}:`, err);
+            }
+          }
+          
+          // Strategy 2: Search by email for common roles if we don't have enough contacts
+          if (contacts.length < 3 && lead.name) {
+            const commonRoles = ['Sales Director', 'Customer Success Manager', 'CEO', 'Business Development Manager'];
+            
+            for (const role of commonRoles.slice(0, 3 - contacts.length)) {
+              try {
+                // Find email
+                const findResponse = await fetch(
+                  `https://api.getprospect.com/public/v1/email/find?name=${encodeURIComponent(role)}&company=${encodeURIComponent(lead.name)}&apiKey=${GETPROSPECT_API_KEY}`
+                );
+                
+                if (findResponse.ok) {
+                  const findData = await findResponse.json();
+                  if (findData.email) {
+                    // Verify email
+                    const verifyResponse = await fetch(
+                      `https://api.getprospect.com/public/v1/email/verify?email=${encodeURIComponent(findData.email)}&apiKey=${GETPROSPECT_API_KEY}`
+                    );
+                    
+                    let verified = false;
+                    if (verifyResponse.ok) {
+                      const verifyData = await verifyResponse.json();
+                      verified = verifyData.status === 'valid';
+                    }
+                    
+                    contacts.push({
+                      name: findData.name || role,
+                      email: findData.email,
+                      emailVerified: verified,
+                      title: role,
+                      companyName: lead.name
+                    });
+                  }
+                }
+                
+                // Rate limit protection
+                await new Promise(resolve => setTimeout(resolve, 500));
+              } catch (err) {
+                console.error(`Email search failed for ${role} at ${lead.name}:`, err);
+              }
+            }
+          }
+          
+          // Prioritize contacts - prefer sales, customer service, support
+          let primaryContact = null;
+          if (contacts.length > 0) {
+            const priorities = ['sales', 'customer', 'support', 'business development', 'account'];
+            for (const keyword of priorities) {
+              const match = contacts.find(c => 
+                c.title?.toLowerCase().includes(keyword) || 
+                c.department?.toLowerCase().includes(keyword)
+              );
+              if (match) {
+                primaryContact = match;
+                break;
+              }
+            }
+            if (!primaryContact) primaryContact = contacts[0];
+          }
+          
+          lead.contacts = contacts;
+          lead.primaryContact = primaryContact;
+          
+        } catch (error) {
+          console.error(`Contact enrichment failed for ${lead.name}:`, error);
+          lead.contacts = [];
+        }
+      }
+      
+      console.log("Contact enrichment complete");
+      await endSpan(contactSpan);
+    }
+
     // If not dry run, insert into database
     let insertedCount = 0;
     if (!dryRun) {
@@ -260,7 +388,7 @@ Return ONLY valid JSON, no markdown blocks.`;
 
       for (const lead of leads) {
         try {
-          const { error } = await supabase.from("companies").upsert(
+          const { data: companyData, error } = await supabase.from("companies").upsert(
             {
               name: lead.name,
               website: lead.website || null,
@@ -277,13 +405,35 @@ Return ONLY valid JSON, no markdown blocks.`;
             },
             {
               onConflict: "website",
-              ignoreDuplicates: true,
+              ignoreDuplicates: false,
             }
-          );
+          ).select();
 
-          if (!error) {
+          if (!error && companyData && companyData.length > 0) {
             insertedCount++;
-          } else {
+            const companyId = companyData[0].id;
+            
+            // Insert contacts if available
+            if (lead.contacts && lead.contacts.length > 0) {
+              for (const contact of lead.contacts) {
+                try {
+                  await supabase.from("contacts").insert({
+                    company_id: companyId,
+                    name: contact.name,
+                    email: contact.email || null,
+                    email_verified: contact.emailVerified || false,
+                    linkedin_url: contact.linkedinUrl || null,
+                    title: contact.title || null,
+                    department: contact.department || null,
+                    phone: contact.phone || null,
+                    is_primary_contact: contact === lead.primaryContact
+                  });
+                } catch (contactError) {
+                  console.error("Contact insert error:", contactError);
+                }
+              }
+            }
+          } else if (error) {
             console.error("Insert error:", error);
           }
         } catch (insertError) {
