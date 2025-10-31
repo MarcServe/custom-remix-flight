@@ -104,28 +104,28 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden p-4">
-      {/* Animated gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/10 animate-fade-in" />
-      
-      {/* Genie image - positioned absolutely and animated */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+    <div className="min-h-screen w-screen flex items-center justify-center relative overflow-hidden p-4">
+      {/* Full-page genie image with gradient overlays */}
+      <div className="absolute inset-0 pointer-events-none">
         <img 
           src={genieImage} 
           alt="AI Genie Assistant" 
-          className="w-full max-w-2xl h-auto opacity-10 animate-scale-in"
+          className="w-full h-full object-cover object-center opacity-20 animate-fade-in"
           style={{ 
             animationDelay: '0.2s',
-            filter: 'blur(1px)'
+            filter: 'blur(0.5px)'
           }}
         />
+        {/* Gradient overlays for better contrast */}
+        <div className="absolute inset-0 bg-gradient-to-br from-background/80 via-background/60 to-background/80" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-background/70" />
       </div>
 
       {/* Floating elements for additional flair */}
-      <div className="absolute top-20 left-10 w-20 h-20 bg-primary/10 rounded-full blur-xl animate-pulse" />
-      <div className="absolute bottom-20 right-10 w-32 h-32 bg-accent/10 rounded-full blur-xl animate-pulse" style={{ animationDelay: '1s' }} />
+      <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl animate-pulse" />
+      <div className="absolute bottom-20 right-10 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
       
-      <Card className="w-full max-w-md relative z-10 animate-fade-in shadow-2xl backdrop-blur-sm bg-card/95" style={{ animationDelay: '0.3s' }}>
+      <Card className="w-full max-w-md relative z-10 animate-fade-in shadow-2xl backdrop-blur-md bg-card/98 border-2" style={{ animationDelay: '0.3s' }}>
         <CardHeader className="text-center space-y-3">
           <CardTitle className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-fade-in" style={{ animationDelay: '0.4s' }}>
             LeadGeni CRM
