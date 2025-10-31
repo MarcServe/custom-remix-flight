@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Sidebar } from "./components/Sidebar";
+import { useAllRealtime } from "./hooks/use-realtime";
 import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import Deals from "./pages/Deals";
@@ -18,6 +19,12 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Component to handle realtime subscriptions
+const RealtimeProvider = ({ children }: { children: React.ReactNode }) => {
+  useAllRealtime();
+  return <>{children}</>;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -25,31 +32,33 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute>
-                  <div className="flex h-screen">
-                    <Sidebar />
-                    <main className="flex-1 overflow-auto bg-gradient-to-br from-background to-muted/20 p-8">
-                      <Routes>
-                        <Route path="/" element={<Dashboard />} />
-                        <Route path="/companies" element={<Companies />} />
-                        <Route path="/deals" element={<Deals />} />
-                        <Route path="/people" element={<People />} />
-                        <Route path="/lead-finder" element={<LeadFinder />} />
-                        <Route path="/pipeline" element={<Pipeline />} />
-                        <Route path="/sequences" element={<Sequences />} />
-                        <Route path="*" element={<NotFound />} />
-                      </Routes>
-                    </main>
-                  </div>
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
+          <RealtimeProvider>
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route
+                path="/*"
+                element={
+                  <ProtectedRoute>
+                    <div className="flex h-screen">
+                      <Sidebar />
+                      <main className="flex-1 overflow-auto bg-gradient-to-br from-background to-muted/20 p-8">
+                        <Routes>
+                          <Route path="/" element={<Dashboard />} />
+                          <Route path="/companies" element={<Companies />} />
+                          <Route path="/deals" element={<Deals />} />
+                          <Route path="/people" element={<People />} />
+                          <Route path="/lead-finder" element={<LeadFinder />} />
+                          <Route path="/pipeline" element={<Pipeline />} />
+                          <Route path="/sequences" element={<Sequences />} />
+                          <Route path="*" element={<NotFound />} />
+                        </Routes>
+                      </main>
+                    </div>
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
+          </RealtimeProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

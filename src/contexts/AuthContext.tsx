@@ -7,6 +7,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  userRole: 'admin' | 'sales_rep' | 'viewer' | null;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -31,7 +32,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<'admin' | 'sales_rep' | 'viewer' | null>(null);
   const { toast } = useToast();
+
+  // Fetch user role when user changes
+  useEffect(() => {
+    if (user) {
+      supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          setUserRole(data?.role || 'sales_rep');
+        });
+    } else {
+      setUserRole(null);
+    }
+  }, [user]);
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -48,6 +66,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             description: "You've successfully signed in.",
           });
         } else if (event === 'SIGNED_OUT') {
+          setUserRole(null);
           toast({
             title: "Signed out",
             description: "You've been signed out successfully.",
@@ -183,6 +202,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     user,
     session,
     loading,
+    userRole,
     signIn,
     signUp,
     signOut,
