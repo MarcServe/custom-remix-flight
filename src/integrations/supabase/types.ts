@@ -47,6 +47,45 @@ export type Database = {
         }
         Relationships: []
       }
+      business_profiles: {
+        Row: {
+          company_name: string | null
+          created_at: string
+          id: string
+          industry: string | null
+          services_description: string
+          target_audience: string | null
+          tone_preference: string | null
+          updated_at: string
+          user_id: string
+          value_proposition: string | null
+        }
+        Insert: {
+          company_name?: string | null
+          created_at?: string
+          id?: string
+          industry?: string | null
+          services_description: string
+          target_audience?: string | null
+          tone_preference?: string | null
+          updated_at?: string
+          user_id: string
+          value_proposition?: string | null
+        }
+        Update: {
+          company_name?: string | null
+          created_at?: string
+          id?: string
+          industry?: string | null
+          services_description?: string
+          target_audience?: string | null
+          tone_preference?: string | null
+          updated_at?: string
+          user_id?: string
+          value_proposition?: string | null
+        }
+        Relationships: []
+      }
       chat_conversations: {
         Row: {
           company_id: string | null

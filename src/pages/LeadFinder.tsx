@@ -38,12 +38,14 @@ export default function LeadFinder() {
   const { leadFinderResults, setLeadFinderResults } = useUIStore();
   const leadFinderMutation = useLeadFinder();
 
-  const handleSearch = async () => {
+  const handleSearch = async (options?: { forceSave?: boolean }) => {
+    const saveToDb = options?.forceSave ? false : dryRun; // If forceSave, set dryRun to false
+    
     const { data } = await leadFinderMutation.mutateAsync({
       size,
       geography,
       industry,
-      dryRun,
+      dryRun: saveToDb,
       provider: providerConfig.provider,
       model: providerConfig.model,
       enrichWithPerplexity,
@@ -243,7 +245,7 @@ export default function LeadFinder() {
           {/* Action Button */}
           <div className="p-6 border-t bg-card/50">
             <Button
-              onClick={handleSearch}
+              onClick={() => handleSearch()}
               disabled={!isFormValid || isLoading}
               className="w-full h-10"
               size="default"
@@ -292,8 +294,21 @@ export default function LeadFinder() {
                     </Badge>
                   )}
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {dryRun ? "Preview mode" : `${results.inserted} added to CRM`}
+                <div className="flex items-center gap-3">
+                  {results.dryRun && results.leads.length > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleSearch({ forceSave: true })}
+                      disabled={isLoading}
+                      className="bg-gradient-primary"
+                    >
+                      <Database className="h-3.5 w-3.5 mr-2" />
+                      Add to CRM
+                    </Button>
+                  )}
+                  <div className="text-xs text-muted-foreground">
+                    {results.dryRun ? "Preview mode" : `${results.inserted} added to CRM`}
+                  </div>
                 </div>
               </div>
 

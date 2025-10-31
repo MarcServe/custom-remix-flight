@@ -77,6 +77,26 @@ Deno.serve(async (req) => {
 
     console.log(`Using contact: ${primaryContact.name} (${primaryContact.title})`);
 
+    // Fetch user's business profile for context
+    const authHeader = req.headers.get('Authorization');
+    let businessProfile = null;
+    
+    if (authHeader) {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+      
+      if (!userError && user) {
+        const { data: profile } = await supabase
+          .from('business_profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+        
+        businessProfile = profile;
+        console.log('Business profile loaded:', businessProfile ? 'Yes' : 'No');
+      }
+    }
+
     // Personalize each email step using AI
     const personalizedEmails = [];
     const steps = sequence.steps || [];
@@ -89,7 +109,8 @@ Deno.serve(async (req) => {
         company,
         primaryContact,
         step,
-        tone
+        tone,
+        businessProfile
       );
 
       // Call Lovable AI
@@ -201,10 +222,20 @@ function buildPersonalizationPrompt(
   company: any,
   contact: any,
   step: any,
-  tone: string
+  tone: string,
+  businessProfile: any = null
 ): string {
+  const businessContext = businessProfile ? `
+YOUR BUSINESS CONTEXT:
+- Company: ${businessProfile.company_name || 'Your Company'}
+- Industry: ${businessProfile.industry || 'Your Industry'}
+- Services/Products: ${businessProfile.services_description}
+${businessProfile.target_audience ? `- Target Audience: ${businessProfile.target_audience}` : ''}
+${businessProfile.value_proposition ? `- Value Proposition: ${businessProfile.value_proposition}` : ''}
+` : '';
+
   const companyContext = `
-COMPANY CONTEXT:
+PROSPECT COMPANY CONTEXT:
 - Name: ${company.name}
 - Industry: ${company.industry || 'Unknown'}
 - Size: ${company.size || 'Unknown'} employees
@@ -235,7 +266,8 @@ Body:
 ${step.body}
 `.trim();
 
-  return `${companyContext}
+  return `${businessContext}
+${companyContext}
 
 ${contactContext}
 
@@ -248,12 +280,13 @@ INSTRUCTIONS:
    - {{first_name}} → ${contact.name.split(' ')[0]}
    - {{contact_name}} → ${contact.name}
    - {{title}} → ${contact.title || 'team member'}
-3. Add 1-2 sentences that reference real company context (products, news, funding, tech stack)
-4. Keep the core message structure but make it feel researched and relevant
-5. Maintain ${tone} tone throughout
-6. Keep it concise (under 150 words for the body)
-7. Make it feel personal, not generic
-8. Use the company's actual situation to create urgency or relevance
+3. Add 1-2 sentences that show how YOUR services/products (from business context) can specifically help ${company.name} based on their situation
+4. Reference real prospect company context (products, news, funding, tech stack) to show you've done research
+5. Keep the core message structure but make it feel researched and relevant
+6. Maintain ${tone} tone throughout
+7. Keep it concise (under 150 words for the body)
+8. Make it feel personal, not generic - connect YOUR value proposition to THEIR specific needs
+9. Use the prospect company's actual situation to create urgency or relevance
 
 Return ONLY a JSON object with this exact structure (no markdown, no extra text):
 {

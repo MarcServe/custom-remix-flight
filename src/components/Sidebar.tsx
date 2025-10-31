@@ -1,4 +1,4 @@
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity } from "lucide-react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +22,7 @@ const navigation = [
   { name: "Pipeline", href: "/pipeline", icon: TrendingUp },
   { name: "Sequences", href: "/sequences", icon: Mail },
   { name: "Active Campaigns", href: "/company-sequences", icon: Activity },
+  { name: "Business Profile", href: "/business-profile", icon: Briefcase },
 ];
 
 export const Sidebar = () => {
