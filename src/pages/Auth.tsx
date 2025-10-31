@@ -40,7 +40,8 @@ export default function Auth() {
       setErrors(prev => ({ ...prev, [name]: '' }));
       return true;
     } catch (error: any) {
-      setErrors(prev => ({ ...prev, [name]: error.errors[0].message }));
+      const message = error.issues?.[0]?.message || 'Invalid input';
+      setErrors(prev => ({ ...prev, [name]: message }));
       return false;
     }
   };
