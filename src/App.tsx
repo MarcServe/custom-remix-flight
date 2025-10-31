@@ -13,6 +13,7 @@ import Deals from "./pages/Deals";
 import People from "./pages/People";
 import LeadFinder from "./pages/LeadFinder";
 import BusinessProfile from "./pages/BusinessProfile";
+import Profile from "./pages/Profile";
 import Pipeline from "./pages/Pipeline";
 import Sequences from "./pages/Sequences";
 import CompanySequences from "./pages/CompanySequences";
@@ -52,6 +53,7 @@ const App = () => (
                           <Route path="/people" element={<People />} />
                           <Route path="/lead-finder" element={<LeadFinder />} />
                           <Route path="/business-profile" element={<BusinessProfile />} />
+                          <Route path="/profile" element={<Profile />} />
                           <Route path="/pipeline" element={<Pipeline />} />
                           <Route path="/sequences" element={<Sequences />} />
                           <Route path="/company-sequences" element={<CompanySequences />} />

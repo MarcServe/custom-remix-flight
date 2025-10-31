@@ -30,7 +30,7 @@ export default function People() {
       {/* Header Section */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-8 border">
         <div className="relative z-10">
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
                 <Users className="h-6 w-6 text-white" />
@@ -42,7 +42,7 @@ export default function People() {
                 </p>
               </div>
             </div>
-            <Button onClick={() => setImportDialogOpen(true)} size="lg">
+            <Button onClick={() => setImportDialogOpen(true)} size="lg" className="w-full sm:w-auto">
               <Upload className="mr-2 h-4 w-4" />
               Import Leads
             </Button>

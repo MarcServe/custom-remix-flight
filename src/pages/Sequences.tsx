@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users } from "lucide-react";
-import { ProviderSelector } from "@/components/features/common/ProviderSelector";
 import { useGenerateSequence, useSequences, useDeleteSequence } from "@/hooks/use-sequences";
 import { useCompanySequences, useUpdateSequenceStatus, useDeleteCompanySequence } from "@/hooks/use-company-sequences";
 import { useProviderStore } from "@/stores/provider-store";
@@ -230,6 +229,81 @@ export default function Sequences() {
                   <p className="text-xs text-muted-foreground">
                     {customInstructions.length}/500 characters
                   </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="seq-provider" className="text-sm font-medium">AI Provider</Label>
+                  <Select
+                    value={providerConfig.provider}
+                    onValueChange={(value: 'lovable' | 'openai' | 'perplexity') => {
+                      const defaultModels: Record<string, string> = {
+                        lovable: 'google/gemini-2.5-flash',
+                        openai: 'gpt-4o-mini',
+                        perplexity: 'sonar',
+                      };
+                      setProviderConfig({
+                        provider: value,
+                        model: defaultModels[value],
+                      });
+                    }}
+                  >
+                    <SelectTrigger id="seq-provider" className="h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="lovable">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4" />
+                          <span>Lovable AI (Gemini)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="openai">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4" />
+                          <span>OpenAI (GPT)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="perplexity">
+                        <div className="flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4" />
+                          <span>Perplexity (Search)</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="seq-model" className="text-sm font-medium">Model</Label>
+                  <Select
+                    value={providerConfig.model}
+                    onValueChange={(value) => setProviderConfig({ ...providerConfig, model: value })}
+                  >
+                    <SelectTrigger id="seq-model" className="h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {providerConfig.provider === 'lovable' && (
+                        <>
+                          <SelectItem value="google/gemini-2.5-flash">Gemini 2.5 Flash (Fast)</SelectItem>
+                          <SelectItem value="google/gemini-2.5-pro">Gemini 2.5 Pro (Powerful)</SelectItem>
+                          <SelectItem value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Fastest)</SelectItem>
+                        </>
+                      )}
+                      {providerConfig.provider === 'openai' && (
+                        <>
+                          <SelectItem value="gpt-4o-mini">GPT-4o Mini (Efficient)</SelectItem>
+                          <SelectItem value="gpt-4o">GPT-4o (Most Capable)</SelectItem>
+                        </>
+                      )}
+                      {providerConfig.provider === 'perplexity' && (
+                        <>
+                          <SelectItem value="sonar">Sonar (Fast with search)</SelectItem>
+                          <SelectItem value="sonar-pro">Sonar Pro (Advanced with search)</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <Button
@@ -504,19 +578,9 @@ export default function Sequences() {
             </div>
           </div>
 
-          {/* Chat Interface & Provider Selector */}
-          <div className="space-y-6">
-            {/* AI Chat Card */}
-            <div className="lg:sticky lg:top-6 h-[600px]">
-              <SequenceChatCard />
-            </div>
-            
-            {/* Provider Selector */}
-            <ProviderSelector
-              value={providerConfig}
-              onChange={(config) => setProviderConfig(config as any)}
-              showCost
-            />
+          {/* Chat Interface */}
+          <div className="lg:sticky lg:top-6 h-[600px]">
+            <SequenceChatCard />
           </div>
         </div>
       </div>
