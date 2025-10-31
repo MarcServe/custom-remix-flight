@@ -11,11 +11,11 @@ export const usePendingCounts = () => {
       const now = new Date().toISOString();
       
       try {
-        // Get active deals count - using or filter instead of in
+        // Get active deals count (using stage, not status)
         const { data: dealsData } = await supabase
           .from('deals')
           .select('id')
-          .or('status.eq.qualification,status.eq.proposal,status.eq.negotiation');
+          .in('stage', ['QUALIFIED', 'CONTACTED', 'MEETING', 'PROPOSAL']);
 
         // Get active company sequences count
         const { data: companySequencesData } = await supabase
@@ -23,15 +23,15 @@ export const usePendingCounts = () => {
           .select('id')
           .eq('status', 'active');
 
-        // Get upcoming events (next 7 days)
+        // Get upcoming events (next 7 days) - using due_at, not event_date
         const nextWeek = new Date();
         nextWeek.setDate(nextWeek.getDate() + 7);
         
         const { data: eventsData } = await supabase
           .from('events')
           .select('id')
-          .gte('event_date', now)
-          .lte('event_date', nextWeek.toISOString());
+          .gte('due_at', now)
+          .lte('due_at', nextWeek.toISOString());
 
         return {
           deals: dealsData?.length || 0,
