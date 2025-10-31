@@ -110,7 +110,7 @@ export default function Dashboard() {
                 <Button
                   size="lg"
                   onClick={() => navigate("/lead-finder")}
-                  className="relative h-14 px-8 text-lg font-semibold bg-gradient-primary hover:opacity-90 shadow-xl transition-all hover:scale-105 group"
+                  className="relative h-14 px-8 text-lg font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xl transition-all hover:scale-105 group"
                 >
                   <Search className="mr-3 h-6 w-6 group-hover:rotate-12 transition-transform" />
                   Find Leads Now
