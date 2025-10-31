@@ -68,7 +68,7 @@ export const Sidebar = () => {
       <Button
         variant="ghost"
         size="icon"
-        className="fixed top-4 left-4 z-50 md:hidden"
+        className="fixed top-3 left-3 z-50 lg:hidden bg-background/80 backdrop-blur-sm border shadow-sm"
         onClick={() => setIsMobileOpen(!isMobileOpen)}
       >
         {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -77,7 +77,7 @@ export const Sidebar = () => {
       {/* Mobile Overlay */}
       {isMobileOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
@@ -85,10 +85,10 @@ export const Sidebar = () => {
       {/* Sidebar */}
       <div className={cn(
         "flex h-full flex-col border-r bg-card transition-all duration-300",
-        "fixed md:relative inset-y-0 left-0 z-40",
-        isCollapsed ? "w-16" : "w-64",
+        "fixed lg:relative inset-y-0 left-0 z-50",
+        isCollapsed ? "lg:w-16" : "w-64",
         // Mobile: hidden by default, slide in when open
-        isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         <div className="flex h-16 items-center border-b px-3 justify-between">
         {!isCollapsed && (

@@ -66,19 +66,19 @@ export default function LeadFinder() {
     <div className="h-screen flex flex-col bg-background">
       {/* Top Bar */}
       <div className="border-b bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
-        <div className="flex items-center justify-between h-14 px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10">
-              <Search className="h-4 w-4 text-primary" />
+        <div className="flex items-center justify-between h-14 px-4 md:px-6">
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-lg bg-primary/10">
+              <Search className="h-3.5 w-3.5 md:h-4 md:w-4 text-primary" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold tracking-tight">AI Lead Finder</h1>
-              <p className="text-sm text-muted-foreground">Intelligent company discovery</p>
+              <h1 className="text-base md:text-lg font-semibold tracking-tight">AI Lead Finder</h1>
+              <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Intelligent company discovery</p>
             </div>
           </div>
           
           {results && (
-            <div className="flex items-center gap-4 text-xs">
+            <div className="hidden md:flex items-center gap-4 text-xs">
               <div className="flex items-center gap-2">
                 <Database className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="font-mono">{results.leads.length}</span>
@@ -95,12 +95,12 @@ export default function LeadFinder() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left Panel - Search Config */}
-        <div className="w-80 border-r bg-card/30 backdrop-blur supports-[backdrop-filter]:bg-card/30 flex flex-col">
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="w-full md:w-80 border-b md:border-b-0 md:border-r bg-card/30 backdrop-blur supports-[backdrop-filter]:bg-card/30 flex flex-col overflow-y-auto max-h-[50vh] md:max-h-none">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
             {/* Search Parameters */}
-            <div className="space-y-4">
+            <div className="space-y-3 md:space-y-4">
               <div>
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                   Search Parameters
@@ -245,11 +245,11 @@ export default function LeadFinder() {
           </div>
 
           {/* Action Button */}
-          <div className="p-6 border-t bg-card/50">
+          <div className="p-4 md:p-6 border-t bg-card/50">
             <Button
               onClick={() => handleSearch()}
               disabled={!isFormValid || isLoading}
-              className="w-full h-10"
+              className="w-full h-9 md:h-10"
               size="default"
             >
               {isLoading ? (
@@ -270,8 +270,8 @@ export default function LeadFinder() {
         {/* Right Panel - Results */}
         <div className="flex-1 overflow-y-auto">
           {!results ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center space-y-3 max-w-md">
+            <div className="h-full flex items-center justify-center p-4">
+              <div className="text-center space-y-3 max-w-md px-4">
                 <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center">
                   <Search className="h-8 w-8 text-primary/40" />
                 </div>
@@ -284,10 +284,10 @@ export default function LeadFinder() {
               </div>
             </div>
           ) : (
-            <div className="p-6 space-y-4">
+            <div className="p-4 md:p-6 space-y-4">
               {/* Results Header */}
-              <div className="flex items-center justify-between pb-3 border-b">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b">
+                <div className="flex items-center gap-2 sm:gap-3">
                   <h2 className="text-sm font-semibold">Search Results</h2>
                   {results.wasEnriched && (
                     <Badge variant="default" className="h-5 text-xs bg-gradient-primary">
@@ -296,19 +296,20 @@ export default function LeadFinder() {
                     </Badge>
                   )}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   {results.dryRun && results.leads.length > 0 && (
                     <Button
                       size="sm"
                       onClick={() => handleSearch({ forceSave: true })}
                       disabled={isLoading}
+                      className="h-8 text-xs"
                     >
-                      <Database className="h-3.5 w-3.5 mr-2" />
+                      <Database className="h-3 w-3 mr-1.5" />
                       Add to CRM
                     </Button>
                   )}
-                  <div className="text-xs text-muted-foreground">
-                    {results.dryRun ? "Preview mode" : `${results.inserted} added to CRM`}
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                    {results.dryRun ? "Preview" : `${results.inserted} added`}
                   </div>
                 </div>
               </div>
@@ -318,17 +319,17 @@ export default function LeadFinder() {
                 {results.leads.map((company: any, idx: number) => (
                   <div
                     key={idx}
-                    className="group relative rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all p-4 cursor-pointer"
+                    className="group relative rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all p-3 md:p-4 cursor-pointer"
                     onClick={() => {
                       setSelectedCompany(company);
                       setDialogOpen(true);
                     }}
                   >
-                    <div className="flex gap-4">
+                    <div className="flex gap-3 md:gap-4">
                       {/* Company Icon */}
                       <div className="shrink-0">
-                        <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm">
-                          <Building2 className="h-5 w-5 text-white" />
+                        <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm">
+                          <Building2 className="h-4 w-4 md:h-5 md:w-5 text-white" />
                         </div>
                       </div>
 
