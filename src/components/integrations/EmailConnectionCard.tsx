@@ -100,7 +100,7 @@ export function EmailConnectionCard({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => connection && onDisconnect(connection.connection_id)}
+              onClick={() => connection && onDisconnect(connection.id)}
               className="w-full"
             >
               <Unplug className="h-4 w-4 mr-2" />

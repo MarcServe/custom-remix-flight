@@ -1,6 +1,7 @@
 import { apiClient } from '../api/client';
 
 export interface NangoConnection {
+  id: string;
   provider: 'gmail' | 'outlook' | 'smtp' | 'verified_email';
   connection_id: string;
   status: 'active' | 'error' | 'disconnected' | 'pending';
