@@ -20,12 +20,27 @@ serve(async (req) => {
 
     // Handle connection.created event
     if (type === 'connection.created') {
-      const { connection, provider } = payload;
+      const { connection, provider, end_user } = payload;
+      
+      // Extract the actual Supabase user ID from the webhook payload
+      const userId = end_user?.id || connection.end_user_id;
+      
+      if (!userId) {
+        console.error('No user ID found in webhook payload:', JSON.stringify(payload, null, 2));
+        return new Response(
+          JSON.stringify({ error: 'Missing user ID in webhook payload' }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
       
       console.log('Processing connection.created:', {
         connectionId: connection.connection_id,
         provider: provider.provider_config_key,
-        userId: connection.connection_id, // Nango uses connection_id as our user_id
+        userId: userId,
+        endUser: end_user,
       });
 
       const supabaseClient = createClient(
@@ -37,7 +52,7 @@ serve(async (req) => {
       const { error: insertError } = await supabaseClient
         .from('crm_connections')
         .upsert({
-          user_id: connection.connection_id, // This is the user_id we passed during session creation
+          user_id: userId, // Use the correct Supabase user UUID
           provider: provider.provider_config_key,
           connection_id: connection.id || connection.connection_id,
           status: 'active',
@@ -61,7 +76,7 @@ serve(async (req) => {
         );
       }
 
-      console.log('Connection stored successfully for user:', connection.connection_id);
+      console.log('Connection stored successfully for user:', userId);
 
       return new Response(
         JSON.stringify({ success: true, message: 'Connection stored successfully' }),
