@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { apiClient } from "@/lib/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -221,13 +222,11 @@ export default function Teams() {
         toast({ title: "Team member added successfully" });
       } else {
         // User doesn't exist, send invitation email
-        const { error } = await supabase.functions.invoke('send-team-invitation', {
-          body: {
-            teamId: selectedTeam.id,
-            email: inviteData.email.toLowerCase(),
-            role: inviteData.role,
-            teamName: selectedTeam.name,
-          },
+        const { error } = await apiClient.callFunction('send-team-invitation', {
+          teamId: selectedTeam.id,
+          email: inviteData.email.toLowerCase(),
+          role: inviteData.role,
+          teamName: selectedTeam.name,
         });
 
         if (error) throw error;
