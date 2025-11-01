@@ -186,8 +186,9 @@ serve(async (req) => {
             from: `${senderName} <${connection.from_email}>`,
             to: toEmail,
             subject,
-            plaintext: emailBodyText,
+            content: emailBodyText,
             html: wrappedHtml,
+            headers: {},
           });
 
           await client.close();
