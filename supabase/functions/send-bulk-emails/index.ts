@@ -163,7 +163,7 @@ serve(async (req) => {
             connection.from_email
           );
 
-          const smtpMode = (connection.metadata as any)?.smtp_mode || 'resend';
+          const smtpMode = (connection.metadata as any)?.smtp_mode || 'direct'; // Default to 'direct' for open-source use
 
           if (smtpMode === 'direct' && (connection.metadata as any)?.smtp_host) {
             // Direct SMTP

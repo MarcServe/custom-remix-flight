@@ -114,17 +114,21 @@ export function ConnectEmailDialog({
       // Test connection first
       const { error: testError } = await nangoClient.testSMTPConnection(smtpConfig);
       if (testError) {
-        toast.error("SMTP connection test failed");
+        toast.error("SMTP connection test failed", {
+          description: "Please check your SMTP settings and try again."
+        });
         setLoading(false);
         return;
       }
 
-      // Save configuration
+      // Save configuration with Direct SMTP as default
       const { error } = await nangoClient.configureSMTP(smtpConfig);
       if (error) {
         toast.error("Failed to save SMTP configuration");
       } else {
-        toast.success("SMTP configured successfully");
+        toast.success("SMTP configured successfully!", {
+          description: "Your emails will be sent directly from your SMTP server."
+        });
         onSuccess();
         onOpenChange(false);
       }

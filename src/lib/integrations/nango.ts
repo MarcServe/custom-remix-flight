@@ -137,6 +137,9 @@ export const nangoClient = {
     const { user } = await apiClient.getCurrentUser();
     if (!user) throw new Error('User not authenticated');
 
+    // Extract email from username (most SMTP servers use email as username)
+    const fromEmail = config.username.includes('@') ? config.username : `${config.username}@${config.host}`;
+
     const { data, error } = await apiClient.supabase
       .from('crm_connections')
       .insert({
@@ -144,7 +147,15 @@ export const nangoClient = {
         provider: 'smtp',
         connection_id: `smtp_${Date.now()}`,
         status: 'active',
-        metadata: config,
+        from_email: fromEmail,
+        metadata: {
+          smtp_mode: 'direct', // Default to Direct SMTP for open-source use
+          smtp_host: config.host,
+          smtp_port: config.port,
+          smtp_username: config.username,
+          smtp_password: config.password,
+          smtp_secure: config.secure,
+        },
       })
       .select()
       .maybeSingle();

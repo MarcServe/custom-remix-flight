@@ -159,7 +159,7 @@ serve(async (req) => {
         .maybeSingle();
 
       const senderName = businessProfile?.company_name || 'Your Business';
-      const smtpMode = (connection.metadata as any)?.smtp_mode || 'resend'; // 'direct' or 'resend'
+      const smtpMode = (connection.metadata as any)?.smtp_mode || 'direct'; // Default to 'direct' for open-source use
       
       // Wrap HTML email with professional styling
       const wrappedHtml = wrapEmailContent(emailBodyHtml, senderName, connection.from_email);
