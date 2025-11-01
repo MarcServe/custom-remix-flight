@@ -33,6 +33,10 @@ export default function Profile() {
     auto_response_daily_limit: 10,
     auto_response_paused: false,
     auto_response_count_today: 0,
+    ai_model: "google/gemini-2.5-flash",
+    ai_temperature: 0.7,
+    ai_max_tokens: 500,
+    ai_response_style: "professional",
   });
 
   const { data: connections } = useQuery({
@@ -88,6 +92,10 @@ export default function Profile() {
           auto_response_daily_limit: data.auto_response_daily_limit || 10,
           auto_response_paused: data.auto_response_paused || false,
           auto_response_count_today: data.auto_response_count_today || 0,
+          ai_model: data.ai_model || "google/gemini-2.5-flash",
+          ai_temperature: data.ai_temperature || 0.7,
+          ai_max_tokens: data.ai_max_tokens || 500,
+          ai_response_style: data.ai_response_style || "professional",
         });
       }
     } catch (error) {
@@ -192,9 +200,10 @@ export default function Profile() {
       </div>
 
       <Tabs defaultValue="account" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="business">Business Profile</TabsTrigger>
+          <TabsTrigger value="ai">AI Settings</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
 
@@ -468,6 +477,159 @@ export default function Profile() {
                     <>
                       <Save className="h-4 w-4 mr-2" />
                       Save Settings
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ai" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>AI Model Configuration</CardTitle>
+              <CardDescription>
+                Configure AI settings for auto-response generation
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="ai_model">AI Model</Label>
+                <Select
+                  value={businessProfile.ai_model}
+                  onValueChange={(value) => setBusinessProfile({ ...businessProfile, ai_model: value })}
+                >
+                  <SelectTrigger id="ai_model">
+                    <SelectValue placeholder="Select AI model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="google/gemini-2.5-flash">
+                      Gemini 2.5 Flash (Recommended) - Fast & Balanced
+                    </SelectItem>
+                    <SelectItem value="google/gemini-2.5-pro">
+                      Gemini 2.5 Pro - Highest Quality
+                    </SelectItem>
+                    <SelectItem value="google/gemini-2.5-flash-lite">
+                      Gemini 2.5 Flash Lite - Fastest & Most Economical
+                    </SelectItem>
+                    <SelectItem value="openai/gpt-5-mini">
+                      GPT-5 Mini - Strong Performance
+                    </SelectItem>
+                    <SelectItem value="openai/gpt-5">
+                      GPT-5 - Maximum Accuracy
+                    </SelectItem>
+                    <SelectItem value="openai/gpt-5-nano">
+                      GPT-5 Nano - High Volume Tasks
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Choose the AI model for generating auto-responses. Better models provide more nuanced responses but cost more.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="ai_response_style">Response Style</Label>
+                <Select
+                  value={businessProfile.ai_response_style}
+                  onValueChange={(value) => setBusinessProfile({ ...businessProfile, ai_response_style: value })}
+                >
+                  <SelectTrigger id="ai_response_style">
+                    <SelectValue placeholder="Select response style" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="professional">Professional - Formal and polished</SelectItem>
+                    <SelectItem value="casual">Casual - Friendly and approachable</SelectItem>
+                    <SelectItem value="technical">Technical - Detailed and precise</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  The tone and style of AI-generated responses
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="ai_temperature">
+                  Creativity Level: {businessProfile.ai_temperature}
+                </Label>
+                <Input
+                  id="ai_temperature"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={businessProfile.ai_temperature}
+                  onChange={(e) => setBusinessProfile({ 
+                    ...businessProfile, 
+                    ai_temperature: parseFloat(e.target.value)
+                  })}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>More Focused (0.0)</span>
+                  <span>More Creative (1.0)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Lower values produce more consistent responses, higher values are more creative
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="ai_max_tokens">Maximum Response Length</Label>
+                <Input
+                  id="ai_max_tokens"
+                  type="number"
+                  min="100"
+                  max="2000"
+                  step="50"
+                  value={businessProfile.ai_max_tokens}
+                  onChange={(e) => setBusinessProfile({ 
+                    ...businessProfile, 
+                    ai_max_tokens: parseInt(e.target.value) || 500
+                  })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Maximum length of AI responses in tokens (~4 characters = 1 token). Recommended: 500
+                </p>
+              </div>
+
+              <div className="rounded-lg border bg-primary/5 p-4 space-y-2">
+                <p className="text-sm font-medium">Current Configuration</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Model:</span>
+                    <p className="font-medium">{businessProfile.ai_model}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Style:</span>
+                    <p className="font-medium capitalize">{businessProfile.ai_response_style}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Creativity:</span>
+                    <p className="font-medium">{businessProfile.ai_temperature}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Max Length:</span>
+                    <p className="font-medium">{businessProfile.ai_max_tokens} tokens</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button
+                  onClick={handleSaveBusinessProfile}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save AI Settings
                     </>
                   )}
                 </Button>

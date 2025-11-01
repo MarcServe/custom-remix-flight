@@ -42,7 +42,7 @@ export function AutomationMetrics() {
       // Get business profile for auto-response metrics
       const { data: profile } = await supabase
         .from('business_profiles')
-        .select('auto_response_count_today, auto_response_daily_limit, auto_response_paused')
+        .select('auto_response_count_today, auto_response_daily_limit, auto_response_paused, ai_model, ai_response_style')
         .eq('user_id', user.id)
         .single();
 
@@ -70,6 +70,8 @@ export function AutomationMetrics() {
         autoResponsePaused: profile?.auto_response_paused || false,
         totalAutoSent: totalAutoSent || 0,
         recentAutoSent: autoSentEmails || [],
+        aiModel: profile?.ai_model || 'google/gemini-2.5-flash',
+        aiResponseStyle: profile?.ai_response_style || 'professional',
       };
     },
     refetchInterval: 60000, // Refresh every minute
@@ -96,7 +98,13 @@ export function AutomationMetrics() {
                 <Activity className="h-5 w-5" />
                 Automation Metrics
               </CardTitle>
-              <CardDescription>Real-time sequence performance</CardDescription>
+              <CardDescription className="flex items-center gap-2 mt-1">
+                Real-time sequence performance
+                <Badge variant="outline" className="text-xs">
+                  <Zap className="h-3 w-3 mr-1" />
+                  {metrics?.aiModel?.split('/')[1]?.replace('-', ' ') || 'AI Powered'}
+                </Badge>
+              </CardDescription>
             </div>
             <Button
               variant="outline"

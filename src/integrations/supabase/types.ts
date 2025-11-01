@@ -49,6 +49,10 @@ export type Database = {
       }
       business_profiles: {
         Row: {
+          ai_max_tokens: number | null
+          ai_model: string | null
+          ai_response_style: string | null
+          ai_temperature: number | null
           auto_response_count_today: number | null
           auto_response_daily_limit: number | null
           auto_response_last_reset_date: string | null
@@ -65,6 +69,10 @@ export type Database = {
           value_proposition: string | null
         }
         Insert: {
+          ai_max_tokens?: number | null
+          ai_model?: string | null
+          ai_response_style?: string | null
+          ai_temperature?: number | null
           auto_response_count_today?: number | null
           auto_response_daily_limit?: number | null
           auto_response_last_reset_date?: string | null
@@ -81,6 +89,10 @@ export type Database = {
           value_proposition?: string | null
         }
         Update: {
+          ai_max_tokens?: number | null
+          ai_model?: string | null
+          ai_response_style?: string | null
+          ai_temperature?: number | null
           auto_response_count_today?: number | null
           auto_response_daily_limit?: number | null
           auto_response_last_reset_date?: string | null

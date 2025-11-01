@@ -53,7 +53,7 @@ serve(async (req) => {
 
     const { data: businessProfile } = await supabaseClient
       .from('business_profiles')
-      .select('*')
+      .select('*, ai_model, ai_temperature, ai_max_tokens, ai_response_style')
       .eq('user_id', user.id)
       .single();
 
@@ -131,7 +131,7 @@ Write a personalized response email that:
 1. Addresses their questions/concerns directly
 2. Provides helpful information
 3. Moves toward the sequence goal: ${companySeq.email_sequences.goal}
-4. Uses ${businessProfile.tone_preference || 'professional'} tone
+4. Uses ${businessProfile.ai_response_style || businessProfile.tone_preference || 'professional'} tone
 5. Is concise (150-200 words maximum)
 6. Includes a clear call-to-action
 7. Ends with proper signature:
@@ -156,7 +156,7 @@ Return ONLY a JSON object with this structure:
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: businessProfile.ai_model || 'google/gemini-2.5-flash',
         messages: [
           { 
             role: 'system', 
@@ -164,6 +164,8 @@ Return ONLY a JSON object with this structure:
           },
           { role: 'user', content: prompt }
         ],
+        temperature: businessProfile.ai_temperature || 0.7,
+        max_tokens: businessProfile.ai_max_tokens || 500,
         tools: [{
           type: 'function',
           function: {

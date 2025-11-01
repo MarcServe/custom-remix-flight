@@ -59,7 +59,7 @@ serve(async (req) => {
 
     const { data: businessProfile } = await supabase
       .from('business_profiles')
-      .select('company_name, auto_response_daily_limit, auto_response_paused, auto_response_count_today, auto_response_last_reset_date')
+      .select('company_name, auto_response_daily_limit, auto_response_paused, auto_response_count_today, auto_response_last_reset_date, ai_model, ai_response_style')
       .eq('user_id', userId)
       .single();
 
