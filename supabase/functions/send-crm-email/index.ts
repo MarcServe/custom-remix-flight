@@ -169,11 +169,18 @@ serve(async (req) => {
         console.log(`Sending via Direct SMTP: ${(connection.metadata as any).smtp_host}`);
 
         const smtpConfig = connection.metadata as any;
+        const smtpPort = smtpConfig.smtp_port || 587;
+        
+        // Port 465 uses direct TLS (tls: true)
+        // Port 587 uses STARTTLS (tls: false)
+        // Port 25 is unencrypted (tls: false + allowUnsecure: true)
+        const useTLS = smtpPort === 465;
+        
         const client = new SMTPClient({
           connection: {
             hostname: smtpConfig.smtp_host,
-            port: smtpConfig.smtp_port || 587,
-            tls: smtpConfig.smtp_secure !== false,
+            port: smtpPort,
+            tls: useTLS,
             auth: {
               username: smtpConfig.smtp_username,
               password: smtpConfig.smtp_password,
