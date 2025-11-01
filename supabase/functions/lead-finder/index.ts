@@ -463,7 +463,7 @@ ${JSON.stringify(batch, null, 2)}`;
             lead.dataCompleteness = calculateDataCompleteness(lead);
           });
 
-          const qualifiedLeads = batchLeads.filter(l => l.qualityScore >= 40);
+          const qualifiedLeads = batchLeads.filter(l => l.qualityScore >= 25);
           allLeads.push(...qualifiedLeads);
 
           // STREAM BATCH
