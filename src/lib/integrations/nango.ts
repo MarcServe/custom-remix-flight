@@ -79,7 +79,7 @@ export const nangoClient = {
               .from('crm_connections')
               .select('*')
               .eq('user_id', user.id)
-              .eq('provider', provider === 'gmail' ? 'google-mail' : 'outlook')
+              .eq('provider', provider)
               .eq('status', 'active')
               .order('created_at', { ascending: false })
               .limit(1);
