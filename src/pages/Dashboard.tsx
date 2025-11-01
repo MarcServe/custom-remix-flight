@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Building2, Users, DollarSign, TrendingUp, Sparkles, Search, Mail, BarChart3, ArrowUpRight, Calendar as CalendarIcon, Clock } from "lucide-react";
+import { useEffect } from "react";
+import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +13,71 @@ import { useEvents } from "@/hooks/use-events";
 import { format, isToday, isTomorrow, isFuture } from "date-fns";
 export default function Dashboard() {
   const navigate = useNavigate();
+
+  // Real-time subscription for auto-response notifications
+  useEffect(() => {
+    const channel = supabase
+      .channel('auto-response-notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'email_activities',
+          filter: `metadata->auto_sent=eq.true`,
+        },
+        (payload) => {
+          const activity = payload.new as any;
+          toast.success('Auto-Response Sent', {
+            description: `AI responded to an email${activity.subject ? `: ${activity.subject}` : ''}`,
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Check for daily limit warnings
+  const { data: businessProfile } = useQuery({
+    queryKey: ['business-profile-limits'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('business_profiles')
+        .select('auto_response_count_today, auto_response_daily_limit, auto_response_paused')
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  useEffect(() => {
+    if (!businessProfile) return;
+    
+    const { auto_response_count_today, auto_response_daily_limit, auto_response_paused } = businessProfile;
+    const percentUsed = (auto_response_count_today / auto_response_daily_limit) * 100;
+
+    if (auto_response_paused) {
+      toast.warning('Auto-Response Paused', {
+        description: 'Auto-responses are currently paused. Enable in Profile settings.',
+        duration: 5000,
+      });
+    } else if (percentUsed >= 90 && percentUsed < 100) {
+      toast.warning('Auto-Response Limit Warning', {
+        description: `${auto_response_count_today}/${auto_response_daily_limit} auto-responses sent today. Approaching limit.`,
+        duration: 5000,
+      });
+    } else if (percentUsed >= 100) {
+      toast.error('Auto-Response Limit Reached', {
+        description: `Daily limit of ${auto_response_daily_limit} auto-responses reached. Limit resets tomorrow.`,
+        duration: 7000,
+      });
+    }
+  }, [businessProfile]);
+
   const {
     data: eventsData
   } = useEvents();

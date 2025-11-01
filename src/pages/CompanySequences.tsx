@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -58,11 +59,51 @@ interface CompanySequence {
 
 export default function CompanySequences() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [industryFilter, setIndustryFilter] = useState<string>('all');
   const [selectedSequence, setSelectedSequence] = useState<CompanySequence | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
+  // Real-time updates for company sequences
+  useEffect(() => {
+    const channel = supabase
+      .channel('company-sequences-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'company_sequences',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['company-sequences-page'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'email_activities',
+        },
+        (payload) => {
+          const activity = payload.new as any;
+          if (activity.metadata?.auto_sent) {
+            toast.success('Auto-Response Sent', {
+              description: 'AI automatically responded to an email',
+            });
+            queryClient.invalidateQueries({ queryKey: ['company-sequences-page'] });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
   
   const updateStatusMutation = useUpdateSequenceStatus();
   const sendEmailMutation = useSendSequenceEmail();

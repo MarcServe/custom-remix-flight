@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -53,7 +54,63 @@ interface UnifiedActivity {
 
 export default function UnifiedCampaigns() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [selectedTab, setSelectedTab] = useState('all');
+
+  // Real-time updates for email activities
+  useEffect(() => {
+    const channel = supabase
+      .channel('campaign-activities')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'email_activities',
+        },
+        (payload) => {
+          const activity = payload.new as any;
+          queryClient.invalidateQueries({ queryKey: ['unified-activities'] });
+          queryClient.invalidateQueries({ queryKey: ['sequence-campaigns'] });
+          
+          if (activity.metadata?.auto_sent) {
+            toast.info('New Auto-Response', {
+              description: `AI sent an automated response`,
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'email_activities',
+        },
+        (payload) => {
+          const activity = payload.new as any;
+          queryClient.invalidateQueries({ queryKey: ['unified-activities'] });
+          
+          if (activity.opened_at && !payload.old.opened_at) {
+            toast.success('Email Opened', {
+              description: activity.subject || 'A recipient opened your email',
+            });
+          }
+          
+          if (activity.replied_at && !payload.old.replied_at) {
+            toast.success('Email Reply Received!', {
+              description: activity.subject || 'A recipient replied to your email',
+              duration: 7000,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   // Fetch bulk campaigns
   const { data: bulkCampaigns } = useQuery({
