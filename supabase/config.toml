@@ -46,7 +46,7 @@ verify_jwt = false  # Webhook from Nango doesn't have JWT
 verify_jwt = true
 
 [functions.send-verification-email]
-verify_jwt = true
+verify_jwt = false  # Function handles authentication internally
 
 [functions.verify-email]
 verify_jwt = false  # Allow verification via GET request from email link
