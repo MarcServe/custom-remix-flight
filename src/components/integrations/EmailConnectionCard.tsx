@@ -2,11 +2,12 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Mail, Check, AlertCircle, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { NangoConnection } from "@/lib/integrations/nango";
 import { SMTPModeToggle } from "./SMTPModeToggle";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface EmailConnectionCardProps {
@@ -53,19 +54,12 @@ export function EmailConnectionCard({
 
       if (error) throw error;
 
-      toast({
-        title: "Email settings updated",
-        description: `Using ${newMode === 'direct' ? 'your email server' : 'cloud relay'}`,
-      });
+      toast.success(`Using ${newMode === 'direct' ? 'your email server' : 'cloud relay'} now`);
 
       // Trigger a refresh
       window.location.reload();
     } catch (error: any) {
-      toast({
-        title: "Failed to update mode",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error(error.message || "Failed to update mode. Please try again.");
     } finally {
       setIsUpdatingMode(false);
     }
@@ -140,6 +134,19 @@ export function EmailConnectionCard({
                 )}
               </CollapsibleContent>
             </Collapsible>
+            
+            {hasError && (connection as any).error_message && (
+              <Alert variant="destructive" className="mt-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  <strong>Connection Issue:</strong> {(connection as any).error_message}
+                  <br />
+                  <span className="text-xs mt-1 block">
+                    Try reconnecting your account or check your email provider settings.
+                  </span>
+                </AlertDescription>
+              </Alert>
+            )}
           </>
         )}
 
