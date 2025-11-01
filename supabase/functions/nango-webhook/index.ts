@@ -16,13 +16,91 @@ serve(async (req) => {
     const webhookData = await req.json();
     console.log('Nango webhook received:', JSON.stringify(webhookData, null, 2));
 
-    const { type, payload } = webhookData;
+    const { type, operation, payload } = webhookData;
 
-    // Handle connection.created event
+    // Handle auth event (OAuth completion) - This is what Nango actually sends
+    if (type === 'auth' && operation === 'creation') {
+      const { connectionId, endUser, providerConfigKey, success } = webhookData;
+      
+      if (!success) {
+        console.log('Auth event was not successful, skipping');
+        return new Response(
+          JSON.stringify({ success: true, message: 'Auth failed, not processing' }),
+          { 
+            status: 200, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      
+      const userId = endUser?.endUserId;
+      
+      if (!userId) {
+        console.error('No user ID found in auth webhook:', JSON.stringify(webhookData, null, 2));
+        return new Response(
+          JSON.stringify({ error: 'Missing user ID in webhook payload' }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      
+      console.log('Processing auth.creation event:', {
+        connectionId,
+        provider: providerConfigKey,
+        userId,
+        authMode: webhookData.authMode,
+      });
+
+      const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+
+      // Store the connection in our database
+      const { error: insertError } = await supabaseClient
+        .from('crm_connections')
+        .upsert({
+          user_id: userId,
+          provider: providerConfigKey,
+          connection_id: connectionId,
+          status: 'active',
+          metadata: {
+            auth_mode: webhookData.authMode,
+            environment: webhookData.environment,
+          },
+          last_sync_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,provider'
+        });
+
+      if (insertError) {
+        console.error('Failed to store connection:', insertError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to store connection', details: insertError.message }),
+          { 
+            status: 500, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+
+      console.log('Connection stored successfully for user:', userId);
+
+      return new Response(
+        JSON.stringify({ success: true, message: 'Connection stored successfully' }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    // Handle connection.created event (legacy/fallback)
     if (type === 'connection.created') {
       const { connection, provider, end_user } = payload;
       
-      // Extract the actual Supabase user ID from the webhook payload
       const userId = end_user?.id || connection.end_user_id;
       
       if (!userId) {
@@ -36,11 +114,10 @@ serve(async (req) => {
         );
       }
       
-      console.log('Processing connection.created:', {
+      console.log('Processing connection.created (legacy):', {
         connectionId: connection.connection_id,
         provider: provider.provider_config_key,
         userId: userId,
-        endUser: end_user,
       });
 
       const supabaseClient = createClient(
@@ -48,11 +125,10 @@ serve(async (req) => {
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
       );
 
-      // Store the connection in our database
       const { error: insertError } = await supabaseClient
         .from('crm_connections')
         .upsert({
-          user_id: userId, // Use the correct Supabase user UUID
+          user_id: userId,
           provider: provider.provider_config_key,
           connection_id: connection.id || connection.connection_id,
           status: 'active',
