@@ -5,13 +5,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Users, Settings, UserPlus, Trash2, Crown, Shield, Eye } from "lucide-react";
+import { Plus, Users, Settings, UserPlus, Trash2, Crown, Shield, Eye, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Team {
   id: string;
@@ -40,6 +41,7 @@ export default function Teams() {
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const { toast } = useToast();
@@ -67,6 +69,7 @@ export default function Teams() {
   const loadTeams = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const { data, error } = await supabase
         .from('teams')
         .select('*')
@@ -80,11 +83,7 @@ export default function Teams() {
       }
     } catch (error: any) {
       console.error('Error loading teams:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load teams",
-        variant: "destructive",
-      });
+      setLoadError(error.message || "Failed to load teams");
     } finally {
       setLoading(false);
     }
@@ -302,6 +301,15 @@ export default function Teams() {
           Create Team
         </Button>
       </div>
+
+      {loadError && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {loadError}. Please try refreshing the page or contact support if the issue persists.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {teams.length === 0 ? (
         <Card>

@@ -5,13 +5,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Inbox, UserCheck, Settings, Mail } from "lucide-react";
+import { Plus, Inbox, UserCheck, Settings, Mail, AlertCircle, ArrowRight } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Link } from "react-router-dom";
 
 interface SharedInbox {
   id: string;
@@ -44,6 +46,7 @@ export default function SharedInbox() {
   const [inboxes, setInboxes] = useState<SharedInbox[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
 
@@ -69,6 +72,7 @@ export default function SharedInbox() {
   const loadTeams = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const { data, error } = await supabase
         .from('teams')
         .select('*')
@@ -82,11 +86,7 @@ export default function SharedInbox() {
       }
     } catch (error: any) {
       console.error('Error loading teams:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load teams",
-        variant: "destructive",
-      });
+      setLoadError(error.message || "Failed to load teams");
     } finally {
       setLoading(false);
     }
@@ -192,14 +192,39 @@ export default function SharedInbox() {
 
   if (teams.length === 0) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto p-6 space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Shared Inbox</h1>
+          <p className="text-muted-foreground mt-1">
+            Collaborate on emails with your team
+          </p>
+        </div>
+
+        {loadError && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {loadError}. Please try refreshing the page or contact support if the issue persists.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Inbox className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
-            <h3 className="text-xl font-semibold mb-2">No Teams Available</h3>
-            <p className="text-muted-foreground text-center mb-4">
-              Create a team first to set up shared inboxes
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <div className="rounded-full bg-muted p-4 mb-4">
+              <Inbox className="h-12 w-12 text-muted-foreground" />
+            </div>
+            <h3 className="text-2xl font-semibold mb-2">No Teams Yet</h3>
+            <p className="text-muted-foreground text-center mb-6 max-w-md">
+              Shared inboxes require a team. Create your first team to start collaborating on emails with your colleagues.
             </p>
+            <Link to="/teams">
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Your First Team
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       </div>
@@ -216,6 +241,14 @@ export default function SharedInbox() {
           </p>
         </div>
         <div className="flex items-center gap-4">
+          {loadError && (
+            <Alert className="mb-0">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {loadError}
+              </AlertDescription>
+            </Alert>
+          )}
           <Select
             value={selectedTeam?.id}
             onValueChange={(value) => {
