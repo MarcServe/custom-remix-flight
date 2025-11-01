@@ -12,32 +12,51 @@ interface VerificationRequest {
 }
 
 serve(async (req) => {
+  console.log("send-verification-email function called");
+  
   if (req.method === "OPTIONS") {
+    console.log("OPTIONS request received");
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    console.log("Processing verification request");
+    const authHeader = req.headers.get("Authorization");
+    console.log("Authorization header present:", !!authHeader);
+    
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       {
         global: {
-          headers: { Authorization: req.headers.get("Authorization")! },
+          headers: { Authorization: authHeader! },
         },
       }
     );
 
+    console.log("Getting user from auth header");
     const {
       data: { user },
       error: userError,
     } = await supabaseClient.auth.getUser();
 
-    if (userError || !user) {
+    if (userError) {
+      console.error("User auth error:", userError);
       return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
+        JSON.stringify({ error: "Unauthorized", details: userError.message }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    
+    if (!user) {
+      console.error("No user found in session");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized", details: "No user found" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("User authenticated:", user.id);
 
     const { email }: VerificationRequest = await req.json();
 
