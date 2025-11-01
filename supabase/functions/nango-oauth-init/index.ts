@@ -66,18 +66,6 @@ serve(async (req) => {
       );
     }
 
-    // Validate that the Nango key format is correct
-    if (!nangoSecretKey.startsWith('sk-')) {
-      console.error('NANGO_SECRET_KEY appears to be invalid (should start with sk-)');
-      return new Response(
-        JSON.stringify({ 
-          error: 'Invalid NANGO_SECRET_KEY format',
-          details: 'The secret key should start with "sk-"'
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     // Create a session token using Nango API
     const sessionResponse = await fetch('https://api.nango.dev/connect/sessions', {
       method: 'POST',
