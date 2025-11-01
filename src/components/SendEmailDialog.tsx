@@ -115,84 +115,86 @@ export function SendEmailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Send Email to {recipientName}</DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="to">To</Label>
-            <Input
-              id="to"
-              value={`${recipientName} <${recipientEmail}>`}
-              disabled
-              className="bg-muted"
-            />
-          </div>
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="to">To</Label>
+              <Input
+                id="to"
+                value={`${recipientName} <${recipientEmail}>`}
+                disabled
+                className="bg-muted"
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="context">AI Context (Optional)</Label>
-            <Textarea
-              id="context"
-              placeholder="Add any context or instructions to guide the AI (e.g., mention a recent conversation, specific pain points, upcoming event...)"
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
-              disabled={isSending || isGenerating}
-              rows={3}
-              className="resize-none text-sm"
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="context">AI Context (Optional)</Label>
+              <Textarea
+                id="context"
+                placeholder="Add any context or instructions to guide the AI (e.g., mention a recent conversation, specific pain points, upcoming event...)"
+                value={context}
+                onChange={(e) => setContext(e.target.value)}
+                disabled={isSending || isGenerating}
+                rows={3}
+                className="resize-none text-sm"
+              />
+            </div>
 
-          <div className="flex justify-between items-center">
-            <Label>Email Content</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleGenerateWithAI}
-              disabled={isGenerating || isSending}
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-3 w-3" />
-                  Generate with AI
-                </>
-              )}
-            </Button>
-          </div>
+            <div className="flex justify-between items-center">
+              <Label>Email Content</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateWithAI}
+                disabled={isGenerating || isSending}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-3 w-3" />
+                    Generate with AI
+                  </>
+                )}
+              </Button>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="subject">Subject</Label>
-            <Input
-              id="subject"
-              placeholder="Enter email subject"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              disabled={isSending || isGenerating}
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="subject">Subject</Label>
+              <Input
+                id="subject"
+                placeholder="Enter email subject"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                disabled={isSending || isGenerating}
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="body">Message</Label>
-            <Textarea
-              id="body"
-              placeholder="Write your message here..."
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              disabled={isSending || isGenerating}
-              rows={10}
-              className="resize-none"
-            />
+            <div className="space-y-2">
+              <Label htmlFor="body">Message</Label>
+              <Textarea
+                id="body"
+                placeholder="Write your message here..."
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                disabled={isSending || isGenerating}
+                rows={10}
+                className="resize-none"
+              />
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 px-6 pb-6 pt-4 border-t">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
