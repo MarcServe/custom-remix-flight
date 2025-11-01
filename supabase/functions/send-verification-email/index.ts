@@ -21,24 +21,33 @@ serve(async (req) => {
 
   try {
     console.log("Processing verification request");
+    
+    // Extract JWT token from Authorization header
     const authHeader = req.headers.get("Authorization");
     console.log("Authorization header present:", !!authHeader);
     
-    const supabaseClient = createClient(
+    if (!authHeader) {
+      console.error("No Authorization header");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized", details: "No Authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    
+    // Create admin client for user validation and database operations
+    const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      {
-        global: {
-          headers: { Authorization: authHeader! },
-        },
-      }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    console.log("Getting user from auth header");
+    console.log("Validating JWT token");
+    // Validate the JWT token directly
     const {
       data: { user },
       error: userError,
-    } = await supabaseClient.auth.getUser();
+    } = await supabaseAdmin.auth.getUser(token);
 
     if (userError) {
       console.error("User auth error:", userError);
@@ -49,9 +58,9 @@ serve(async (req) => {
     }
     
     if (!user) {
-      console.error("No user found in session");
+      console.error("No user found in token");
       return new Response(
-        JSON.stringify({ error: "Unauthorized", details: "No user found" }),
+        JSON.stringify({ error: "Unauthorized", details: "Invalid token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -69,7 +78,7 @@ serve(async (req) => {
 
     // Check rate limiting - max 3 verification emails per hour per email
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const { count } = await supabaseClient
+    const { count } = await supabaseAdmin
       .from("crm_connections")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id)
@@ -89,7 +98,7 @@ serve(async (req) => {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     // Store verification token
-    const { data: connection, error: insertError } = await supabaseClient
+    const { data: connection, error: insertError } = await supabaseAdmin
       .from("crm_connections")
       .insert({
         user_id: user.id,
@@ -155,7 +164,7 @@ serve(async (req) => {
       console.error("Error sending verification email:", emailError);
       
       // Clean up the connection record
-      await supabaseClient
+      await supabaseAdmin
         .from("crm_connections")
         .delete()
         .eq("id", connection.id);
