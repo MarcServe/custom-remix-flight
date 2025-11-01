@@ -15,8 +15,21 @@ export const apiClient = {
     body?: any
   ): Promise<{ data: T | null; error: Error | null }> {
     try {
+      // Get the current session to ensure auth token is available
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        return { 
+          data: null, 
+          error: new Error('You must be logged in to perform this action') 
+        };
+      }
+
       const { data, error } = await supabase.functions.invoke(functionName, {
         body,
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (error) {
