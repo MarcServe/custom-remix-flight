@@ -68,6 +68,7 @@ export interface LeadFinderResponse {
   };
   wasEnriched?: boolean;
   traceUrl: string;
+  filteredCount?: number;
 }
 
 /**

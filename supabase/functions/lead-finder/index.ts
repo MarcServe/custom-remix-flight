@@ -394,6 +394,21 @@ Return ONLY valid JSON, no markdown blocks.`;
       await endSpan(contactSpan);
     }
 
+    // Filter out leads without contact information
+    const originalLeadCount = leads.length;
+    const leadsWithContacts = leads.filter(lead => {
+      const hasContacts = lead.contacts && lead.contacts.length > 0;
+      const hasGeneralEmail = lead.generalEmail;
+      const hasPrimaryContact = lead.primaryContact;
+      return hasContacts || hasGeneralEmail || hasPrimaryContact;
+    });
+    
+    const filteredCount = originalLeadCount - leadsWithContacts.length;
+    console.log(`Filtered ${filteredCount} leads without contact info. ${leadsWithContacts.length} leads remaining.`);
+    
+    // Use filtered leads for the rest of the process
+    leads = leadsWithContacts;
+
     // If not dry run, insert into database
     let insertedCount = 0;
     if (!dryRun) {
@@ -477,6 +492,7 @@ Return ONLY valid JSON, no markdown blocks.`;
         enrichmentUsage,
         wasEnriched: enrichWithPerplexity,
         traceUrl: aiResult.traceUrl,
+        filteredCount,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
