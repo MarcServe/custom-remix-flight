@@ -516,8 +516,8 @@ export default function LeadFinder() {
           ) : (
             <div className="p-4 md:p-6 space-y-4">
               {/* Results Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b">
-                <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex flex-col gap-3 pb-3 border-b">
+                <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-base font-semibold">
                     {results.leads.length} {results.leads.length === 1 ? 'Company' : 'Companies'} Found
                   </h2>
@@ -526,6 +526,15 @@ export default function LeadFinder() {
                       {results.filteredCount} filtered (no contacts)
                     </Badge>
                   )}
+                  {results.wasEnriched && (
+                    <Badge variant="default" className="h-5 text-xs bg-gradient-primary">
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      Enriched
+                    </Badge>
+                  )}
+                </div>
+                
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   {results.dryRun && results.leads.length > 0 && (
                     <div className="flex items-center gap-2">
                       <Checkbox
@@ -538,37 +547,31 @@ export default function LeadFinder() {
                       </Label>
                     </div>
                   )}
-                  <h2 className="text-sm font-semibold">Search Results</h2>
-                  {results.wasEnriched && (
-                    <Badge variant="default" className="h-5 text-xs bg-gradient-primary">
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      Enriched
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 sm:gap-3">
-                  {results.dryRun && results.leads.length > 0 && (
-                    <Button
-                      size="sm"
-                      onClick={handleSaveSelectedCompanies}
-                      disabled={isLoading || isSaving || selectedCompanyIndices.size === 0}
-                      className="h-8 text-xs"
-                    >
-                      {isSaving ? (
-                        <>
-                          <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Database className="h-3 w-3 mr-1.5" />
-                          Add {selectedCompanyIndices.size > 0 ? `${selectedCompanyIndices.size} ` : ''}to CRM
-                        </>
-                      )}
-                    </Button>
-                  )}
-                  <div className="text-xs text-muted-foreground whitespace-nowrap">
-                    {results.dryRun ? "Preview" : `${results.inserted} added`}
+                  
+                  <div className="flex items-center gap-2 ml-auto">
+                    {results.dryRun && results.leads.length > 0 && (
+                      <Button
+                        size="sm"
+                        onClick={handleSaveSelectedCompanies}
+                        disabled={isLoading || isSaving || selectedCompanyIndices.size === 0}
+                        className="h-8 text-xs"
+                      >
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Database className="h-3 w-3 mr-1.5" />
+                            Add {selectedCompanyIndices.size > 0 ? `${selectedCompanyIndices.size} ` : ''}to CRM
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    <div className="text-xs text-muted-foreground whitespace-nowrap">
+                      {results.dryRun ? "Preview" : `${results.inserted} added`}
+                    </div>
                   </div>
                 </div>
               </div>
