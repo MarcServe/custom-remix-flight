@@ -74,6 +74,8 @@ export default function BusinessProfile() {
         .upsert({
           user_id: user.id,
           ...profile,
+        }, {
+          onConflict: 'user_id'
         });
 
       if (error) throw error;

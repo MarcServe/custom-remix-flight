@@ -56,3 +56,15 @@ verify_jwt = true
 
 [functions.check-email-deliverability]
 verify_jwt = true
+
+[functions.send-bulk-emails]
+verify_jwt = true
+
+[functions.send-test-email]
+verify_jwt = true
+
+[functions.process-inbound-emails]
+verify_jwt = false  # Webhook from email providers
+
+[functions.generate-ai-response]
+verify_jwt = true

@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, User, Info } from "lucide-react";
+import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 interface BulkEmailDialogProps {
@@ -30,6 +32,12 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople }: 
   const [body, setBody] = useState("");
   const [sender, setSender] = useState<string>("");
   const [sending, setSending] = useState(false);
+  const [aiContext, setAiContext] = useState("");
+  const [generatingAi, setGeneratingAi] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [testEmailDialogOpen, setTestEmailDialogOpen] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState("");
+  const [sendingTest, setSendingTest] = useState(false);
 
   // Fetch email connections
   const { data: connections } = useQuery({
@@ -56,6 +64,124 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople }: 
 
   const insertVariable = (variable: string) => {
     setBody(body + `{{${variable}}}`);
+  };
+
+  const handleGenerateWithAI = async () => {
+    if (selectedPeople.length === 0) {
+      toast({
+        title: "No recipients",
+        description: "Please select at least one person to generate email for",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setGeneratingAi(true);
+      const firstPerson = selectedPeople[0];
+      
+      const { data, error } = await supabase.functions.invoke('generate-email-with-ai', {
+        body: {
+          recipientName: `${firstPerson.first_name} ${firstPerson.last_name}`.trim(),
+          recipientEmail: firstPerson.email,
+          companyId: firstPerson.company_id,
+          context: aiContext || undefined,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.subject && data?.body) {
+        setSubject(data.subject);
+        setBody(data.body);
+        toast({
+          title: "Email generated",
+          description: "AI has generated your email content. You can edit it before sending.",
+        });
+      }
+    } catch (error: any) {
+      console.error('Error generating email:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate email with AI",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingAi(false);
+    }
+  };
+
+  const handleSendTest = async () => {
+    if (!testEmailAddress.trim()) {
+      toast({
+        title: "Missing email",
+        description: "Please enter a test email address",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!subject.trim() || !body.trim()) {
+      toast({
+        title: "Missing content",
+        description: "Please fill in subject and body",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!sender) {
+      toast({
+        title: "No sender",
+        description: "Please select an email account",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (selectedPeople.length === 0) {
+      toast({
+        title: "No recipients",
+        description: "Please select at least one person for personalization context",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setSendingTest(true);
+      const firstPerson = selectedPeople[0];
+
+      const { error } = await supabase.functions.invoke('send-test-email', {
+        body: {
+          testEmail: testEmailAddress,
+          subject,
+          body,
+          senderConnectionId: sender,
+          recipientName: `${firstPerson.first_name} ${firstPerson.last_name}`.trim(),
+          recipientEmail: firstPerson.email,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Test email sent",
+        description: `Check your inbox at ${testEmailAddress}`,
+      });
+
+      setTestEmailDialogOpen(false);
+      setTestEmailAddress("");
+    } catch (error: any) {
+      console.error('Error sending test email:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send test email",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingTest(false);
+    }
   };
 
   const handleSend = async () => {
@@ -208,6 +334,66 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople }: 
         </DialogHeader>
 
         <div className="space-y-6 py-4">
+          {/* AI Email Generator */}
+          <Collapsible open={aiOpen} onOpenChange={setAiOpen}>
+            <div className="rounded-lg border bg-gradient-to-br from-primary/5 to-primary/10 p-4">
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full flex items-center justify-between p-0 h-auto hover:bg-transparent"
+                >
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    <span className="font-medium">AI Email Generator</span>
+                  </div>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${aiOpen ? 'rotate-180' : ''}`} />
+                </Button>
+              </CollapsibleTrigger>
+              
+              <CollapsibleContent className="space-y-3 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="ai_context">Additional Context (Optional)</Label>
+                  <Textarea
+                    id="ai_context"
+                    value={aiContext}
+                    onChange={(e) => setAiContext(e.target.value)}
+                    placeholder="e.g., Focus on our new AI features, mention their recent Series A funding..."
+                    className="min-h-[80px] bg-background"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Provide additional context to help AI personalize the email
+                  </p>
+                </div>
+                
+                {previewPerson && (
+                  <div className="rounded-md bg-muted/50 p-3 text-sm">
+                    <p className="text-muted-foreground">
+                      <strong>Using context from:</strong> {previewPerson.first_name} {previewPerson.last_name}
+                    </p>
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleGenerateWithAI}
+                  disabled={generatingAi || selectedPeople.length === 0}
+                  className="w-full"
+                >
+                  {generatingAi ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Generate Email with AI
+                    </>
+                  )}
+                </Button>
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
+
           <div className="space-y-2">
             <Label htmlFor="campaign_name">Campaign Name</Label>
             <Input
@@ -323,28 +509,85 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople }: 
           </div>
         </div>
 
-        <div className="flex justify-end gap-3">
+        <div className="flex justify-between gap-3">
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={sending}
+            onClick={() => setTestEmailDialogOpen(true)}
+            disabled={sending || !subject || !body || !sender}
           >
-            Cancel
+            <Mail className="h-4 w-4 mr-2" />
+            Send Test Email
           </Button>
-          <Button onClick={handleSend} disabled={sending}>
-            {sending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Sending...
-              </>
-            ) : (
-              <>
-                <Send className="h-4 w-4 mr-2" />
-                Send Campaign
-              </>
-            )}
-          </Button>
+          
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={sending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSend} disabled={sending}>
+              {sending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Send Campaign
+                </>
+              )}
+            </Button>
+          </div>
         </div>
+        
+        {/* Test Email Dialog */}
+        <AlertDialog open={testEmailDialogOpen} onOpenChange={setTestEmailDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Send Test Email</AlertDialogTitle>
+              <AlertDialogDescription>
+                Enter your email address to receive a test email with personalized content based on the first selected recipient.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            
+            <div className="space-y-2 py-4">
+              <Label htmlFor="test_email">Test Email Address</Label>
+              <Input
+                id="test_email"
+                type="email"
+                value={testEmailAddress}
+                onChange={(e) => setTestEmailAddress(e.target.value)}
+                placeholder="your@email.com"
+              />
+            </div>
+
+            <AlertDialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setTestEmailDialogOpen(false)}
+                disabled={sendingTest}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSendTest} disabled={sendingTest}>
+                {sendingTest ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-4 w-4 mr-2" />
+                    Send Test
+                  </>
+                )}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );

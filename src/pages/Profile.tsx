@@ -139,6 +139,8 @@ export default function Profile() {
         .upsert({
           user_id: user.id,
           ...businessProfile,
+        }, {
+          onConflict: 'user_id'
         });
 
       if (error) throw error;
