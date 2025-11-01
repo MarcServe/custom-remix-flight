@@ -140,6 +140,53 @@ export default function Conversations() {
     }
   };
 
+  const handleSendResponse = async () => {
+    if (!selectedSequence || !generatedResponse) return;
+
+    try {
+      setIsGenerating(true);
+
+      const lastInbound = threads?.reverse().find(t => t.direction === 'inbound');
+      if (!lastInbound) {
+        toast({
+          title: "Error",
+          description: "Cannot send response without recipient information",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('send-ai-response', {
+        body: {
+          companySequenceId: selectedSequence,
+          subject: generatedResponse.subject,
+          body: generatedResponse.body,
+          recipientEmail: lastInbound.from_email,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Response sent!",
+        description: "Your email has been sent successfully",
+      });
+
+      // Clear the generated response after sending
+      setGeneratedResponse(null);
+
+    } catch (error: any) {
+      console.error('Error sending response:', error);
+      toast({
+        title: "Failed to send",
+        description: error.message || "Could not send the email",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const getSentimentBadge = (sentiment?: string) => {
     if (!sentiment) return null;
 
@@ -379,11 +426,28 @@ export default function Conversations() {
                         />
                       </div>
                       <div className="flex gap-2">
-                        <Button className="flex-1">
-                          <Send className="h-4 w-4 mr-2" />
-                          Send Response
+                        <Button 
+                          className="flex-1"
+                          onClick={handleSendResponse}
+                          disabled={isGenerating}
+                        >
+                          {isGenerating ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4 mr-2" />
+                              Send Response
+                            </>
+                          )}
                         </Button>
-                        <Button variant="outline" onClick={handleGenerateResponse}>
+                        <Button 
+                          variant="outline" 
+                          onClick={handleGenerateResponse}
+                          disabled={isGenerating}
+                        >
                           Regenerate
                         </Button>
                       </div>
