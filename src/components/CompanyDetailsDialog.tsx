@@ -339,7 +339,7 @@ export function CompanyDetailsDialog({
             <TabsTrigger value="activity">Activity Timeline</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="mt-0 data-[state=active]:flex data-[state=active]:flex-col overflow-hidden flex-1">
+          <TabsContent value="overview" className="mt-0 data-[state=active]:flex data-[state=active]:flex-col flex-1">
             <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-6 pt-4">
             {/* Overview Section */}
             <div className="space-y-3">
@@ -652,7 +652,7 @@ export function CompanyDetailsDialog({
             </div>
           </TabsContent>
 
-          <TabsContent value="activity" className="mt-0 data-[state=active]:flex data-[state=active]:flex-col overflow-hidden flex-1">
+          <TabsContent value="activity" className="mt-0 data-[state=active]:flex data-[state=active]:flex-col flex-1">
             <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
