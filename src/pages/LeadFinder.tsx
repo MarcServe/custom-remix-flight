@@ -254,6 +254,14 @@ export default function LeadFinder() {
     stats: streamingSearch.stats
   } : null;
 
+  // Debug logging for stored results
+  console.log('Lead Finder State:', {
+    hasLeads: streamingSearch.leads.length,
+    hasStoredResults: streamingSearch.hasStoredResults,
+    resultsObject: results ? 'exists' : 'null',
+    isLoading
+  });
+
   // Filter and sort results
   const filteredAndSortedResults = results ? {
     ...results,
@@ -905,7 +913,7 @@ export default function LeadFinder() {
                 <LeadCardSkeleton key={i} />
               ))}
             </div>
-          ) : !results && !isLoading ? (
+          ) : !results && !isLoading && streamingSearch.leads.length === 0 ? (
             <div className="h-full flex items-center justify-center p-4">
               <div className="text-center space-y-4 max-w-md px-4">
                 <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center">
@@ -938,9 +946,19 @@ export default function LeadFinder() {
                             variant="default"
                             className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white"
                             onClick={() => {
-                              // The stored results are already loaded by the hook
-                              // Just need to trigger a re-render or ensure visibility
+                              console.log('View Saved Results clicked. Current leads:', streamingSearch.leads.length);
+                              // Results should already be visible if streamingSearch.leads has data
+                              // Scroll to top to ensure the banner and results are visible
                               window.scrollTo({ top: 0, behavior: 'smooth' });
+                              // Force a small state update to trigger re-render if needed
+                              if (streamingSearch.leads.length > 0) {
+                                // The results variable should already be populated above
+                                // This click just helps navigate to see them
+                                toast({
+                                  title: 'Restored',
+                                  description: `Displaying ${streamingSearch.leads.length} saved leads`,
+                                });
+                              }
                             }}
                           >
                             <RefreshCw className="h-3 w-3 mr-1" />
