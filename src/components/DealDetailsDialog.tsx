@@ -14,14 +14,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   DollarSign, Calendar, Building2, Pencil, 
   Trash2, TrendingUp, Clock, Tag as TagIcon, 
   X, Plus, AlertCircle
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, isToday, isYesterday, startOfDay } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useDealEvents, useDeleteEvent } from "@/hooks/use-events";
+import { EventCard } from "@/components/EventCard";
+import { EventDialog } from "@/components/EventDialog";
 
 interface Deal {
   id: string;
@@ -55,6 +59,10 @@ export function DealDetailsDialog({
   const [formData, setFormData] = useState<any>(deal);
   const [loading, setLoading] = useState(false);
   const [tagInput, setTagInput] = useState("");
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  
+  const { data: eventsData, isLoading: eventsLoading } = useDealEvents(deal.id);
+  const deleteEventMutation = useDeleteEvent();
 
   const handleAddTag = () => {
     if (tagInput.trim() && !formData.tags?.includes(tagInput.trim())) {
@@ -457,17 +465,82 @@ export function DealDetailsDialog({
             )}
           </TabsContent>
 
-          <TabsContent value="activity">
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground text-center">
-                  Activity history and notes coming soon
-                </p>
-              </CardContent>
-            </Card>
+          <TabsContent value="activity" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Activity Timeline</h3>
+              <Button onClick={() => setEventDialogOpen(true)} size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                New Event
+              </Button>
+            </div>
+
+            {eventsLoading ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <p className="text-sm text-muted-foreground text-center">Loading activities...</p>
+                </CardContent>
+              </Card>
+            ) : !eventsData?.data || eventsData.data.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center space-y-2">
+                    <Calendar className="h-12 w-12 mx-auto text-muted-foreground/50" />
+                    <p className="text-sm text-muted-foreground">No activities yet</p>
+                    <p className="text-xs text-muted-foreground">Create your first event to start tracking activities</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <ScrollArea className="h-[400px] pr-4">
+                <div className="space-y-6">
+                  {Object.entries(
+                    (eventsData.data as any[]).reduce((acc: Record<string, any[]>, event: any) => {
+                      const date = startOfDay(new Date(event.created_at)).toISOString();
+                      if (!acc[date]) acc[date] = [];
+                      acc[date].push(event);
+                      return acc;
+                    }, {} as Record<string, any[]>)
+                  ).map(([date, events]: [string, any[]]) => {
+                    const dateLabel = (() => {
+                      const d = new Date(date);
+                      if (isToday(d)) return 'Today';
+                      if (isYesterday(d)) return 'Yesterday';
+                      return format(d, 'MMMM d, yyyy');
+                    })();
+
+                    return (
+                      <div key={date} className="space-y-3">
+                        <h4 className="text-sm font-semibold text-muted-foreground sticky top-0 bg-background py-2">
+                          {dateLabel}
+                        </h4>
+                        <div className="space-y-2">
+                          {events.map((event: any) => (
+                            <EventCard
+                              key={event.id}
+                              event={event}
+                              onDelete={(id) => {
+                                if (confirm('Are you sure you want to delete this event?')) {
+                                  deleteEventMutation.mutate(id);
+                                }
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            )}
           </TabsContent>
         </Tabs>
       </DialogContent>
+
+      <EventDialog
+        open={eventDialogOpen}
+        onOpenChange={setEventDialogOpen}
+        defaultDealId={deal.id}
+      />
     </Dialog>
   );
 }
