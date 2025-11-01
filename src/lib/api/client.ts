@@ -15,15 +15,9 @@ export const apiClient = {
     body?: any
   ): Promise<{ data: T | null; error: Error | null }> {
     try {
-      // Check for active session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      // Get session and include Authorization header for edge functions
+      const { data: { session } } = await supabase.auth.getSession();
       
-      console.log('Session check:', { 
-        hasSession: !!session, 
-        userId: session?.user?.id,
-        expiresAt: session?.expires_at 
-      });
-
       if (!session) {
         console.error('No active session found');
         return { 
@@ -32,18 +26,12 @@ export const apiClient = {
         };
       }
 
-      // Check if session is expired
-      if (session.expires_at && session.expires_at * 1000 < Date.now()) {
-        console.error('Session expired');
-        return {
-          data: null,
-          error: new Error('Your session has expired. Please sign in again.')
-        };
-      }
-
-      console.log(`Calling edge function: ${functionName}`);
+      console.log(`Calling edge function: ${functionName} with auth`);
       const { data, error } = await supabase.functions.invoke(functionName, {
         body,
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (error) {
