@@ -27,8 +27,9 @@ const navigation = [
   { name: "Lead Finder", href: "/lead-finder", icon: Sparkles },
   { name: "Pipeline", href: "/pipeline", icon: TrendingUp },
   { name: "Sequences", href: "/sequences", icon: Mail },
-  { name: "Active Campaigns", href: "/company-sequences", icon: Activity },
-  { name: "Campaigns", href: "/campaigns", icon: Briefcase },
+  { name: "All Campaigns", href: "/all-campaigns", icon: Activity },
+  { name: "Active Campaigns", href: "/company-sequences", icon: TrendingUp },
+  { name: "Bulk Campaigns", href: "/campaigns", icon: Briefcase },
   { name: "Conversations", href: "/conversations", icon: MessageSquare },
   { name: "Integrations", href: "/integrations", icon: Plug2 },
 ];
