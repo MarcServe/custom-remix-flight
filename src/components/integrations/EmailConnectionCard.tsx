@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Check, AlertCircle, Unplug } from "lucide-react";
+import { Mail, Check, AlertCircle, Unplug, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { NangoConnection } from "@/lib/integrations/nango";
 
@@ -54,9 +54,9 @@ export function EmailConnectionCard({
             </Badge>
           )}
           {isPending && (
-            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-              <AlertCircle className="h-3 w-3 mr-1" />
-              Pending
+            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              Connecting
             </Badge>
           )}
           {hasError && (
@@ -105,6 +105,15 @@ export function EmailConnectionCard({
             >
               <Unplug className="h-4 w-4 mr-2" />
               Disconnect
+            </Button>
+          ) : isPending ? (
+            <Button
+              disabled
+              size="sm"
+              className="w-full"
+            >
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Connecting...
             </Button>
           ) : (
             <Button

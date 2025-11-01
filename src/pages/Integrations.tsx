@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmailConnectionCard } from "@/components/integrations/EmailConnectionCard";
@@ -7,6 +7,7 @@ import { VerifyEmailDialog } from "@/components/integrations/VerifyEmailDialog";
 import { nangoClient } from "@/lib/integrations/nango";
 import { toast } from "sonner";
 import { Plug2, Mail } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const emailProviders = [
   {
@@ -49,6 +50,28 @@ export default function Integrations() {
     },
   });
 
+  // Real-time subscription for automatic updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('crm-connections-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'crm_connections'
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['nango-connections'], refetchType: 'active' });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   const disconnectMutation = useMutation({
     mutationFn: (connectionId: string) => nangoClient.disconnect(connectionId),
     onSuccess: () => {
@@ -74,7 +97,7 @@ export default function Integrations() {
   };
 
   const handleConnectionSuccess = () => {
-    queryClient.invalidateQueries({ queryKey: ['nango-connections'] });
+    queryClient.invalidateQueries({ queryKey: ['nango-connections'], refetchType: 'active' });
   };
 
   if (isLoading) {
