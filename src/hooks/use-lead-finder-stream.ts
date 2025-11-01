@@ -54,6 +54,8 @@ interface StreamState {
   usage: Usage | null;
   error: Error | null;
   traceUrl: string | null;
+  searchId: string | null;
+  hasActiveSearch: boolean;
 }
 
 interface SearchParams {
@@ -71,6 +73,7 @@ export const useLeadFinderStream = () => {
   const queryClient = useQueryClient();
   const abortControllerRef = useRef<AbortController | null>(null);
   const searchParamsRef = useRef<SearchParams | null>(null);
+  const currentSearchIdRef = useRef<string | null>(null);
 
   const [state, setState] = useState<StreamState>({
     leads: [],
@@ -81,10 +84,33 @@ export const useLeadFinderStream = () => {
     usage: null,
     error: null,
     traceUrl: null,
+    searchId: null,
+    hasActiveSearch: false,
   });
 
-  // Load persisted results on mount
+  // Load persisted results on mount (check both active and completed)
   useEffect(() => {
+    // First check for active search
+    const activeSearch = leadFinderStorage.loadActiveSearch();
+    if (activeSearch && !activeSearch.isComplete) {
+      setState(prev => ({
+        ...prev,
+        leads: activeSearch.leads,
+        stats: activeSearch.stats,
+        usage: activeSearch.usage,
+        traceUrl: activeSearch.traceUrl,
+        progress: activeSearch.progress,
+        currentStatus: activeSearch.currentStatus,
+        searchId: activeSearch.searchId,
+        hasActiveSearch: true,
+        isLoading: false, // Not actively loading, but can be resumed
+      }));
+      currentSearchIdRef.current = activeSearch.searchId;
+      searchParamsRef.current = activeSearch.searchParams;
+      return;
+    }
+
+    // If no active search, load completed results
     const stored = leadFinderStorage.load();
     if (stored && stored.leads.length > 0) {
       setState(prev => ({
@@ -93,11 +119,16 @@ export const useLeadFinderStream = () => {
         stats: stored.stats,
         usage: stored.usage,
         traceUrl: stored.traceUrl,
+        hasActiveSearch: false,
       }));
     }
   }, []);
 
   const findLeads = async (params: SearchParams) => {
+    // Generate unique search ID
+    const searchId = crypto.randomUUID();
+    currentSearchIdRef.current = searchId;
+    
     // Store search params for later
     searchParamsRef.current = params;
 
@@ -109,6 +140,8 @@ export const useLeadFinderStream = () => {
     // Create new abort controller
     abortControllerRef.current = new AbortController();
 
+    const startTime = Date.now();
+
     // Reset state
     setState({
       leads: [],
@@ -119,6 +152,30 @@ export const useLeadFinderStream = () => {
       usage: null,
       error: null,
       traceUrl: null,
+      searchId,
+      hasActiveSearch: true,
+    });
+
+    // Save initial active search state
+    leadFinderStorage.saveActiveSearch({
+      searchId,
+      startTime,
+      searchParams: {
+        size: params.size,
+        geography: params.geography,
+        industry: params.industry,
+        extractionProvider: params.provider,
+        extractionModel: params.model,
+        enrichmentEnabled: params.enrichWithPerplexity,
+      },
+      leads: [],
+      progress: 0,
+      currentStatus: 'Initializing...',
+      stats: null,
+      usage: null,
+      traceUrl: null,
+      isComplete: false,
+      lastBatchTime: startTime,
     });
 
     try {
@@ -190,17 +247,36 @@ export const useLeadFinderStream = () => {
               const event = JSON.parse(dataStr);
 
               if (event.type === 'status') {
+                const newProgress = event.progress || state.progress;
                 setState(prev => ({
                   ...prev,
                   currentStatus: event.message,
-                  progress: event.progress || prev.progress,
+                  progress: newProgress,
                 }));
+
+                // Save progress update to active search
+                leadFinderStorage.updateActiveSearchProgress(searchId, {
+                  currentStatus: event.message,
+                  progress: newProgress,
+                });
               } else if (event.type === 'batch') {
-                setState(prev => ({
-                  ...prev,
-                  leads: [...prev.leads, ...event.leads],
-                  currentStatus: `Processed batch ${event.batchNumber}/${event.totalBatches}`,
-                }));
+                setState(prev => {
+                  const updatedLeads = [...prev.leads, ...event.leads];
+                  const batchStatus = `Processed batch ${event.batchNumber}/${event.totalBatches}`;
+                  
+                  // Save batch to active search immediately
+                  leadFinderStorage.updateActiveSearchProgress(searchId, {
+                    leads: updatedLeads,
+                    currentStatus: batchStatus,
+                    progress: Math.round((event.batchNumber / event.totalBatches) * 90), // Reserve 100% for completion
+                  });
+
+                  return {
+                    ...prev,
+                    leads: updatedLeads,
+                    currentStatus: batchStatus,
+                  };
+                });
               } else if (event.type === 'complete') {
                 const totalLeads = state.leads.length + (event.leads?.length || 0);
                 const allLeads = [...state.leads, ...(event.leads || [])];
@@ -214,22 +290,21 @@ export const useLeadFinderStream = () => {
                   stats: event.stats,
                   usage: event.usage,
                   traceUrl: event.traceUrl,
+                  hasActiveSearch: false,
                 }));
 
-                // Save to localStorage
-                if (searchParamsRef.current) {
-                  leadFinderStorage.save({
-                    searchParams: {
-                      size: searchParamsRef.current.size,
-                      geography: searchParamsRef.current.geography,
-                      industry: searchParamsRef.current.industry,
-                    },
-                    leads: allLeads,
-                    stats: event.stats,
-                    usage: event.usage,
-                    traceUrl: event.traceUrl,
-                  });
-                }
+                // Mark search as complete and move to completed storage
+                leadFinderStorage.updateActiveSearchProgress(searchId, {
+                  leads: allLeads,
+                  stats: event.stats,
+                  usage: event.usage,
+                  traceUrl: event.traceUrl,
+                  progress: 100,
+                  currentStatus: 'Complete',
+                  isComplete: true,
+                });
+
+                leadFinderStorage.markSearchComplete(searchId);
 
                 // Invalidate queries if companies were inserted
                 if (!params.dryRun && totalLeads > 0) {
@@ -237,11 +312,15 @@ export const useLeadFinderStream = () => {
                   queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] });
                 }
 
-                // Show toast notification
+                // Show toast notification with action
                 toast({
                   title: '✨ Lead Search Complete',
                   description: `Found ${event.stats.returned} companies. Results saved and ready to view.`,
+                  duration: 8000,
                 });
+
+                // Clear current search ID
+                currentSearchIdRef.current = null;
               } else if (event.type === 'error') {
                 throw new Error(event.message);
               }
@@ -277,16 +356,25 @@ export const useLeadFinderStream = () => {
       console.error('Lead finder stream error:', error);
       
       if (error instanceof Error && error.name === 'AbortError') {
-        // Request was cancelled
+        // Request was cancelled - keep active search for potential resume
         setState(prev => ({
           ...prev,
           isLoading: false,
-          currentStatus: 'Search cancelled',
+          currentStatus: 'Paused',
         }));
         
+        // Save paused state
+        if (currentSearchIdRef.current) {
+          leadFinderStorage.updateActiveSearchProgress(currentSearchIdRef.current, {
+            currentStatus: 'Paused',
+            isComplete: false,
+          });
+        }
+        
         toast({
-          title: 'Search Cancelled',
-          description: 'Lead search was stopped. Partial results are kept.',
+          title: 'Search Paused',
+          description: 'Lead search was paused. Partial results are saved. You can navigate away and return later.',
+          duration: 5000,
         });
       } else {
         setState(prev => ({
@@ -294,7 +382,14 @@ export const useLeadFinderStream = () => {
           isLoading: false,
           error: error instanceof Error ? error : new Error('Unknown error'),
           currentStatus: 'Error',
+          hasActiveSearch: false,
         }));
+
+        // Clear active search on error
+        if (currentSearchIdRef.current) {
+          leadFinderStorage.clearActiveSearch();
+          currentSearchIdRef.current = null;
+        }
 
         toast({
           title: 'Error',
@@ -313,6 +408,8 @@ export const useLeadFinderStream = () => {
 
   const clearStoredResults = () => {
     leadFinderStorage.clear();
+    leadFinderStorage.clearActiveSearch();
+    currentSearchIdRef.current = null;
     setState({
       leads: [],
       isLoading: false,
@@ -322,6 +419,8 @@ export const useLeadFinderStream = () => {
       usage: null,
       error: null,
       traceUrl: null,
+      searchId: null,
+      hasActiveSearch: false,
     });
   };
 
@@ -337,10 +436,44 @@ export const useLeadFinderStream = () => {
         isLoading: false,
         currentStatus: 'Restored',
         progress: 100,
+        searchId: null,
+        hasActiveSearch: false,
       }));
       return true;
     }
     return false;
+  };
+
+  const resumeActiveSearch = () => {
+    const activeSearch = leadFinderStorage.loadActiveSearch();
+    if (activeSearch && !activeSearch.isComplete) {
+      setState(prev => ({
+        ...prev,
+        leads: activeSearch.leads,
+        stats: activeSearch.stats,
+        usage: activeSearch.usage,
+        traceUrl: activeSearch.traceUrl,
+        progress: activeSearch.progress,
+        currentStatus: activeSearch.currentStatus + ' (Resumed)',
+        searchId: activeSearch.searchId,
+        hasActiveSearch: true,
+        isLoading: false,
+      }));
+      currentSearchIdRef.current = activeSearch.searchId;
+      searchParamsRef.current = activeSearch.searchParams;
+      return true;
+    }
+    return false;
+  };
+
+  const clearActiveSearch = () => {
+    leadFinderStorage.clearActiveSearch();
+    currentSearchIdRef.current = null;
+    setState(prev => ({
+      ...prev,
+      hasActiveSearch: false,
+      searchId: null,
+    }));
   };
 
   return {
@@ -349,6 +482,9 @@ export const useLeadFinderStream = () => {
     cancelSearch,
     clearStoredResults,
     restoreStoredResults,
+    resumeActiveSearch,
+    clearActiveSearch,
     hasStoredResults: leadFinderStorage.hasStoredResults(),
+    hasActiveSearch: leadFinderStorage.hasActiveSearch(),
   };
 };
