@@ -6,10 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical } from "lucide-react";
+import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { exportCompaniesToCSV } from "@/lib/utils/export";
+import { ContactsList } from "@/components/lead-finder/ContactsList";
+import { LeadCardSkeleton } from "@/components/lead-finder/LeadCardSkeleton";
 import { useLeadFinder } from "@/hooks/use-lead-finder";
 import { useProviderStore } from "@/stores/provider-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -305,6 +307,16 @@ export default function LeadFinder() {
   };
 
   const hasActiveFilters = minQualityScore > 0 || mustHaveContacts || mustHaveLinkedIn || mustHaveNews || mustHaveFunding || sortBy !== 'quality';
+
+  // Copy email to clipboard
+  const handleCopyEmail = (email: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(email);
+    toast({
+      title: 'Copied',
+      description: 'Email copied to clipboard',
+    });
+  };
 
   // Batch action handlers
   const handleExportSelected = () => {
@@ -808,7 +820,17 @@ export default function LeadFinder() {
 
         {/* Right Panel - Results */}
         <div className="flex-1 overflow-y-auto">
-          {!filteredAndSortedResults ? (
+          {isLoading && !filteredAndSortedResults ? (
+            <div className="p-4 md:p-6 space-y-3 md:space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <h2 className="text-base font-semibold">Searching for leads...</h2>
+              </div>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <LeadCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : !filteredAndSortedResults ? (
             <div className="h-full flex items-center justify-center p-4">
               <div className="text-center space-y-3 max-w-md px-4">
                 <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center">
@@ -972,13 +994,57 @@ export default function LeadFinder() {
                 {filteredAndSortedResults.leads.map((company: any, idx: number) => (
                   <div 
                     key={idx} 
-                    className="group relative rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all p-3 md:p-4 cursor-pointer"
+                    className="group relative rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all p-3 md:p-4 cursor-pointer animate-in fade-in slide-in-from-bottom-2"
+                    style={{ animationDelay: `${idx * 50}ms` }}
                     onClick={() => {
                       setCurrentCompanyIndex(idx);
                       setSelectedCompany(company);
                       setDialogOpen(true);
                     }}
                   >
+                    {/* Hover Quick Actions */}
+                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-7 px-2 text-xs shadow-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCurrentCompanyIndex(idx);
+                          setSelectedCompany(company);
+                          setDialogOpen(true);
+                        }}
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        View
+                      </Button>
+                      {company.primaryContact?.email && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="h-7 px-2 text-xs shadow-sm"
+                          onClick={(e) => handleCopyEmail(company.primaryContact.email, e)}
+                        >
+                          <Copy className="h-3 w-3 mr-1" />
+                          Email
+                        </Button>
+                      )}
+                      {filteredAndSortedResults.dryRun && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="h-7 px-2 text-xs shadow-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleCompanySelection(idx);
+                          }}
+                        >
+                          <Database className="h-3 w-3 mr-1" />
+                          Add
+                        </Button>
+                      )}
+                    </div>
+
                     <div className="flex flex-col h-full gap-3">
                       {/* Header with checkbox and icon */}
                       <div className="flex gap-3 md:gap-4">
@@ -1083,14 +1149,18 @@ export default function LeadFinder() {
                           hasPatternContacts={company.contacts?.some((c: any) => !c.emailVerified)}
                         />
 
+                        {/* Expandable Contacts List */}
+                        {company.contacts && company.contacts.length > 0 && (
+                          <ContactsList
+                            contacts={company.contacts.map((c: any) => ({
+                              ...c,
+                              isPrimary: c === company.primaryContact
+                            }))}
+                          />
+                        )}
+
                         {/* Meta Badges */}
                         <div className="flex flex-wrap gap-1.5 pt-1">
-                          {company.primaryContact && (
-                            <Badge variant="outline" className="h-5 text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
-                              <Mail className="h-3 w-3 mr-1" />
-                              Contact Available
-                            </Badge>
-                          )}
                           {company.industry && (
                             <Badge variant="outline" className="h-5 text-xs font-mono">
                               {company.industry}
