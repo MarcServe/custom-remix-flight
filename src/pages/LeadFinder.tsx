@@ -11,6 +11,9 @@ import { useUIStore } from "@/stores/ui-store";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
+import { companiesApi } from "@/lib/api/companies";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 export default function LeadFinder() {
   const [size, setSize] = useState("");
@@ -20,6 +23,8 @@ export default function LeadFinder() {
   const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(true);
   const [selectedCompany, setSelectedCompany] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedCompanyIndices, setSelectedCompanyIndices] = useState<Set<number>>(new Set());
+  const [isSaving, setIsSaving] = useState(false);
   
   const { defaultProvider, defaultModels } = useProviderStore();
   const [providerConfig, setProviderConfig] = useState<{
@@ -40,6 +45,8 @@ export default function LeadFinder() {
 
   const { leadFinderResults, setLeadFinderResults } = useUIStore();
   const leadFinderMutation = useLeadFinder();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const handleSearch = async (options?: { forceSave?: boolean }) => {
     // If forceSave is true, we want to save to DB (dryRun: false)
@@ -58,6 +65,122 @@ export default function LeadFinder() {
 
     if (data) {
       setLeadFinderResults(data.leads);
+      setSelectedCompanyIndices(new Set()); // Reset selection on new search
+    }
+  };
+
+  const handleSaveSelectedCompanies = async () => {
+    if (!results?.leads || selectedCompanyIndices.size === 0) return;
+
+    setIsSaving(true);
+    try {
+      const selectedCompanies = Array.from(selectedCompanyIndices).map(idx => results.leads[idx]);
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const company of selectedCompanies) {
+        try {
+          // Create company
+          const { data: createdCompany, error: companyError } = await companiesApi.createCompany({
+            name: company.name,
+            website: company.website,
+            description: company.description,
+            industry: company.industry,
+            size: company.size,
+            geography: company.geography,
+            linkedin_url: company.linkedinUrl,
+            company_phone: company.companyPhone,
+            general_email: company.generalEmail,
+            social_profiles: company.socialProfiles,
+            key_executives: company.keyExecutives,
+            employee_count: company.employeeCount,
+            enriched_at: company.wasEnriched ? new Date().toISOString() : undefined,
+            enrichment_data: company.wasEnriched ? {
+              products: company.products,
+              recentNews: company.recentNews,
+              fundingInfo: company.fundingInfo,
+            } : undefined,
+          });
+
+          if (companyError) {
+            console.error('Error creating company:', companyError);
+            errorCount++;
+            continue;
+          }
+
+          // Create contacts if they exist
+          if (company.contacts && company.contacts.length > 0 && createdCompany) {
+            const { supabase } = await import("@/integrations/supabase/client");
+            const contactsToInsert = company.contacts.map((contact: any) => ({
+              company_id: createdCompany.id,
+              name: contact.name,
+              email: contact.email,
+              email_verified: contact.emailVerified,
+              linkedin_url: contact.linkedinUrl,
+              title: contact.title,
+              department: contact.department,
+              phone: contact.phone,
+              is_primary_contact: contact === company.primaryContact,
+            }));
+
+            const { error: contactsError } = await supabase
+              .from('contacts')
+              .insert(contactsToInsert);
+
+            if (contactsError) {
+              console.error('Error creating contacts:', contactsError);
+            }
+          }
+
+          successCount++;
+        } catch (error) {
+          console.error('Error saving company:', error);
+          errorCount++;
+        }
+      }
+
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] });
+
+      toast({
+        title: 'Success',
+        description: `Added ${successCount} ${successCount === 1 ? 'company' : 'companies'} to CRM${errorCount > 0 ? ` (${errorCount} failed)` : ''}`,
+      });
+
+      // Clear selection after saving
+      setSelectedCompanyIndices(new Set());
+    } catch (error) {
+      console.error('Error saving companies:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to save companies to CRM',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const toggleCompanySelection = (index: number) => {
+    setSelectedCompanyIndices(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (!results?.leads) return;
+    
+    if (selectedCompanyIndices.size === results.leads.length) {
+      setSelectedCompanyIndices(new Set());
+    } else {
+      setSelectedCompanyIndices(new Set(results.leads.map((_, idx) => idx)));
     }
   };
 
@@ -291,6 +414,18 @@ export default function LeadFinder() {
               {/* Results Header */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b">
                 <div className="flex items-center gap-2 sm:gap-3">
+                  {results.dryRun && results.leads.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="select-all"
+                        checked={selectedCompanyIndices.size === results.leads.length && results.leads.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                      <Label htmlFor="select-all" className="text-xs font-medium cursor-pointer">
+                        Select All
+                      </Label>
+                    </div>
+                  )}
                   <h2 className="text-sm font-semibold">Search Results</h2>
                   {results.wasEnriched && (
                     <Badge variant="default" className="h-5 text-xs bg-gradient-primary">
@@ -303,12 +438,21 @@ export default function LeadFinder() {
                   {results.dryRun && results.leads.length > 0 && (
                     <Button
                       size="sm"
-                      onClick={() => handleSearch({ forceSave: true })}
-                      disabled={isLoading}
+                      onClick={handleSaveSelectedCompanies}
+                      disabled={isLoading || isSaving || selectedCompanyIndices.size === 0}
                       className="h-8 text-xs"
                     >
-                      <Database className="h-3 w-3 mr-1.5" />
-                      Add to CRM
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Database className="h-3 w-3 mr-1.5" />
+                          Add {selectedCompanyIndices.size > 0 ? `${selectedCompanyIndices.size} ` : ''}to CRM
+                        </>
+                      )}
                     </Button>
                   )}
                   <div className="text-xs text-muted-foreground whitespace-nowrap">
@@ -322,22 +466,40 @@ export default function LeadFinder() {
                 {results.leads.map((company: any, idx: number) => (
                   <div
                     key={idx}
-                    className="group relative rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all p-3 md:p-4 cursor-pointer"
-                    onClick={() => {
-                      setSelectedCompany(company);
-                      setDialogOpen(true);
-                    }}
+                    className="group relative rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all p-3 md:p-4"
                   >
                     <div className="flex gap-3 md:gap-4">
+                      {/* Selection Checkbox */}
+                      {results.dryRun && (
+                        <div className="flex items-start pt-1">
+                          <Checkbox
+                            checked={selectedCompanyIndices.has(idx)}
+                            onCheckedChange={() => toggleCompanySelection(idx)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                      )}
                       {/* Company Icon */}
-                      <div className="shrink-0">
+                      <div 
+                        className="shrink-0 cursor-pointer"
+                        onClick={() => {
+                          setSelectedCompany(company);
+                          setDialogOpen(true);
+                        }}
+                      >
                         <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm">
                           <Building2 className="h-4 w-4 md:h-5 md:w-5 text-white" />
                         </div>
                       </div>
 
                       {/* Company Info */}
-                      <div className="flex-1 min-w-0 space-y-2">
+                      <div 
+                        className="flex-1 min-w-0 space-y-2 cursor-pointer"
+                        onClick={() => {
+                          setSelectedCompany(company);
+                          setDialogOpen(true);
+                        }}
+                      >
                         {/* Header */}
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
