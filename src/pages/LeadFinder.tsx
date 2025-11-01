@@ -573,8 +573,8 @@ export default function LeadFinder() {
                 </div>
               </div>
 
-              {/* Results Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+              {/* Results List */}
+              <div className="space-y-3 md:space-y-4">
                 {results.leads.map((company: any, idx: number) => (
                   <div 
                     key={idx} 
