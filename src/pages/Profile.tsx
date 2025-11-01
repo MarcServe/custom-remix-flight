@@ -12,7 +12,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { nangoClient } from "@/lib/integrations/nango";
-import { Loader2, Building2, Save, User, Mail } from "lucide-react";
+import { Loader2, Building2, Save, User, Mail, Palette } from "lucide-react";
+import { EmailTemplatePreview } from "@/components/email/EmailTemplatePreview";
+import { SendTestEmailButton } from "@/components/email/SendTestEmailButton";
 
 export default function Profile() {
   const { toast } = useToast();
@@ -37,6 +39,11 @@ export default function Profile() {
     ai_temperature: 0.7,
     ai_max_tokens: 500,
     ai_response_style: "professional",
+    email_logo_url: "",
+    email_brand_color: "#8b5cf6",
+    email_footer_text: "",
+    email_signature: "",
+    email_template_style: "professional",
   });
 
   const { data: connections } = useQuery({
@@ -96,6 +103,11 @@ export default function Profile() {
           ai_temperature: data.ai_temperature || 0.7,
           ai_max_tokens: data.ai_max_tokens || 500,
           ai_response_style: data.ai_response_style || "professional",
+          email_logo_url: data.email_logo_url || "",
+          email_brand_color: data.email_brand_color || "#8b5cf6",
+          email_footer_text: data.email_footer_text || "",
+          email_signature: data.email_signature || "",
+          email_template_style: data.email_template_style || "professional",
         });
       }
     } catch (error) {
@@ -200,10 +212,11 @@ export default function Profile() {
       </div>
 
       <Tabs defaultValue="account" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="business">Business Profile</TabsTrigger>
           <TabsTrigger value="ai">AI Settings</TabsTrigger>
+          <TabsTrigger value="branding">Email Branding</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
 
@@ -636,6 +649,140 @@ export default function Profile() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="branding" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Palette className="h-5 w-5" />
+                Email Branding
+              </CardTitle>
+              <CardDescription>
+                Customize the appearance of your auto-response emails
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="email_template_style">Template Style</Label>
+                <Select
+                  value={businessProfile.email_template_style}
+                  onValueChange={(value) => setBusinessProfile({ ...businessProfile, email_template_style: value })}
+                >
+                  <SelectTrigger id="email_template_style">
+                    <SelectValue placeholder="Select template style" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="professional">Professional - Classic & Polished</SelectItem>
+                    <SelectItem value="minimal">Minimal - Clean & Simple</SelectItem>
+                    <SelectItem value="modern">Modern - Bold & Stylish</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email_brand_color">Brand Color</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="email_brand_color"
+                    type="color"
+                    value={businessProfile.email_brand_color}
+                    onChange={(e) => setBusinessProfile({ ...businessProfile, email_brand_color: e.target.value })}
+                    className="w-20 h-10"
+                  />
+                  <Input
+                    value={businessProfile.email_brand_color}
+                    onChange={(e) => setBusinessProfile({ ...businessProfile, email_brand_color: e.target.value })}
+                    placeholder="#8b5cf6"
+                    className="flex-1"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Primary color for email headers and accents
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email_logo_url">Logo URL</Label>
+                <Input
+                  id="email_logo_url"
+                  value={businessProfile.email_logo_url}
+                  onChange={(e) => setBusinessProfile({ ...businessProfile, email_logo_url: e.target.value })}
+                  placeholder="https://example.com/logo.png"
+                />
+                <p className="text-xs text-muted-foreground">
+                  URL to your company logo (recommended: 200x60px)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email_footer_text">Footer Text</Label>
+                <Textarea
+                  id="email_footer_text"
+                  value={businessProfile.email_footer_text}
+                  onChange={(e) => setBusinessProfile({ ...businessProfile, email_footer_text: e.target.value })}
+                  placeholder={`© ${new Date().getFullYear()} ${businessProfile.company_name || 'Your Company'}. All rights reserved.`}
+                  rows={2}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Custom footer text for your emails
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email_signature">Custom Email Signature (HTML)</Label>
+                <Textarea
+                  id="email_signature"
+                  value={businessProfile.email_signature}
+                  onChange={(e) => setBusinessProfile({ ...businessProfile, email_signature: e.target.value })}
+                  placeholder="Leave empty to use default signature"
+                  rows={4}
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional custom HTML signature (overrides default)
+                </p>
+              </div>
+
+              <div className="flex justify-between pt-4">
+                <SendTestEmailButton
+                  templateStyle={businessProfile.email_template_style}
+                  brandColor={businessProfile.email_brand_color}
+                  logoUrl={businessProfile.email_logo_url || undefined}
+                  companyName={businessProfile.company_name || undefined}
+                  footerText={businessProfile.email_footer_text || undefined}
+                  signature={businessProfile.email_signature || undefined}
+                />
+                <Button
+                  onClick={handleSaveBusinessProfile}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Branding
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <EmailTemplatePreview
+            template={businessProfile.email_template_style as 'professional' | 'minimal' | 'modern'}
+            brandColor={businessProfile.email_brand_color}
+            logoUrl={businessProfile.email_logo_url || undefined}
+            companyName={businessProfile.company_name || undefined}
+            senderName={profile.full_name || undefined}
+            senderTitle={profile.job_title || undefined}
+            senderEmail={user?.email || undefined}
+            footerText={businessProfile.email_footer_text || undefined}
+          />
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-4">

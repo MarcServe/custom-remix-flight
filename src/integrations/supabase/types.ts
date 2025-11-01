@@ -137,6 +137,11 @@ export type Database = {
           auto_response_paused: boolean | null
           company_name: string | null
           created_at: string
+          email_brand_color: string | null
+          email_footer_text: string | null
+          email_logo_url: string | null
+          email_signature: string | null
+          email_template_style: string | null
           id: string
           industry: string | null
           services_description: string
@@ -157,6 +162,11 @@ export type Database = {
           auto_response_paused?: boolean | null
           company_name?: string | null
           created_at?: string
+          email_brand_color?: string | null
+          email_footer_text?: string | null
+          email_logo_url?: string | null
+          email_signature?: string | null
+          email_template_style?: string | null
           id?: string
           industry?: string | null
           services_description: string
@@ -177,6 +187,11 @@ export type Database = {
           auto_response_paused?: boolean | null
           company_name?: string | null
           created_at?: string
+          email_brand_color?: string | null
+          email_footer_text?: string | null
+          email_logo_url?: string | null
+          email_signature?: string | null
+          email_template_style?: string | null
           id?: string
           industry?: string | null
           services_description?: string

@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { wrapEmailContent } from '../_shared/email-wrapper.ts';
+import { renderEmailTemplate } from './_templates/professional-template.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -53,13 +53,13 @@ serve(async (req) => {
 
     const { data: userProfile } = await supabase
       .from('profiles')
-      .select('full_name, email')
+      .select('full_name, email, job_title')
       .eq('id', userId)
       .single();
 
     const { data: businessProfile } = await supabase
       .from('business_profiles')
-      .select('company_name, auto_response_daily_limit, auto_response_paused, auto_response_count_today, auto_response_last_reset_date, ai_model, ai_response_style, ai_temperature')
+      .select('company_name, auto_response_daily_limit, auto_response_paused, auto_response_count_today, auto_response_last_reset_date, ai_model, ai_response_style, ai_temperature, email_logo_url, email_brand_color, email_footer_text, email_signature, email_template_style')
       .eq('user_id', userId)
       .single();
 
@@ -122,9 +122,21 @@ serve(async (req) => {
     const senderName = businessProfile?.company_name || userProfile?.full_name || 'CRM';
     const senderEmail = emailConnection?.from_email || userProfile?.email || 'noreply@yourdomain.com';
 
-    // Convert plain text body to HTML
-    const bodyHtml = body.replace(/\n/g, '<br>');
-    const wrappedHtml = wrapEmailContent(bodyHtml, senderName, senderEmail);
+    // Render email with branded template
+    const wrappedHtml = renderEmailTemplate(
+      businessProfile?.email_template_style || 'professional',
+      {
+        body,
+        senderName,
+        senderEmail,
+        senderTitle: userProfile?.job_title,
+        companyName: businessProfile?.company_name,
+        logoUrl: businessProfile?.email_logo_url,
+        brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+        footerText: businessProfile?.email_footer_text,
+        signature: businessProfile?.email_signature,
+      }
+    );
 
     // Send email based on available connection
     if (emailConnection?.provider === 'smtp' && emailConnection.from_email) {
@@ -216,7 +228,20 @@ serve(async (req) => {
           to: [contact.email],
           subject,
           text: body,
-          html: wrapEmailContent(bodyHtml, 'CRM', 'onboarding@resend.dev'),
+          html: renderEmailTemplate(
+            businessProfile?.email_template_style || 'professional',
+            {
+              body,
+              senderName: 'CRM',
+              senderEmail: 'onboarding@resend.dev',
+              senderTitle: userProfile?.job_title,
+              companyName: businessProfile?.company_name,
+              logoUrl: businessProfile?.email_logo_url,
+              brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+              footerText: businessProfile?.email_footer_text,
+              signature: businessProfile?.email_signature,
+            }
+          ),
         }),
       });
 
