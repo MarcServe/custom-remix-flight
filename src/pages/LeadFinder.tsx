@@ -6,17 +6,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy } from "lucide-react";
+import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy, StopCircle } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { exportCompaniesToCSV } from "@/lib/utils/export";
 import { ContactsList } from "@/components/lead-finder/ContactsList";
 import { LeadCardSkeleton } from "@/components/lead-finder/LeadCardSkeleton";
-import { useLeadFinder } from "@/hooks/use-lead-finder";
+import { useLeadFinderStream } from "@/hooks/use-lead-finder-stream";
 import { useProviderStore } from "@/stores/provider-store";
 import { useUIStore } from "@/stores/ui-store";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { companiesApi } from "@/lib/api/companies";
 import { useQueryClient } from "@tanstack/react-query";
@@ -73,21 +74,17 @@ export default function LeadFinder() {
   }, [defaultProvider, defaultModels]);
 
   const { leadFinderResults, setLeadFinderResults } = useUIStore();
-  const leadFinderMutation = useLeadFinder();
+  const streamingSearch = useLeadFinderStream();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const handleSearch = async (options?: { forceSave?: boolean }) => {
-    // If forceSave is true, we want to save to DB (dryRun: false)
-    // Otherwise, use the dryRun checkbox value
     const shouldDryRun = options?.forceSave ? false : dryRun;
-    
-    // Use the helper function to format industry string
     const industryString = industrySubcategory 
       ? formatIndustryString(industryCategory, industrySubcategory)
       : industryCategory;
     
-    const { data } = await leadFinderMutation.mutateAsync({
+    await streamingSearch.findLeads({
       size,
       geography,
       industry: industryString,
@@ -96,11 +93,10 @@ export default function LeadFinder() {
       model: providerConfig.model,
       enrichWithPerplexity,
     });
+  };
 
-    if (data) {
-      setLeadFinderResults(data.leads);
-      setSelectedCompanyIndices(new Set()); // Reset selection on new search
-    }
+  const handleCancelSearch = () => {
+    streamingSearch.cancelSearch();
   };
 
   const handleNavigateCompany = (direction: 'prev' | 'next') => {
@@ -241,8 +237,20 @@ export default function LeadFinder() {
   );
 
   const isFormValid = size && geography && industryCategory;
-  const isLoading = leadFinderMutation.isPending;
-  const results = leadFinderMutation.data?.data;
+  const isLoading = streamingSearch.isLoading;
+  
+  // Create results object compatible with existing code
+  const results = streamingSearch.leads.length > 0 ? {
+    leads: streamingSearch.leads,
+    inserted: 0,
+    dryRun,
+    provider: providerConfig.provider,
+    model: providerConfig.model || '',
+    usage: streamingSearch.usage || { promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 },
+    wasEnriched: enrichWithPerplexity,
+    traceUrl: streamingSearch.traceUrl || '',
+    stats: streamingSearch.stats
+  } : null;
 
   // Filter and sort results
   const filteredAndSortedResults = results ? {
@@ -462,7 +470,7 @@ export default function LeadFinder() {
               <Separator orientation="vertical" className="h-4" />
               <div className="flex items-center gap-2">
                 <Zap className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="font-mono">${(results.usage.estimatedCost + (results.enrichmentUsage?.estimatedCost || 0)).toFixed(4)}</span>
+                <span className="font-mono">${results.usage.estimatedCost.toFixed(4)}</span>
               </div>
             </div>
           )}
@@ -815,22 +823,45 @@ export default function LeadFinder() {
                 </>
               )}
             </Button>
+            
+            {/* Stop Search Button */}
+            {isLoading && (
+              <Button
+                onClick={handleCancelSearch}
+                variant="outline"
+                className="w-full h-9 md:h-10 mt-2"
+                size="default"
+              >
+                <StopCircle className="mr-2 h-4 w-4" />
+                <span className="text-xs font-medium">Stop Search</span>
+              </Button>
+            )}
           </div>
         </div>
 
         {/* Right Panel - Results */}
         <div className="flex-1 overflow-y-auto">
-          {isLoading && !filteredAndSortedResults ? (
-            <div className="p-4 md:p-6 space-y-3 md:space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                <h2 className="text-base font-semibold">Searching for leads...</h2>
+          {/* Progress Indicator */}
+          {isLoading && (
+            <div className="p-4 md:p-6 space-y-3 border-b bg-secondary/20">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-sm font-medium">{streamingSearch.currentStatus}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">{streamingSearch.leads.length} found</span>
               </div>
+              <Progress value={streamingSearch.progress} className="h-2" />
+            </div>
+          )}
+
+          {isLoading && streamingSearch.leads.length === 0 ? (
+            <div className="p-4 md:p-6 space-y-3 md:space-y-4">
               {Array.from({ length: 5 }).map((_, i) => (
                 <LeadCardSkeleton key={i} />
               ))}
             </div>
-          ) : !filteredAndSortedResults ? (
+          ) : !results && !isLoading ? (
             <div className="h-full flex items-center justify-center p-4">
               <div className="text-center space-y-3 max-w-md px-4">
                 <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center">
@@ -1199,13 +1230,13 @@ export default function LeadFinder() {
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground font-medium">Tokens</div>
                       <div className="text-xs font-mono">
-                        {(filteredAndSortedResults.usage.totalTokens + (filteredAndSortedResults.enrichmentUsage?.totalTokens || 0)).toLocaleString()}
+                        {filteredAndSortedResults.usage.totalTokens.toLocaleString()}
                       </div>
                     </div>
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground font-medium">Cost</div>
                       <div className="text-xs font-mono font-semibold">
-                        ${(filteredAndSortedResults.usage.estimatedCost + (filteredAndSortedResults.enrichmentUsage?.estimatedCost || 0)).toFixed(4)}
+                        ${filteredAndSortedResults.usage.estimatedCost.toFixed(4)}
                       </div>
                     </div>
                     {filteredAndSortedResults.traceUrl && (
