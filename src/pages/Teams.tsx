@@ -36,10 +36,24 @@ interface TeamMember {
   };
 }
 
+interface TeamInvitation {
+  id: string;
+  team_id: string;
+  email: string;
+  role: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  profiles?: {
+    full_name: string;
+  };
+}
+
 export default function Teams() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [teamInvitations, setTeamInvitations] = useState<TeamInvitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -63,6 +77,7 @@ export default function Teams() {
   useEffect(() => {
     if (selectedTeam) {
       loadTeamMembers(selectedTeam.id);
+      loadTeamInvitations(selectedTeam.id);
     }
   }, [selectedTeam]);
 
@@ -115,6 +130,28 @@ export default function Teams() {
     }
   };
 
+  const loadTeamInvitations = async (teamId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('team_invitations')
+        .select(`
+          *,
+          profiles:invited_by_user_id (
+            full_name
+          )
+        `)
+        .eq('team_id', teamId)
+        .eq('status', 'pending')
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setTeamInvitations(data as any || []);
+    } catch (error: any) {
+      console.error('Error loading invitations:', error);
+    }
+  };
+
   const handleCreateTeam = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -162,37 +199,49 @@ export default function Teams() {
     if (!selectedTeam) return;
 
     try {
-      // In a real app, you'd send an email invitation
-      // For now, we'll simulate by looking up the user by email
+      // Check if user exists
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('id')
-        .eq('email', inviteData.email)
+        .eq('email', inviteData.email.toLowerCase())
         .single();
 
-      if (profileError || !profile) {
-        toast({
-          title: "User not found",
-          description: "No user found with that email address",
-          variant: "destructive",
+      if (profile) {
+        // User exists, add them directly to the team
+        const { error } = await supabase
+          .from('team_members')
+          .insert({
+            team_id: selectedTeam.id,
+            user_id: profile.id,
+            role: inviteData.role,
+          });
+
+        if (error) throw error;
+
+        toast({ title: "Team member added successfully" });
+      } else {
+        // User doesn't exist, send invitation email
+        const { error } = await supabase.functions.invoke('send-team-invitation', {
+          body: {
+            teamId: selectedTeam.id,
+            email: inviteData.email.toLowerCase(),
+            role: inviteData.role,
+            teamName: selectedTeam.name,
+          },
         });
-        return;
+
+        if (error) throw error;
+
+        toast({ 
+          title: "Invitation sent",
+          description: `An invitation email has been sent to ${inviteData.email}`,
+        });
       }
 
-      const { error } = await supabase
-        .from('team_members')
-        .insert({
-          team_id: selectedTeam.id,
-          user_id: profile.id,
-          role: inviteData.role,
-        });
-
-      if (error) throw error;
-
-      toast({ title: "Team member added successfully" });
       setIsInviteDialogOpen(false);
       resetInviteForm();
       await loadTeamMembers(selectedTeam.id);
+      await loadTeamInvitations(selectedTeam.id);
     } catch (error: any) {
       console.error('Error inviting member:', error);
       toast({
@@ -377,6 +426,52 @@ export default function Teams() {
                   </TabsList>
 
                   <TabsContent value="members" className="space-y-4 mt-4">
+                    {/* Pending Invitations */}
+                    {teamInvitations.length > 0 && (
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-semibold text-muted-foreground">
+                          Pending Invitations ({teamInvitations.length})
+                        </h3>
+                        <div className="space-y-2">
+                          {teamInvitations.map((invitation) => (
+                            <div
+                              key={invitation.id}
+                              className="flex items-center justify-between p-3 border border-dashed rounded-lg bg-muted/30"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                  <UserPlus className="h-4 w-4 text-primary" />
+                                </div>
+                                <div>
+                                  <div className="font-medium text-sm">
+                                    {invitation.email}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Invited {new Date(invitation.created_at).toLocaleDateString()} • 
+                                    Expires {new Date(invitation.expires_at).toLocaleDateString()}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="capitalize">
+                                  {getRoleIcon(invitation.role)}
+                                  <span className="ml-1">{invitation.role}</span>
+                                </Badge>
+                                <Badge variant="secondary" className="text-xs">
+                                  Pending
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Team Members */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-muted-foreground mb-2">
+                        Active Members ({teamMembers.length})
+                      </h3>
                     {teamMembers.length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground">
                         No team members yet
@@ -438,6 +533,7 @@ export default function Teams() {
                         ))}
                       </div>
                     )}
+                    </div>
                   </TabsContent>
 
                   <TabsContent value="settings" className="space-y-4 mt-4">

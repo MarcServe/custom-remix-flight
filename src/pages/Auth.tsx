@@ -23,6 +23,7 @@ export default function Auth() {
   const [showReset, setShowReset] = useState(false);
 
   const mode = searchParams.get('mode') || 'signin';
+  const invitationToken = searchParams.get('invitation');
 
   // Redirect if already logged in
   if (user) {
@@ -83,8 +84,29 @@ export default function Auth() {
 
     setLoading(true);
     const { error } = await signUp(email, password, fullName);
-    setLoading(false);
 
+    if (!error && invitationToken) {
+      // If signing up with an invitation, accept it
+      try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data, error: inviteError } = await supabase.rpc('accept_team_invitation', {
+          invitation_token: invitationToken
+        });
+
+        if (inviteError) {
+          console.error('Error accepting invitation:', inviteError);
+        } else if (data && typeof data === 'object' && 'success' in data && data.success) {
+          // Successfully joined team, navigate to teams page
+          setLoading(false);
+          navigate('/teams');
+          return;
+        }
+      } catch (err) {
+        console.error('Error processing invitation:', err);
+      }
+    }
+
+    setLoading(false);
     if (!error) {
       navigate('/');
     }
@@ -220,6 +242,16 @@ export default function Auth() {
             </TabsContent>
 
             <TabsContent value="signup">
+              {invitationToken && (
+                <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                  <p className="text-sm text-primary font-medium">
+                    🎉 You've been invited to join a team!
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Complete sign up to accept the invitation.
+                  </p>
+                </div>
+              )}
               <form onSubmit={handleSignUp} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="signup-name">Full Name</Label>
