@@ -240,7 +240,7 @@ export const useLeadFinderStream = () => {
                 // Show toast notification
                 toast({
                   title: '✨ Lead Search Complete',
-                  description: `Found ${event.stats.returned} companies. Results saved - navigate to Lead Finder to view.`,
+                  description: `Found ${event.stats.returned} companies. Results saved and ready to view.`,
                 });
               } else if (event.type === 'error') {
                 throw new Error(event.message);
@@ -325,11 +325,30 @@ export const useLeadFinderStream = () => {
     });
   };
 
+  const restoreStoredResults = () => {
+    const stored = leadFinderStorage.load();
+    if (stored && stored.leads.length > 0) {
+      setState(prev => ({
+        ...prev,
+        leads: stored.leads,
+        stats: stored.stats,
+        usage: stored.usage,
+        traceUrl: stored.traceUrl,
+        isLoading: false,
+        currentStatus: 'Restored',
+        progress: 100,
+      }));
+      return true;
+    }
+    return false;
+  };
+
   return {
     ...state,
     findLeads,
     cancelSearch,
     clearStoredResults,
+    restoreStoredResults,
     hasStoredResults: leadFinderStorage.hasStoredResults(),
   };
 };

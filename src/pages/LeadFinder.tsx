@@ -946,17 +946,19 @@ export default function LeadFinder() {
                             variant="default"
                             className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white"
                             onClick={() => {
-                              console.log('View Saved Results clicked. Current leads:', streamingSearch.leads.length);
-                              // Results should already be visible if streamingSearch.leads has data
-                              // Scroll to top to ensure the banner and results are visible
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
-                              // Force a small state update to trigger re-render if needed
-                              if (streamingSearch.leads.length > 0) {
-                                // The results variable should already be populated above
-                                // This click just helps navigate to see them
+                              console.log('View Saved Results clicked');
+                              const restored = streamingSearch.restoreStoredResults();
+                              if (restored) {
                                 toast({
-                                  title: 'Restored',
-                                  description: `Displaying ${streamingSearch.leads.length} saved leads`,
+                                  title: '✨ Results Restored',
+                                  description: `Displaying ${streamingSearch.leads.length} saved leads from your previous search`,
+                                });
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              } else {
+                                toast({
+                                  title: 'No Results Found',
+                                  description: 'Could not restore previous search results',
+                                  variant: 'destructive',
                                 });
                               }
                             }}
