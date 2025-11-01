@@ -7,6 +7,51 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// PHASE 1: Deduplication helper function
+function deduplicateResults(results: any[]): any[] {
+  const seen = new Map<string, any>();
+  
+  return results.filter(result => {
+    if (!result.url && !result.title) return false;
+    
+    // Create deduplication key from URL or title
+    let key = '';
+    
+    if (result.url) {
+      // Normalize URL: remove protocol, www, trailing slashes
+      try {
+        const url = new URL(result.url);
+        key = url.hostname.replace('www.', '') + url.pathname.replace(/\/$/, '');
+      } catch {
+        key = result.url.toLowerCase();
+      }
+    } else if (result.title) {
+      // Normalize title: lowercase, remove common company suffixes
+      key = result.title
+        .toLowerCase()
+        .replace(/\b(inc|llc|ltd|corp|corporation|limited|company|co)\b\.?/g, '')
+        .replace(/[^\w\s]/g, '')
+        .trim();
+    }
+    
+    if (seen.has(key)) {
+      // Keep the result with more content
+      const existing = seen.get(key);
+      const existingLength = (existing.text || '').length;
+      const currentLength = (result.text || '').length;
+      
+      if (currentLength > existingLength) {
+        seen.set(key, result);
+        return false; // Remove existing, will add current
+      }
+      return false; // Skip duplicate
+    }
+    
+    seen.set(key, result);
+    return true;
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -29,7 +74,7 @@ Deno.serve(async (req) => {
 
     const exaKey = String(EXA_API_KEY).trim();
 
-    // Exa search span
+    // Exa search span - PHASE 1: Multiple parallel searches
     const exaSpan = createSpan(trace, 'exa-api-search', { query: `${industry} companies in ${geography} with ${size} employees` });
 
     // Build the Exa search query with enhanced industry context
@@ -45,41 +90,98 @@ Deno.serve(async (req) => {
       }
     }
     
-    const exaQuery = `${industryContext} companies in ${geography} with approximately ${size} employees`;
-    console.log("Exa search query:", exaQuery);
     console.log("Industry context:", { industryContext, mainCategory });
 
-    const exaResponse = await fetch("https://api.exa.ai/search", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": exaKey,
-      },
-      body: JSON.stringify({
-        query: exaQuery,
-        numResults: 10, // Increased from 5 to get more results
-        useAutoprompt: true,
-        type: "keyword",
-        contents: {
-          text: {
-            maxCharacters: 1000,
-            includeHtmlTags: false,
-          },
+    // PHASE 1: Create 4 parallel search strategies for comprehensive coverage
+    const exaQueries = [
+      // Strategy 1: Direct industry + location search
+      `${industryContext} companies in ${geography} with approximately ${size} employees`,
+      
+      // Strategy 2: LinkedIn company pages (higher quality)
+      `site:linkedin.com/company ${industryContext} ${geography} ${size}`,
+      
+      // Strategy 3: Company directories and listings
+      `${industryContext} company directory ${geography} industry list`,
+      
+      // Strategy 4: News and press releases (active companies)
+      `${industryContext} company news ${geography} 2024 2025 ${size} employees`
+    ];
+
+    console.log("Running 4 parallel Exa searches for comprehensive coverage");
+
+    // Enhanced Exa parameters for better quality
+    const exaSearchParams = {
+      numResults: 20, // Increased from 10 to 20 per query
+      useAutoprompt: true,
+      type: "keyword",
+      includeDomains: [
+        "linkedin.com",
+        "crunchbase.com",
+        "bloomberg.com",
+        "reuters.com"
+      ], // Prioritize high-quality sources
+      contents: {
+        text: {
+          maxCharacters: 2000, // Increased from 1000 for more context
+          includeHtmlTags: false,
         },
-      }),
+      },
+    };
+
+    // Execute all 4 queries in parallel
+    const exaPromises = exaQueries.map(async (query, index) => {
+      try {
+        console.log(`Exa query ${index + 1}:`, query);
+        const response = await fetch("https://api.exa.ai/search", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": exaKey,
+          },
+          body: JSON.stringify({
+            query,
+            ...exaSearchParams,
+          }),
+        });
+
+        if (!response.ok) {
+          console.error(`Exa query ${index + 1} failed:`, await response.text());
+          return { results: [] };
+        }
+
+        const data = await response.json();
+        console.log(`Exa query ${index + 1} returned ${data.results?.length || 0} results`);
+        return data;
+      } catch (error) {
+        console.error(`Exa query ${index + 1} error:`, error);
+        return { results: [] };
+      }
     });
 
-    if (!exaResponse.ok) {
-      const errorText = await exaResponse.text();
-      console.error("Exa API error:", errorText);
-      await endSpan(exaSpan, undefined, new Error(`Exa API error: ${exaResponse.statusText}`));
-      throw new Error(`Exa API error: ${exaResponse.statusText}`);
-    }
-
-    const exaData = await exaResponse.json();
-    console.log("Exa results:", exaData.results?.length || 0);
+    const exaResponses = await Promise.all(exaPromises);
     
-    await endSpan(exaSpan, { resultCount: exaData.results?.length || 0 });
+    // Combine all results
+    let allResults: any[] = [];
+    exaResponses.forEach((response, index) => {
+      if (response.results && Array.isArray(response.results)) {
+        allResults.push(...response.results);
+      }
+    });
+
+    console.log(`Total raw results from all queries: ${allResults.length}`);
+
+    // PHASE 1: Deduplication by URL and normalized company name
+    const deduplicatedResults = deduplicateResults(allResults);
+    console.log(`After deduplication: ${deduplicatedResults.length} unique companies`);
+
+    // Create combined exaData object for downstream processing
+    const exaData = { results: deduplicatedResults };
+    
+    await endSpan(exaSpan, { 
+      totalResults: allResults.length,
+      uniqueResults: deduplicatedResults.length,
+      queriesRun: 4
+    });
 
     // Enhanced extraction prompt with industry context
     const industryGuidance = mainCategory 
