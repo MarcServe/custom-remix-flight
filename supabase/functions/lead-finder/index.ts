@@ -497,6 +497,17 @@ ${JSON.stringify(batch, null, 2)}`;
 
       // Database insertion in background (non-blocking)
       // Note: We send insertedCount as 0 initially, DB insertion happens asynchronously
+      // Helper functions to parse funding info
+      const extractFundingStage = (fundingInfo: string): string | null => {
+        const stageMatch = fundingInfo.match(/(Seed|Pre-Seed|Series [A-Z]|IPO|Private|Bootstrapped)/i);
+        return stageMatch ? stageMatch[0] : null;
+      };
+
+      const extractFundingTotal = (fundingInfo: string): string | null => {
+        const amountMatch = fundingInfo.match(/\$[\d.]+[KMB]/i);
+        return amountMatch ? amountMatch[0] : null;
+      };
+
       const insertPromise = !dryRun && leads.length > 0 ? (async () => {
         let count = 0;
         try {
@@ -518,8 +529,20 @@ ${JSON.stringify(batch, null, 2)}`;
                 social_profiles: lead.socialProfiles || null,
                 key_executives: lead.keyExecutives || null,
                 employee_count: lead.employeeCount || null,
+                recent_news: lead.recentNews || null,
+                tech_stack: lead.technologies || lead.techStack || null,
+                funding_stage: lead.fundingInfo ? extractFundingStage(lead.fundingInfo) : null,
+                funding_total: lead.fundingInfo ? extractFundingTotal(lead.fundingInfo) : null,
+                enrichment_data: (lead.products || lead.fundingInfo || lead.technologies || lead.recentNews) ? {
+                  products: lead.products || null,
+                  fundingInfo: lead.fundingInfo || null,
+                  recentNews: lead.recentNews || null,
+                  technologies: lead.technologies || lead.techStack || null,
+                  enrichmentTier: lead.enrichmentTier || null,
+                } : null,
                 status: "NEW",
                 enriched_at: new Date().toISOString(),
+                enrichment_status: (lead.wasEnriched || lead.enrichmentTier) ? 'completed' : 'pending',
                 enrichment_provider: extractionProvider,
                 enrichment_model: extractionModel,
                 langfuse_trace_id: trace.id,
