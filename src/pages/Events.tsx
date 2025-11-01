@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Calendar, Filter } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,6 +14,7 @@ import {
 import { EventCard } from '@/components/EventCard';
 import { EventDialog } from '@/components/EventDialog';
 import { useEvents, useDeleteEvent } from '@/hooks/use-events';
+import { useMarkMultipleEventsAsViewed } from '@/hooks/use-event-views';
 import { format, isToday, isYesterday, startOfDay } from 'date-fns';
 
 export default function Events() {
@@ -33,6 +34,15 @@ export default function Events() {
     Object.keys(filters).length > 0 ? filters : undefined
   );
   const deleteMutation = useDeleteEvent();
+  const markMultipleAsViewedMutation = useMarkMultipleEventsAsViewed();
+
+  // Mark all visible events as viewed when they load
+  useEffect(() => {
+    if (eventsData?.data && eventsData.data.length > 0) {
+      const eventIds = eventsData.data.map((e: any) => e.id);
+      markMultipleAsViewedMutation.mutate(eventIds);
+    }
+  }, [eventsData?.data]);
 
   // Fetch companies for filter
   const { data: companies } = useQuery({

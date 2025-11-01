@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePendingCounts } from "@/hooks/use-pending-counts";
+import { useEventsRealtime } from "@/hooks/use-realtime";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: BarChart3 },

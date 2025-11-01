@@ -197,6 +197,44 @@ export const useCompanySequencesRealtime = () => {
 };
 
 /**
+ * Hook to subscribe to real-time updates for events table
+ */
+export const useEventsRealtime = () => {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('events-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'events',
+        },
+        (payload: RealtimePostgresChangesPayload<any>) => {
+          console.log('Events realtime update:', payload.eventType);
+          
+          queryClient.invalidateQueries({ queryKey: ['events'] });
+          queryClient.invalidateQueries({ queryKey: ['pending-counts'] });
+          
+          if (payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
+            const eventId = payload.old?.id;
+            if (eventId) {
+              queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+};
+
+/**
  * Combined hook for all real-time subscriptions
  */
 export const useAllRealtime = () => {
@@ -205,4 +243,5 @@ export const useAllRealtime = () => {
   useSequencesRealtime();
   usePeopleRealtime();
   useCompanySequencesRealtime();
+  useEventsRealtime();
 };

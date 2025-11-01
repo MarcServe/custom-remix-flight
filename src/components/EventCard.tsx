@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
+import { useMarkEventAsViewed } from '@/hooks/use-event-views';
 
 interface EventCardProps {
   event: {
@@ -41,11 +42,18 @@ const eventColors = {
 
 export function EventCard({ event, onDelete, onClick }: EventCardProps) {
   const Icon = eventIcons[event.type];
+  const markAsViewedMutation = useMarkEventAsViewed();
+
+  const handleClick = () => {
+    // Mark as viewed when clicked
+    markAsViewedMutation.mutate(event.id);
+    onClick?.();
+  };
 
   return (
     <Card 
       className="hover:shadow-md transition-shadow cursor-pointer"
-      onClick={onClick}
+      onClick={handleClick}
     >
       <CardContent className="p-4">
         <div className="flex items-start gap-3">

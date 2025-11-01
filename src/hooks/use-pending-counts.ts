@@ -11,6 +11,8 @@ export const usePendingCounts = () => {
       const now = new Date().toISOString();
       
       try {
+        const { data: { user } } = await supabase.auth.getUser();
+        
         // Get active deals count (using stage, not status)
         const { data: dealsData } = await supabase
           .from('deals')
@@ -23,21 +25,31 @@ export const usePendingCounts = () => {
           .select('id')
           .eq('status', 'active');
 
-        // Get upcoming events (next 7 days) - using due_at, not event_date
-        const nextWeek = new Date();
-        nextWeek.setDate(nextWeek.getDate() + 7);
-        
-        const { data: eventsData } = await supabase
-          .from('events')
-          .select('id')
-          .gte('due_at', now)
-          .lte('due_at', nextWeek.toISOString());
+        // Count unviewed events
+        let unviewedEventsCount = 0;
+        if (user) {
+          // Get all event IDs
+          const { data: allEvents } = await supabase
+            .from('events')
+            .select('id');
+
+          if (allEvents && allEvents.length > 0) {
+            // Get event IDs that the user has already viewed
+            const { data: viewedEvents } = await supabase
+              .from('user_event_views')
+              .select('event_id')
+              .eq('user_id', user.id);
+
+            const viewedEventIds = new Set(viewedEvents?.map(v => v.event_id) || []);
+            unviewedEventsCount = allEvents.filter(e => !viewedEventIds.has(e.id)).length;
+          }
+        }
 
         return {
           deals: dealsData?.length || 0,
           sequences: 0, // Not counting sequences for now
           campaigns: companySequencesData?.length || 0,
-          events: eventsData?.length || 0,
+          events: unviewedEventsCount,
         };
       } catch (error) {
         console.error('Error fetching pending counts:', error);
