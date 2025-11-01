@@ -228,36 +228,45 @@ export type Database = {
       }
       company_sequences: {
         Row: {
+          ai_context: Json | null
           automation_rules: Json | null
           company_id: string
+          conversation_history: Json | null
           created_at: string
           current_step: number
           id: string
           metadata: Json | null
+          next_action: string | null
           personalized_emails: Json | null
           sequence_id: string
           status: string
           updated_at: string
         }
         Insert: {
+          ai_context?: Json | null
           automation_rules?: Json | null
           company_id: string
+          conversation_history?: Json | null
           created_at?: string
           current_step?: number
           id?: string
           metadata?: Json | null
+          next_action?: string | null
           personalized_emails?: Json | null
           sequence_id: string
           status?: string
           updated_at?: string
         }
         Update: {
+          ai_context?: Json | null
           automation_rules?: Json | null
           company_id?: string
+          conversation_history?: Json | null
           created_at?: string
           current_step?: number
           id?: string
           metadata?: Json | null
+          next_action?: string | null
           personalized_emails?: Json | null
           sequence_id?: string
           status?: string
@@ -722,9 +731,11 @@ export type Database = {
       }
       email_sequences: {
         Row: {
+          ai_instructions: string | null
           created_at: string | null
           created_by: string | null
           custom_instructions: string | null
+          goal: string | null
           id: string
           langfuse_trace_id: string | null
           model: string | null
@@ -735,9 +746,11 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          ai_instructions?: string | null
           created_at?: string | null
           created_by?: string | null
           custom_instructions?: string | null
+          goal?: string | null
           id?: string
           langfuse_trace_id?: string | null
           model?: string | null
@@ -748,9 +761,11 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          ai_instructions?: string | null
           created_at?: string | null
           created_by?: string | null
           custom_instructions?: string | null
+          goal?: string | null
           id?: string
           langfuse_trace_id?: string | null
           model?: string | null
@@ -761,6 +776,65 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      email_threads: {
+        Row: {
+          ai_analysis: Json | null
+          body_html: string | null
+          body_text: string | null
+          company_sequence_id: string
+          created_at: string
+          direction: string
+          from_email: string
+          id: string
+          message_id: string | null
+          received_at: string
+          sentiment: string | null
+          subject: string | null
+          thread_id: string | null
+          to_email: string
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          body_html?: string | null
+          body_text?: string | null
+          company_sequence_id: string
+          created_at?: string
+          direction: string
+          from_email: string
+          id?: string
+          message_id?: string | null
+          received_at?: string
+          sentiment?: string | null
+          subject?: string | null
+          thread_id?: string | null
+          to_email: string
+        }
+        Update: {
+          ai_analysis?: Json | null
+          body_html?: string | null
+          body_text?: string | null
+          company_sequence_id?: string
+          created_at?: string
+          direction?: string
+          from_email?: string
+          id?: string
+          message_id?: string | null
+          received_at?: string
+          sentiment?: string | null
+          subject?: string | null
+          thread_id?: string | null
+          to_email?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_threads_company_sequence_id_fkey"
+            columns: ["company_sequence_id"]
+            isOneToOne: false
+            referencedRelation: "company_sequences"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       events: {
         Row: {
