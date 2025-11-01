@@ -13,6 +13,7 @@ interface EmailRequest {
   body: string;
   companyId?: string;
   contactId?: string;
+  sender?: 'gmail' | 'resend';
 }
 
 serve(async (req) => {
@@ -43,61 +44,98 @@ serve(async (req) => {
     }
 
     const emailRequest: EmailRequest = await req.json();
-    const { toEmail, toName, subject, body, companyId, contactId } = emailRequest;
+    const { toEmail, toName, subject, body, companyId, contactId, sender = 'resend' } = emailRequest;
 
     if (!toEmail || !subject || !body) {
       throw new Error('Missing required fields: toEmail, subject, body');
     }
 
-    console.log(`Sending email to ${toEmail} from user ${user.email}`);
+    console.log(`Sending email to ${toEmail} from user ${user.email} using ${sender}`);
 
-    // Get user's Nango connection
-    const { data: connection, error: connectionError } = await supabaseClient
-      .from('crm_connections')
-      .select('connection_id, provider')
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .maybeSingle();
+    let messageId: string | null = null;
+    let provider = sender;
 
-    if (connectionError || !connection) {
-      throw new Error('No active email connection found. Please connect your email account in Settings.');
-    }
+    if (sender === 'gmail') {
+      // Send via Nango/Gmail
+      const { data: connection, error: connectionError } = await supabaseClient
+        .from('crm_connections')
+        .select('connection_id, provider')
+        .eq('user_id', user.id)
+        .eq('provider', 'gmail')
+        .eq('status', 'active')
+        .maybeSingle();
 
-    const nangoSecretKey = Deno.env.get('NANGO_SECRET_KEY');
-    if (!nangoSecretKey) {
-      console.error('NANGO_SECRET_KEY environment variable is not set');
-      throw new Error('Email integration not configured. Please contact support to set up NANGO_SECRET_KEY.');
-    }
+      if (connectionError || !connection) {
+        throw new Error('Gmail not connected. Please connect Gmail in Settings or use Resend.');
+      }
 
-    console.log(`Attempting to send email via ${connection.provider} using connection ${connection.connection_id}`);
+      const nangoSecretKey = Deno.env.get('NANGO_SECRET_KEY');
+      if (!nangoSecretKey) {
+        throw new Error('Gmail integration not configured.');
+      }
 
-    // Send email via Nango
-    const nangoResponse = await fetch('https://api.nango.dev/v1/gmail/messages', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${nangoSecretKey}`,
-        'Connection-Id': connection.connection_id,
-        'Provider-Config-Key': connection.provider,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        to: [{ email: toEmail, name: toName }],
-        subject,
-        body: {
-          content: body,
-          type: 'text/plain',
+      console.log(`Sending via Gmail using connection ${connection.connection_id}`);
+
+      const nangoResponse = await fetch('https://api.nango.dev/v1/gmail/messages', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${nangoSecretKey}`,
+          'Connection-Id': connection.connection_id,
+          'Provider-Config-Key': 'google-mail',
+          'Content-Type': 'application/json',
         },
-      }),
-    });
+        body: JSON.stringify({
+          to: [{ email: toEmail, name: toName }],
+          subject,
+          body: {
+            content: body,
+            type: 'text/plain',
+          },
+        }),
+      });
 
-    if (!nangoResponse.ok) {
-      const errorData = await nangoResponse.text();
-      console.error('Nango API error:', errorData);
-      throw new Error(`Failed to send email via ${connection.provider}: ${errorData}`);
+      if (!nangoResponse.ok) {
+        const errorData = await nangoResponse.text();
+        console.error('Gmail API error:', errorData);
+        throw new Error(`Failed to send via Gmail: ${errorData}`);
+      }
+
+      const nangoData = await nangoResponse.json();
+      messageId = nangoData.id || null;
+      console.log('Email sent via Gmail:', nangoData);
+    } else {
+      // Send via Resend (default)
+      const resendApiKey = Deno.env.get('RESEND_API_KEY');
+      if (!resendApiKey) {
+        throw new Error('Resend not configured. Please contact support.');
+      }
+
+      console.log('Sending via Resend');
+
+      const resendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'CRM <onboarding@resend.dev>',
+          to: [toEmail],
+          subject,
+          text: body,
+        }),
+      });
+
+      if (!resendResponse.ok) {
+        const errorData = await resendResponse.text();
+        console.error('Resend API error:', errorData);
+        throw new Error(`Failed to send via Resend: ${errorData}`);
+      }
+
+      const resendData = await resendResponse.json();
+      messageId = resendData.id || null;
+      console.log('Email sent via Resend:', resendData);
     }
-
-    const nangoData = await nangoResponse.json();
-    console.log('Email sent successfully:', nangoData);
 
     // Log email activity
     const { error: activityError } = await supabaseClient
@@ -110,9 +148,9 @@ serve(async (req) => {
         subject,
         body,
         sent_at: new Date().toISOString(),
-        external_message_id: nangoData.id || null,
+        external_message_id: messageId,
         metadata: {
-          provider: connection.provider,
+          provider,
           sent_via: 'crm_direct',
         },
       });
@@ -124,8 +162,9 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Email sent successfully',
-        messageId: nangoData.id,
+        message: `Email sent successfully via ${sender}`,
+        messageId,
+        provider,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

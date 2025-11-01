@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, Send, Sparkles } from "lucide-react";
 
 interface SendEmailDialogProps {
@@ -28,9 +30,22 @@ export function SendEmailDialog({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [context, setContext] = useState("");
+  const [sender, setSender] = useState<'gmail' | 'resend'>('resend');
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
+
+  const { data: connections } = useQuery({
+    queryKey: ['email-connections'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('crm_connections')
+        .select('provider, status, from_email')
+        .eq('status', 'active')
+        .in('provider', ['gmail', 'outlook']);
+      return data || [];
+    },
+  });
 
   const handleGenerateWithAI = async () => {
     setIsGenerating(true);
@@ -87,6 +102,7 @@ export function SendEmailDialog({
           body,
           companyId,
           contactId,
+          sender,
         },
       });
 
@@ -130,6 +146,49 @@ export function SendEmailDialog({
                 disabled
                 className="bg-muted"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="sender">Send From</Label>
+              <Select value={sender} onValueChange={(value) => setSender(value as 'gmail' | 'resend')}>
+                <SelectTrigger id="sender">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="resend">
+                    <div className="flex items-center gap-2">
+                      <span>📧</span>
+                      <div>
+                        <div className="font-medium">Resend (Default)</div>
+                        <div className="text-xs text-muted-foreground">Reliable delivery service</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  {connections?.some(c => c.provider === 'gmail') && (
+                    <SelectItem value="gmail">
+                      <div className="flex items-center gap-2">
+                        <span>📬</span>
+                        <div>
+                          <div className="font-medium">Gmail</div>
+                          <div className="text-xs text-muted-foreground">
+                            {connections.find(c => c.provider === 'gmail')?.from_email || 'Connected account'}
+                          </div>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              {sender === 'gmail' && (
+                <p className="text-xs text-muted-foreground">
+                  ✓ Email will appear in your Gmail Sent folder
+                </p>
+              )}
+              {sender === 'resend' && (
+                <p className="text-xs text-muted-foreground">
+                  ✓ Reliable delivery • Won't appear in your Gmail Sent folder
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
