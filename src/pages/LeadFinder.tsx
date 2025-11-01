@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy, StopCircle, X, AlertCircle } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -450,21 +451,42 @@ export default function LeadFinder() {
     <div className="h-screen flex flex-col bg-background">
       {/* Stored Results Banner */}
       {streamingSearch.hasStoredResults && streamingSearch.leads.length > 0 && (
-        <Alert className="rounded-none border-x-0 border-t-0 bg-primary/5 border-primary/20">
-          <AlertCircle className="h-4 w-4 text-primary" />
+        <Alert className="sticky top-0 z-10 rounded-none border-x-0 border-t-0 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
+          <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           <AlertDescription className="flex items-center justify-between">
-            <span className="text-sm">
-              You have {streamingSearch.leads.length} saved lead{streamingSearch.leads.length !== 1 ? 's' : ''} from your previous search
+            <span className="text-sm text-blue-900 dark:text-blue-100 font-medium">
+              💾 You have {streamingSearch.leads.length} saved lead{streamingSearch.leads.length !== 1 ? 's' : ''} from your previous search
             </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => streamingSearch.clearStoredResults()}
-              className="h-7 text-xs"
-            >
-              <X className="h-3 w-3 mr-1" />
-              Clear
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear saved results?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete {streamingSearch.leads.length} saved lead{streamingSearch.leads.length !== 1 ? 's' : ''} from your browser storage. 
+                    This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => streamingSearch.clearStoredResults()}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Clear Results
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </AlertDescription>
         </Alert>
       )}
@@ -885,7 +907,7 @@ export default function LeadFinder() {
             </div>
           ) : !results && !isLoading ? (
             <div className="h-full flex items-center justify-center p-4">
-              <div className="text-center space-y-3 max-w-md px-4">
+              <div className="text-center space-y-4 max-w-md px-4">
                 <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center">
                   <Search className="h-8 w-8 text-primary/40" />
                 </div>
@@ -895,6 +917,40 @@ export default function LeadFinder() {
                     Configure your search parameters and click "Find Companies" to discover leads
                   </p>
                 </div>
+                
+                {/* Restore Stored Results */}
+                {streamingSearch.hasStoredResults && (
+                  <div className="pt-4 border-t">
+                    <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-4 space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
+                          <Database className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                            Previous Search Found
+                          </h4>
+                          <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
+                            You have saved results from a previous search. Would you like to restore them?
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                            onClick={() => {
+                              // The stored results are already loaded by the hook
+                              // Just need to trigger a re-render or ensure visibility
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            View Saved Results
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
