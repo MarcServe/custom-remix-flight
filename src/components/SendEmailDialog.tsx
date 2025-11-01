@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Send, Sparkles } from "lucide-react";
+import { Loader2, Send, Sparkles, Code, Eye } from "lucide-react";
+import { RichTextEditor } from "./email/RichTextEditor";
+import { EmailTemplateSelector, EMAIL_TEMPLATES, type EmailTemplate } from "./email/EmailTemplateSelector";
 
 interface SendEmailDialogProps {
   open: boolean;
@@ -28,9 +31,11 @@ export function SendEmailDialog({
   contactId,
 }: SendEmailDialogProps) {
   const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [bodyHtml, setBodyHtml] = useState("");
+  const [bodyText, setBodyText] = useState("");
   const [context, setContext] = useState("");
   const [sender, setSender] = useState<'gmail' | 'resend' | 'smtp'>('smtp');
+  const [template, setTemplate] = useState<EmailTemplate>('blank');
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
@@ -62,6 +67,25 @@ export function SendEmailDialog({
     },
   });
 
+  // Apply template when changed
+  useEffect(() => {
+    if (template !== 'blank') {
+      const templateData = EMAIL_TEMPLATES[template];
+      let processedSubject = templateData.subject;
+      let processedBody = templateData.body;
+
+      // Replace variables
+      const firstName = recipientName.split(' ')[0];
+      processedSubject = processedSubject.replace(/{{firstName}}/g, firstName);
+      processedBody = processedBody.replace(/{{firstName}}/g, firstName);
+      processedBody = processedBody.replace(/{{companyName}}/g, companyId ? 'your company' : 'your team');
+
+      setSubject(processedSubject);
+      setBodyHtml(processedBody);
+      setBodyText(processedBody.replace(/<[^>]+>/g, ''));
+    }
+  }, [template, recipientName, companyId]);
+
   const handleGenerateWithAI = async () => {
     setIsGenerating(true);
     try {
@@ -79,7 +103,8 @@ export function SendEmailDialog({
 
       if (data?.subject && data?.body) {
         setSubject(data.subject);
-        setBody(data.body);
+        setBodyHtml(`<p>${data.body.replace(/\n/g, '</p><p>')}</p>`);
+        setBodyText(data.body);
         toast({
           title: "Email Generated",
           description: "AI has drafted an email based on your business profile and the prospect's information",
@@ -98,7 +123,7 @@ export function SendEmailDialog({
   };
 
   const handleSend = async () => {
-    if (!subject.trim() || !body.trim()) {
+    if (!subject.trim() || !bodyText.trim()) {
       toast({
         title: "Validation Error",
         description: "Please fill in both subject and message",
@@ -114,7 +139,8 @@ export function SendEmailDialog({
           toEmail: recipientEmail,
           toName: recipientName,
           subject,
-          body,
+          bodyHtml,
+          bodyText,
           companyId,
           contactId,
           sender,
@@ -130,7 +156,9 @@ export function SendEmailDialog({
 
       // Reset form and close dialog
       setSubject("");
-      setBody("");
+      setBodyHtml("");
+      setBodyText("");
+      setTemplate('blank');
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error sending email:", error);
@@ -237,6 +265,12 @@ export function SendEmailDialog({
               />
             </div>
 
+            <EmailTemplateSelector
+              value={template}
+              onChange={setTemplate}
+              disabled={isSending || isGenerating}
+            />
+
             <div className="flex justify-between items-center">
               <Label>Email Content</Label>
               <Button
@@ -271,18 +305,41 @@ export function SendEmailDialog({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="body">Message</Label>
-              <Textarea
-                id="body"
-                placeholder="Write your message here..."
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                disabled={isSending || isGenerating}
-                rows={10}
-                className="resize-none"
-              />
-            </div>
+            <Tabs defaultValue="editor" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="editor">
+                  <Eye className="mr-2 h-4 w-4" />
+                  Editor
+                </TabsTrigger>
+                <TabsTrigger value="html">
+                  <Code className="mr-2 h-4 w-4" />
+                  HTML
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="editor" className="mt-4">
+                <RichTextEditor
+                  content={bodyHtml}
+                  onChange={(html, text) => {
+                    setBodyHtml(html);
+                    setBodyText(text);
+                  }}
+                  disabled={isSending || isGenerating}
+                />
+              </TabsContent>
+              <TabsContent value="html" className="mt-4">
+                <Textarea
+                  placeholder="HTML content..."
+                  value={bodyHtml}
+                  onChange={(e) => {
+                    setBodyHtml(e.target.value);
+                    setBodyText(e.target.value.replace(/<[^>]+>/g, ''));
+                  }}
+                  disabled={isSending || isGenerating}
+                  rows={12}
+                  className="resize-none font-mono text-sm"
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
 

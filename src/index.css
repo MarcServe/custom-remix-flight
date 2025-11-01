@@ -120,3 +120,76 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* TipTap Rich Text Editor Styles */
+.ProseMirror {
+  @apply focus:outline-none;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply text-muted-foreground;
+  float: left;
+  pointer-events: none;
+  height: 0;
+}
+
+.ProseMirror p {
+  @apply mb-3;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  @apply pl-6 mb-3;
+}
+
+.ProseMirror ul {
+  @apply list-disc;
+}
+
+.ProseMirror ol {
+  @apply list-decimal;
+}
+
+.ProseMirror li {
+  @apply mb-1;
+}
+
+.ProseMirror strong {
+  @apply font-semibold;
+}
+
+.ProseMirror em {
+  @apply italic;
+}
+
+.ProseMirror code {
+  @apply bg-muted px-1 py-0.5 rounded text-sm font-mono;
+}
+
+.ProseMirror pre {
+  @apply bg-muted p-3 rounded-lg mb-3;
+}
+
+.ProseMirror blockquote {
+  @apply border-l-4 border-primary pl-4 italic my-3;
+}
+
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3 {
+  @apply font-bold mb-3 mt-4;
+}
+
+.ProseMirror h1 {
+  @apply text-2xl;
+}
+
+.ProseMirror h2 {
+  @apply text-xl;
+}
+
+.ProseMirror h3 {
+  @apply text-lg;
+}
+

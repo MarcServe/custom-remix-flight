@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { wrapEmailContent } from "./_templates/email-wrapper.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +12,9 @@ interface EmailRequest {
   toEmail: string;
   toName: string;
   subject: string;
-  body: string;
+  body?: string; // Plain text (legacy)
+  bodyHtml?: string; // HTML content
+  bodyText?: string; // Plain text version
   companyId?: string;
   contactId?: string;
   sender?: 'gmail' | 'resend' | 'smtp';
@@ -45,9 +48,13 @@ serve(async (req) => {
     }
 
     const emailRequest: EmailRequest = await req.json();
-    const { toEmail, toName, subject, body, companyId, contactId, sender = 'resend' } = emailRequest;
+    const { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, sender = 'resend' } = emailRequest;
 
-    if (!toEmail || !subject || !body) {
+    // Support both legacy plain text and new HTML emails
+    const emailBodyHtml = bodyHtml || (body ? `<p>${body.replace(/\n/g, '</p><p>')}</p>` : '');
+    const emailBodyText = bodyText || body || '';
+
+    if (!toEmail || !subject || !emailBodyText) {
       throw new Error('Missing required fields: toEmail, subject, body');
     }
 
@@ -85,14 +92,14 @@ serve(async (req) => {
           'Provider-Config-Key': 'google-mail',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          to: [{ email: toEmail, name: toName }],
-          subject,
-          body: {
-            content: body,
-            type: 'text/plain',
-          },
-        }),
+      body: JSON.stringify({
+        to: [{ email: toEmail, name: toName }],
+        subject,
+        body: {
+          content: emailBodyText,
+          type: 'text/plain',
+        },
+      }),
       });
 
       if (!nangoResponse.ok) {
@@ -126,13 +133,16 @@ serve(async (req) => {
         .maybeSingle();
 
       const senderName = businessProfile?.company_name || 'Your Business';
-      const smtpMode = connection.metadata?.smtp_mode || 'resend'; // 'direct' or 'resend'
+      const smtpMode = (connection.metadata as any)?.smtp_mode || 'resend'; // 'direct' or 'resend'
+      
+      // Wrap HTML email with professional styling
+      const wrappedHtml = wrapEmailContent(emailBodyHtml, senderName, connection.from_email);
 
-      if (smtpMode === 'direct' && connection.metadata?.smtp_host) {
+      if (smtpMode === 'direct' && (connection.metadata as any)?.smtp_host) {
         // Direct SMTP Connection
-        console.log(`Sending via Direct SMTP: ${connection.metadata.smtp_host}`);
+        console.log(`Sending via Direct SMTP: ${(connection.metadata as any).smtp_host}`);
 
-        const smtpConfig = connection.metadata;
+        const smtpConfig = connection.metadata as any;
         const client = new SMTPClient({
           connection: {
             hostname: smtpConfig.smtp_host,
@@ -150,7 +160,8 @@ serve(async (req) => {
             from: `${senderName} <${connection.from_email}>`,
             to: toEmail,
             subject,
-            content: body,
+            content: emailBodyText,
+            html: wrappedHtml,
           });
 
           await client.close();
@@ -177,12 +188,13 @@ serve(async (req) => {
             'Authorization': `Bearer ${resendApiKey}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            from: `${senderName} <${connection.from_email}>`,
-            to: [toEmail],
-            subject,
-            text: body,
-          }),
+        body: JSON.stringify({
+          from: `${senderName} <${connection.from_email}>`,
+          to: [toEmail],
+          subject,
+          text: emailBodyText,
+          html: wrappedHtml,
+        }),
         });
 
         if (!resendResponse.ok) {
@@ -211,12 +223,13 @@ serve(async (req) => {
           'Authorization': `Bearer ${resendApiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          from: 'CRM <onboarding@resend.dev>',
-          to: [toEmail],
-          subject,
-          text: body,
-        }),
+      body: JSON.stringify({
+        from: 'CRM <onboarding@resend.dev>',
+        to: [toEmail],
+        subject,
+        text: emailBodyText,
+        html: wrapEmailContent(emailBodyHtml, 'CRM', 'onboarding@resend.dev'),
+      }),
       });
 
       if (!resendResponse.ok) {
@@ -239,12 +252,13 @@ serve(async (req) => {
         step_number: 0,
         status: 'sent',
         subject,
-        body,
+        body: emailBodyText,
         sent_at: new Date().toISOString(),
         external_message_id: messageId,
         metadata: {
           provider,
           sent_via: 'crm_direct',
+          has_html: !!emailBodyHtml,
         },
       });
 
