@@ -4,7 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { GenerateSequenceForCompanyDialog } from "@/components/sequences/GenerateSequenceForCompanyDialog";
@@ -259,8 +258,7 @@ export function CompanyDetailsDialog({
           </TabsList>
 
           <TabsContent value="overview" className="mt-0 data-[state=active]:flex data-[state=active]:flex-col overflow-hidden flex-1">
-            <ScrollArea className="flex-1">
-              <div className="px-6 pb-6 space-y-6 pt-4">
+            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-6 pt-4">
             {/* Overview Section */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -554,13 +552,11 @@ export function CompanyDetailsDialog({
                  </Button>
                )}
              </div>
-              </div>
-            </ScrollArea>
+            </div>
           </TabsContent>
 
           <TabsContent value="activity" className="mt-0 data-[state=active]:flex data-[state=active]:flex-col overflow-hidden flex-1">
-            <ScrollArea className="flex-1">
-              <div className="px-6 pb-6 space-y-4 pt-4">
+            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                     Recent Activity
@@ -598,8 +594,7 @@ export function CompanyDetailsDialog({
                     <p className="text-xs mt-1">Start tracking interactions with this company</p>
                   </div>
                 )}
-              </div>
-            </ScrollArea>
+            </div>
           </TabsContent>
         </Tabs>
       </DialogContent>
