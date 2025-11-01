@@ -155,6 +155,14 @@ export function ConnectEmailDialog({
 
         {provider === 'smtp' ? (
           <div className="space-y-4">
+            <Alert className="border-blue-500/50 bg-blue-500/10">
+              <Info className="h-4 w-4 text-blue-500" />
+              <AlertDescription className="text-sm">
+                <strong>Direct SMTP Mode:</strong> Your emails will be sent directly from your SMTP server. 
+                No external verification required—just enter your SMTP credentials and start sending!
+              </AlertDescription>
+            </Alert>
+
             <div className="space-y-2">
               <Label htmlFor="smtp-host">SMTP Host</Label>
               <Input
