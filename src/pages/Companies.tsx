@@ -80,7 +80,7 @@ export default function Companies() {
         </div>
       </div>
 
-      <div className="space-y-3 px-4 md:px-0">
+      <div className="space-y-3 px-4 md:px-0 max-h-[calc(100vh-12rem)] overflow-y-auto">
         {companies?.map((company, index) => {
           const contactCount = company.contacts?.length || 0;
           const dealCount = company.deals?.length || 0;
