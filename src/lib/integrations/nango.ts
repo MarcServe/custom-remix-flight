@@ -36,16 +36,13 @@ export const nangoClient = {
       // Dynamically import Nango frontend SDK
       const { default: Nango } = await import('@nangohq/frontend');
       
-      const nangoProjectId = import.meta.env.VITE_NANGO_PROJECT_ID;
-      if (!nangoProjectId) {
-        throw new Error('VITE_NANGO_PROJECT_ID is not configured');
-      }
-      
-      const nango = new Nango({ publicKey: nangoProjectId });
+      const nango = new Nango({ 
+        connectSessionToken: sessionData.sessionToken
+      });
 
       // Open Nango Connect UI and wait for completion
       return new Promise((resolve) => {
-        const connect = nango.openConnectUI({
+        nango.openConnectUI({
           onEvent: (event: any) => {
             if (event.type === 'close') {
               resolve({
@@ -63,9 +60,6 @@ export const nangoClient = {
             }
           },
         });
-
-        // Set the session token to start the flow
-        connect.setSessionToken(sessionData.sessionToken);
       });
     } catch (error) {
       return {
