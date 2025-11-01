@@ -846,20 +846,84 @@ Return ONLY valid JSON, no markdown.`;
       await endSpan(contactSpan, { leadsWithContacts });
     }
 
-    // Filter out leads without contact information
-    const originalLeadCount = leads.length;
-    const leadsWithContacts = leads.filter(lead => {
-      const hasContacts = lead.contacts && lead.contacts.length > 0;
-      const hasGeneralEmail = lead.generalEmail;
-      const hasPrimaryContact = lead.primaryContact;
-      return hasContacts || hasGeneralEmail || hasPrimaryContact;
+    // PHASE 5: Smart Filtering & Quality Scoring
+    console.log("PHASE 5: Calculating quality scores and ranking leads");
+    
+    // Calculate comprehensive quality score for each lead (0-100 points)
+    const calculateFinalQualityScore = (lead: any) => {
+      let score = 0;
+      
+      // Core data completeness (max 40 points)
+      if (lead.website) score += 15;
+      if (lead.linkedinUrl) score += 15;
+      if (lead.description && lead.description.length > 50) score += 10;
+      
+      // Contact information (max 40 points) - most important for outreach
+      if (lead.contacts && lead.contacts.length > 0) {
+        score += 20; // Has direct contacts
+        if (lead.contacts.some((c: any) => c.emailVerified)) score += 5; // Has verified email
+        if (lead.contacts.length > 1) score += 5; // Multiple contacts
+      }
+      if (lead.generalEmail) score += 5;
+      if (lead.companyPhone) score += 5;
+      
+      // Enrichment data (max 20 points)
+      if (lead.keyExecutives && lead.keyExecutives.length > 0) score += 5;
+      if (lead.recentNews) score += 3;
+      if (lead.fundingInfo) score += 3;
+      if (lead.socialProfiles && Object.keys(lead.socialProfiles).length > 0) score += 3;
+      if (lead.products) score += 3;
+      if (lead.technologies) score += 3;
+      
+      return Math.min(score, 100); // Cap at 100
+    };
+
+    // Assign quality scores to all leads
+    leads.forEach(lead => {
+      lead.qualityScore = calculateFinalQualityScore(lead);
+      lead.dataCompleteness = calculateDataCompleteness(lead);
     });
+
+    // Sort by quality score (highest first)
+    leads.sort((a, b) => b.qualityScore - a.qualityScore);
+
+    // Calculate statistics
+    const totalFound = leads.length;
+    const leadsWithContacts = leads.filter(l => (l.contacts && l.contacts.length > 0) || l.generalEmail).length;
+    const leadsWithLinkedIn = leads.filter(l => l.linkedinUrl).length;
+    const avgQualityScore = leads.reduce((sum, l) => sum + l.qualityScore, 0) / leads.length;
+    const highQualityLeads = leads.filter(l => l.qualityScore >= 70).length;
+
+    console.log(`Quality Analysis:
+      - Total leads: ${totalFound}
+      - With contacts: ${leadsWithContacts} (${Math.round(leadsWithContacts / totalFound * 100)}%)
+      - With LinkedIn: ${leadsWithLinkedIn} (${Math.round(leadsWithLinkedIn / totalFound * 100)}%)
+      - High quality (≥70): ${highQualityLeads} (${Math.round(highQualityLeads / totalFound * 100)}%)
+      - Average score: ${avgQualityScore.toFixed(1)}/100
+    `);
+
+    // Return top 40 leads (or all if less than 40)
+    // Keep all leads with quality score >= 40, or top 40 if more
+    const qualityThreshold = 40;
+    const qualifiedLeads = leads.filter(l => l.qualityScore >= qualityThreshold);
+    const finalLeads = qualifiedLeads.slice(0, 40); // Cap at 40 for performance
+    const filteredCount = totalFound - finalLeads.length;
     
-    const filteredCount = originalLeadCount - leadsWithContacts.length;
-    console.log(`Filtered ${filteredCount} leads without contact info. ${leadsWithContacts.length} leads remaining.`);
+    console.log(`Returning ${finalLeads.length} leads (filtered ${filteredCount} low quality leads)`);
     
-    // Use filtered leads for the rest of the process
-    leads = leadsWithContacts;
+    // Stats object for response
+    const qualityStats = {
+      totalFound,
+      returned: finalLeads.length,
+      filtered: filteredCount,
+      withContacts: leadsWithContacts,
+      withLinkedIn: leadsWithLinkedIn,
+      highQuality: highQualityLeads,
+      averageScore: Math.round(avgQualityScore * 10) / 10
+    };
+    
+    // Use final leads for database insertion
+    leads = finalLeads;
 
     // If not dry run, insert into database
     let insertedCount = 0;
@@ -944,7 +1008,7 @@ Return ONLY valid JSON, no markdown.`;
         enrichmentUsage,
         wasEnriched: enrichWithPerplexity,
         traceUrl: `https://cloud.langfuse.com/trace/${trace.id}`,
-        filteredCount,
+        stats: qualityStats,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

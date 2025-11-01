@@ -49,6 +49,10 @@ export interface LeadFinderResponse {
     }>;
     contacts?: Contact[];
     primaryContact?: Contact;
+    qualityScore?: number;
+    dataCompleteness?: number;
+    enrichmentTier?: 'basic' | 'deep';
+    contactCount?: number;
   }>;
   inserted: number;
   dryRun: boolean;
@@ -68,7 +72,15 @@ export interface LeadFinderResponse {
   };
   wasEnriched?: boolean;
   traceUrl: string;
-  filteredCount?: number;
+  stats?: {
+    totalFound: number;
+    returned: number;
+    filtered: number;
+    withContacts: number;
+    withLinkedIn: number;
+    highQuality: number;
+    averageScore: number;
+  };
 }
 
 /**

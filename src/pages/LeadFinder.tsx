@@ -521,9 +521,14 @@ export default function LeadFinder() {
                   <h2 className="text-base font-semibold">
                     {results.leads.length} {results.leads.length === 1 ? 'Company' : 'Companies'} Found
                   </h2>
-                  {results.filteredCount !== undefined && results.filteredCount > 0 && (
+                  {results.stats && results.stats.filtered > 0 && (
                     <Badge variant="outline" className="text-xs">
-                      {results.filteredCount} filtered (no contacts)
+                      {results.stats.filtered} filtered (quality &lt;40)
+                    </Badge>
+                  )}
+                  {results.stats && results.stats.averageScore && (
+                    <Badge variant="secondary" className="text-xs">
+                      Avg Score: {results.stats.averageScore}/100
                     </Badge>
                   )}
                   {results.wasEnriched && (
