@@ -411,127 +411,215 @@ Return ONLY the JSON array now:`;
       });
     });
 
-    // Enrich with Perplexity if requested - Process in parallel for speed
+    // PHASE 3: Intelligent two-tier Perplexity enrichment
     let enrichmentUsage = null;
     if (enrichWithPerplexity && leads.length > 0) {
-      const enrichmentSpan = createSpan(trace, 'perplexity-enrichment', { leadCount: leads.length });
-      console.log("Starting Perplexity enrichment for", leads.length, "leads (parallel processing)");
+      const enrichmentSpan = createSpan(trace, 'perplexity-two-tier-enrichment', { leadCount: leads.length });
+      console.log("PHASE 3: Starting two-tier Perplexity enrichment for", leads.length, "leads");
 
       let totalEnrichmentTokens = 0;
       let totalEnrichmentCost = 0;
 
-      // Process all leads in parallel with 10 second timeout per lead
-      const enrichmentPromises = leads.map(async (lead) => {
-        try {
-          const enrichmentPrompt = `Find detailed current information about ${lead.name}${lead.website ? ` (website: ${lead.website})` : ''}:
+      // Helper: Check if lead needs basic enrichment (missing critical fields)
+      const needsBasicEnrichment = (lead: any) => {
+        return !lead.website || !lead.description || lead.description.length < 30;
+      };
+
+      // Helper: Calculate quality score for deep enrichment selection
+      const calculateQualityScore = (lead: any) => {
+        let score = 0;
+        if (lead.website) score += 20;
+        if (lead.linkedinUrl) score += 20;
+        if (lead.description && lead.description.length > 50) score += 15;
+        if (lead.keyExecutives && lead.keyExecutives.length > 0) score += 15;
+        if (lead.generalEmail) score += 10;
+        if (lead.companyPhone) score += 10;
+        if (lead.fundingStage) score += 10;
+        return score;
+      };
+
+      // Categorize leads for two-tier enrichment
+      const leadsNeedingBasic: any[] = [];
+      const leadsForDeep: any[] = [];
+
+      leads.forEach(lead => {
+        lead.qualityScore = calculateQualityScore(lead);
+        
+        if (needsBasicEnrichment(lead)) {
+          leadsNeedingBasic.push(lead);
+        } else if (lead.qualityScore >= 50) {
+          // Only deep enrich high-quality leads (top tier)
+          leadsForDeep.push(lead);
+        }
+      });
+
+      console.log(`Tier 1 (Basic): ${leadsNeedingBasic.length} leads | Tier 2 (Deep): ${leadsForDeep.length} leads`);
+
+      // TIER 1: Basic enrichment for leads with missing critical data
+      if (leadsNeedingBasic.length > 0) {
+        console.log("Starting Tier 1: Basic enrichment with sonar-small");
+        
+        // Process in batches of 5 to respect rate limits
+        for (let i = 0; i < leadsNeedingBasic.length; i += 5) {
+          const batch = leadsNeedingBasic.slice(i, i + 5);
           
-Return a JSON object with these fields:
-- description: detailed company overview (2-3 sentences)
-- products: key products or services (brief)
-- recentNews: latest significant news or developments (brief)
-- fundingInfo: recent funding information if available
-- employeeCount: current employee count estimate (number)
-- headquarters: headquarters location
-- companyPhone: main public phone number if available (format: international with country code)
-- generalEmail: general inquiry email (e.g., info@, contact@, hello@, sales@)
-- socialProfiles: object with linkedin, twitter, facebook, instagram, youtube URLs if available
-- keyExecutives: array of top 2-3 executives with name and title (e.g., [{name: "John Doe", title: "CEO"}])
+          const basicPromises = batch.map(async (lead) => {
+            try {
+              const basicPrompt = `Quick facts about ${lead.name}${lead.website ? ` (${lead.website})` : ''}:
 
-Return ONLY valid JSON, no markdown blocks.`;
+Return ONLY a JSON object with:
+- website: official website URL (if missing)
+- description: one clear sentence about what they do
+- employeeCount: estimated number of employees (number)
+- generalEmail: general contact email if publicly available
 
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Enrichment timeout')), 10000)
-          );
+Return ONLY valid JSON, no markdown.`;
 
-          const enrichPromise = fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/ai-provider`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              provider: 'perplexity',
-              model: 'sonar',
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are a company research assistant. Return only valid JSON objects, no markdown.',
+              const response = await fetch(`${supabaseUrl}/functions/v1/ai-provider`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${supabaseAnonKey}`,
+                  'Content-Type': 'application/json',
                 },
-                {
-                  role: 'user',
-                  content: enrichmentPrompt,
-                },
-              ],
-              temperature: 0.2,
-              traceId: trace.id,
-            }),
+                body: JSON.stringify({
+                  provider: 'perplexity',
+                  model: 'sonar-small',
+                  messages: [
+                    { role: 'system', content: 'Return only valid JSON, no markdown.' },
+                    { role: 'user', content: basicPrompt },
+                  ],
+                  temperature: 0.2,
+                  traceId: trace.id,
+                }),
+              });
+
+              if (response.ok) {
+                const result = await response.json();
+                let enrichedData: any = {};
+                
+                try {
+                  let cleaned = result.content.trim()
+                    .replace(/```json\n?/g, "").replace(/```\n?/g, "");
+                  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+                  if (jsonMatch) enrichedData = JSON.parse(jsonMatch[0]);
+                } catch (e) {
+                  console.error("Basic enrichment parse error:", lead.name);
+                }
+
+                lead.website = enrichedData.website || lead.website;
+                lead.description = enrichedData.description || lead.description;
+                lead.employeeCount = enrichedData.employeeCount || lead.employeeCount;
+                lead.generalEmail = enrichedData.generalEmail || lead.generalEmail;
+                lead.enrichmentTier = 'basic';
+                
+                if (result.usage) {
+                  totalEnrichmentTokens += result.usage.totalTokens || 0;
+                  totalEnrichmentCost += result.usage.estimatedCost || 0;
+                }
+              }
+            } catch (error) {
+              console.error("Basic enrichment error:", lead.name, error);
+            }
           });
 
-          const enrichResponse = await Promise.race([enrichPromise, timeoutPromise]) as Response;
-
-          if (enrichResponse.ok) {
-            const enrichResult = await enrichResponse.json();
-            let enrichedData: any = {};
-            
-            // Clean and parse enrichment response with robust error handling
-            try {
-              let cleanedEnrichText = enrichResult.content.trim();
-              
-              // Remove markdown code blocks
-              cleanedEnrichText = cleanedEnrichText
-                .replace(/```json\n?/g, "")
-                .replace(/```\n?/g, "")
-                .trim();
-              
-              // Try to extract JSON if wrapped in text
-              const jsonMatch = cleanedEnrichText.match(/\{[\s\S]*\}/);
-              if (jsonMatch) {
-                cleanedEnrichText = jsonMatch[0];
-              }
-              
-              enrichedData = JSON.parse(cleanedEnrichText);
-            } catch (e) {
-              console.error("Failed to parse enrichment for", lead.name);
-              enrichedData = {};
-            }
-
-            return {
-              ...lead,
-              description: enrichedData.description || lead.description,
-              products: enrichedData.products,
-              recentNews: enrichedData.recentNews,
-              fundingInfo: enrichedData.fundingInfo,
-              employeeCount: enrichedData.employeeCount,
-              geography: enrichedData.headquarters || lead.geography,
-              companyPhone: enrichedData.companyPhone,
-              generalEmail: enrichedData.generalEmail,
-              socialProfiles: enrichedData.socialProfiles,
-              keyExecutives: enrichedData.keyExecutives,
-              wasEnriched: true,
-              usage: enrichResult.usage,
-            };
-          } else {
-            console.error("Enrichment failed for", lead.name);
-            return { ...lead, wasEnriched: false };
+          await Promise.all(basicPromises);
+          
+          // Rate limiting: 1 second delay between batches
+          if (i + 5 < leadsNeedingBasic.length) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
-        } catch (enrichError) {
-          console.error("Enrichment error for", lead.name, ":", enrichError);
-          return { ...lead, wasEnriched: false };
         }
-      });
+      }
 
-      const enrichedLeads = await Promise.all(enrichmentPromises);
-      
-      // Calculate total usage
-      enrichedLeads.forEach(lead => {
-        if (lead.usage) {
-          totalEnrichmentTokens += lead.usage.totalTokens || 0;
-          totalEnrichmentCost += lead.usage.estimatedCost || 0;
-          delete lead.usage; // Remove usage from lead object
+      // TIER 2: Deep enrichment for high-quality leads
+      if (leadsForDeep.length > 0) {
+        console.log("Starting Tier 2: Deep enrichment with sonar");
+        
+        // Process in batches of 5
+        for (let i = 0; i < leadsForDeep.length; i += 5) {
+          const batch = leadsForDeep.slice(i, i + 5);
+          
+          const deepPromises = batch.map(async (lead) => {
+            try {
+              const deepPrompt = `Comprehensive research on ${lead.name}${lead.website ? ` (${lead.website})` : ''}:
+
+Return a JSON object with:
+- description: detailed company overview (3-4 sentences)
+- products: key products/services offered
+- recentNews: latest significant news or developments (last 6 months)
+- fundingInfo: recent funding details if available
+- employeeCount: current employee count (number)
+- companyPhone: main phone number (international format)
+- generalEmail: general contact email
+- socialProfiles: object with linkedin, twitter, facebook URLs
+- keyExecutives: top 3 executives with name and title [{name, title}]
+- technologies: main technologies or platforms they use
+
+Return ONLY valid JSON, no markdown.`;
+
+              const response = await fetch(`${supabaseUrl}/functions/v1/ai-provider`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${supabaseAnonKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  provider: 'perplexity',
+                  model: 'sonar',
+                  messages: [
+                    { role: 'system', content: 'You are a company research assistant. Return only valid JSON, no markdown.' },
+                    { role: 'user', content: deepPrompt },
+                  ],
+                  temperature: 0.2,
+                  traceId: trace.id,
+                }),
+              });
+
+              if (response.ok) {
+                const result = await response.json();
+                let enrichedData: any = {};
+                
+                try {
+                  let cleaned = result.content.trim()
+                    .replace(/```json\n?/g, "").replace(/```\n?/g, "");
+                  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+                  if (jsonMatch) enrichedData = JSON.parse(jsonMatch[0]);
+                } catch (e) {
+                  console.error("Deep enrichment parse error:", lead.name);
+                }
+
+                // Merge enriched data (preserve existing if enrichment is empty)
+                lead.description = enrichedData.description || lead.description;
+                lead.products = enrichedData.products || lead.products;
+                lead.recentNews = enrichedData.recentNews || lead.recentNews;
+                lead.fundingInfo = enrichedData.fundingInfo || lead.fundingInfo;
+                lead.employeeCount = enrichedData.employeeCount || lead.employeeCount;
+                lead.companyPhone = enrichedData.companyPhone || lead.companyPhone;
+                lead.generalEmail = enrichedData.generalEmail || lead.generalEmail;
+                lead.socialProfiles = enrichedData.socialProfiles || lead.socialProfiles;
+                lead.keyExecutives = enrichedData.keyExecutives || lead.keyExecutives;
+                lead.technologies = enrichedData.technologies || lead.technologies;
+                lead.enrichmentTier = 'deep';
+                
+                if (result.usage) {
+                  totalEnrichmentTokens += result.usage.totalTokens || 0;
+                  totalEnrichmentCost += result.usage.estimatedCost || 0;
+                }
+              }
+            } catch (error) {
+              console.error("Deep enrichment error:", lead.name, error);
+            }
+          });
+
+          await Promise.all(deepPromises);
+          
+          // Rate limiting: 1 second delay between batches
+          if (i + 5 < leadsForDeep.length) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
         }
-      });
+      }
 
-      leads = enrichedLeads;
       enrichmentUsage = {
         promptTokens: 0,
         completionTokens: totalEnrichmentTokens,
@@ -539,8 +627,13 @@ Return ONLY valid JSON, no markdown blocks.`;
         estimatedCost: totalEnrichmentCost,
       };
 
-      console.log("Enrichment complete. Total cost:", totalEnrichmentCost);
-      await endSpan(enrichmentSpan, { enrichedCount: enrichedLeads.filter(l => l.wasEnriched).length });
+      const enrichedCount = leadsNeedingBasic.length + leadsForDeep.length;
+      console.log(`Enrichment complete. Enriched ${enrichedCount} leads. Total cost: $${totalEnrichmentCost.toFixed(4)}`);
+      await endSpan(enrichmentSpan, { 
+        basicEnriched: leadsNeedingBasic.length,
+        deepEnriched: leadsForDeep.length,
+        totalCost: totalEnrichmentCost
+      });
     }
 
     // Contact enrichment with GetProspect - Optimized with parallel processing
