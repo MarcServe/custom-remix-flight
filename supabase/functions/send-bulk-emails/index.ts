@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
-import { wrapEmailContent } from "../send-crm-email/_templates/email-wrapper.ts";
+import { wrapEmailContent } from "../_shared/email-wrapper.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
