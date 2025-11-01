@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { recipientName, recipientEmail, companyId, contactId } = await req.json();
+    const { recipientName, recipientEmail, companyId, contactId, context } = await req.json();
     
     console.log('Generating email with AI:', { recipientName, companyId, contactId });
 
@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
     }
 
     // Build AI prompt
-    const prompt = buildEmailPrompt(businessProfile, companyData, contactData, recipientName);
+    const prompt = buildEmailPrompt(businessProfile, companyData, contactData, recipientName, context);
 
     if (!LOVABLE_API_KEY) {
       throw new Error('AI email generation not configured. Please enable Lovable AI in project settings.');
@@ -142,7 +142,8 @@ function buildEmailPrompt(
   businessProfile: any,
   company: any,
   contact: any,
-  recipientName: string
+  recipientName: string,
+  context?: string
 ): string {
   const businessContext = `
 YOUR BUSINESS:
@@ -176,9 +177,15 @@ RECIPIENT:
 - Name: ${recipientName}
 `;
 
+  const additionalContext = context ? `
+ADDITIONAL CONTEXT FROM SENDER:
+${context}
+` : '';
+
   return `${businessContext}
 ${prospectContext}
 ${contactContext}
+${additionalContext}
 
 TASK:
 Write a personalized cold outreach email from YOUR business to the recipient. 

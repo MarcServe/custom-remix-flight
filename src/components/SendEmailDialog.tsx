@@ -27,6 +27,7 @@ export function SendEmailDialog({
 }: SendEmailDialogProps) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [context, setContext] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
@@ -40,6 +41,7 @@ export function SendEmailDialog({
           recipientEmail,
           companyId,
           contactId,
+          context: context.trim() || undefined,
         },
       });
 
@@ -129,7 +131,20 @@ export function SendEmailDialog({
             />
           </div>
 
-          <div className="flex justify-between items-center mb-2">
+          <div className="space-y-2">
+            <Label htmlFor="context">AI Context (Optional)</Label>
+            <Textarea
+              id="context"
+              placeholder="Add any context or instructions to guide the AI (e.g., mention a recent conversation, specific pain points, upcoming event...)"
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              disabled={isSending || isGenerating}
+              rows={3}
+              className="resize-none text-sm"
+            />
+          </div>
+
+          <div className="flex justify-between items-center">
             <Label>Email Content</Label>
             <Button
               type="button"
