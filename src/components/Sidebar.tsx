@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X, MessageSquare, Shield } from "lucide-react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X, MessageSquare, Shield, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,6 +33,8 @@ const navigation = [
   { name: "Bulk Campaigns", href: "/campaigns", icon: Briefcase },
   { name: "Conversations", href: "/conversations", icon: MessageSquare },
   { name: "Email Health", href: "/email-deliverability", icon: Shield },
+  { name: "Automation Rules", href: "/automation-rules", icon: Zap },
+  { name: "A/B Testing", href: "/ab-testing", icon: TrendingUp },
   { name: "Integrations", href: "/integrations", icon: Plug2 },
 ];
 

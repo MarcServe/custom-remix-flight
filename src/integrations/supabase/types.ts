@@ -125,6 +125,126 @@ export type Database = {
           },
         ]
       }
+      automation_rule_executions: {
+        Row: {
+          action_taken: string | null
+          company_sequence_id: string | null
+          conditions_met: Json | null
+          error_message: string | null
+          executed_at: string
+          id: string
+          metadata: Json | null
+          rule_id: string
+          success: boolean
+        }
+        Insert: {
+          action_taken?: string | null
+          company_sequence_id?: string | null
+          conditions_met?: Json | null
+          error_message?: string | null
+          executed_at?: string
+          id?: string
+          metadata?: Json | null
+          rule_id: string
+          success: boolean
+        }
+        Update: {
+          action_taken?: string | null
+          company_sequence_id?: string | null
+          conditions_met?: Json | null
+          error_message?: string | null
+          executed_at?: string
+          id?: string
+          metadata?: Json | null
+          rule_id?: string
+          success?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_rule_executions_company_sequence_id_fkey"
+            columns: ["company_sequence_id"]
+            isOneToOne: false
+            referencedRelation: "company_sequences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_rule_executions_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "automation_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_rules: {
+        Row: {
+          actions: Json
+          company_ids: string[] | null
+          conditions: Json
+          created_at: string
+          description: string | null
+          enabled: boolean | null
+          id: string
+          max_sends_per_day: number | null
+          metadata: Json | null
+          min_time_between_sends_hours: number | null
+          name: string
+          priority: number | null
+          rule_type: string
+          send_time_preference: string | null
+          sequence_ids: string[] | null
+          specific_days: number[] | null
+          specific_time: string | null
+          timezone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          actions?: Json
+          company_ids?: string[] | null
+          conditions?: Json
+          created_at?: string
+          description?: string | null
+          enabled?: boolean | null
+          id?: string
+          max_sends_per_day?: number | null
+          metadata?: Json | null
+          min_time_between_sends_hours?: number | null
+          name: string
+          priority?: number | null
+          rule_type: string
+          send_time_preference?: string | null
+          sequence_ids?: string[] | null
+          specific_days?: number[] | null
+          specific_time?: string | null
+          timezone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          actions?: Json
+          company_ids?: string[] | null
+          conditions?: Json
+          created_at?: string
+          description?: string | null
+          enabled?: boolean | null
+          id?: string
+          max_sends_per_day?: number | null
+          metadata?: Json | null
+          min_time_between_sends_hours?: number | null
+          name?: string
+          priority?: number | null
+          rule_type?: string
+          send_time_preference?: string | null
+          sequence_ids?: string[] | null
+          specific_days?: number[] | null
+          specific_time?: string | null
+          timezone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       business_profiles: {
         Row: {
           ai_max_tokens: number | null
@@ -639,6 +759,135 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      email_ab_test_assignments: {
+        Row: {
+          ab_test_id: string
+          clicked_at: string | null
+          converted_at: string | null
+          created_at: string
+          email_activity_id: string
+          id: string
+          metadata: Json | null
+          opened_at: string | null
+          replied_at: string | null
+          sent_at: string | null
+          variant: string
+        }
+        Insert: {
+          ab_test_id: string
+          clicked_at?: string | null
+          converted_at?: string | null
+          created_at?: string
+          email_activity_id: string
+          id?: string
+          metadata?: Json | null
+          opened_at?: string | null
+          replied_at?: string | null
+          sent_at?: string | null
+          variant: string
+        }
+        Update: {
+          ab_test_id?: string
+          clicked_at?: string | null
+          converted_at?: string | null
+          created_at?: string
+          email_activity_id?: string
+          id?: string
+          metadata?: Json | null
+          opened_at?: string | null
+          replied_at?: string | null
+          sent_at?: string | null
+          variant?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_ab_test_assignments_ab_test_id_fkey"
+            columns: ["ab_test_id"]
+            isOneToOne: false
+            referencedRelation: "email_ab_tests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_ab_test_assignments_email_activity_id_fkey"
+            columns: ["email_activity_id"]
+            isOneToOne: false
+            referencedRelation: "email_activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_ab_tests: {
+        Row: {
+          auto_select_winner: boolean | null
+          completed_at: string | null
+          confidence_level: number | null
+          created_at: string
+          description: string | null
+          id: string
+          metadata: Json | null
+          min_sample_size: number | null
+          name: string
+          results: Json | null
+          started_at: string | null
+          status: string
+          test_type: string
+          traffic_split: Json
+          updated_at: string
+          user_id: string
+          variant_a: Json
+          variant_b: Json
+          variant_c: Json | null
+          winner_metric: string | null
+          winning_variant: string | null
+        }
+        Insert: {
+          auto_select_winner?: boolean | null
+          completed_at?: string | null
+          confidence_level?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          min_sample_size?: number | null
+          name: string
+          results?: Json | null
+          started_at?: string | null
+          status?: string
+          test_type?: string
+          traffic_split?: Json
+          updated_at?: string
+          user_id: string
+          variant_a: Json
+          variant_b: Json
+          variant_c?: Json | null
+          winner_metric?: string | null
+          winning_variant?: string | null
+        }
+        Update: {
+          auto_select_winner?: boolean | null
+          completed_at?: string | null
+          confidence_level?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          min_sample_size?: number | null
+          name?: string
+          results?: Json | null
+          started_at?: string | null
+          status?: string
+          test_type?: string
+          traffic_split?: Json
+          updated_at?: string
+          user_id?: string
+          variant_a?: Json
+          variant_b?: Json
+          variant_c?: Json | null
+          winner_metric?: string | null
+          winning_variant?: string | null
+        }
+        Relationships: []
       }
       email_activities: {
         Row: {
