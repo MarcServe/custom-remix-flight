@@ -25,8 +25,8 @@ const emailProviders = [
   },
   {
     id: 'smtp' as const,
-    name: 'SMTP',
-    description: 'Configure custom SMTP server',
+    name: 'Business Email (SMTP)',
+    description: 'Send directly from your SMTP server - no verification needed',
     icon: '⚙️',
   },
 ];
@@ -117,7 +117,7 @@ export default function Integrations() {
             <CardTitle>Email Connections</CardTitle>
           </div>
           <CardDescription>
-            Connect email providers to send and track emails from your CRM
+            Connect email providers to send and track emails from your CRM. SMTP connections send emails directly from your server with no external verification required.
           </CardDescription>
         </CardHeader>
         <CardContent>

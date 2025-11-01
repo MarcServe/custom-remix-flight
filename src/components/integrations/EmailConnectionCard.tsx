@@ -32,7 +32,7 @@ export function EmailConnectionCard({
   const hasError = connection?.status === 'error';
   const [isUpdatingMode, setIsUpdatingMode] = useState(false);
 
-  const currentMode = (connection?.metadata as any)?.smtp_mode || 'resend';
+  const currentMode = (connection?.metadata as any)?.smtp_mode || 'direct';
   const hasDirectSMTP = (connection?.metadata as any)?.smtp_host;
 
   const handleModeChange = async (newMode: 'direct' | 'resend') => {
