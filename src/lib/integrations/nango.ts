@@ -35,7 +35,13 @@ export const nangoClient = {
 
       // Dynamically import Nango frontend SDK
       const { default: Nango } = await import('@nangohq/frontend');
-      const nango = new Nango();
+      
+      const nangoProjectId = import.meta.env.VITE_NANGO_PROJECT_ID;
+      if (!nangoProjectId) {
+        throw new Error('VITE_NANGO_PROJECT_ID is not configured');
+      }
+      
+      const nango = new Nango({ publicKey: nangoProjectId });
 
       // Open Nango Connect UI and wait for completion
       return new Promise((resolve) => {
