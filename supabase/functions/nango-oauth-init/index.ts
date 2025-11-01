@@ -142,7 +142,10 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ sessionToken: token }),
+      JSON.stringify({ 
+        sessionToken: token,
+        connectLink: sessionData.data?.connect_link 
+      }),
       {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

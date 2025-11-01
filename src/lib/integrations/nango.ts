@@ -19,49 +19,103 @@ export interface NangoConnection {
  */
 export const nangoClient = {
   /**
-   * Initialize OAuth flow for Gmail or Outlook using Nango Connect UI popup
+   * Initialize OAuth flow for Gmail or Outlook using manual popup
    */
   async initiateOAuth(provider: 'gmail' | 'outlook'): Promise<{ data: any; error: Error | null }> {
     try {
-      // Get session token from our edge function
+      // Get session token and connect link from our edge function
       const { data: sessionData, error: sessionError } = await apiClient.callFunction('nango-oauth-init', {
         provider,
       });
 
       if (sessionError) throw sessionError;
-      if (!sessionData?.sessionToken) {
-        throw new Error('No session token received');
+      if (!sessionData?.sessionToken || !sessionData?.connectLink) {
+        throw new Error('No session token or connect link received');
       }
 
-      // Dynamically import Nango frontend SDK
-      const { default: Nango } = await import('@nangohq/frontend');
-      
-      const nango = new Nango({ 
-        connectSessionToken: sessionData.sessionToken
-      });
+      console.log('Opening OAuth popup for', provider);
 
-      // Open Nango Connect UI popup and wait for completion
-      return new Promise((resolve) => {
-        nango.openConnectUI({
-          onEvent: (event: any) => {
-            if (event.type === 'close') {
-              resolve({
-                data: null,
-                error: new Error('Authentication window was closed'),
-              });
-            } else if (event.type === 'connect') {
+      // Manually open popup window with proper dimensions
+      const popupWidth = 500;
+      const popupHeight = 600;
+      const left = window.screen.width / 2 - popupWidth / 2;
+      const top = window.screen.height / 2 - popupHeight / 2;
+      
+      const popup = window.open(
+        sessionData.connectLink,
+        'nango-oauth',
+        `width=${popupWidth},height=${popupHeight},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
+      );
+
+      // Check if popup was blocked
+      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+        throw new Error('Popup blocked. Please allow popups for this site and try again.');
+      }
+
+      // Poll for connection completion
+      return new Promise((resolve, reject) => {
+        let checkCount = 0;
+        const maxChecks = 300; // 5 minutes (300 seconds)
+        
+        const checkInterval = setInterval(async () => {
+          checkCount++;
+
+          // Check if popup was closed by user
+          if (popup.closed) {
+            clearInterval(checkInterval);
+            console.log('Popup closed, checking for connection...');
+            
+            // Give webhook a moment to process
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Poll for new connection in database
+            const { user } = await apiClient.getCurrentUser();
+            if (!user) {
+              reject(new Error('User not authenticated'));
+              return;
+            }
+
+            const { data: connections, error: fetchError } = await apiClient.supabase
+              .from('crm_connections')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('provider', provider === 'gmail' ? 'google-mail' : 'outlook')
+              .eq('status', 'active')
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            if (fetchError) {
+              console.error('Error fetching connections:', fetchError);
+              reject(new Error('Failed to verify connection. Please try again.'));
+              return;
+            }
+
+            if (connections && connections.length > 0) {
+              console.log('Connection found:', connections[0]);
               resolve({ 
                 data: { 
                   success: true,
-                  connectionId: event.payload?.connectionId 
+                  connection: connections[0]
                 }, 
                 error: null 
               });
+            } else {
+              console.log('No connection found after popup closed');
+              reject(new Error('Connection not completed. Please try again.'));
             }
-          },
-        });
+            return;
+          }
+
+          // Timeout after 5 minutes
+          if (checkCount >= maxChecks) {
+            clearInterval(checkInterval);
+            if (!popup.closed) popup.close();
+            reject(new Error('Connection timeout. Please try again.'));
+          }
+        }, 1000); // Check every second
       });
     } catch (error) {
+      console.error('OAuth error:', error);
       return {
         data: null,
         error: error instanceof Error ? error : new Error('OAuth initialization failed'),
