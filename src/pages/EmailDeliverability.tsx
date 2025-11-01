@@ -27,6 +27,7 @@ interface DeliverabilityMetric {
   mx_records_valid: boolean;
   blacklisted: boolean;
   blacklist_providers: string[];
+  metadata?: any;
 }
 
 interface BounceEvent {
@@ -167,6 +168,32 @@ export default function EmailDeliverability() {
     return <Badge variant="destructive">Poor</Badge>;
   };
 
+  const getProviderBadge = (provider?: string) => {
+    if (!provider) return null;
+    const colors: Record<string, string> = {
+      'Gmail': 'bg-red-500',
+      'Resend': 'bg-purple-500',
+      'Outlook': 'bg-blue-500',
+      'SendGrid': 'bg-cyan-500',
+      'Mailgun': 'bg-orange-500',
+    };
+    return <Badge className={colors[provider] || 'bg-gray-500'}>{provider}</Badge>;
+  };
+
+  const getTimeSinceCheck = (timestamp: string) => {
+    const now = new Date();
+    const checked = new Date(timestamp);
+    const diffMs = now.getTime() - checked.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto p-6">
@@ -181,10 +208,20 @@ export default function EmailDeliverability() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Email Deliverability</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold">Email Health</h1>
+            {latestMetric?.metadata?.email_provider && getProviderBadge(latestMetric.metadata.email_provider)}
+          </div>
           <p className="text-muted-foreground mt-1">
             Monitor your email health, bounce rates, and sender reputation
           </p>
+          {latestMetric && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Last checked: {getTimeSinceCheck(latestMetric.checked_at)} • 
+              DNS records refresh on each check • 
+              Metrics from sent emails update in real-time
+            </p>
+          )}
         </div>
         <Button onClick={checkDeliverability} disabled={checking}>
           <RefreshCw className={`h-4 w-4 mr-2 ${checking ? 'animate-spin' : ''}`} />
@@ -229,7 +266,10 @@ export default function EmailDeliverability() {
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Bounce Rate</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  Bounce Rate
+                  <Badge variant="outline" className="text-xs">Live</Badge>
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
@@ -250,7 +290,10 @@ export default function EmailDeliverability() {
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Spam Complaints</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  Spam Complaints
+                  <Badge variant="outline" className="text-xs">Live</Badge>
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
@@ -271,7 +314,10 @@ export default function EmailDeliverability() {
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Sender Reputation</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  Sender Reputation
+                  <Badge variant="outline" className="text-xs">Live</Badge>
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
@@ -303,9 +349,12 @@ export default function EmailDeliverability() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Domain Health</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      Domain Health
+                      <Badge variant="outline" className="text-xs">DNS Check</Badge>
+                    </CardTitle>
                     <CardDescription>
-                      Authentication records and configuration status
+                      Authentication records and configuration status (refreshes on manual check)
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -346,9 +395,12 @@ export default function EmailDeliverability() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Blacklist Status</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      Blacklist Status
+                      <Badge variant="outline" className="text-xs">DNS Check</Badge>
+                    </CardTitle>
                     <CardDescription>
-                      Check if your domain is on any blacklists
+                      Checked against common spam blacklists (refreshes on manual check)
                     </CardDescription>
                   </CardHeader>
                   <CardContent>

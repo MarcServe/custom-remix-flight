@@ -126,13 +126,44 @@ serve(async (req) => {
         });
       }
 
-      // DKIM check (note: requires specific selector, usually provided by email service)
-      dnsRecords.push({
-        type: 'DKIM',
-        status: 'missing',
-        expected: 'Verify in Resend dashboard',
-        message: 'DKIM verification requires domain setup in Resend. Visit https://resend.com/domains to configure.'
-      });
+      // DKIM check - try common selectors for different providers
+      let dkimFound = false;
+      const dkimSelectors = ['default', 'resend', 'google', 'mailgun', 'sendgrid', 'k1'];
+      
+      for (const selector of dkimSelectors) {
+        try {
+          const dkimDomain = `${selector}._domainkey.${domain}`;
+          const dkimResponse = await fetch(`https://dns.google/resolve?name=${dkimDomain}&type=TXT`);
+          const dkimData = await dkimResponse.json();
+          
+          const dkimRecord = dkimData.Answer?.find((record: any) => 
+            record.data.includes('v=DKIM1') || record.data.includes('k=rsa') || record.data.includes('p=')
+          );
+
+          if (dkimRecord) {
+            dnsRecords.push({
+              type: 'DKIM',
+              status: 'valid',
+              value: `${selector}._domainkey`,
+              message: `DKIM record found using ${selector} selector`
+            });
+            dkimFound = true;
+            break;
+          }
+        } catch (error) {
+          // Continue to next selector
+          continue;
+        }
+      }
+
+      if (!dkimFound) {
+        dnsRecords.push({
+          type: 'DKIM',
+          status: 'missing',
+          expected: 'Configure DKIM in your email provider',
+          message: 'DKIM record not found. Set up DKIM in your email service provider (Gmail, Resend, etc.)'
+        });
+      }
 
       // Check MX records
       let mxValid = false;
@@ -143,6 +174,11 @@ serve(async (req) => {
       } catch (error) {
         console.error('Error checking MX:', error);
       }
+
+      // Check blacklists (check against common DNS-based blacklists)
+      const blacklistStatus = await checkBlacklists(domain);
+      const isBlacklisted = blacklistStatus.blacklisted;
+      const blacklistProviders = blacklistStatus.providers;
 
       result.dnsRecords = dnsRecords;
       result.domainScore = calculateDomainScore(dnsRecords);
@@ -155,6 +191,9 @@ serve(async (req) => {
       // Calculate sender reputation (simplified for now)
       const reputationScore = Math.round((result.domainScore + 20) * 0.9);
 
+      // Detect email provider
+      const emailProvider = detectEmailProvider(domain, dnsRecords);
+      
       // Save metrics to database
       const { error: insertError } = await supabaseClient
         .from('email_deliverability_metrics')
@@ -167,10 +206,12 @@ serve(async (req) => {
           dkim_valid: dkimValid,
           dmarc_valid: dmarcValid,
           mx_records_valid: mxValid,
-          blacklisted: false, // Would need external API to check
-          blacklist_providers: [],
+          blacklisted: isBlacklisted,
+          blacklist_providers: blacklistProviders,
           metadata: {
             dns_records: dnsRecords,
+            email_provider: emailProvider,
+            last_checked: new Date().toISOString(),
           },
         });
 
@@ -233,6 +274,77 @@ function calculateDomainScore(records: DNSRecord[]): number {
   });
 
   return Math.round(score);
+}
+
+async function checkBlacklists(domain: string): Promise<{ blacklisted: boolean; providers: string[] }> {
+  const blacklists = [
+    'zen.spamhaus.org',
+    'bl.spamcop.net',
+    'dnsbl.sorbs.net',
+    'b.barracudacentral.org',
+  ];
+  
+  const blacklistedProviders: string[] = [];
+  
+  // Get the domain's IP addresses from DNS
+  try {
+    const aResponse = await fetch(`https://dns.google/resolve?name=${domain}&type=A`);
+    const aData = await aResponse.json();
+    
+    if (!aData.Answer || aData.Answer.length === 0) {
+      return { blacklisted: false, providers: [] };
+    }
+    
+    const ipAddress = aData.Answer[0].data;
+    
+    // Reverse the IP for blacklist lookup
+    const reversedIp = ipAddress.split('.').reverse().join('.');
+    
+    // Check each blacklist
+    for (const blacklist of blacklists) {
+      try {
+        const lookupDomain = `${reversedIp}.${blacklist}`;
+        const blResponse = await fetch(`https://dns.google/resolve?name=${lookupDomain}&type=A`);
+        const blData = await blResponse.json();
+        
+        // If we get an answer, the IP is blacklisted
+        if (blData.Answer && blData.Answer.length > 0) {
+          blacklistedProviders.push(blacklist.replace('.org', '').replace('.net', ''));
+        }
+      } catch (error) {
+        // If lookup fails, not blacklisted on this provider
+        continue;
+      }
+    }
+  } catch (error) {
+    console.error('Error checking blacklists:', error);
+  }
+  
+  return {
+    blacklisted: blacklistedProviders.length > 0,
+    providers: blacklistedProviders,
+  };
+}
+
+function detectEmailProvider(domain: string, dnsRecords: DNSRecord[]): string {
+  // Check SPF record for provider hints
+  const spfRecord = dnsRecords.find(r => r.type === 'SPF');
+  if (spfRecord?.value) {
+    if (spfRecord.value.includes('_spf.google.com')) return 'Gmail';
+    if (spfRecord.value.includes('resend.com')) return 'Resend';
+    if (spfRecord.value.includes('spf.protection.outlook.com')) return 'Outlook';
+    if (spfRecord.value.includes('sendgrid.net')) return 'SendGrid';
+    if (spfRecord.value.includes('mailgun.org')) return 'Mailgun';
+  }
+  
+  // Check DKIM selector for provider hints
+  const dkimRecord = dnsRecords.find(r => r.type === 'DKIM');
+  if (dkimRecord?.value) {
+    if (dkimRecord.value.includes('google')) return 'Gmail';
+    if (dkimRecord.value.includes('resend')) return 'Resend';
+  }
+  
+  return 'Custom SMTP';
 }
 
 function analyzeEmailContent(content: { subject: string; body: string }) {
