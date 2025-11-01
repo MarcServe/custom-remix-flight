@@ -80,6 +80,23 @@ export default function LeadFinder() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Handle page visibility changes - refresh when user returns
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Check for active search updates when page becomes visible
+        const activeSearch = streamingSearch.hasActiveSearch;
+        if (activeSearch) {
+          console.log('Page visible - active search detected');
+          // The hook already loads active search on mount, so just log
+        }
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [streamingSearch.hasActiveSearch]);
+
   const handleSearch = async (options?: { forceSave?: boolean }) => {
     const shouldDryRun = options?.forceSave ? false : dryRun;
     const industryString = industrySubcategory 
@@ -457,8 +474,58 @@ export default function LeadFinder() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
+      {/* Active Search Recovery Banner */}
+      {streamingSearch.hasActiveSearch && !streamingSearch.isLoading && streamingSearch.currentStatus !== 'Complete' && (
+        <Alert className="sticky top-0 z-20 rounded-none border-x-0 border-t-0 bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900">
+          <RefreshCw className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+          <AlertDescription className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm text-orange-900 dark:text-orange-100 font-medium mb-1">
+                🔄 Search in Progress ({streamingSearch.progress}% complete)
+              </div>
+              <div className="text-xs text-orange-700 dark:text-orange-300">
+                {streamingSearch.leads.length} leads found so far • {streamingSearch.currentStatus}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-orange-700 dark:text-orange-300 hover:text-orange-900 dark:hover:text-orange-100 hover:bg-orange-100 dark:hover:bg-orange-900/50"
+                onClick={() => {
+                  streamingSearch.resumeActiveSearch();
+                  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                  toast({
+                    title: 'Viewing Partial Results',
+                    description: `Currently showing ${streamingSearch.leads.length} leads found so far`,
+                  });
+                }}
+              >
+                <Eye className="h-3 w-3 mr-1" />
+                View Progress
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-orange-700 dark:text-orange-300 hover:text-orange-900 dark:hover:text-orange-100 hover:bg-orange-100 dark:hover:bg-orange-900/50"
+                onClick={() => {
+                  streamingSearch.clearActiveSearch();
+                  toast({
+                    title: 'Search Cancelled',
+                    description: 'Active search has been cancelled',
+                  });
+                }}
+              >
+                <X className="h-3 w-3 mr-1" />
+                Cancel
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Stored Results Banner */}
-      {streamingSearch.hasStoredResults && streamingSearch.leads.length > 0 && (
+      {streamingSearch.hasStoredResults && streamingSearch.leads.length > 0 && !streamingSearch.hasActiveSearch && (
         <Alert className="sticky top-0 z-10 rounded-none border-x-0 border-t-0 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
           <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           <AlertDescription className="flex items-center justify-between">
@@ -497,6 +564,20 @@ export default function LeadFinder() {
             </AlertDialog>
           </AlertDescription>
         </Alert>
+      )}
+      
+      {/* Background Search Indicator (Floating) */}
+      {streamingSearch.hasActiveSearch && streamingSearch.isLoading && (
+        <div className="fixed bottom-4 right-4 z-50 bg-card border shadow-lg rounded-lg p-3 max-w-xs animate-in slide-in-from-bottom-4">
+          <div className="flex items-start gap-3">
+            <Loader2 className="h-4 w-4 animate-spin text-primary flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-medium mb-1">Finding Leads in Background</div>
+              <div className="text-xs text-muted-foreground truncate">{streamingSearch.currentStatus}</div>
+              <Progress value={streamingSearch.progress} className="h-1 mt-2" />
+            </div>
+          </div>
+        </div>
       )}
       
       {/* Top Bar */}
@@ -945,19 +1026,34 @@ export default function LeadFinder() {
                             size="sm"
                             variant="default"
                             className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white"
-                            onClick={() => {
+                            onClick={async () => {
                               console.log('View Saved Results clicked');
                               const restored = streamingSearch.restoreStoredResults();
+                              
                               if (restored) {
-                                toast({
-                                  title: '✨ Results Restored',
-                                  description: `Displaying ${streamingSearch.leads.length} saved leads from your previous search`,
-                                });
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                // Wait for state update
+                                await new Promise(resolve => setTimeout(resolve, 150));
+                                
+                                // Check the actual leads count after restoration
+                                const leadsCount = streamingSearch.leads.length;
+                                
+                                if (leadsCount > 0) {
+                                  toast({
+                                    title: '✨ Results Restored',
+                                    description: `Displaying ${leadsCount} saved leads from your previous search`,
+                                  });
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                } else {
+                                  toast({
+                                    title: 'No Results Found',
+                                    description: 'Previous search had no results',
+                                    variant: 'destructive',
+                                  });
+                                }
                               } else {
                                 toast({
-                                  title: 'No Results Found',
-                                  description: 'Could not restore previous search results',
+                                  title: 'No Saved Results',
+                                  description: 'Could not find any previous search results',
                                   variant: 'destructive',
                                 });
                               }
