@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -177,6 +177,9 @@ export function SendEmailDialog({
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Send Email to {recipientName}</DialogTitle>
+          <DialogDescription>
+            Compose and send an email to your contact
+          </DialogDescription>
         </DialogHeader>
         
         <div className="flex-1 overflow-y-auto px-6 py-4">

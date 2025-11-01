@@ -53,3 +53,6 @@ verify_jwt = false  # Allow verification via GET request from email link
 
 [functions.find-additional-contacts]
 verify_jwt = true
+
+[functions.check-email-deliverability]
+verify_jwt = true

@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmailConnectionCard } from "@/components/integrations/EmailConnectionCard";
 import { ConnectEmailDialog } from "@/components/integrations/ConnectEmailDialog";
+import { DomainVerificationCard } from "@/components/integrations/DomainVerificationCard";
+import { EmailDeliverabilityChecker } from "@/components/integrations/EmailDeliverabilityChecker";
 import { nangoClient } from "@/lib/integrations/nango";
 import { toast } from "sonner";
 import { Plug2, Mail } from "lucide-react";
@@ -88,6 +90,10 @@ export default function Integrations() {
     queryClient.invalidateQueries({ queryKey: ['nango-connections'], refetchType: 'active' });
   };
 
+  // Extract domain from SMTP connection
+  const smtpConnection = connections?.find(c => c.provider === 'smtp' && c.status === 'active');
+  const businessDomain = smtpConnection?.from_email?.split('@')[1];
+
   if (isLoading) {
     return <div className="flex items-center justify-center h-96">Loading integrations...</div>;
   }
@@ -133,6 +139,11 @@ export default function Integrations() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <DomainVerificationCard domain={businessDomain} />
+        <EmailDeliverabilityChecker />
+      </div>
 
       <ConnectEmailDialog
         open={connectDialogOpen}

@@ -1,0 +1,271 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+interface DeliverabilityRequest {
+  domain?: string;
+  emailContent?: {
+    subject: string;
+    body: string;
+  };
+}
+
+interface DNSRecord {
+  type: 'SPF' | 'DKIM' | 'DMARC';
+  status: 'valid' | 'invalid' | 'missing';
+  value?: string;
+  expected?: string;
+  message: string;
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: { Authorization: req.headers.get('Authorization')! },
+        },
+      }
+    );
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseClient.auth.getUser();
+
+    if (authError || !user) {
+      throw new Error('Unauthorized');
+    }
+
+    const { domain, emailContent }: DeliverabilityRequest = await req.json();
+
+    const result: any = {
+      timestamp: new Date().toISOString(),
+    };
+
+    // Check DNS records if domain provided
+    if (domain) {
+      console.log(`Checking DNS records for domain: ${domain}`);
+      
+      const dnsRecords: DNSRecord[] = [];
+
+      // Check SPF
+      try {
+        const spfResponse = await fetch(`https://dns.google/resolve?name=${domain}&type=TXT`);
+        const spfData = await spfResponse.json();
+        
+        const spfRecord = spfData.Answer?.find((record: any) => 
+          record.data.includes('v=spf1')
+        );
+
+        if (spfRecord) {
+          dnsRecords.push({
+            type: 'SPF',
+            status: 'valid',
+            value: spfRecord.data,
+            message: 'SPF record found and configured'
+          });
+        } else {
+          dnsRecords.push({
+            type: 'SPF',
+            status: 'missing',
+            expected: 'v=spf1 include:_spf.resend.com ~all',
+            message: 'SPF record not found. Add this TXT record to your DNS.'
+          });
+        }
+      } catch (error) {
+        console.error('Error checking SPF:', error);
+        dnsRecords.push({
+          type: 'SPF',
+          status: 'invalid',
+          message: 'Unable to verify SPF record'
+        });
+      }
+
+      // Check DMARC
+      try {
+        const dmarcDomain = `_dmarc.${domain}`;
+        const dmarcResponse = await fetch(`https://dns.google/resolve?name=${dmarcDomain}&type=TXT`);
+        const dmarcData = await dmarcResponse.json();
+        
+        const dmarcRecord = dmarcData.Answer?.find((record: any) => 
+          record.data.includes('v=DMARC1')
+        );
+
+        if (dmarcRecord) {
+          dnsRecords.push({
+            type: 'DMARC',
+            status: 'valid',
+            value: dmarcRecord.data,
+            message: 'DMARC record found and configured'
+          });
+        } else {
+          dnsRecords.push({
+            type: 'DMARC',
+            status: 'missing',
+            expected: 'v=DMARC1; p=none; rua=mailto:dmarc@' + domain,
+            message: 'DMARC record not found. Add this TXT record to _dmarc.' + domain
+          });
+        }
+      } catch (error) {
+        console.error('Error checking DMARC:', error);
+        dnsRecords.push({
+          type: 'DMARC',
+          status: 'invalid',
+          message: 'Unable to verify DMARC record'
+        });
+      }
+
+      // DKIM check (note: requires specific selector, usually provided by email service)
+      dnsRecords.push({
+        type: 'DKIM',
+        status: 'missing',
+        expected: 'Verify in Resend dashboard',
+        message: 'DKIM verification requires domain setup in Resend. Visit https://resend.com/domains to configure.'
+      });
+
+      result.dnsRecords = dnsRecords;
+      result.domainScore = calculateDomainScore(dnsRecords);
+    }
+
+    // Analyze email content if provided
+    if (emailContent) {
+      console.log('Analyzing email content for deliverability');
+      
+      const contentAnalysis = analyzeEmailContent(emailContent);
+      result.contentAnalysis = contentAnalysis;
+      result.contentScore = contentAnalysis.score;
+    }
+
+    // Overall deliverability score
+    if (result.domainScore !== undefined && result.contentScore !== undefined) {
+      result.overallScore = Math.round((result.domainScore + result.contentScore) / 2);
+    } else if (result.domainScore !== undefined) {
+      result.overallScore = result.domainScore;
+    } else if (result.contentScore !== undefined) {
+      result.overallScore = result.contentScore;
+    }
+
+    return new Response(
+      JSON.stringify(result),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
+    );
+  } catch (error: any) {
+    console.error('Error in check-email-deliverability:', error);
+    return new Response(
+      JSON.stringify({
+        error: error.message || 'An error occurred while checking deliverability',
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500,
+      }
+    );
+  }
+});
+
+function calculateDomainScore(records: DNSRecord[]): number {
+  let score = 0;
+  const weights = { SPF: 40, DKIM: 35, DMARC: 25 };
+
+  records.forEach(record => {
+    if (record.status === 'valid') {
+      score += weights[record.type];
+    } else if (record.status === 'invalid') {
+      score += weights[record.type] * 0.3;
+    }
+  });
+
+  return Math.round(score);
+}
+
+function analyzeEmailContent(content: { subject: string; body: string }) {
+  const issues: string[] = [];
+  let score = 100;
+
+  const { subject, body } = content;
+  const fullText = `${subject} ${body}`.toLowerCase();
+
+  // Spam trigger words
+  const spamWords = [
+    'free', 'guarantee', 'click here', 'urgent', 'act now', 'limited time',
+    'buy now', 'order now', '100%', 'winner', 'congratulations', 'cash',
+    'bonus', 'prize', 'claim', 'risk-free', 'no obligation', '$$$'
+  ];
+
+  const foundSpamWords = spamWords.filter(word => fullText.includes(word));
+  if (foundSpamWords.length > 0) {
+    score -= foundSpamWords.length * 5;
+    issues.push(`Contains spam trigger words: ${foundSpamWords.slice(0, 3).join(', ')}${foundSpamWords.length > 3 ? '...' : ''}`);
+  }
+
+  // All caps in subject
+  if (subject.toUpperCase() === subject && subject.length > 5) {
+    score -= 15;
+    issues.push('Subject line is in all caps');
+  }
+
+  // Excessive punctuation
+  const exclamationCount = (subject + body).split('!').length - 1;
+  if (exclamationCount > 3) {
+    score -= 10;
+    issues.push('Excessive exclamation marks');
+  }
+
+  // Too many links
+  const linkCount = (body.match(/https?:\/\//g) || []).length;
+  if (linkCount > 5) {
+    score -= 10;
+    issues.push('Too many links in email body');
+  }
+
+  // Subject line length
+  if (subject.length < 10) {
+    score -= 5;
+    issues.push('Subject line is too short');
+  } else if (subject.length > 70) {
+    score -= 10;
+    issues.push('Subject line is too long (may get cut off)');
+  }
+
+  // Body length
+  if (body.length < 50) {
+    score -= 10;
+    issues.push('Email body is very short');
+  }
+
+  // Positive signals
+  const recommendations: string[] = [];
+  if (body.includes('unsubscribe')) {
+    score += 5;
+    recommendations.push('✓ Includes unsubscribe option');
+  }
+  if (fullText.includes('{{firstname}}') || fullText.includes('{{name}}')) {
+    recommendations.push('✓ Uses personalization');
+  }
+  if (subject.length >= 30 && subject.length <= 50) {
+    recommendations.push('✓ Subject line is optimal length');
+  }
+
+  score = Math.max(0, Math.min(100, score));
+
+  return {
+    score,
+    issues,
+    recommendations,
+    spamRisk: score < 60 ? 'high' : score < 80 ? 'medium' : 'low'
+  };
+}
