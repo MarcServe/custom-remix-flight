@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EventCard } from "@/components/EventCard";
 import { AutomationMetrics } from "@/components/sequences/AutomationMetrics";
+import { AutoResponseAnalytics } from "@/components/sequences/AutoResponseAnalytics";
 import { useNavigate } from "react-router-dom";
 import { useEvents } from "@/hooks/use-events";
 import { format, isToday, isTomorrow, isFuture } from "date-fns";
@@ -367,6 +368,11 @@ export default function Dashboard() {
           {/* Automation Metrics - Spans full width */}
           <div className="lg:col-span-4">
             <AutomationMetrics />
+          </div>
+
+          {/* Auto-Response Analytics - Spans full width */}
+          <div className="lg:col-span-4">
+            <AutoResponseAnalytics />
           </div>
 
           {/* Recent Activity Feed - Spans full width */}

@@ -47,6 +47,84 @@ export type Database = {
         }
         Relationships: []
       }
+      auto_response_analytics: {
+        Row: {
+          ai_model: string
+          ai_temperature: number | null
+          company_sequence_id: string | null
+          completion_tokens: number | null
+          created_at: string
+          email_activity_id: string | null
+          generated_at: string
+          id: string
+          metadata: Json | null
+          opened_at: string | null
+          prompt_tokens: number | null
+          replied_at: string | null
+          response_time_ms: number | null
+          sent_at: string | null
+          sentiment_score: number | null
+          success_score: number | null
+          token_count: number | null
+          user_id: string
+        }
+        Insert: {
+          ai_model: string
+          ai_temperature?: number | null
+          company_sequence_id?: string | null
+          completion_tokens?: number | null
+          created_at?: string
+          email_activity_id?: string | null
+          generated_at?: string
+          id?: string
+          metadata?: Json | null
+          opened_at?: string | null
+          prompt_tokens?: number | null
+          replied_at?: string | null
+          response_time_ms?: number | null
+          sent_at?: string | null
+          sentiment_score?: number | null
+          success_score?: number | null
+          token_count?: number | null
+          user_id: string
+        }
+        Update: {
+          ai_model?: string
+          ai_temperature?: number | null
+          company_sequence_id?: string | null
+          completion_tokens?: number | null
+          created_at?: string
+          email_activity_id?: string | null
+          generated_at?: string
+          id?: string
+          metadata?: Json | null
+          opened_at?: string | null
+          prompt_tokens?: number | null
+          replied_at?: string | null
+          response_time_ms?: number | null
+          sent_at?: string | null
+          sentiment_score?: number | null
+          success_score?: number | null
+          token_count?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auto_response_analytics_company_sequence_id_fkey"
+            columns: ["company_sequence_id"]
+            isOneToOne: false
+            referencedRelation: "company_sequences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "auto_response_analytics_email_activity_id_fkey"
+            columns: ["email_activity_id"]
+            isOneToOne: false
+            referencedRelation: "email_activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_profiles: {
         Row: {
           ai_max_tokens: number | null

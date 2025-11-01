@@ -59,7 +59,7 @@ serve(async (req) => {
 
     const { data: businessProfile } = await supabase
       .from('business_profiles')
-      .select('company_name, auto_response_daily_limit, auto_response_paused, auto_response_count_today, auto_response_last_reset_date, ai_model, ai_response_style')
+      .select('company_name, auto_response_daily_limit, auto_response_paused, auto_response_count_today, auto_response_last_reset_date, ai_model, ai_response_style, ai_temperature')
       .eq('user_id', userId)
       .single();
 
@@ -253,7 +253,7 @@ serve(async (req) => {
     }
 
     // Create email_activities record
-    const { error: activityError } = await supabase
+    const { data: activityData, error: activityError } = await supabase
       .from('email_activities')
       .insert({
         company_sequence_id: companySequenceId,
@@ -269,10 +269,36 @@ serve(async (req) => {
           auto_sent: true,
           ai_generated: true,
         },
-      });
+      })
+      .select()
+      .single();
 
     if (activityError) {
       console.error('Failed to record email activity:', activityError);
+    }
+
+    // Track analytics for sent auto-response
+    if (activityData) {
+      const { error: analyticsError } = await supabase
+        .from('auto_response_analytics')
+        .insert({
+          user_id: userId,
+          company_sequence_id: companySequenceId,
+          email_activity_id: activityData.id,
+          ai_model: businessProfile.ai_model || 'google/gemini-2.5-flash',
+          ai_temperature: businessProfile.ai_temperature || 0.7,
+          sent_at: new Date().toISOString(),
+          token_count: (subject + body).length,
+          metadata: {
+            provider,
+            recipient: contact.email,
+            company_name: (companySequence.company as any)?.name,
+          },
+        });
+
+      if (analyticsError) {
+        console.error('Failed to track analytics:', analyticsError);
+      }
     }
 
     // Update company sequence

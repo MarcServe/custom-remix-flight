@@ -148,6 +148,7 @@ Return ONLY a JSON object with this structure:
 }`;
 
     console.log('Calling AI to generate response...');
+    const startTime = Date.now();
 
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -199,8 +200,27 @@ Return ONLY a JSON object with this structure:
     }
 
     const emailContent = JSON.parse(toolCall.function.arguments);
+    const responseTime = Date.now() - startTime;
 
     console.log('AI generated response:', emailContent);
+
+    // Track analytics
+    const tokenCount = (emailContent.subject + emailContent.body).length;
+    await supabaseClient
+      .from('auto_response_analytics')
+      .insert({
+        user_id: user.id,
+        company_sequence_id: companySequenceId,
+        ai_model: businessProfile.ai_model || 'google/gemini-2.5-flash',
+        ai_temperature: businessProfile.ai_temperature || 0.7,
+        response_time_ms: responseTime,
+        token_count: tokenCount,
+        metadata: {
+          sequence_goal: companySeq.email_sequences.goal,
+          company_name: companySeq.companies.name,
+          tone: businessProfile.ai_response_style || businessProfile.tone_preference,
+        },
+      });
 
     // Store as draft or send automatically
     const responseStatus = autoSend ? 'ready_to_send' : 'draft';
