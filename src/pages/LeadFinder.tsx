@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
 import { useLeadFinder } from "@/hooks/use-lead-finder";
 import { useProviderStore } from "@/stores/provider-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -35,6 +36,16 @@ export default function LeadFinder() {
   const [selectedCompanyIndices, setSelectedCompanyIndices] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [currentCompanyIndex, setCurrentCompanyIndex] = useState<number>(0);
+  
+  // Filter states
+  const [minQualityScore, setMinQualityScore] = useState<number>(0);
+  const [mustHaveContacts, setMustHaveContacts] = useState(false);
+  const [mustHaveLinkedIn, setMustHaveLinkedIn] = useState(false);
+  const [mustHaveNews, setMustHaveNews] = useState(false);
+  const [mustHaveFunding, setMustHaveFunding] = useState(false);
+  
+  // Sorting state
+  const [sortBy, setSortBy] = useState<'quality' | 'completeness' | 'alphabetical' | 'employees'>('quality');
   
   const { defaultProvider, defaultModels } = useProviderStore();
   const [providerConfig, setProviderConfig] = useState<{
@@ -85,25 +96,25 @@ export default function LeadFinder() {
   };
 
   const handleNavigateCompany = (direction: 'prev' | 'next') => {
-    if (!results?.leads) return;
+    if (!filteredAndSortedResults?.leads) return;
     
     let newIndex = currentCompanyIndex;
     if (direction === 'prev' && currentCompanyIndex > 0) {
       newIndex = currentCompanyIndex - 1;
-    } else if (direction === 'next' && currentCompanyIndex < results.leads.length - 1) {
+    } else if (direction === 'next' && currentCompanyIndex < filteredAndSortedResults.leads.length - 1) {
       newIndex = currentCompanyIndex + 1;
     }
     
     setCurrentCompanyIndex(newIndex);
-    setSelectedCompany(results.leads[newIndex]);
+    setSelectedCompany(filteredAndSortedResults.leads[newIndex]);
   };
 
   const handleSaveSelectedCompanies = async () => {
-    if (!results?.leads || selectedCompanyIndices.size === 0) return;
+    if (!filteredAndSortedResults?.leads || selectedCompanyIndices.size === 0) return;
 
     setIsSaving(true);
     try {
-      const selectedCompanies = Array.from(selectedCompanyIndices).map(idx => results.leads[idx]);
+      const selectedCompanies = Array.from(selectedCompanyIndices).map(idx => filteredAndSortedResults.leads[idx]);
       let successCount = 0;
       let errorCount = 0;
 
@@ -204,12 +215,12 @@ export default function LeadFinder() {
   };
 
   const toggleSelectAll = () => {
-    if (!results?.leads) return;
+    if (!filteredAndSortedResults?.leads) return;
     
-    if (selectedCompanyIndices.size === results.leads.length) {
+    if (selectedCompanyIndices.size === filteredAndSortedResults.leads.length) {
       setSelectedCompanyIndices(new Set());
     } else {
-      setSelectedCompanyIndices(new Set(results.leads.map((_, idx) => idx)));
+      setSelectedCompanyIndices(new Set(filteredAndSortedResults.leads.map((_, idx) => idx)));
     }
   };
 
@@ -224,6 +235,70 @@ export default function LeadFinder() {
   const isFormValid = size && geography && industryCategory;
   const isLoading = leadFinderMutation.isPending;
   const results = leadFinderMutation.data?.data;
+
+  // Filter and sort results
+  const filteredAndSortedResults = results ? {
+    ...results,
+    leads: (() => {
+      let filtered = results.leads.filter((company: any) => {
+        // Quality score filter
+        if (company.qualityScore !== undefined && company.qualityScore < minQualityScore) {
+          return false;
+        }
+        
+        // Must have contacts filter
+        if (mustHaveContacts && (!company.contacts || company.contacts.length === 0)) {
+          return false;
+        }
+        
+        // Must have LinkedIn filter
+        if (mustHaveLinkedIn && !company.linkedinUrl) {
+          return false;
+        }
+        
+        // Must have news filter
+        if (mustHaveNews && !company.recentNews) {
+          return false;
+        }
+        
+        // Must have funding filter
+        if (mustHaveFunding && !company.fundingInfo) {
+          return false;
+        }
+        
+        return true;
+      });
+
+      // Sort
+      const sorted = [...filtered].sort((a: any, b: any) => {
+        switch (sortBy) {
+          case 'quality':
+            return (b.qualityScore || 0) - (a.qualityScore || 0);
+          case 'completeness':
+            return (b.dataCompleteness || 0) - (a.dataCompleteness || 0);
+          case 'alphabetical':
+            return (a.name || '').localeCompare(b.name || '');
+          case 'employees':
+            return (b.employeeCount || 0) - (a.employeeCount || 0);
+          default:
+            return 0;
+        }
+      });
+
+      return sorted;
+    })()
+  } : null;
+
+  const clearFilters = () => {
+    setMinQualityScore(0);
+    setMustHaveContacts(false);
+    setMustHaveLinkedIn(false);
+    setMustHaveNews(false);
+    setMustHaveFunding(false);
+    setSortBy('quality');
+  };
+
+  const hasActiveFilters = minQualityScore > 0 || mustHaveContacts || mustHaveLinkedIn || mustHaveNews || mustHaveFunding || sortBy !== 'quality';
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -475,6 +550,111 @@ export default function LeadFinder() {
                   </div>
                 </div>
               </div>
+
+              {/* Filters & Sorting */}
+              {results && (
+                <>
+                  <Separator />
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Filters & Sorting
+                      </h2>
+                      {hasActiveFilters && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearFilters}
+                          className="h-6 text-xs px-2"
+                        >
+                          <FilterX className="h-3 w-3 mr-1" />
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Quality Score Slider */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium">Min Quality Score</Label>
+                        <span className="text-xs font-mono text-muted-foreground">{minQualityScore}</span>
+                      </div>
+                      <Slider
+                        value={[minQualityScore]}
+                        onValueChange={(value) => setMinQualityScore(value[0])}
+                        min={0}
+                        max={100}
+                        step={5}
+                        className="py-2"
+                      />
+                    </div>
+
+                    {/* Sort Dropdown */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">Sort By</Label>
+                      <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="z-50 bg-popover">
+                          <SelectItem value="quality">Quality Score (High to Low)</SelectItem>
+                          <SelectItem value="completeness">Data Completeness (High to Low)</SelectItem>
+                          <SelectItem value="alphabetical">Alphabetical (A-Z)</SelectItem>
+                          <SelectItem value="employees">Employee Count (High to Low)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Filter Checkboxes */}
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="mustHaveContacts"
+                          checked={mustHaveContacts}
+                          onCheckedChange={(checked) => setMustHaveContacts(checked as boolean)}
+                        />
+                        <Label htmlFor="mustHaveContacts" className="text-xs font-normal cursor-pointer">
+                          Must have contacts
+                        </Label>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="mustHaveLinkedIn"
+                          checked={mustHaveLinkedIn}
+                          onCheckedChange={(checked) => setMustHaveLinkedIn(checked as boolean)}
+                        />
+                        <Label htmlFor="mustHaveLinkedIn" className="text-xs font-normal cursor-pointer">
+                          Must have LinkedIn URL
+                        </Label>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="mustHaveNews"
+                          checked={mustHaveNews}
+                          onCheckedChange={(checked) => setMustHaveNews(checked as boolean)}
+                        />
+                        <Label htmlFor="mustHaveNews" className="text-xs font-normal cursor-pointer">
+                          Must have recent news
+                        </Label>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="mustHaveFunding"
+                          checked={mustHaveFunding}
+                          onCheckedChange={(checked) => setMustHaveFunding(checked as boolean)}
+                        />
+                        <Label htmlFor="mustHaveFunding" className="text-xs font-normal cursor-pointer">
+                          Must have funding info
+                        </Label>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -503,7 +683,7 @@ export default function LeadFinder() {
 
         {/* Right Panel - Results */}
         <div className="flex-1 overflow-y-auto">
-          {!results ? (
+          {!filteredAndSortedResults ? (
             <div className="h-full flex items-center justify-center p-4">
               <div className="text-center space-y-3 max-w-md px-4">
                 <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center">
@@ -523,11 +703,16 @@ export default function LeadFinder() {
               <div className="flex flex-col gap-3 pb-3 border-b">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-base font-semibold">
-                    {results.leads.length} {results.leads.length === 1 ? 'Company' : 'Companies'} Found
+                    {filteredAndSortedResults.leads.length} {filteredAndSortedResults.leads.length === 1 ? 'Company' : 'Companies'}
                   </h2>
+                  {hasActiveFilters && results && filteredAndSortedResults.leads.length < results.leads.length && (
+                    <Badge variant="outline" className="text-xs bg-orange-500/10 text-orange-600 border-orange-500/20">
+                      {results.leads.length - filteredAndSortedResults.leads.length} filtered out
+                    </Badge>
+                  )}
                   {results.stats && results.stats.filtered > 0 && (
                     <Badge variant="outline" className="text-xs">
-                      {results.stats.filtered} filtered (quality &lt;40)
+                      {results.stats.filtered} low quality (backend)
                     </Badge>
                   )}
                   {results.stats && results.stats.averageScore && (
@@ -544,11 +729,11 @@ export default function LeadFinder() {
                 </div>
                 
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  {results.dryRun && results.leads.length > 0 && (
+                  {filteredAndSortedResults.dryRun && filteredAndSortedResults.leads.length > 0 && (
                     <div className="flex items-center gap-2">
                       <Checkbox
                         id="select-all"
-                        checked={selectedCompanyIndices.size === results.leads.length && results.leads.length > 0}
+                        checked={selectedCompanyIndices.size === filteredAndSortedResults.leads.length && filteredAndSortedResults.leads.length > 0}
                         onCheckedChange={toggleSelectAll}
                       />
                       <Label htmlFor="select-all" className="text-xs font-medium cursor-pointer">
@@ -558,7 +743,7 @@ export default function LeadFinder() {
                   )}
                   
                   <div className="flex items-center gap-2 ml-auto">
-                    {results.dryRun && results.leads.length > 0 && (
+                    {filteredAndSortedResults.dryRun && filteredAndSortedResults.leads.length > 0 && (
                       <Button
                         size="sm"
                         onClick={handleSaveSelectedCompanies}
@@ -579,7 +764,7 @@ export default function LeadFinder() {
                       </Button>
                     )}
                     <div className="text-xs text-muted-foreground whitespace-nowrap">
-                      {results.dryRun ? "Preview" : `${results.inserted} added`}
+                      {filteredAndSortedResults.dryRun ? "Preview" : `${filteredAndSortedResults.inserted} added`}
                     </div>
                   </div>
                 </div>
@@ -587,7 +772,7 @@ export default function LeadFinder() {
 
               {/* Results List */}
               <div className="space-y-3 md:space-y-4">
-                {results.leads.map((company: any, idx: number) => (
+                {filteredAndSortedResults.leads.map((company: any, idx: number) => (
                   <div 
                     key={idx} 
                     className="group relative rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all p-3 md:p-4 cursor-pointer"
@@ -601,7 +786,7 @@ export default function LeadFinder() {
                       {/* Header with checkbox and icon */}
                       <div className="flex gap-3 md:gap-4">
                         {/* Selection Checkbox */}
-                        {results.dryRun && (
+                        {filteredAndSortedResults.dryRun && (
                           <div className="flex items-start pt-1">
                             <Checkbox
                               checked={selectedCompanyIndices.has(idx)}
@@ -737,30 +922,30 @@ export default function LeadFinder() {
               </div>
 
               {/* Usage Stats Footer */}
-              {results.usage && (
+              {filteredAndSortedResults.usage && (
                 <div className="mt-6 pt-4 border-t">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground font-medium">Provider</div>
-                      <div className="text-xs font-mono capitalize">{results.provider}</div>
+                      <div className="text-xs font-mono capitalize">{filteredAndSortedResults.provider}</div>
                     </div>
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground font-medium">Tokens</div>
                       <div className="text-xs font-mono">
-                        {(results.usage.totalTokens + (results.enrichmentUsage?.totalTokens || 0)).toLocaleString()}
+                        {(filteredAndSortedResults.usage.totalTokens + (filteredAndSortedResults.enrichmentUsage?.totalTokens || 0)).toLocaleString()}
                       </div>
                     </div>
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground font-medium">Cost</div>
                       <div className="text-xs font-mono font-semibold">
-                        ${(results.usage.estimatedCost + (results.enrichmentUsage?.estimatedCost || 0)).toFixed(4)}
+                        ${(filteredAndSortedResults.usage.estimatedCost + (filteredAndSortedResults.enrichmentUsage?.estimatedCost || 0)).toFixed(4)}
                       </div>
                     </div>
-                    {results.traceUrl && (
+                    {filteredAndSortedResults.traceUrl && (
                       <div className="space-y-1">
                         <div className="text-xs text-muted-foreground font-medium">Trace</div>
                         <a
-                          href={results.traceUrl}
+                          href={filteredAndSortedResults.traceUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono"
@@ -783,7 +968,7 @@ export default function LeadFinder() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         isSearching={isLoading}
-        allCompanies={results?.leads || []}
+        allCompanies={filteredAndSortedResults?.leads || []}
         currentIndex={currentCompanyIndex}
         onNavigate={handleNavigateCompany}
       />
