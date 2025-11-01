@@ -43,31 +43,61 @@ export function ConnectEmailDialog({
     setLoading(true);
     try {
       const { data, error } = await nangoClient.initiateOAuth(provider as 'gmail' | 'outlook');
+      
       if (error) {
         console.error('OAuth error:', error);
-        if (error.message.includes('Popup blocked') || error.message.includes('popup')) {
-          toast.error("Please allow popups in your browser and try again");
-        } else if (error.message.includes('closed')) {
-          toast.info("OAuth cancelled");
-        } else if (error.message.includes('Nango not configured') || 
-                   error.message.includes('NANGO_SECRET_KEY') ||
-                   error.message.includes('integration not configured')) {
-          toast.error("Email integration needs configuration");
-          setShowSetupInstructions(true);
-        } else if (error.message.includes('authentication session') ||
-                   error.message.includes('allowed_integrations')) {
-          toast.error("Integration not found in Nango dashboard");
-          setShowSetupInstructions(true);
-        } else {
-          toast.error(`Failed to connect ${provider}: ${error.message}`);
+        
+        // Handle popup blocker specifically
+        if (error.message.includes('Popup blocked')) {
+          toast.error("Pop-ups are blocked", {
+            description: "Please allow pop-ups for this site and try again. Check your browser's address bar for a pop-up blocked icon."
+          });
+          return;
         }
+        
+        // Handle timeout
+        if (error.message.includes('timeout')) {
+          toast.error("Connection timed out", {
+            description: "The authentication took too long. Please try again."
+          });
+          return;
+        }
+        
+        // Handle connection not completed
+        if (error.message.includes('not completed')) {
+          toast.error("Connection not completed", {
+            description: "The authentication window was closed before completing. Please try again and complete the authorization."
+          });
+          return;
+        }
+        
+        // Handle configuration errors
+        if (error.message.includes('NANGO_SECRET_KEY') || 
+            error.message.includes('integration not configured') ||
+            error.message.includes('authentication session')) {
+          toast.error("Email integration needs setup", {
+            description: "The integration is not properly configured. Please contact support or view setup instructions."
+          });
+          setShowSetupInstructions(true);
+          return;
+        }
+        
+        // Generic error
+        toast.error(`Failed to connect ${provider}`, {
+          description: error.message
+        });
       } else if (data?.success) {
-        toast.success(`${provider} connected successfully`);
+        toast.success(`${provider === 'gmail' ? 'Gmail' : 'Outlook'} connected successfully!`, {
+          description: data.connection?.from_email ? `Connected: ${data.connection.from_email}` : undefined
+        });
         onSuccess();
         onOpenChange(false);
       }
     } catch (error) {
-      toast.error("Connection failed");
+      console.error('Unexpected error:', error);
+      toast.error("Connection failed", {
+        description: "An unexpected error occurred. Please try again."
+      });
     } finally {
       setLoading(false);
     }
@@ -201,7 +231,8 @@ export function ConnectEmailDialog({
                   <Info className="h-4 w-4 text-blue-500" />
                   <AlertDescription className="text-sm">
                     A popup window will open for {provider === 'gmail' ? 'Google' : 'Microsoft'} authorization. 
-                    <strong> Please allow popups for this site.</strong> Make sure to allow the required permissions for sending emails.
+                    {' '}<strong>Please allow popups for this site.</strong>
+                    {' '}If you don't see the popup, check your browser's address bar for a blocked popup icon.
                   </AlertDescription>
                 </Alert>
 
