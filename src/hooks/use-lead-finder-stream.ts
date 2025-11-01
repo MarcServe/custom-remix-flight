@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
+import { leadFinderStorage } from '@/lib/utils/lead-finder-storage';
 
 interface Lead {
   name: string;
@@ -69,6 +70,7 @@ export const useLeadFinderStream = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const abortControllerRef = useRef<AbortController | null>(null);
+  const searchParamsRef = useRef<SearchParams | null>(null);
 
   const [state, setState] = useState<StreamState>({
     leads: [],
@@ -81,7 +83,24 @@ export const useLeadFinderStream = () => {
     traceUrl: null,
   });
 
+  // Load persisted results on mount
+  useEffect(() => {
+    const stored = leadFinderStorage.load();
+    if (stored && stored.leads.length > 0) {
+      setState(prev => ({
+        ...prev,
+        leads: stored.leads,
+        stats: stored.stats,
+        usage: stored.usage,
+        traceUrl: stored.traceUrl,
+      }));
+    }
+  }, []);
+
   const findLeads = async (params: SearchParams) => {
+    // Store search params for later
+    searchParamsRef.current = params;
+
     // Cancel any existing request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -184,9 +203,11 @@ export const useLeadFinderStream = () => {
                 }));
               } else if (event.type === 'complete') {
                 const totalLeads = state.leads.length + (event.leads?.length || 0);
+                const allLeads = [...state.leads, ...(event.leads || [])];
                 
                 setState(prev => ({
                   ...prev,
+                  leads: allLeads,
                   isLoading: false,
                   currentStatus: 'Complete',
                   progress: 100,
@@ -195,19 +216,31 @@ export const useLeadFinderStream = () => {
                   traceUrl: event.traceUrl,
                 }));
 
+                // Save to localStorage
+                if (searchParamsRef.current) {
+                  leadFinderStorage.save({
+                    searchParams: {
+                      size: searchParamsRef.current.size,
+                      geography: searchParamsRef.current.geography,
+                      industry: searchParamsRef.current.industry,
+                    },
+                    leads: allLeads,
+                    stats: event.stats,
+                    usage: event.usage,
+                    traceUrl: event.traceUrl,
+                  });
+                }
+
                 // Invalidate queries if companies were inserted
                 if (!params.dryRun && totalLeads > 0) {
                   queryClient.invalidateQueries({ queryKey: ['companies'] });
                   queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] });
                 }
 
+                // Show toast notification
                 toast({
-                  title: 'Success',
-                  description: `Found ${event.stats.returned} leads. ${
-                    params.dryRun
-                      ? 'Preview mode - no companies inserted.'
-                      : `Inserted in background.`
-                  }`,
+                  title: '✨ Lead Search Complete',
+                  description: `Found ${event.stats.returned} companies. Results saved - navigate to Lead Finder to view.`,
                 });
               } else if (event.type === 'error') {
                 throw new Error(event.message);
@@ -278,9 +311,25 @@ export const useLeadFinderStream = () => {
     }
   };
 
+  const clearStoredResults = () => {
+    leadFinderStorage.clear();
+    setState({
+      leads: [],
+      isLoading: false,
+      currentStatus: '',
+      progress: 0,
+      stats: null,
+      usage: null,
+      error: null,
+      traceUrl: null,
+    });
+  };
+
   return {
     ...state,
     findLeads,
     cancelSearch,
+    clearStoredResults,
+    hasStoredResults: leadFinderStorage.hasStoredResults(),
   };
 };

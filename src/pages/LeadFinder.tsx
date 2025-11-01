@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy, StopCircle } from "lucide-react";
+import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy, StopCircle, X, AlertCircle } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { exportCompaniesToCSV } from "@/lib/utils/export";
@@ -15,6 +15,7 @@ import { LeadCardSkeleton } from "@/components/lead-finder/LeadCardSkeleton";
 import { useLeadFinderStream } from "@/hooks/use-lead-finder-stream";
 import { useProviderStore } from "@/stores/provider-store";
 import { useUIStore } from "@/stores/ui-store";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
@@ -447,6 +448,27 @@ export default function LeadFinder() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
+      {/* Stored Results Banner */}
+      {streamingSearch.hasStoredResults && streamingSearch.leads.length > 0 && (
+        <Alert className="rounded-none border-x-0 border-t-0 bg-primary/5 border-primary/20">
+          <AlertCircle className="h-4 w-4 text-primary" />
+          <AlertDescription className="flex items-center justify-between">
+            <span className="text-sm">
+              You have {streamingSearch.leads.length} saved lead{streamingSearch.leads.length !== 1 ? 's' : ''} from your previous search
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => streamingSearch.clearStoredResults()}
+              className="h-7 text-xs"
+            >
+              <X className="h-3 w-3 mr-1" />
+              Clear
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      
       {/* Top Bar */}
       <div className="border-b bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
         <div className="flex items-center justify-between h-14 px-4 md:px-6">
