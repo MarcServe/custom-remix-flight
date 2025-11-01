@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmailConnectionCard } from "@/components/integrations/EmailConnectionCard";
 import { ConnectEmailDialog } from "@/components/integrations/ConnectEmailDialog";
-import { VerifyEmailDialog } from "@/components/integrations/VerifyEmailDialog";
 import { nangoClient } from "@/lib/integrations/nango";
 import { toast } from "sonner";
 import { Plug2, Mail } from "lucide-react";
@@ -28,19 +27,12 @@ const emailProviders = [
     description: 'Configure custom SMTP server',
     icon: '⚙️',
   },
-  {
-    id: 'verified_email' as const,
-    name: 'Business Email',
-    description: 'Verify your business email address',
-    icon: '✉️',
-  },
 ];
 
 export default function Integrations() {
   const queryClient = useQueryClient();
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
-  const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'outlook' | 'smtp' | 'verified_email'>('gmail');
+  const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'outlook' | 'smtp'>('gmail');
 
   const { data: connections, isLoading } = useQuery({
     queryKey: ['nango-connections'],
@@ -83,13 +75,9 @@ export default function Integrations() {
     },
   });
 
-  const handleConnect = (provider: 'gmail' | 'outlook' | 'smtp' | 'verified_email') => {
+  const handleConnect = (provider: 'gmail' | 'outlook' | 'smtp') => {
     setSelectedProvider(provider);
-    if (provider === 'verified_email') {
-      setVerifyDialogOpen(true);
-    } else {
-      setConnectDialogOpen(true);
-    }
+    setConnectDialogOpen(true);
   };
 
   const handleDisconnect = (connectionId: string) => {
@@ -149,13 +137,7 @@ export default function Integrations() {
       <ConnectEmailDialog
         open={connectDialogOpen}
         onOpenChange={setConnectDialogOpen}
-        provider={selectedProvider === 'verified_email' ? 'gmail' : selectedProvider}
-        onSuccess={handleConnectionSuccess}
-      />
-      
-      <VerifyEmailDialog
-        open={verifyDialogOpen}
-        onOpenChange={setVerifyDialogOpen}
+        provider={selectedProvider}
         onSuccess={handleConnectionSuccess}
       />
     </div>
