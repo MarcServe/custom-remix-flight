@@ -1855,11 +1855,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_user_team_role: {
+        Args: { _team_id: string; _user_id: string }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      has_team_membership: {
+        Args: { _team_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_team_admin: {
+        Args: { _team_id: string; _user_id: string }
         Returns: boolean
       }
       search_companies: {
