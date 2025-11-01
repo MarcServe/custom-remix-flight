@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X, MessageSquare, Shield, Zap } from "lucide-react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,10 +15,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { usePendingCounts } from "@/hooks/use-pending-counts";
 import { useEventsRealtime, useDealsRealtimeForNotifications, useCampaignsRealtimeForNotifications } from "@/hooks/use-realtime";
 
-const navigation = [
+type NavigationItem = {
+  name: string;
+  href: string;
+  icon: any;
+  children?: NavigationItem[];
+};
+
+const navigation: NavigationItem[] = [
   { name: "Dashboard", href: "/", icon: BarChart3 },
   { name: "Companies", href: "/companies", icon: Building2 },
   { name: "Deals", href: "/deals", icon: DollarSign },
@@ -26,19 +34,50 @@ const navigation = [
   { name: "Events", href: "/events", icon: Calendar },
   { name: "Lead Finder", href: "/lead-finder", icon: Sparkles },
   { name: "Pipeline", href: "/pipeline", icon: TrendingUp },
-  { name: "Sequences", href: "/sequences", icon: Mail },
-  { name: "Auto-Responses", href: "/auto-responses", icon: Sparkles },
-  { name: "All Campaigns", href: "/all-campaigns", icon: Activity },
-  { name: "Active Campaigns", href: "/company-sequences", icon: TrendingUp },
-  { name: "Bulk Campaigns", href: "/campaigns", icon: Briefcase },
+  { 
+    name: "Campaigns", 
+    href: "#campaigns", 
+    icon: Send,
+    children: [
+      { name: "Sequences", href: "/sequences", icon: Mail },
+      { name: "Auto-Responses", href: "/auto-responses", icon: Sparkles },
+      { name: "All Campaigns", href: "/all-campaigns", icon: Activity },
+      { name: "Active Campaigns", href: "/company-sequences", icon: TrendingUp },
+      { name: "Bulk Campaigns", href: "/campaigns", icon: Briefcase },
+    ]
+  },
   { name: "Conversations", href: "/conversations", icon: MessageSquare },
-  { name: "Email Health", href: "/email-deliverability", icon: Shield },
-  { name: "Automation Rules", href: "/automation-rules", icon: Zap },
-  { name: "A/B Testing", href: "/ab-testing", icon: TrendingUp },
-  { name: "Teams", href: "/teams", icon: Users },
-  { name: "Shared Inbox", href: "/shared-inbox", icon: Mail },
+  { 
+    name: "Email Tools", 
+    href: "#email-tools", 
+    icon: Settings,
+    children: [
+      { name: "Email Health", href: "/email-deliverability", icon: Shield },
+      { name: "Automation Rules", href: "/automation-rules", icon: Zap },
+      { name: "A/B Testing", href: "/ab-testing", icon: TrendingUp },
+    ]
+  },
+  { 
+    name: "Collaboration", 
+    href: "#collaboration", 
+    icon: Users,
+    children: [
+      { name: "Teams", href: "/teams", icon: Users },
+      { name: "Shared Inbox", href: "/shared-inbox", icon: Mail },
+    ]
+  },
   { name: "Integrations", href: "/integrations", icon: Plug2 },
 ];
+
+// Helper function to get pending count for a menu item
+const getPendingCount = (href: string, pendingCounts: any) => {
+  if (!pendingCounts) return 0;
+  if (href === '/deals') return pendingCounts.deals;
+  if (href === '/sequences') return pendingCounts.sequences;
+  if (href === '/company-sequences') return pendingCounts.campaigns;
+  if (href === '/events') return pendingCounts.events;
+  return 0;
+};
 
 export const Sidebar = () => {
   const location = useLocation();
@@ -127,18 +166,81 @@ export const Sidebar = () => {
           )}
         </Button>
       </div>
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
         {navigation.map((item) => {
+          // Check if current route is in this group's children
+          const isGroupActive = item.children?.some(child => location.pathname === child.href) || false;
           const isActive = location.pathname === item.href;
           
-          // Get pending count for this menu item
-          let pendingCount = 0;
-          if (pendingCounts) {
-            if (item.href === '/deals') pendingCount = pendingCounts.deals;
-            else if (item.href === '/sequences') pendingCount = pendingCounts.sequences;
-            else if (item.href === '/company-sequences') pendingCount = pendingCounts.campaigns;
-            else if (item.href === '/events') pendingCount = pendingCounts.events;
+          // Render parent item with children (collapsible group)
+          if (item.children) {
+            return (
+              <Collapsible key={item.name} defaultOpen={isGroupActive}>
+                <CollapsibleTrigger asChild>
+                  <button
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                      isGroupActive
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      isCollapsed && "justify-center"
+                    )}
+                  >
+                    <item.icon className="h-5 w-5 shrink-0" />
+                    {!isCollapsed && (
+                      <>
+                        <span className="flex-1 text-left">{item.name}</span>
+                        <ChevronDown className="h-4 w-4 transition-transform duration-200" />
+                      </>
+                    )}
+                  </button>
+                </CollapsibleTrigger>
+                {!isCollapsed && (
+                  <CollapsibleContent className="space-y-1 mt-1 ml-4">
+                    {item.children.map((child) => {
+                      const isChildActive = location.pathname === child.href;
+                      
+                      // Get pending count for child items
+                      let pendingCount = 0;
+                      if (pendingCounts) {
+                        if (child.href === '/deals') pendingCount = pendingCounts.deals;
+                        else if (child.href === '/sequences') pendingCount = pendingCounts.sequences;
+                        else if (child.href === '/company-sequences') pendingCount = pendingCounts.campaigns;
+                        else if (child.href === '/events') pendingCount = pendingCounts.events;
+                      }
+                      
+                      return (
+                        <Link
+                          key={child.name}
+                          to={child.href}
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors relative",
+                            isChildActive
+                              ? "bg-primary text-primary-foreground font-medium"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          )}
+                        >
+                          <child.icon className="h-4 w-4 shrink-0" />
+                          <span className="flex-1">{child.name}</span>
+                          {pendingCount > 0 && (
+                            <Badge 
+                              variant="secondary" 
+                              className="h-5 min-w-5 px-1 text-xs font-semibold bg-destructive text-destructive-foreground animate-pulse"
+                            >
+                              {pendingCount > 99 ? '99+' : pendingCount}
+                            </Badge>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </CollapsibleContent>
+                )}
+              </Collapsible>
+            );
           }
+          
+          // Render regular navigation item
+          const pendingCount = getPendingCount(item.href, pendingCounts);
           
           const linkContent = (
             <Link
