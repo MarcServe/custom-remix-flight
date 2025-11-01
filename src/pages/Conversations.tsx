@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { MessageSquare, Loader2, Send, ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
+import { MessageSquare, Loader2, Send, ArrowLeft, ArrowRight, Sparkles, Filter } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +23,10 @@ interface EmailThread {
   received_at: string;
   sentiment?: string;
   ai_analysis?: any;
+  metadata?: {
+    auto_sent?: boolean;
+    [key: string]: any;
+  };
 }
 
 interface CompanySequence {
@@ -46,6 +50,7 @@ export default function Conversations() {
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null);
   const [generatedResponse, setGeneratedResponse] = useState<{ subject: string; body: string } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [filterAutoSent, setFilterAutoSent] = useState(false);
 
   const { data: sequences, isLoading } = useQuery({
     queryKey: ['active-conversations'],
@@ -79,6 +84,11 @@ export default function Conversations() {
       return data as EmailThread[];
     },
   });
+
+  // Filter threads based on auto-sent toggle
+  const filteredThreads = filterAutoSent 
+    ? threads?.filter(t => t.metadata?.auto_sent === true)
+    : threads;
 
   const selectedSeqData = sequences?.find(s => s.id === selectedSequence);
 
@@ -225,14 +235,28 @@ export default function Conversations() {
         {/* Conversation Thread */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>
-              {selectedSeqData
-                ? `${selectedSeqData.companies.name} - ${selectedSeqData.email_sequences.name}`
-                : 'Select a conversation'}
-            </CardTitle>
-            {selectedSeqData?.email_sequences.goal && (
-              <CardDescription>Goal: {selectedSeqData.email_sequences.goal}</CardDescription>
-            )}
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>
+                  {selectedSeqData
+                    ? `${selectedSeqData.companies.name} - ${selectedSeqData.email_sequences.name}`
+                    : 'Select a conversation'}
+                </CardTitle>
+                {selectedSeqData?.email_sequences.goal && (
+                  <CardDescription>Goal: {selectedSeqData.email_sequences.goal}</CardDescription>
+                )}
+              </div>
+              {selectedSequence && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFilterAutoSent(!filterAutoSent)}
+                >
+                  <Filter className="h-4 w-4 mr-2" />
+                  {filterAutoSent ? "Show All" : "Auto-Sent Only"}
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {!selectedSequence ? (
@@ -246,7 +270,12 @@ export default function Conversations() {
               <div className="space-y-6">
                 <ScrollArea className="h-[400px] pr-4">
                   <div className="space-y-4">
-                    {threads?.map((thread) => (
+                    {filteredThreads?.length === 0 && filterAutoSent && (
+                      <div className="text-center py-8">
+                        <p className="text-sm text-muted-foreground">No auto-sent emails in this conversation</p>
+                      </div>
+                    )}
+                    {filteredThreads?.map((thread) => (
                       <div
                         key={thread.id}
                         className={`flex ${thread.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
@@ -267,6 +296,12 @@ export default function Conversations() {
                             <span className="text-xs font-medium">
                               {thread.direction === 'outbound' ? 'You' : thread.from_email}
                             </span>
+                            {thread.metadata?.auto_sent && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Sparkles className="h-3 w-3 mr-1" />
+                                Auto-Sent
+                              </Badge>
+                            )}
                             {thread.sentiment && getSentimentBadge(thread.sentiment)}
                           </div>
                           <div className="text-sm font-semibold mb-2">{thread.subject}</div>

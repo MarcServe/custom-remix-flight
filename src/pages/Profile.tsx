@@ -30,6 +30,9 @@ export default function Profile() {
     target_audience: "",
     value_proposition: "",
     tone_preference: "professional",
+    auto_response_daily_limit: 10,
+    auto_response_paused: false,
+    auto_response_count_today: 0,
   });
 
   const { data: connections } = useQuery({
@@ -82,6 +85,9 @@ export default function Profile() {
           target_audience: data.target_audience || "",
           value_proposition: data.value_proposition || "",
           tone_preference: data.tone_preference || "professional",
+          auto_response_daily_limit: data.auto_response_daily_limit || 10,
+          auto_response_paused: data.auto_response_paused || false,
+          auto_response_count_today: data.auto_response_count_today || 0,
         });
       }
     } catch (error) {
@@ -383,6 +389,85 @@ export default function Profile() {
                     <>
                       <Save className="h-4 w-4 mr-2" />
                       Save Profile
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Auto-Response Settings</CardTitle>
+              <CardDescription>
+                Control AI auto-response behavior and safety limits
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
+                <p className="text-sm font-medium">Today's Usage</p>
+                <p className="text-2xl font-bold">
+                  {businessProfile.auto_response_count_today} / {businessProfile.auto_response_daily_limit}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Auto-responses sent today
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="auto_response_daily_limit">Daily Auto-Response Limit</Label>
+                <Input
+                  id="auto_response_daily_limit"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={businessProfile.auto_response_daily_limit}
+                  onChange={(e) => setBusinessProfile({ 
+                    ...businessProfile, 
+                    auto_response_daily_limit: parseInt(e.target.value) || 10
+                  })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Maximum number of AI responses to send automatically per day (1-100)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Auto-Response Status</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {businessProfile.auto_response_paused 
+                        ? "Auto-responses are currently paused for all sequences" 
+                        : "Auto-responses are active for enabled sequences"}
+                    </p>
+                  </div>
+                  <Button
+                    variant={businessProfile.auto_response_paused ? "default" : "destructive"}
+                    onClick={() => setBusinessProfile({ 
+                      ...businessProfile, 
+                      auto_response_paused: !businessProfile.auto_response_paused
+                    })}
+                  >
+                    {businessProfile.auto_response_paused ? "Resume All" : "Pause All"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button
+                  onClick={handleSaveBusinessProfile}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Settings
                     </>
                   )}
                 </Button>

@@ -49,6 +49,10 @@ export type Database = {
       }
       business_profiles: {
         Row: {
+          auto_response_count_today: number | null
+          auto_response_daily_limit: number | null
+          auto_response_last_reset_date: string | null
+          auto_response_paused: boolean | null
           company_name: string | null
           created_at: string
           id: string
@@ -61,6 +65,10 @@ export type Database = {
           value_proposition: string | null
         }
         Insert: {
+          auto_response_count_today?: number | null
+          auto_response_daily_limit?: number | null
+          auto_response_last_reset_date?: string | null
+          auto_response_paused?: boolean | null
           company_name?: string | null
           created_at?: string
           id?: string
@@ -73,6 +81,10 @@ export type Database = {
           value_proposition?: string | null
         }
         Update: {
+          auto_response_count_today?: number | null
+          auto_response_daily_limit?: number | null
+          auto_response_last_reset_date?: string | null
+          auto_response_paused?: boolean | null
           company_name?: string | null
           created_at?: string
           id?: string

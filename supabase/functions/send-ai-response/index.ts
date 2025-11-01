@@ -59,9 +59,40 @@ serve(async (req) => {
 
     const { data: businessProfile } = await supabase
       .from('business_profiles')
-      .select('company_name')
+      .select('company_name, auto_response_daily_limit, auto_response_paused, auto_response_count_today, auto_response_last_reset_date')
       .eq('user_id', userId)
       .single();
+
+    if (!businessProfile) {
+      throw new Error('Business profile not found');
+    }
+
+    // Check if auto-response is paused globally
+    if (businessProfile.auto_response_paused) {
+      throw new Error('Auto-response is currently paused. Please unpause in settings to continue.');
+    }
+
+    // Check and reset daily counter if needed
+    const today = new Date().toISOString().split('T')[0];
+    let currentCount = businessProfile.auto_response_count_today || 0;
+    
+    if (businessProfile.auto_response_last_reset_date !== today) {
+      // Reset counter for new day
+      currentCount = 0;
+      await supabase
+        .from('business_profiles')
+        .update({
+          auto_response_count_today: 0,
+          auto_response_last_reset_date: today,
+        })
+        .eq('user_id', userId);
+    }
+
+    // Check daily limit
+    const dailyLimit = businessProfile.auto_response_daily_limit || 10;
+    if (currentCount >= dailyLimit) {
+      throw new Error(`Daily auto-response limit reached (${dailyLimit}). Increase limit in settings or wait until tomorrow.`);
+    }
 
     // Fetch the primary contact for this company
     const { data: contacts } = await supabase
@@ -261,7 +292,15 @@ serve(async (req) => {
       console.error('Failed to update company sequence:', updateError);
     }
 
-    console.log(`AI response sent successfully to ${contact.email}`);
+    // Increment daily auto-response counter
+    await supabase
+      .from('business_profiles')
+      .update({
+        auto_response_count_today: currentCount + 1,
+      })
+      .eq('user_id', userId);
+
+    console.log(`AI response sent successfully to ${contact.email} (${currentCount + 1}/${dailyLimit} today)`);
 
     return new Response(
       JSON.stringify({
