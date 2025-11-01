@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmailConnectionCard } from "@/components/integrations/EmailConnectionCard";
@@ -48,23 +48,6 @@ export default function Integrations() {
       return data || [];
     },
   });
-
-  // Handle OAuth callback after redirect
-  useEffect(() => {
-    const handleCallback = async () => {
-      const result = await nangoClient.handleOAuthCallback();
-      
-      if (result.success && result.provider) {
-        toast.success(`${result.provider} connected successfully!`);
-        queryClient.invalidateQueries({ queryKey: ['nango-connections'] });
-      } else if (result.error) {
-        console.error('OAuth callback error:', result.error);
-        toast.error(`Failed to complete connection: ${result.error}`);
-      }
-    };
-
-    handleCallback();
-  }, [queryClient]);
 
   const disconnectMutation = useMutation({
     mutationFn: (connectionId: string) => nangoClient.disconnect(connectionId),

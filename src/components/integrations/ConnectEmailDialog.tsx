@@ -200,8 +200,8 @@ export function ConnectEmailDialog({
                 <Alert className="border-blue-500/50 bg-blue-500/10">
                   <Info className="h-4 w-4 text-blue-500" />
                   <AlertDescription className="text-sm">
-                    You'll be redirected to {provider === 'gmail' ? 'Google' : 'Microsoft'} to authorize access. 
-                    Make sure to allow the required permissions for sending emails.
+                    A popup window will open for {provider === 'gmail' ? 'Google' : 'Microsoft'} authorization. 
+                    <strong> Please allow popups for this site.</strong> Make sure to allow the required permissions for sending emails.
                   </AlertDescription>
                 </Alert>
 
@@ -211,7 +211,7 @@ export function ConnectEmailDialog({
                   className="w-full"
                 >
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {loading ? `Redirecting to ${provider === 'gmail' ? 'Google' : 'Microsoft'}...` : `Continue with ${provider === 'gmail' ? 'Google' : 'Microsoft'}`}
+                  Continue with {provider === 'gmail' ? 'Google' : 'Microsoft'}
                 </Button>
 
                 <Button

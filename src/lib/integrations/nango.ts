@@ -19,7 +19,7 @@ export interface NangoConnection {
  */
 export const nangoClient = {
   /**
-   * Initialize OAuth flow for Gmail or Outlook using redirect flow
+   * Initialize OAuth flow for Gmail or Outlook using Nango Connect UI popup
    */
   async initiateOAuth(provider: 'gmail' | 'outlook'): Promise<{ data: any; error: Error | null }> {
     try {
@@ -33,10 +33,6 @@ export const nangoClient = {
         throw new Error('No session token received');
       }
 
-      // Store provider in localStorage so we know what to do after callback
-      localStorage.setItem('nango_connecting_provider', provider);
-      localStorage.setItem('nango_redirect_url', window.location.pathname);
-
       // Dynamically import Nango frontend SDK
       const { default: Nango } = await import('@nangohq/frontend');
       
@@ -44,82 +40,31 @@ export const nangoClient = {
         connectSessionToken: sessionData.sessionToken
       });
 
-      // Map provider to Nango integration ID
-      const integrationId = provider === 'gmail' ? 'google-mail' : 'outlook';
-
-      // Initiate redirect flow - this will redirect the user to Google/Microsoft
-      await nango.auth(integrationId, {
-        user_scope: ['email'],
+      // Open Nango Connect UI popup and wait for completion
+      return new Promise((resolve) => {
+        nango.openConnectUI({
+          onEvent: (event: any) => {
+            if (event.type === 'close') {
+              resolve({
+                data: null,
+                error: new Error('Authentication window was closed'),
+              });
+            } else if (event.type === 'connect') {
+              resolve({ 
+                data: { 
+                  success: true,
+                  connectionId: event.payload?.connectionId 
+                }, 
+                error: null 
+              });
+            }
+          },
+        });
       });
-
-      return { data: { success: true }, error: null };
     } catch (error) {
       return {
         data: null,
         error: error instanceof Error ? error : new Error('OAuth initialization failed'),
-      };
-    }
-  },
-
-  /**
-   * Handle OAuth callback after redirect
-   */
-  async handleOAuthCallback(): Promise<{ success: boolean; provider?: string; error?: string }> {
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      
-      // Check if this is an OAuth callback
-      if (!urlParams.has('state') || !urlParams.has('code')) {
-        return { success: false };
-      }
-
-      const provider = localStorage.getItem('nango_connecting_provider') as 'gmail' | 'outlook';
-      const redirectUrl = localStorage.getItem('nango_redirect_url');
-      
-      if (!provider) {
-        return { success: false, error: 'No provider found in storage' };
-      }
-
-      // Get a new session token
-      const { data: sessionData, error: sessionError } = await apiClient.callFunction('nango-oauth-init', {
-        provider,
-      });
-
-      if (sessionError || !sessionData?.sessionToken) {
-        throw new Error('Failed to get session token');
-      }
-
-      // Initialize Nango with session token
-      const { default: Nango } = await import('@nangohq/frontend');
-      const nango = new Nango({ 
-        connectSessionToken: sessionData.sessionToken
-      });
-
-      // Map provider to Nango integration ID
-      const integrationId = provider === 'gmail' ? 'google-mail' : 'outlook';
-
-      // Complete the OAuth flow
-      await nango.auth(integrationId, {
-        user_scope: ['email'],
-      });
-
-      // Clean up localStorage
-      localStorage.removeItem('nango_connecting_provider');
-      localStorage.removeItem('nango_redirect_url');
-
-      // Remove OAuth params from URL
-      const cleanUrl = redirectUrl || window.location.pathname;
-      window.history.replaceState({}, document.title, cleanUrl);
-
-      return { success: true, provider };
-    } catch (error) {
-      // Clean up localStorage on error
-      localStorage.removeItem('nango_connecting_provider');
-      localStorage.removeItem('nango_redirect_url');
-      
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'OAuth callback failed',
       };
     }
   },
