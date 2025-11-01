@@ -32,8 +32,22 @@ Deno.serve(async (req) => {
     // Exa search span
     const exaSpan = createSpan(trace, 'exa-api-search', { query: `${industry} companies in ${geography} with ${size} employees` });
 
-    const exaQuery = `${industry} companies in ${geography} with ${size} employees`;
+    // Build the Exa search query with enhanced industry context
+    // Extract subcategory from format "Subcategory (Category)" if present
+    let industryContext = industry;
+    let mainCategory = '';
+    
+    if (industry.includes('(') && industry.includes(')')) {
+      const match = industry.match(/^(.+?)\s*\((.+?)\)$/);
+      if (match) {
+        industryContext = match[1].trim(); // Subcategory
+        mainCategory = match[2].trim(); // Main category
+      }
+    }
+    
+    const exaQuery = `${industryContext} companies in ${geography} with approximately ${size} employees`;
     console.log("Exa search query:", exaQuery);
+    console.log("Industry context:", { industryContext, mainCategory });
 
     const exaResponse = await fetch("https://api.exa.ai/search", {
       method: "POST",
@@ -67,22 +81,31 @@ Deno.serve(async (req) => {
     
     await endSpan(exaSpan, { resultCount: exaData.results?.length || 0 });
 
-    // Call AI provider for data extraction
+    // Enhanced extraction prompt with industry context
+    const industryGuidance = mainCategory 
+      ? `Focus on companies specifically in the ${industryContext} sector within the broader ${mainCategory} industry.`
+      : `Focus on companies in the ${industryContext} industry.`;
+
     const extractionPrompt = `Extract company information from the following search results and return ONLY a valid JSON array of objects.
+
+${industryGuidance}
 
 CRITICAL RULES:
 1. Extract ALL companies mentioned in the results, even if data is incomplete
 2. If a field is missing, use null (don't skip the company)
 3. Return ONLY the JSON array - NO markdown, NO explanations, NO code blocks
+4. For the industry field, be as specific as possible using "${industryContext}"${mainCategory ? ` (${mainCategory})` : ''}
 
 Each object must have these exact fields:
 - name (string, required)
 - website (string or null)
-- description (string or null)
-- industry (string, use "${industry}")
+- description (string or null, 1-2 sentences highlighting their specific niche)
+- industry (string, use "${industryContext}"${mainCategory ? ` or more specific within ${mainCategory}` : ''})
 - size (string, use "${size}")
 - geography (string, use "${geography}")
 - linkedinUrl (string or null)
+
+Prioritize companies that are a strong match for "${industryContext}" within the search results.
 
 Search results:
 ${JSON.stringify(exaData.results, null, 2)}

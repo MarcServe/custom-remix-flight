@@ -3,8 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight } from "lucide-react";
+import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import { useLeadFinder } from "@/hooks/use-lead-finder";
 import { useProviderStore } from "@/stores/provider-store";
@@ -15,26 +17,14 @@ import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { companiesApi } from "@/lib/api/companies";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-
-// Industry categories with subcategories
-const industryCategories = {
-  'Technology': ['SaaS', 'Fintech', 'EdTech', 'HealthTech', 'AI/ML', 'Cybersecurity', 'DevOps', 'Cloud Services', 'E-commerce Tech'],
-  'Finance': ['Banking', 'Insurance', 'Investment', 'Wealth Management', 'Payments', 'Credit Services'],
-  'Healthcare': ['Hospitals', 'Pharmaceuticals', 'Medical Devices', 'Telemedicine', 'Biotech', 'Healthcare IT'],
-  'Legal': ['Law Firms', 'Legal Tech', 'Compliance', 'IP Services', 'Contract Management'],
-  'Marketing': ['Digital Marketing', 'SEO/SEM', 'Content Marketing', 'Social Media', 'Advertising', 'Marketing Automation'],
-  'Manufacturing': ['Industrial', 'Automotive', 'Electronics', 'Consumer Goods', 'Food & Beverage'],
-  'Retail': ['E-commerce', 'Fashion', 'Consumer Electronics', 'Grocery', 'Specialty Retail'],
-  'Real Estate': ['Commercial', 'Residential', 'Property Management', 'Real Estate Tech'],
-  'Education': ['K-12', 'Higher Education', 'Online Learning', 'Training & Development'],
-  'Consulting': ['Management Consulting', 'IT Consulting', 'HR Consulting', 'Financial Advisory']
-};
+import { industryTaxonomy, getIndustryCategories, getIndustrySubcategories, formatIndustryString } from "@/lib/data/industry-taxonomy";
 
 export default function LeadFinder() {
   const [size, setSize] = useState("");
   const [geography, setGeography] = useState("");
   const [industryCategory, setIndustryCategory] = useState("");
   const [industrySubcategory, setIndustrySubcategory] = useState("");
+  const [subcategorySearch, setSubcategorySearch] = useState("");
   const [dryRun, setDryRun] = useState(true);
   const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(true);
   const [selectedCompany, setSelectedCompany] = useState<any>(null);
@@ -69,8 +59,10 @@ export default function LeadFinder() {
     // Otherwise, use the dryRun checkbox value
     const shouldDryRun = options?.forceSave ? false : dryRun;
     
-    // Combine category and subcategory for industry
-    const industryString = industrySubcategory ? `${industrySubcategory} (${industryCategory})` : industryCategory;
+    // Use the helper function to format industry string
+    const industryString = industrySubcategory 
+      ? formatIndustryString(industryCategory, industrySubcategory)
+      : industryCategory;
     
     const { data } = await leadFinderMutation.mutateAsync({
       size,
@@ -203,6 +195,14 @@ export default function LeadFinder() {
     }
   };
 
+  const availableSubcategories = industryCategory 
+    ? getIndustrySubcategories(industryCategory)
+    : [];
+
+  const filteredSubcategories = availableSubcategories.filter(sub =>
+    sub.toLowerCase().includes(subcategorySearch.toLowerCase())
+  );
+
   const isFormValid = size && geography && industryCategory;
   const isLoading = leadFinderMutation.isPending;
   const results = leadFinderMutation.data?.data;
@@ -284,14 +284,15 @@ export default function LeadFinder() {
                       value={industryCategory} 
                       onValueChange={(value) => {
                         setIndustryCategory(value);
-                        setIndustrySubcategory(""); // Reset subcategory when category changes
+                        setIndustrySubcategory("");
+                        setSubcategorySearch("");
                       }}
                     >
                       <SelectTrigger id="industry-category" className="h-9 text-xs">
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
-                      <SelectContent>
-                        {Object.keys(industryCategories).map(category => (
+                      <SelectContent className="max-h-[300px]">
+                        {getIndustryCategories().map(category => (
                           <SelectItem key={category} value={category}>{category}</SelectItem>
                         ))}
                       </SelectContent>
@@ -301,17 +302,61 @@ export default function LeadFinder() {
                   {industryCategory && (
                     <div className="space-y-1.5">
                       <Label htmlFor="industry-subcategory" className="text-xs font-medium">Subcategory (Optional)</Label>
-                      <Select value={industrySubcategory} onValueChange={setIndustrySubcategory}>
-                        <SelectTrigger id="industry-subcategory" className="h-9 text-xs">
-                          <SelectValue placeholder="Select subcategory" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">None</SelectItem>
-                          {industryCategories[industryCategory as keyof typeof industryCategories]?.map(subcategory => (
-                            <SelectItem key={subcategory} value={subcategory}>{subcategory}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full h-9 justify-between text-xs font-normal"
+                          >
+                            {industrySubcategory || "Select subcategory"}
+                            <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                          <div className="p-2">
+                            <Input
+                              placeholder="Search..."
+                              value={subcategorySearch}
+                              onChange={(e) => setSubcategorySearch(e.target.value)}
+                              className="h-8 text-xs mb-2"
+                            />
+                            <ScrollArea className="h-[200px]">
+                              <div className="space-y-1">
+                                <Button
+                                  variant="ghost"
+                                  className="w-full h-8 justify-start text-xs font-normal"
+                                  onClick={() => {
+                                    setIndustrySubcategory("");
+                                    setSubcategorySearch("");
+                                  }}
+                                >
+                                  None
+                                </Button>
+                                {filteredSubcategories.length > 0 ? (
+                                  filteredSubcategories.map((subcategory) => (
+                                    <Button
+                                      key={subcategory}
+                                      variant="ghost"
+                                      className="w-full h-8 justify-start text-xs font-normal"
+                                      onClick={() => {
+                                        setIndustrySubcategory(subcategory);
+                                        setSubcategorySearch("");
+                                      }}
+                                    >
+                                      {subcategory}
+                                    </Button>
+                                  ))
+                                ) : (
+                                  <div className="p-2 text-xs text-muted-foreground text-center">
+                                    No results found
+                                  </div>
+                                )}
+                              </div>
+                            </ScrollArea>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   )}
                 </div>
