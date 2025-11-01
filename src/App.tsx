@@ -23,6 +23,7 @@ import AutoResponseHub from "./pages/AutoResponseHub";
 import Conversations from "./pages/Conversations";
 import Events from "./pages/Events";
 import Integrations from "./pages/Integrations";
+import EmailDeliverability from "./pages/EmailDeliverability";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -68,6 +69,7 @@ const App = () => (
                           <Route path="/conversations" element={<Conversations />} />
                           <Route path="/events" element={<Events />} />
                           <Route path="/integrations" element={<Integrations />} />
+                          <Route path="/email-deliverability" element={<EmailDeliverability />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </main>

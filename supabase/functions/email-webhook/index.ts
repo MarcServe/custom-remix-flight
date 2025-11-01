@@ -76,6 +76,31 @@ serve(async (req) => {
         updates.status = 'bounced';
         updates.metadata.bounce_reason = data.reason || 'Unknown';
         
+        // Determine bounce type (hard or soft)
+        const bounceType = data.bounce_type || (data.reason?.toLowerCase().includes('permanent') ? 'hard' : 'soft');
+        
+        // Track bounce event
+        const { data: sequenceData } = await supabase
+          .from('company_sequences')
+          .select('sequence:email_sequences(user_id)')
+          .eq('id', activity.company_sequence_id)
+          .single();
+        
+        if (sequenceData) {
+          await supabase
+            .from('email_bounce_events')
+            .insert({
+              user_id: (sequenceData.sequence as any)?.user_id,
+              email_activity_id: activity.id,
+              recipient_email: data.email || 'unknown',
+              bounce_type: bounceType,
+              bounce_reason: data.reason || 'No reason provided',
+              external_message_id: emailId,
+              occurred_at: new Date().toISOString(),
+              metadata: data,
+            });
+        }
+        
         // Pause the sequence if email bounced
         await supabase
           .from('company_sequences')
@@ -102,6 +127,28 @@ serve(async (req) => {
       case 'email.spam':
         updates.status = 'spam';
         updates.metadata.marked_spam_at = new Date().toISOString();
+        
+        // Track spam complaint as a bounce event
+        const { data: spamSequenceData } = await supabase
+          .from('company_sequences')
+          .select('sequence:email_sequences(user_id)')
+          .eq('id', activity.company_sequence_id)
+          .single();
+        
+        if (spamSequenceData) {
+          await supabase
+            .from('email_bounce_events')
+            .insert({
+              user_id: (spamSequenceData.sequence as any)?.user_id,
+              email_activity_id: activity.id,
+              recipient_email: data.email || 'unknown',
+              bounce_type: 'complaint',
+              bounce_reason: 'Marked as spam',
+              external_message_id: emailId,
+              occurred_at: new Date().toISOString(),
+              metadata: data,
+            });
+        }
         
         // Stop the sequence if marked as spam
         await supabase

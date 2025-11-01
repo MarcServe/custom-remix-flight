@@ -134,8 +134,51 @@ serve(async (req) => {
         message: 'DKIM verification requires domain setup in Resend. Visit https://resend.com/domains to configure.'
       });
 
+      // Check MX records
+      let mxValid = false;
+      try {
+        const mxResponse = await fetch(`https://dns.google/resolve?name=${domain}&type=MX`);
+        const mxData = await mxResponse.json();
+        mxValid = mxData.Answer && mxData.Answer.length > 0;
+      } catch (error) {
+        console.error('Error checking MX:', error);
+      }
+
       result.dnsRecords = dnsRecords;
       result.domainScore = calculateDomainScore(dnsRecords);
+
+      // Get SPF, DKIM, DMARC validity from records
+      const spfValid = dnsRecords.find(r => r.type === 'SPF')?.status === 'valid';
+      const dkimValid = dnsRecords.find(r => r.type === 'DKIM')?.status === 'valid';
+      const dmarcValid = dnsRecords.find(r => r.type === 'DMARC')?.status === 'valid';
+
+      // Calculate sender reputation (simplified for now)
+      const reputationScore = Math.round((result.domainScore + 20) * 0.9);
+
+      // Save metrics to database
+      const { error: insertError } = await supabaseClient
+        .from('email_deliverability_metrics')
+        .insert({
+          user_id: user.id,
+          domain,
+          overall_score: result.domainScore,
+          sender_reputation: reputationScore,
+          spf_valid: spfValid,
+          dkim_valid: dkimValid,
+          dmarc_valid: dmarcValid,
+          mx_records_valid: mxValid,
+          blacklisted: false, // Would need external API to check
+          blacklist_providers: [],
+          metadata: {
+            dns_records: dnsRecords,
+          },
+        });
+
+      if (insertError) {
+        console.error('Error saving deliverability metrics:', insertError);
+      } else {
+        console.log('Deliverability metrics saved successfully');
+      }
     }
 
     // Analyze email content if provided

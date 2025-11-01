@@ -706,6 +706,53 @@ export type Database = {
           },
         ]
       }
+      email_bounce_events: {
+        Row: {
+          bounce_reason: string | null
+          bounce_type: string
+          created_at: string
+          email_activity_id: string | null
+          external_message_id: string | null
+          id: string
+          metadata: Json | null
+          occurred_at: string
+          recipient_email: string
+          user_id: string
+        }
+        Insert: {
+          bounce_reason?: string | null
+          bounce_type: string
+          created_at?: string
+          email_activity_id?: string | null
+          external_message_id?: string | null
+          id?: string
+          metadata?: Json | null
+          occurred_at?: string
+          recipient_email: string
+          user_id: string
+        }
+        Update: {
+          bounce_reason?: string | null
+          bounce_type?: string
+          created_at?: string
+          email_activity_id?: string | null
+          external_message_id?: string | null
+          id?: string
+          metadata?: Json | null
+          occurred_at?: string
+          recipient_email?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_bounce_events_email_activity_id_fkey"
+            columns: ["email_activity_id"]
+            isOneToOne: false
+            referencedRelation: "email_activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_campaign_recipients: {
         Row: {
           bounced_at: string | null
@@ -848,6 +895,78 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      email_deliverability_metrics: {
+        Row: {
+          blacklist_providers: string[] | null
+          blacklisted: boolean | null
+          bounce_rate: number | null
+          checked_at: string
+          created_at: string
+          dkim_valid: boolean | null
+          dmarc_valid: boolean | null
+          domain: string
+          hard_bounce_count: number | null
+          id: string
+          metadata: Json | null
+          mx_records_valid: boolean | null
+          overall_score: number | null
+          sender_reputation: number | null
+          soft_bounce_count: number | null
+          spam_complaint_count: number | null
+          spam_complaint_rate: number | null
+          spam_score: number | null
+          spf_valid: boolean | null
+          total_sent: number | null
+          user_id: string
+        }
+        Insert: {
+          blacklist_providers?: string[] | null
+          blacklisted?: boolean | null
+          bounce_rate?: number | null
+          checked_at?: string
+          created_at?: string
+          dkim_valid?: boolean | null
+          dmarc_valid?: boolean | null
+          domain: string
+          hard_bounce_count?: number | null
+          id?: string
+          metadata?: Json | null
+          mx_records_valid?: boolean | null
+          overall_score?: number | null
+          sender_reputation?: number | null
+          soft_bounce_count?: number | null
+          spam_complaint_count?: number | null
+          spam_complaint_rate?: number | null
+          spam_score?: number | null
+          spf_valid?: boolean | null
+          total_sent?: number | null
+          user_id: string
+        }
+        Update: {
+          blacklist_providers?: string[] | null
+          blacklisted?: boolean | null
+          bounce_rate?: number | null
+          checked_at?: string
+          created_at?: string
+          dkim_valid?: boolean | null
+          dmarc_valid?: boolean | null
+          domain?: string
+          hard_bounce_count?: number | null
+          id?: string
+          metadata?: Json | null
+          mx_records_valid?: boolean | null
+          overall_score?: number | null
+          sender_reputation?: number | null
+          soft_bounce_count?: number | null
+          spam_complaint_count?: number | null
+          spam_complaint_rate?: number | null
+          spam_score?: number | null
+          spf_valid?: boolean | null
+          total_sent?: number | null
+          user_id?: string
+        }
+        Relationships: []
       }
       email_sequences: {
         Row: {
