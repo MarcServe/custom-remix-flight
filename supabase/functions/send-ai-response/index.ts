@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { renderEmailTemplate } from '../_shared/professional-template.ts';
 
@@ -11,6 +12,7 @@ interface SendAIResponseRequest {
   companySequenceId: string;
   subject: string;
   body: string;
+  recipientEmail?: string;
   inboundThreadId?: string;
 }
 
@@ -20,7 +22,7 @@ serve(async (req) => {
   }
 
   try {
-    const { companySequenceId, subject, body, inboundThreadId }: SendAIResponseRequest = await req.json();
+    const { companySequenceId, subject, body, recipientEmail, inboundThreadId }: SendAIResponseRequest = await req.json();
 
     if (!companySequenceId || !subject || !body) {
       throw new Error('Missing required fields: companySequenceId, subject, body');
@@ -94,19 +96,29 @@ serve(async (req) => {
       throw new Error(`Daily auto-response limit reached (${dailyLimit}). Increase limit in settings or wait until tomorrow.`);
     }
 
-    // Fetch the primary contact for this company
-    const { data: contacts } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('company_id', companySequence.company_id)
-      .order('is_primary_contact', { ascending: false })
-      .limit(1);
+    // Use provided recipientEmail or fetch from contacts
+    let recipientEmailAddress = recipientEmail;
+    let contactName = '';
 
-    if (!contacts || contacts.length === 0) {
-      throw new Error('No contacts found for this company');
+    if (!recipientEmailAddress) {
+      const { data: contacts } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('company_id', companySequence.company_id)
+        .order('is_primary_contact', { ascending: false })
+        .limit(1);
+
+      if (!contacts || contacts.length === 0) {
+        throw new Error('No contacts found for this company and no recipient email provided');
+      }
+
+      recipientEmailAddress = contacts[0].email;
+      contactName = contacts[0].name;
     }
 
-    const contact = contacts[0];
+    if (!recipientEmailAddress) {
+      throw new Error('Recipient email address is required');
+    }
 
     // Check for email connection (SMTP or Gmail)
     const { data: emailConnection } = await supabase
@@ -140,37 +152,71 @@ serve(async (req) => {
 
     // Send email based on available connection
     if (emailConnection?.provider === 'smtp' && emailConnection.from_email) {
-      // Send via SMTP (Resend relay mode)
-      if (!RESEND_API_KEY) {
-        throw new Error('Email service not configured');
-      }
+      const smtpMode = (emailConnection.metadata as any)?.smtp_mode || 'direct';
 
-      console.log(`Sending AI response via SMTP: ${senderName} <${emailConnection.from_email}>`);
+      if (smtpMode === 'direct' && (emailConnection.metadata as any)?.smtp_host) {
+        // Direct SMTP Connection
+        console.log(`Sending AI response via Direct SMTP: ${(emailConnection.metadata as any).smtp_host}`);
 
-      const resendResponse = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        const smtpConfig = emailConnection.metadata as any;
+        const client = new SMTPClient({
+          connection: {
+            hostname: smtpConfig.smtp_host,
+            port: smtpConfig.smtp_port || 587,
+            tls: smtpConfig.smtp_secure !== false,
+            auth: {
+              username: smtpConfig.smtp_username,
+              password: smtpConfig.smtp_password,
+            },
+          },
+        });
+
+        await client.send({
           from: `${senderName} <${emailConnection.from_email}>`,
-          to: [contact.email],
+          to: recipientEmailAddress,
           subject,
-          text: body,
+          content: body,
           html: wrappedHtml,
-        }),
-      });
+        });
 
-      if (!resendResponse.ok) {
-        const errorText = await resendResponse.text();
-        throw new Error(`Failed to send via SMTP: ${errorText}`);
+        await client.close();
+        messageId = `direct-smtp-${Date.now()}`;
+        provider = 'smtp';
+        console.log('AI response sent via Direct SMTP');
+
+      } else {
+        // Resend relay mode
+        if (!RESEND_API_KEY) {
+          throw new Error('Email service not configured');
+        }
+
+        console.log(`Sending AI response via SMTP (Resend relay): ${senderName} <${emailConnection.from_email}>`);
+
+        const resendResponse = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: `${senderName} <${emailConnection.from_email}>`,
+            to: [recipientEmailAddress],
+            subject,
+            text: body,
+            html: wrappedHtml,
+          }),
+        });
+
+        if (!resendResponse.ok) {
+          const errorText = await resendResponse.text();
+          throw new Error(`Failed to send via SMTP: ${errorText}`);
+        }
+
+        const resendData = await resendResponse.json();
+        messageId = resendData.id;
+        provider = 'smtp';
+        console.log('AI response sent via SMTP (Resend relay):', messageId);
       }
-
-      const resendData = await resendResponse.json();
-      messageId = resendData.id;
-      provider = 'smtp';
-      console.log('AI response sent via SMTP:', messageId);
 
     } else if (emailConnection?.provider === 'gmail') {
       // Send via Gmail/Nango
@@ -190,7 +236,7 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          to: [{ email: contact.email, name: contact.name }],
+          to: [{ email: recipientEmailAddress, name: contactName || '' }],
           subject,
           body: {
             content: body,
@@ -225,7 +271,7 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           from: 'CRM <onboarding@resend.dev>',
-          to: [contact.email],
+          to: [recipientEmailAddress],
           subject,
           text: body,
           html: renderEmailTemplate(
@@ -262,10 +308,12 @@ serve(async (req) => {
         company_sequence_id: companySequenceId,
         direction: 'outbound',
         from_email: senderEmail,
-        to_email: contact.email,
+        to_email: recipientEmailAddress,
         subject,
-        body,
-        external_message_id: messageId,
+        body_text: body,
+        body_html: wrappedHtml,
+        message_id: messageId,
+        received_at: new Date().toISOString(),
         metadata: {
           provider,
           auto_sent: true,
@@ -277,29 +325,41 @@ serve(async (req) => {
       console.error('Failed to create email thread:', threadError);
     }
 
-    // Create email_activities record
-    const { data: activityData, error: activityError } = await supabase
-      .from('email_activities')
-      .insert({
-        company_sequence_id: companySequenceId,
-        contact_id: contact.id,
-        step_number: (companySequence.current_step || 0) + 1,
-        subject,
-        body,
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-        external_message_id: messageId,
-        metadata: {
-          provider,
-          auto_sent: true,
-          ai_generated: true,
-        },
-      })
-      .select()
-      .single();
+    // Create email_activities record (only if we have a contact_id from contacts table)
+    let activityData = null;
+    const { data: contactForActivity } = await supabase
+      .from('contacts')
+      .select('id')
+      .eq('email', recipientEmailAddress)
+      .eq('company_id', companySequence.company_id)
+      .maybeSingle();
 
-    if (activityError) {
-      console.error('Failed to record email activity:', activityError);
+    if (contactForActivity) {
+      const { data, error: activityError } = await supabase
+        .from('email_activities')
+        .insert({
+          company_sequence_id: companySequenceId,
+          contact_id: contactForActivity.id,
+          step_number: (companySequence.current_step || 0) + 1,
+          subject,
+          body,
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+          external_message_id: messageId,
+          metadata: {
+            provider,
+            auto_sent: true,
+            ai_generated: true,
+          },
+        })
+        .select()
+        .single();
+
+      activityData = data;
+      
+      if (activityError) {
+        console.error('Failed to record email activity:', activityError);
+      }
     }
 
     // Track analytics for sent auto-response
@@ -314,11 +374,11 @@ serve(async (req) => {
           ai_temperature: businessProfile.ai_temperature || 0.7,
           sent_at: new Date().toISOString(),
           token_count: (subject + body).length,
-          metadata: {
-            provider,
-            recipient: contact.email,
-            company_name: (companySequence.company as any)?.name,
-          },
+            metadata: {
+              provider,
+              recipient: recipientEmailAddress,
+              company_name: (companySequence.company as any)?.name,
+            },
         });
 
       if (analyticsError) {
@@ -351,14 +411,14 @@ serve(async (req) => {
       })
       .eq('user_id', userId);
 
-    console.log(`AI response sent successfully to ${contact.email} (${currentCount + 1}/${dailyLimit} today)`);
+    console.log(`AI response sent successfully to ${recipientEmailAddress} (${currentCount + 1}/${dailyLimit} today)`);
 
     return new Response(
       JSON.stringify({
         success: true,
         messageId,
         provider,
-        recipient: contact.email,
+        recipient: recipientEmailAddress,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
