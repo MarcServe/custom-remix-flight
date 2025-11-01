@@ -199,16 +199,23 @@ Return a JSON object with: sentiment, keyPoints (array), questionsAsked (array),
     if (nextAction === 'personalized_response') {
       console.log('Triggering AI response generation');
       
-      // Call generate-ai-response function
+      // Check if auto-response is enabled for this sequence
+      const autoSend = matchedSequence.auto_respond_enabled === true;
+      console.log(`Auto-response enabled: ${autoSend}`);
+      
+      // Call generate-ai-response function with autoSend flag
       const { error: generateError } = await supabaseClient.functions.invoke('generate-ai-response', {
         body: { 
           companySequenceId: matchedSequence.id,
-          inboundThreadId: thread.id 
+          inboundThreadId: thread.id,
+          autoSend 
         },
       });
 
       if (generateError) {
         console.error('Error triggering AI response:', generateError);
+      } else {
+        console.log(`AI response generation triggered (autoSend: ${autoSend})`);
       }
     }
 

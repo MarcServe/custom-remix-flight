@@ -68,3 +68,6 @@ verify_jwt = false  # Webhook from email providers
 
 [functions.generate-ai-response]
 verify_jwt = true
+
+[functions.send-ai-response]
+verify_jwt = false  # Called by generate-ai-response function

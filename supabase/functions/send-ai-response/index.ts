@@ -1,0 +1,289 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { corsHeaders } from '../_shared/cors.ts';
+import { wrapEmailContent } from '../_shared/email-wrapper.ts';
+
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+interface SendAIResponseRequest {
+  companySequenceId: string;
+  subject: string;
+  body: string;
+  inboundThreadId?: string;
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { companySequenceId, subject, body, inboundThreadId }: SendAIResponseRequest = await req.json();
+
+    if (!companySequenceId || !subject || !body) {
+      throw new Error('Missing required fields: companySequenceId, subject, body');
+    }
+
+    console.log(`Sending AI response for sequence: ${companySequenceId}`);
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Fetch company sequence with related data
+    const { data: companySequence, error: sequenceError } = await supabase
+      .from('company_sequences')
+      .select(`
+        *,
+        company:companies(id, name, website),
+        sequence:email_sequences(name, user_id)
+      `)
+      .eq('id', companySequenceId)
+      .single();
+
+    if (sequenceError || !companySequence) {
+      throw new Error(`Company sequence not found: ${sequenceError?.message}`);
+    }
+
+    // Fetch user profile for sender info
+    const userId = (companySequence.sequence as any)?.user_id;
+    if (!userId) {
+      throw new Error('User not found for sequence');
+    }
+
+    const { data: userProfile } = await supabase
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', userId)
+      .single();
+
+    const { data: businessProfile } = await supabase
+      .from('business_profiles')
+      .select('company_name')
+      .eq('user_id', userId)
+      .single();
+
+    // Fetch the primary contact for this company
+    const { data: contacts } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('company_id', companySequence.company_id)
+      .order('is_primary_contact', { ascending: false })
+      .limit(1);
+
+    if (!contacts || contacts.length === 0) {
+      throw new Error('No contacts found for this company');
+    }
+
+    const contact = contacts[0];
+
+    // Check for email connection (SMTP or Gmail)
+    const { data: emailConnection } = await supabase
+      .from('crm_connections')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .in('provider', ['smtp', 'gmail'])
+      .maybeSingle();
+
+    let messageId: string | null = null;
+    let provider = 'resend';
+    const senderName = businessProfile?.company_name || userProfile?.full_name || 'CRM';
+    const senderEmail = emailConnection?.from_email || userProfile?.email || 'noreply@yourdomain.com';
+
+    // Convert plain text body to HTML
+    const bodyHtml = body.replace(/\n/g, '<br>');
+    const wrappedHtml = wrapEmailContent(bodyHtml, senderName, senderEmail);
+
+    // Send email based on available connection
+    if (emailConnection?.provider === 'smtp' && emailConnection.from_email) {
+      // Send via SMTP (Resend relay mode)
+      if (!RESEND_API_KEY) {
+        throw new Error('Email service not configured');
+      }
+
+      console.log(`Sending AI response via SMTP: ${senderName} <${emailConnection.from_email}>`);
+
+      const resendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: `${senderName} <${emailConnection.from_email}>`,
+          to: [contact.email],
+          subject,
+          text: body,
+          html: wrappedHtml,
+        }),
+      });
+
+      if (!resendResponse.ok) {
+        const errorText = await resendResponse.text();
+        throw new Error(`Failed to send via SMTP: ${errorText}`);
+      }
+
+      const resendData = await resendResponse.json();
+      messageId = resendData.id;
+      provider = 'smtp';
+      console.log('AI response sent via SMTP:', messageId);
+
+    } else if (emailConnection?.provider === 'gmail') {
+      // Send via Gmail/Nango
+      const nangoSecretKey = Deno.env.get('NANGO_SECRET_KEY');
+      if (!nangoSecretKey) {
+        throw new Error('Gmail integration not configured');
+      }
+
+      console.log(`Sending AI response via Gmail: ${emailConnection.connection_id}`);
+
+      const nangoResponse = await fetch('https://api.nango.dev/v1/gmail/messages', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${nangoSecretKey}`,
+          'Connection-Id': emailConnection.connection_id,
+          'Provider-Config-Key': 'google-mail',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: [{ email: contact.email, name: contact.name }],
+          subject,
+          body: {
+            content: body,
+            type: 'text/plain',
+          },
+        }),
+      });
+
+      if (!nangoResponse.ok) {
+        const errorText = await nangoResponse.text();
+        throw new Error(`Failed to send via Gmail: ${errorText}`);
+      }
+
+      const nangoData = await nangoResponse.json();
+      messageId = nangoData.id;
+      provider = 'gmail';
+      console.log('AI response sent via Gmail:', messageId);
+
+    } else {
+      // Fallback to Resend
+      if (!RESEND_API_KEY) {
+        throw new Error('No email provider configured. Please set up SMTP or Gmail in Settings.');
+      }
+
+      console.log('Sending AI response via Resend (fallback)');
+
+      const resendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'CRM <onboarding@resend.dev>',
+          to: [contact.email],
+          subject,
+          text: body,
+          html: wrapEmailContent(bodyHtml, 'CRM', 'onboarding@resend.dev'),
+        }),
+      });
+
+      if (!resendResponse.ok) {
+        const errorText = await resendResponse.text();
+        throw new Error(`Failed to send via Resend: ${errorText}`);
+      }
+
+      const resendData = await resendResponse.json();
+      messageId = resendData.id;
+      console.log('AI response sent via Resend:', messageId);
+    }
+
+    // Create email_threads record for outbound email
+    const { error: threadError } = await supabase
+      .from('email_threads')
+      .insert({
+        company_sequence_id: companySequenceId,
+        direction: 'outbound',
+        from_email: senderEmail,
+        to_email: contact.email,
+        subject,
+        body,
+        external_message_id: messageId,
+        metadata: {
+          provider,
+          auto_sent: true,
+          inbound_thread_id: inboundThreadId,
+        },
+      });
+
+    if (threadError) {
+      console.error('Failed to create email thread:', threadError);
+    }
+
+    // Create email_activities record
+    const { error: activityError } = await supabase
+      .from('email_activities')
+      .insert({
+        company_sequence_id: companySequenceId,
+        contact_id: contact.id,
+        step_number: (companySequence.current_step || 0) + 1,
+        subject,
+        body,
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+        external_message_id: messageId,
+        metadata: {
+          provider,
+          auto_sent: true,
+          ai_generated: true,
+        },
+      });
+
+    if (activityError) {
+      console.error('Failed to record email activity:', activityError);
+    }
+
+    // Update company sequence
+    const { error: updateError } = await supabase
+      .from('company_sequences')
+      .update({
+        next_action: 'wait_for_response',
+        updated_at: new Date().toISOString(),
+        metadata: {
+          ...(companySequence.metadata || {}),
+          last_auto_response_at: new Date().toISOString(),
+        },
+      })
+      .eq('id', companySequenceId);
+
+    if (updateError) {
+      console.error('Failed to update company sequence:', updateError);
+    }
+
+    console.log(`AI response sent successfully to ${contact.email}`);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        messageId,
+        provider,
+        recipient: contact.email,
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+
+  } catch (error) {
+    console.error('Error in send-ai-response:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
+});

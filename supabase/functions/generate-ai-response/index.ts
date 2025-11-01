@@ -216,12 +216,64 @@ Return ONLY a JSON object with this structure:
       })
       .eq('id', companySequenceId);
 
+    console.log(`AI response saved as ${responseStatus}`);
+
+    // If autoSend is true, immediately send the response
+    if (autoSend) {
+      console.log('Auto-send enabled, sending AI response...');
+      
+      try {
+        const { error: sendError } = await supabaseClient.functions.invoke('send-ai-response', {
+          body: {
+            companySequenceId,
+            subject: emailContent.subject,
+            body: emailContent.body,
+            inboundThreadId,
+          },
+        });
+
+        if (sendError) {
+          console.error('Failed to auto-send AI response:', sendError);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: `AI response generated but failed to send: ${sendError.message}`,
+              subject: emailContent.subject,
+              body: emailContent.body,
+            }),
+            {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
+        console.log('AI response auto-sent successfully');
+        
+        return new Response(
+          JSON.stringify({
+            success: true,
+            subject: emailContent.subject,
+            body: emailContent.body,
+            status: 'sent',
+            autoSent: true,
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      } catch (sendError) {
+        console.error('Error auto-sending AI response:', sendError);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         subject: emailContent.subject,
         body: emailContent.body,
         status: responseStatus,
+        autoSent: false,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
