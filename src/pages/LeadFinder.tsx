@@ -6,8 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX } from "lucide-react";
+import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { exportCompaniesToCSV } from "@/lib/utils/export";
 import { useLeadFinder } from "@/hooks/use-lead-finder";
 import { useProviderStore } from "@/stores/provider-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -36,6 +38,10 @@ export default function LeadFinder() {
   const [selectedCompanyIndices, setSelectedCompanyIndices] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [currentCompanyIndex, setCurrentCompanyIndex] = useState<number>(0);
+  
+  // Batch operation states
+  const [isEnriching, setIsEnriching] = useState(false);
+  const [isFindingContacts, setIsFindingContacts] = useState(false);
   
   // Filter states
   const [minQualityScore, setMinQualityScore] = useState<number>(0);
@@ -299,6 +305,125 @@ export default function LeadFinder() {
   };
 
   const hasActiveFilters = minQualityScore > 0 || mustHaveContacts || mustHaveLinkedIn || mustHaveNews || mustHaveFunding || sortBy !== 'quality';
+
+  // Batch action handlers
+  const handleExportSelected = () => {
+    if (!filteredAndSortedResults?.leads || selectedCompanyIndices.size === 0) return;
+    
+    const selectedCompanies = Array.from(selectedCompanyIndices).map(idx => filteredAndSortedResults.leads[idx]);
+    exportCompaniesToCSV(selectedCompanies, 'selected_leads');
+    
+    toast({
+      title: 'Success',
+      description: `Exported ${selectedCompanies.length} ${selectedCompanies.length === 1 ? 'company' : 'companies'} to CSV`,
+    });
+  };
+
+  const handleExportAll = () => {
+    if (!filteredAndSortedResults?.leads) return;
+    
+    exportCompaniesToCSV(filteredAndSortedResults.leads, 'all_leads');
+    
+    toast({
+      title: 'Success',
+      description: `Exported ${filteredAndSortedResults.leads.length} ${filteredAndSortedResults.leads.length === 1 ? 'company' : 'companies'} to CSV`,
+    });
+  };
+
+  const handleEnrichSelected = async () => {
+    if (!filteredAndSortedResults?.leads || selectedCompanyIndices.size === 0) return;
+    
+    setIsEnriching(true);
+    try {
+      const selectedCompanies = Array.from(selectedCompanyIndices).map(idx => filteredAndSortedResults.leads[idx]);
+      const { supabase } = await import("@/integrations/supabase/client");
+      
+      let enrichedCount = 0;
+      let errorCount = 0;
+
+      for (const company of selectedCompanies) {
+        try {
+          const { data, error } = await supabase.functions.invoke('generate-email-with-ai', {
+            body: {
+              companyName: company.name,
+              companyWebsite: company.website,
+              enrichOnly: true
+            }
+          });
+
+          if (error) throw error;
+          enrichedCount++;
+        } catch (error) {
+          console.error('Error enriching company:', error);
+          errorCount++;
+        }
+      }
+
+      toast({
+        title: 'Enrichment Complete',
+        description: `Enriched ${enrichedCount} ${enrichedCount === 1 ? 'company' : 'companies'}${errorCount > 0 ? ` (${errorCount} failed)` : ''}`,
+      });
+
+      // Trigger a re-search to get updated data
+      if (enrichedCount > 0) {
+        await handleSearch();
+      }
+    } catch (error) {
+      console.error('Error in batch enrichment:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to enrich selected companies',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsEnriching(false);
+    }
+  };
+
+  const handleFindMoreContacts = async () => {
+    if (!filteredAndSortedResults?.leads || selectedCompanyIndices.size === 0) return;
+    
+    setIsFindingContacts(true);
+    try {
+      const selectedCompanies = Array.from(selectedCompanyIndices).map(idx => {
+        const company = filteredAndSortedResults.leads[idx];
+        return {
+          name: company.name,
+          website: company.website,
+        };
+      });
+      
+      const { supabase } = await import("@/integrations/supabase/client");
+      
+      const { data, error } = await supabase.functions.invoke('find-additional-contacts', {
+        body: { companies: selectedCompanies }
+      });
+
+      if (error) throw error;
+
+      const totalFound = data?.totalContactsFound || 0;
+      const companiesWithContacts = data?.companiesWithContacts || 0;
+
+      toast({
+        title: 'Contact Discovery Complete',
+        description: `Found ${totalFound} additional contacts across ${companiesWithContacts} ${companiesWithContacts === 1 ? 'company' : 'companies'}`,
+      });
+
+      // Optionally trigger a re-search to refresh data
+      if (totalFound > 0) {
+        await handleSearch();
+      }
+    } catch (error) {
+      console.error('Error finding contacts:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to find additional contacts',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsFindingContacts(false);
+    }
+  };
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -743,6 +868,78 @@ export default function LeadFinder() {
                   )}
                   
                   <div className="flex items-center gap-2 ml-auto">
+                    {/* Batch Actions Dropdown */}
+                    {filteredAndSortedResults.leads.length > 0 && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs"
+                            disabled={isEnriching || isFindingContacts}
+                          >
+                            <MoreVertical className="h-3 w-3 mr-1.5" />
+                            Batch Actions
+                            {(isEnriching || isFindingContacts) && (
+                              <Loader2 className="h-3 w-3 ml-1.5 animate-spin" />
+                            )}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 z-50 bg-popover">
+                          <DropdownMenuItem
+                            onClick={handleExportSelected}
+                            disabled={selectedCompanyIndices.size === 0}
+                            className="cursor-pointer"
+                          >
+                            <Download className="h-3.5 w-3.5 mr-2" />
+                            Export Selected to CSV
+                            {selectedCompanyIndices.size > 0 && (
+                              <span className="ml-auto text-xs text-muted-foreground">
+                                ({selectedCompanyIndices.size})
+                              </span>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={handleExportAll}
+                            className="cursor-pointer"
+                          >
+                            <Download className="h-3.5 w-3.5 mr-2" />
+                            Export All to CSV
+                            <span className="ml-auto text-xs text-muted-foreground">
+                              ({filteredAndSortedResults.leads.length})
+                            </span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={handleEnrichSelected}
+                            disabled={selectedCompanyIndices.size === 0 || isEnriching}
+                            className="cursor-pointer"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5 mr-2" />
+                            Enrich Selected
+                            {selectedCompanyIndices.size > 0 && (
+                              <span className="ml-auto text-xs text-muted-foreground">
+                                ({selectedCompanyIndices.size})
+                              </span>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={handleFindMoreContacts}
+                            disabled={selectedCompanyIndices.size === 0 || isFindingContacts}
+                            className="cursor-pointer"
+                          >
+                            <UserPlus className="h-3.5 w-3.5 mr-2" />
+                            Find More Contacts
+                            {selectedCompanyIndices.size > 0 && (
+                              <span className="ml-auto text-xs text-muted-foreground">
+                                ({selectedCompanyIndices.size})
+                              </span>
+                            )}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+
                     {filteredAndSortedResults.dryRun && filteredAndSortedResults.leads.length > 0 && (
                       <Button
                         size="sm"
