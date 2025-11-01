@@ -333,13 +333,13 @@ export function CompanyDetailsDialog({
           </div>
         </DialogHeader>
 
-        <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden">
+        <Tabs defaultValue="overview" className="flex-1 flex flex-col min-h-0">
           <TabsList className="mx-6 mt-2 shrink-0">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="activity">Activity Timeline</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="mt-0 data-[state=active]:flex data-[state=active]:flex-col flex-1 relative">
+          <TabsContent value="overview" className="mt-0 data-[state=active]:flex data-[state=active]:flex-col flex-1 relative min-h-0 overflow-hidden">
             <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-6 pt-4">
             {/* Overview Section */}
             <div className="space-y-3">
@@ -653,7 +653,7 @@ export function CompanyDetailsDialog({
              <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background to-transparent z-10" />
           </TabsContent>
 
-          <TabsContent value="activity" className="mt-0 data-[state=active]:flex data-[state=active]:flex-col flex-1 relative">
+          <TabsContent value="activity" className="mt-0 data-[state=active]:flex data-[state=active]:flex-col flex-1 relative min-h-0 overflow-hidden">
             <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
