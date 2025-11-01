@@ -39,8 +39,8 @@ verify_jwt = true
 [functions.nango-oauth-init]
 verify_jwt = true
 
-[functions.nango-oauth-callback]
-verify_jwt = false  # OAuth callback from Nango doesn't have JWT
+[functions.nango-webhook]
+verify_jwt = false  # Webhook from Nango doesn't have JWT
 
 [functions.test-smtp]
 verify_jwt = true
