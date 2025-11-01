@@ -50,9 +50,35 @@ serve(async (req) => {
     const emailRequest: EmailRequest = await req.json();
     const { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, sender = 'resend' } = emailRequest;
 
-    // Support both legacy plain text and new HTML emails
-    const emailBodyHtml = bodyHtml || (body ? `<p>${body.replace(/\n/g, '</p><p>')}</p>` : '');
-    const emailBodyText = bodyText || body || '';
+    // Fetch user profile for signature
+    const { data: userProfile } = await supabaseClient
+      .from('profiles')
+      .select('full_name, job_title')
+      .eq('id', user.id)
+      .single();
+
+    // Fetch business profile for company name
+    const { data: businessProfile } = await supabaseClient
+      .from('business_profiles')
+      .select('company_name')
+      .eq('user_id', user.id)
+      .single();
+
+    // Build email signature
+    const signatureText = `\n\nBest regards,\n${userProfile?.full_name || 'Team'}\n${userProfile?.job_title ? `${userProfile.job_title}\n` : ''}${businessProfile?.company_name || ''}`;
+    const signatureHtml = `<br><br><p>Best regards,<br><strong>${userProfile?.full_name || 'Team'}</strong><br>${userProfile?.job_title ? `${userProfile.job_title}<br>` : ''}${businessProfile?.company_name || ''}</p>`;
+
+    // Support both legacy plain text and new HTML emails with signature
+    let emailBodyHtml = bodyHtml || (body ? `<p>${body.replace(/\n/g, '</p><p>')}</p>` : '');
+    let emailBodyText = bodyText || body || '';
+
+    // Append signature if not already present
+    if (!emailBodyText.includes('Best regards,')) {
+      emailBodyText += signatureText;
+    }
+    if (!emailBodyHtml.includes('Best regards,')) {
+      emailBodyHtml += signatureHtml;
+    }
 
     if (!toEmail || !subject || !emailBodyText) {
       throw new Error('Missing required fields: toEmail, subject, body');

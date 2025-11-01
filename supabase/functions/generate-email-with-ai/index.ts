@@ -44,6 +44,13 @@ Deno.serve(async (req) => {
       throw new Error('Please complete your business profile first to use AI email generation');
     }
 
+    // Get user profile for signature
+    const { data: userProfile } = await supabase
+      .from('profiles')
+      .select('full_name, job_title')
+      .eq('id', user.id)
+      .single();
+
     // Get company and contact details
     let companyData = null;
     let contactData = null;
@@ -67,7 +74,7 @@ Deno.serve(async (req) => {
     }
 
     // Build AI prompt
-    const prompt = buildEmailPrompt(businessProfile, companyData, contactData, recipientName, context);
+    const prompt = buildEmailPrompt(businessProfile, userProfile, companyData, contactData, recipientName, context);
 
     if (!LOVABLE_API_KEY) {
       throw new Error('AI email generation not configured. Please enable Lovable AI in project settings.');
@@ -140,11 +147,19 @@ Deno.serve(async (req) => {
 
 function buildEmailPrompt(
   businessProfile: any,
+  userProfile: any,
   company: any,
   contact: any,
   recipientName: string,
   context?: string
 ): string {
+  const senderInfo = `
+SENDER (YOU):
+- Name: ${userProfile?.full_name || 'Sales Representative'}
+- Job Title: ${userProfile?.job_title || 'Sales'}
+- Company: ${businessProfile.company_name}
+`;
+
   const businessContext = `
 YOUR BUSINESS:
 - Company: ${businessProfile.company_name}
@@ -182,13 +197,14 @@ ADDITIONAL CONTEXT FROM SENDER:
 ${context}
 ` : '';
 
-  return `${businessContext}
+  return `${senderInfo}
+${businessContext}
 ${prospectContext}
 ${contactContext}
 ${additionalContext}
 
 TASK:
-Write a personalized cold outreach email from YOUR business to the recipient. 
+Write a personalized cold outreach email from YOU (${userProfile?.full_name || 'Sales Representative'}) at ${businessProfile.company_name} to the recipient. 
 
 REQUIREMENTS:
 1. Subject line should be personalized and compelling (max 60 characters)
@@ -199,12 +215,18 @@ REQUIREMENTS:
    - Include a clear, low-friction call-to-action
    - Be concise (100-150 words maximum)
    - Use ${businessProfile.tone_preference || 'professional'} tone
+   - End with this EXACT signature format:
+     
+     Best regards,
+     ${userProfile?.full_name || 'Sales Representative'}
+     ${userProfile?.job_title || 'Sales'}
+     ${businessProfile.company_name}
 3. Focus on THEIR needs and how YOU can help solve their problems
 4. Make it conversational and human, not salesy
 
 Return ONLY a JSON object with this structure (no markdown):
 {
   "subject": "personalized subject line",
-  "body": "complete email body with proper formatting"
+  "body": "complete email body with proper formatting including the signature"
 }`;
 }
