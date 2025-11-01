@@ -27,6 +27,7 @@ const navigation = [
   { name: "Lead Finder", href: "/lead-finder", icon: Sparkles },
   { name: "Pipeline", href: "/pipeline", icon: TrendingUp },
   { name: "Sequences", href: "/sequences", icon: Mail },
+  { name: "Auto-Responses", href: "/auto-responses", icon: Sparkles },
   { name: "All Campaigns", href: "/all-campaigns", icon: Activity },
   { name: "Active Campaigns", href: "/company-sequences", icon: TrendingUp },
   { name: "Bulk Campaigns", href: "/campaigns", icon: Briefcase },

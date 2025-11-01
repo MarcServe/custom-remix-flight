@@ -19,6 +19,7 @@ import Sequences from "./pages/Sequences";
 import CompanySequences from "./pages/CompanySequences";
 import Campaigns from "./pages/Campaigns";
 import UnifiedCampaigns from "./pages/UnifiedCampaigns";
+import AutoResponseHub from "./pages/AutoResponseHub";
 import Conversations from "./pages/Conversations";
 import Events from "./pages/Events";
 import Integrations from "./pages/Integrations";
@@ -61,8 +62,9 @@ const App = () => (
                           <Route path="/pipeline" element={<Pipeline />} />
                           <Route path="/sequences" element={<Sequences />} />
                           <Route path="/company-sequences" element={<CompanySequences />} />
-                          <Route path="/all-campaigns" element={<UnifiedCampaigns />} />
-                          <Route path="/campaigns" element={<Campaigns />} />
+          <Route path="/all-campaigns" element={<UnifiedCampaigns />} />
+          <Route path="/auto-responses" element={<AutoResponseHub />} />
+          <Route path="/campaigns" element={<Campaigns />} />
                           <Route path="/conversations" element={<Conversations />} />
                           <Route path="/events" element={<Events />} />
                           <Route path="/integrations" element={<Integrations />} />
