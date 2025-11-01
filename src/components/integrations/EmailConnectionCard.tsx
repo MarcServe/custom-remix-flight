@@ -2,12 +2,12 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Check, AlertCircle, Unplug, Loader2 } from "lucide-react";
-import { format } from "date-fns";
+import { Mail, Check, AlertCircle, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { NangoConnection } from "@/lib/integrations/nango";
 import { SMTPModeToggle } from "./SMTPModeToggle";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface EmailConnectionCardProps {
   provider: {
@@ -31,6 +31,7 @@ export function EmailConnectionCard({
   const isPending = connection?.status === 'pending';
   const hasError = connection?.status === 'error';
   const [isUpdatingMode, setIsUpdatingMode] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   const currentMode = (connection?.metadata as any)?.smtp_mode || 'direct';
   const hasDirectSMTP = (connection?.metadata as any)?.smtp_host;
@@ -53,8 +54,8 @@ export function EmailConnectionCard({
       if (error) throw error;
 
       toast({
-        title: "SMTP mode updated",
-        description: `Now using ${newMode === 'direct' ? 'Direct SMTP' : 'Resend Relay'}`,
+        title: "Email settings updated",
+        description: `Using ${newMode === 'direct' ? 'your email server' : 'cloud relay'}`,
       });
 
       // Trigger a refresh
@@ -70,42 +71,35 @@ export function EmailConnectionCard({
     }
   };
 
-  const providerColors: Record<string, string> = {
-    gmail: "bg-red-50 text-red-600 border-red-200",
-    outlook: "bg-blue-50 text-blue-600 border-blue-200",
-    smtp: "bg-purple-50 text-purple-600 border-purple-200",
-    verified_email: "bg-green-50 text-green-600 border-green-200",
-  };
-
   return (
-    <Card className={`${providerColors[provider.id]} border-2`}>
+    <Card className="hover:shadow-lg transition-all">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className="text-4xl">{provider.icon}</div>
+            <div className="text-3xl">{provider.icon}</div>
             <div>
-              <CardTitle className="text-lg">{provider.name}</CardTitle>
-              <CardDescription className="text-sm">
+              <CardTitle className="text-base">{provider.name}</CardTitle>
+              <CardDescription className="text-xs mt-0.5">
                 {provider.description}
               </CardDescription>
             </div>
           </div>
           {isConnected && (
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+            <Badge variant="outline" className="bg-success/10 text-success border-success/20">
               <Check className="h-3 w-3 mr-1" />
               Connected
             </Badge>
           )}
           {isPending && (
-            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
               <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-              Connecting
+              Setting up...
             </Badge>
           )}
           {hasError && (
-            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+            <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
               <AlertCircle className="h-3 w-3 mr-1" />
-              Error
+              Issue
             </Badge>
           )}
         </div>
@@ -113,28 +107,39 @@ export function EmailConnectionCard({
       <CardContent className="space-y-3">
         {connection && (
           <>
-            {connection.from_email && (
+            {(connection.from_email || connection.metadata?.email) && (
               <div className="flex items-center gap-2 text-sm">
-                <Mail className="h-4 w-4" />
-                <span className="font-medium">{connection.from_email}</span>
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">{connection.from_email || connection.metadata?.email}</span>
               </div>
             )}
-            {connection.metadata?.email && !connection.from_email && (
-              <div className="flex items-center gap-2 text-sm">
-                <Mail className="h-4 w-4" />
-                <span className="font-medium">{connection.metadata.email}</span>
-              </div>
-            )}
-            {connection.verified_at && (
-              <p className="text-xs text-muted-foreground">
-                Verified: {format(new Date(connection.verified_at), "MMM dd, yyyy 'at' h:mm a")}
-              </p>
-            )}
-            {connection.last_sync_at && (
-              <p className="text-xs text-muted-foreground">
-                Last synced: {format(new Date(connection.last_sync_at), "MMM dd, yyyy 'at' h:mm a")}
-              </p>
-            )}
+            
+            <Collapsible open={showDetails} onOpenChange={setShowDetails}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full justify-between text-xs h-7">
+                  <span className="text-muted-foreground">
+                    {showDetails ? 'Hide details' : 'Show details'}
+                  </span>
+                  {showDetails ? (
+                    <ChevronUp className="h-3 w-3" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-2 pt-2">
+                {connection.verified_at && (
+                  <p className="text-xs text-muted-foreground">
+                    ✓ Verified and ready to use
+                  </p>
+                )}
+                {connection.last_sync_at && (
+                  <p className="text-xs text-muted-foreground">
+                    Last active: Recently
+                  </p>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
           </>
         )}
 
@@ -147,7 +152,7 @@ export function EmailConnectionCard({
           />
         )}
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 pt-1">
           {isConnected ? (
             <Button
               variant="outline"
@@ -155,7 +160,6 @@ export function EmailConnectionCard({
               onClick={() => connection && onDisconnect(connection.id)}
               className="w-full"
             >
-              <Unplug className="h-4 w-4 mr-2" />
               Disconnect
             </Button>
           ) : isPending ? (
@@ -165,7 +169,7 @@ export function EmailConnectionCard({
               className="w-full"
             >
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Connecting...
+              Setting up...
             </Button>
           ) : (
             <Button
@@ -173,7 +177,7 @@ export function EmailConnectionCard({
               size="sm"
               className="w-full"
             >
-              Connect {provider.name}
+              Connect
             </Button>
           )}
         </div>

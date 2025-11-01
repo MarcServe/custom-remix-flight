@@ -144,39 +144,39 @@ export function ConnectEmailDialog({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
-            Connect {provider === 'gmail' ? 'Gmail' : provider === 'outlook' ? 'Outlook' : 'SMTP'}
+            Connect {provider === 'gmail' ? 'Gmail' : provider === 'outlook' ? 'Outlook' : 'Business Email'}
           </DialogTitle>
           <DialogDescription>
             {provider === 'smtp'
-              ? 'Configure your SMTP server settings'
-              : `Authorize access to your ${provider} account`}
+              ? 'Enter your email server details to start sending'
+              : `Sign in with your ${provider === 'gmail' ? 'Google' : 'Microsoft'} account`}
           </DialogDescription>
         </DialogHeader>
 
         {provider === 'smtp' ? (
           <div className="space-y-4">
-            <Alert className="border-blue-500/50 bg-blue-500/10">
-              <Info className="h-4 w-4 text-blue-500" />
+            <Alert className="border-primary/50 bg-primary/5">
+              <Info className="h-4 w-4 text-primary" />
               <AlertDescription className="text-sm">
-                <strong>Direct SMTP Mode:</strong> Your emails will be sent directly from your SMTP server. 
-                No external verification required—just enter your SMTP credentials and start sending!
+                Connect your email server to send messages directly. No verification needed!
               </AlertDescription>
             </Alert>
 
             <div className="space-y-2">
-              <Label htmlFor="smtp-host">SMTP Host</Label>
+              <Label htmlFor="smtp-host">Email Server Address</Label>
               <Input
                 id="smtp-host"
-                placeholder="smtp.example.com"
+                placeholder="mail.yourdomain.com"
                 value={smtpConfig.host}
                 onChange={(e) =>
                   setSMTPConfig({ ...smtpConfig, host: e.target.value })
                 }
               />
+              <p className="text-xs text-muted-foreground">Usually starts with "smtp" or "mail"</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="smtp-port">Port</Label>
+              <Label htmlFor="smtp-port">Port Number</Label>
               <Input
                 id="smtp-port"
                 type="number"
@@ -186,13 +186,14 @@ export function ConnectEmailDialog({
                   setSMTPConfig({ ...smtpConfig, port: parseInt(e.target.value) })
                 }
               />
+              <p className="text-xs text-muted-foreground">Common ports: 587 or 465</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="smtp-username">Username / Email</Label>
+              <Label htmlFor="smtp-username">Your Email Address</Label>
               <Input
                 id="smtp-username"
-                placeholder="user@example.com"
+                placeholder="you@yourdomain.com"
                 value={smtpConfig.username}
                 onChange={(e) =>
                   setSMTPConfig({ ...smtpConfig, username: e.target.value })
@@ -201,7 +202,7 @@ export function ConnectEmailDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="smtp-password">Password</Label>
+              <Label htmlFor="smtp-password">Email Password</Label>
               <Input
                 id="smtp-password"
                 type="password"
@@ -211,10 +212,14 @@ export function ConnectEmailDialog({
                   setSMTPConfig({ ...smtpConfig, password: e.target.value })
                 }
               />
+              <p className="text-xs text-muted-foreground">Your email account password</p>
             </div>
 
-            <div className="flex items-center justify-between">
-              <Label htmlFor="smtp-secure">Use TLS/SSL</Label>
+            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+              <div>
+                <Label htmlFor="smtp-secure" className="cursor-pointer">Secure Connection</Label>
+                <p className="text-xs text-muted-foreground">Recommended for security</p>
+              </div>
               <Switch
                 id="smtp-secure"
                 checked={smtpConfig.secure}
@@ -230,7 +235,7 @@ export function ConnectEmailDialog({
               className="w-full"
             >
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Test & Save Configuration
+              Connect Email
             </Button>
           </div>
         ) : (
@@ -239,12 +244,10 @@ export function ConnectEmailDialog({
               <NangoSetupInstructions provider={provider as 'gmail' | 'outlook'} />
             ) : (
               <>
-                <Alert className="border-blue-500/50 bg-blue-500/10">
-                  <Info className="h-4 w-4 text-blue-500" />
+                <Alert className="border-primary/50 bg-primary/5">
+                  <Info className="h-4 w-4 text-primary" />
                   <AlertDescription className="text-sm">
-                    A popup window will open for {provider === 'gmail' ? 'Google' : 'Microsoft'} authorization. 
-                    {' '}<strong>Please allow popups for this site.</strong>
-                    {' '}If you don't see the popup, check your browser's address bar for a blocked popup icon.
+                    A new window will open to sign in. Make sure pop-ups are allowed in your browser.
                   </AlertDescription>
                 </Alert>
 
@@ -252,9 +255,10 @@ export function ConnectEmailDialog({
                   onClick={handleOAuthConnect}
                   disabled={loading}
                   className="w-full"
+                  size="lg"
                 >
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Continue with {provider === 'gmail' ? 'Google' : 'Microsoft'}
+                  {loading ? 'Connecting...' : `Sign in with ${provider === 'gmail' ? 'Google' : 'Microsoft'}`}
                 </Button>
 
                 <Button
@@ -262,7 +266,7 @@ export function ConnectEmailDialog({
                   onClick={() => setShowSetupInstructions(true)}
                   className="w-full text-xs text-muted-foreground"
                 >
-                  Having trouble connecting? View setup instructions
+                  Need help? View instructions
                 </Button>
               </>
             )}
