@@ -159,7 +159,7 @@ export function ImportLeadsDialog({ open, onOpenChange }: ImportLeadsDialogProps
               </div>
             </div>
 
-            <ScrollArea className="flex-1 min-h-0 max-h-[45vh] pr-4">
+            <div className="flex-1 overflow-y-auto pr-2" style={{ maxHeight: '400px' }}>
               <div className="space-y-2">
                 {contacts.map((contact) => (
                   <div
@@ -201,7 +201,7 @@ export function ImportLeadsDialog({ open, onOpenChange }: ImportLeadsDialogProps
                   </div>
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           </>
         ) : (
           <div className="py-12 text-center">
