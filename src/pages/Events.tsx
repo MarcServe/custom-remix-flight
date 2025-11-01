@@ -19,6 +19,14 @@ import { format, isToday, isYesterday, startOfDay } from 'date-fns';
 
 export default function Events() {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<{
+    id: string;
+    type: 'note' | 'call' | 'email' | 'meeting' | 'task' | 'reminder';
+    content: { title?: string; description?: string };
+    due_at?: string;
+    company_id?: string;
+    deal_id?: string;
+  } | null>(null);
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [companyFilter, setCompanyFilter] = useState<string>('all');
   const [dealFilter, setDealFilter] = useState<string>('all');
@@ -220,9 +228,15 @@ export default function Events() {
                     event={event}
                     onDelete={handleDelete}
                     onClick={() => {
-                      const eventTitle = event.content.title || event.type;
-                      const eventDesc = event.content.description || 'No description';
-                      alert(`${eventTitle}\n\n${eventDesc}\n\n${event.companies?.name || ''} ${event.deals?.title || ''}`);
+                      setSelectedEvent({
+                        id: event.id,
+                        type: event.type,
+                        content: event.content,
+                        due_at: event.due_at,
+                        company_id: event.companies ? undefined : undefined,
+                        deal_id: event.deals ? undefined : undefined,
+                      });
+                      setDialogOpen(true);
                     }}
                   />
                 ))}
@@ -239,7 +253,12 @@ export default function Events() {
           onOpenChange={(open) => {
             console.log('Event dialog state change:', open);
             setDialogOpen(open);
-          }} 
+            if (!open) {
+              setSelectedEvent(null);
+            }
+          }}
+          eventId={selectedEvent?.id}
+          event={selectedEvent || undefined}
         />
       )}
     </div>

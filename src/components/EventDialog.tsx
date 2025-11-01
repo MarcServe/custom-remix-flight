@@ -20,13 +20,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useCreateEvent } from '@/hooks/use-events';
+import { useCreateEvent, useUpdateEvent } from '@/hooks/use-events';
 
 interface EventDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultCompanyId?: string;
   defaultDealId?: string;
+  eventId?: string;
+  event?: {
+    type: 'note' | 'call' | 'email' | 'meeting' | 'task' | 'reminder';
+    content: { title?: string; description?: string };
+    due_at?: string;
+    company_id?: string;
+    deal_id?: string;
+  };
 }
 
 const eventTypes = [
@@ -38,7 +46,9 @@ const eventTypes = [
   { value: 'reminder', label: 'Reminder', icon: Bell },
 ] as const;
 
-export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealId }: EventDialogProps) {
+export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealId, eventId, event }: EventDialogProps) {
+  const isEditMode = !!eventId && !!event;
+  
   const [type, setType] = useState<'note' | 'call' | 'email' | 'meeting' | 'task' | 'reminder'>('note');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -47,6 +57,7 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
   const [dealId, setDealId] = useState<string>('');
   
   const createMutation = useCreateEvent();
+  const updateMutation = useUpdateEvent();
 
   // Fetch companies for dropdown
   const { data: companies, isLoading: companiesLoading, error: companiesError } = useQuery({
@@ -94,13 +105,28 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
     },
   });
 
-  // Set defaults when dialog opens
+  // Set defaults or edit data when dialog opens
   useEffect(() => {
     if (open) {
-      setCompanyId(defaultCompanyId || '');
-      setDealId(defaultDealId || '');
+      if (isEditMode && event) {
+        // Populate with existing event data
+        setType(event.type);
+        setTitle(event.content.title || '');
+        setDescription(event.content.description || '');
+        setDueDate(event.due_at ? new Date(event.due_at).toISOString().slice(0, 16) : '');
+        setCompanyId(event.company_id || '');
+        setDealId(event.deal_id || '');
+      } else {
+        // Reset form for new event
+        setType('note');
+        setTitle('');
+        setDescription('');
+        setDueDate('');
+        setCompanyId(defaultCompanyId || '');
+        setDealId(defaultDealId || '');
+      }
     }
-  }, [open, defaultCompanyId, defaultDealId]);
+  }, [open, isEditMode, event, defaultCompanyId, defaultDealId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,31 +137,39 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
     }
 
     try {
-      console.log('Creating event:', { type, title, description, dueDate, companyId, dealId });
-      
-      await createMutation.mutateAsync({
-        type,
-        content: {
-          title,
-          description,
-        },
-        due_at: dueDate || undefined,
-        company_id: companyId || undefined,
-        deal_id: dealId || undefined,
-      });
+      if (isEditMode && eventId) {
+        console.log('Updating event:', eventId);
+        await updateMutation.mutateAsync({
+          id: eventId,
+          updates: {
+            type,
+            content: {
+              title,
+              description,
+            },
+            due_at: dueDate || undefined,
+            company_id: companyId || undefined,
+            deal_id: dealId || undefined,
+          }
+        });
+      } else {
+        console.log('Creating event:', { type, title, description, dueDate, companyId, dealId });
+        await createMutation.mutateAsync({
+          type,
+          content: {
+            title,
+            description,
+          },
+          due_at: dueDate || undefined,
+          company_id: companyId || undefined,
+          deal_id: dealId || undefined,
+        });
+      }
 
-      console.log('Event created successfully');
-
-      // Reset form
-      setType('note');
-      setTitle('');
-      setDescription('');
-      setDueDate('');
-      setCompanyId('');
-      setDealId('');
+      console.log(isEditMode ? 'Event updated successfully' : 'Event created successfully');
       onOpenChange(false);
     } catch (error) {
-      console.error('Failed to create event:', error);
+      console.error(`Failed to ${isEditMode ? 'update' : 'create'} event:`, error);
       // Keep dialog open so user can retry
     }
   };
@@ -147,9 +181,9 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Create New Event</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit Event' : 'Create New Event'}</DialogTitle>
           <DialogDescription>
-            Add a new activity to track your interactions
+            {isEditMode ? 'Update the event details' : 'Add a new activity to track your interactions'}
           </DialogDescription>
         </DialogHeader>
 
@@ -255,21 +289,24 @@ export function EventDialog({ open, onOpenChange, defaultCompanyId, defaultDealI
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={createMutation.isPending}
+              disabled={createMutation.isPending || updateMutation.isPending}
             >
               Cancel
             </Button>
             <Button 
               type="submit" 
-              disabled={createMutation.isPending || isLoading || !title.trim()}
+              disabled={createMutation.isPending || updateMutation.isPending || isLoading || !title.trim()}
             >
-              {createMutation.isPending ? 'Creating...' : 'Create Event'}
+              {isEditMode 
+                ? (updateMutation.isPending ? 'Updating...' : 'Update Event')
+                : (createMutation.isPending ? 'Creating...' : 'Create Event')
+              }
             </Button>
           </div>
 
-          {createMutation.isError && (
+          {(createMutation.isError || updateMutation.isError) && (
             <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md">
-              Failed to create event. Please try again.
+              Failed to {isEditMode ? 'update' : 'create'} event. Please try again.
             </div>
           )}
         </form>
