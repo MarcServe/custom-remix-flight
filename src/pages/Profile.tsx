@@ -19,6 +19,10 @@ export default function Profile() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState({
+    full_name: "",
+    job_title: "",
+  });
   const [businessProfile, setBusinessProfile] = useState({
     company_name: "",
     industry: "",
@@ -45,6 +49,21 @@ export default function Profile() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Load personal profile
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("full_name, job_title")
+        .eq("id", user.id)
+        .single();
+
+      if (profileData) {
+        setProfile({
+          full_name: profileData.full_name || "",
+          job_title: profileData.job_title || "",
+        });
+      }
+
+      // Load business profile
       const { data, error } = await supabase
         .from("business_profiles")
         .select("*")
@@ -74,6 +93,38 @@ export default function Profile() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      setSaving(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          full_name: profile.full_name,
+          job_title: profile.job_title,
+        })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Personal profile saved successfully",
+      });
+    } catch (error) {
+      console.error("Error saving profile:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save personal profile",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -142,12 +193,12 @@ export default function Profile() {
         <TabsContent value="account" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Account Information</CardTitle>
+              <CardTitle>Personal Information</CardTitle>
               <CardDescription>
-                Your account details and preferences
+                Your personal details for email signatures
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -163,17 +214,60 @@ export default function Profile() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="display_name">Display Name</Label>
+                <Label htmlFor="full_name">Full Name *</Label>
                 <Input
-                  id="display_name"
-                  value={user?.user_metadata?.full_name || ""}
-                  placeholder="Your name"
-                  disabled
-                  className="bg-muted"
+                  id="full_name"
+                  value={profile.full_name}
+                  onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
+                  placeholder="e.g., Michael Orji"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Update your display name in account settings
+                  Your name will appear in email signatures
                 </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="job_title">Job Title / Position *</Label>
+                <Input
+                  id="job_title"
+                  value={profile.job_title}
+                  onChange={(e) => setProfile({ ...profile, job_title: e.target.value })}
+                  placeholder="e.g., AI Product Manager"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Your position will appear in email signatures
+                </p>
+              </div>
+
+              <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
+                <p className="text-sm font-medium">Email Signature Preview</p>
+                <div className="text-sm text-muted-foreground">
+                  <p>Best regards,</p>
+                  <p className="font-medium text-foreground">
+                    {profile.full_name || "Your Name"}
+                  </p>
+                  <p>{profile.job_title || "Your Job Title"}</p>
+                  <p>{businessProfile.company_name || "Your Company"}</p>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button
+                  onClick={handleSaveProfile}
+                  disabled={saving || !profile.full_name || !profile.job_title}
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Profile
+                    </>
+                  )}
+                </Button>
               </div>
             </CardContent>
           </Card>
