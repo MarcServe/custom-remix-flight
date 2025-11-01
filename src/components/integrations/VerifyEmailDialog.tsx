@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Check } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Mail, Check, Server } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { nangoClient } from "@/lib/integrations/nango";
 
@@ -20,7 +21,7 @@ interface VerifyEmailDialogProps {
   onSuccess: () => void;
 }
 
-type Step = "email" | "code" | "success";
+type Step = "email" | "smtp" | "code" | "success";
 
 export function VerifyEmailDialog({
   open,
@@ -32,8 +33,16 @@ export function VerifyEmailDialog({
   const [code, setCode] = useState("");
   const [connectionId, setConnectionId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [useDirectSMTP, setUseDirectSMTP] = useState(false);
+  
+  // SMTP Configuration
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("587");
+  const [smtpUsername, setSmtpUsername] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [smtpSecure, setSmtpSecure] = useState(true);
 
-  const handleSendVerification = async () => {
+  const handleContinue = () => {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       toast({
         title: "Invalid email",
@@ -43,9 +52,28 @@ export function VerifyEmailDialog({
       return;
     }
 
+    if (useDirectSMTP) {
+      setStep("smtp");
+    } else {
+      handleSendVerification();
+    }
+  };
+
+  const handleSendVerification = async (smtpConfig?: any) => {
     setIsLoading(true);
     try {
-      const { data, error } = await nangoClient.sendVerificationEmail(email);
+      const metadata = smtpConfig ? {
+        smtp_mode: 'direct',
+        smtp_host: smtpConfig.host,
+        smtp_port: smtpConfig.port,
+        smtp_username: smtpConfig.username,
+        smtp_password: smtpConfig.password,
+        smtp_secure: smtpConfig.secure,
+      } : {
+        smtp_mode: 'resend',
+      };
+
+      const { data, error } = await nangoClient.sendVerificationEmail(email, metadata);
 
       if (error) {
         throw error;
@@ -70,6 +98,25 @@ export function VerifyEmailDialog({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSMTPSubmit = () => {
+    if (!smtpHost || !smtpPort || !smtpUsername || !smtpPassword) {
+      toast({
+        title: "Missing SMTP details",
+        description: "Please fill in all SMTP configuration fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    handleSendVerification({
+      host: smtpHost,
+      port: parseInt(smtpPort),
+      username: smtpUsername,
+      password: smtpPassword,
+      secure: smtpSecure,
+    });
   };
 
   const handleVerifyCode = async () => {
@@ -136,6 +183,12 @@ export function VerifyEmailDialog({
     setEmail("");
     setCode("");
     setConnectionId("");
+    setUseDirectSMTP(false);
+    setSmtpHost("");
+    setSmtpPort("587");
+    setSmtpUsername("");
+    setSmtpPassword("");
+    setSmtpSecure(true);
     onOpenChange(false);
   };
 
@@ -147,7 +200,7 @@ export function VerifyEmailDialog({
             <DialogHeader>
               <DialogTitle>Verify Business Email</DialogTitle>
               <DialogDescription>
-                Enter your business email address to receive a verification code.
+                Enter your business email address to configure SMTP.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -161,9 +214,24 @@ export function VerifyEmailDialog({
                   onChange={(e) => setEmail(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !isLoading) {
-                      handleSendVerification();
+                      handleContinue();
                     }
                   }}
+                />
+              </div>
+              
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Server className="h-4 w-4" />
+                  <div>
+                    <Label htmlFor="direct-smtp" className="cursor-pointer">Use Direct SMTP</Label>
+                    <p className="text-xs text-muted-foreground">Configure your own SMTP server</p>
+                  </div>
+                </div>
+                <Switch
+                  id="direct-smtp"
+                  checked={useDirectSMTP}
+                  onCheckedChange={setUseDirectSMTP}
                 />
               </div>
             </div>
@@ -171,15 +239,78 @@ export function VerifyEmailDialog({
               <Button variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button onClick={handleSendVerification} disabled={isLoading}>
-                {isLoading ? (
-                  "Sending..."
-                ) : (
-                  <>
-                    <Mail className="mr-2 h-4 w-4" />
-                    Send Verification
-                  </>
-                )}
+              <Button onClick={handleContinue} disabled={isLoading}>
+                Continue
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+
+        {step === "smtp" && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Configure SMTP Server</DialogTitle>
+              <DialogDescription>
+                Enter your SMTP server details for direct email sending.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4 max-h-[400px] overflow-y-auto">
+              <div className="grid gap-2">
+                <Label htmlFor="smtp-host">SMTP Host</Label>
+                <Input
+                  id="smtp-host"
+                  placeholder="smtp.gmail.com"
+                  value={smtpHost}
+                  onChange={(e) => setSmtpHost(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="smtp-port">SMTP Port</Label>
+                <Input
+                  id="smtp-port"
+                  type="number"
+                  placeholder="587"
+                  value={smtpPort}
+                  onChange={(e) => setSmtpPort(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="smtp-username">Username</Label>
+                <Input
+                  id="smtp-username"
+                  placeholder="your-email@gmail.com"
+                  value={smtpUsername}
+                  onChange={(e) => setSmtpUsername(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="smtp-password">Password / App Password</Label>
+                <Input
+                  id="smtp-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={smtpPassword}
+                  onChange={(e) => setSmtpPassword(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <div>
+                  <Label htmlFor="smtp-secure" className="cursor-pointer">Use TLS/SSL</Label>
+                  <p className="text-xs text-muted-foreground">Secure connection (recommended)</p>
+                </div>
+                <Switch
+                  id="smtp-secure"
+                  checked={smtpSecure}
+                  onCheckedChange={setSmtpSecure}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep("email")}>
+                Back
+              </Button>
+              <Button onClick={handleSMTPSubmit} disabled={isLoading}>
+                {isLoading ? "Testing..." : "Test & Continue"}
               </Button>
             </DialogFooter>
           </>

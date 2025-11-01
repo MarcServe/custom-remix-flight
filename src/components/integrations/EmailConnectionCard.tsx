@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Mail, Check, AlertCircle, Unplug, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { NangoConnection } from "@/lib/integrations/nango";
+import { SMTPModeToggle } from "./SMTPModeToggle";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 interface EmailConnectionCardProps {
   provider: {
@@ -26,6 +30,45 @@ export function EmailConnectionCard({
   const isConnected = connection?.status === 'active';
   const isPending = connection?.status === 'pending';
   const hasError = connection?.status === 'error';
+  const [isUpdatingMode, setIsUpdatingMode] = useState(false);
+
+  const currentMode = (connection?.metadata as any)?.smtp_mode || 'resend';
+  const hasDirectSMTP = (connection?.metadata as any)?.smtp_host;
+
+  const handleModeChange = async (newMode: 'direct' | 'resend') => {
+    if (!connection) return;
+
+    setIsUpdatingMode(true);
+    try {
+      const { error } = await supabase
+        .from('crm_connections')
+        .update({
+          metadata: {
+            ...connection.metadata,
+            smtp_mode: newMode,
+          },
+        })
+        .eq('id', connection.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "SMTP mode updated",
+        description: `Now using ${newMode === 'direct' ? 'Direct SMTP' : 'Resend Relay'}`,
+      });
+
+      // Trigger a refresh
+      window.location.reload();
+    } catch (error: any) {
+      toast({
+        title: "Failed to update mode",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingMode(false);
+    }
+  };
 
   const providerColors: Record<string, string> = {
     gmail: "bg-red-50 text-red-600 border-red-200",
@@ -93,6 +136,15 @@ export function EmailConnectionCard({
               </p>
             )}
           </>
+        )}
+
+        {/* SMTP Mode Toggle - Only show for SMTP provider if connected and has direct SMTP configured */}
+        {provider.id === 'smtp' && isConnected && hasDirectSMTP && (
+          <SMTPModeToggle
+            mode={currentMode}
+            onModeChange={handleModeChange}
+            isLoading={isUpdatingMode}
+          />
         )}
         
         <div className="flex gap-2">

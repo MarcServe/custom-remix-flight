@@ -197,8 +197,8 @@ export const nangoClient = {
   /**
    * Send email verification
    */
-  async sendVerificationEmail(email: string) {
-    const { data, error } = await apiClient.callFunction('send-verification-email', { email });
+  async sendVerificationEmail(email: string, metadata?: any) {
+    const { data, error } = await apiClient.callFunction('send-verification-email', { email, metadata });
     return { data, error };
   },
 

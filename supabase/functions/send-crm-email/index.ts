@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -104,10 +105,10 @@ serve(async (req) => {
       messageId = nangoData.id || null;
       console.log('Email sent via Gmail:', nangoData);
     } else if (sender === 'smtp') {
-      // Send via SMTP (uses Resend API with custom from_email and business name)
+      // Send via SMTP (Direct or via Resend relay based on metadata.smtp_mode)
       const { data: connection, error: connectionError } = await supabaseClient
         .from('crm_connections')
-        .select('from_email, status')
+        .select('from_email, status, metadata')
         .eq('user_id', user.id)
         .eq('provider', 'smtp')
         .eq('status', 'active')
@@ -125,38 +126,76 @@ serve(async (req) => {
         .maybeSingle();
 
       const senderName = businessProfile?.company_name || 'Your Business';
-      const resendApiKey = Deno.env.get('RESEND_API_KEY');
-      
-      if (!resendApiKey) {
-        throw new Error('Email service not configured.');
+      const smtpMode = connection.metadata?.smtp_mode || 'resend'; // 'direct' or 'resend'
+
+      if (smtpMode === 'direct' && connection.metadata?.smtp_host) {
+        // Direct SMTP Connection
+        console.log(`Sending via Direct SMTP: ${connection.metadata.smtp_host}`);
+
+        const smtpConfig = connection.metadata;
+        const client = new SMTPClient({
+          connection: {
+            hostname: smtpConfig.smtp_host,
+            port: smtpConfig.smtp_port || 587,
+            tls: smtpConfig.smtp_secure !== false,
+            auth: {
+              username: smtpConfig.smtp_username,
+              password: smtpConfig.smtp_password,
+            },
+          },
+        });
+
+        try {
+          await client.send({
+            from: `${senderName} <${connection.from_email}>`,
+            to: toEmail,
+            subject,
+            content: body,
+          });
+
+          await client.close();
+          messageId = `direct-smtp-${Date.now()}`;
+          provider = 'smtp';
+          console.log('Email sent via Direct SMTP');
+        } catch (smtpError: any) {
+          console.error('Direct SMTP error:', smtpError);
+          throw new Error(`Failed to send via Direct SMTP: ${smtpError.message}`);
+        }
+      } else {
+        // Send via Resend (default relay mode)
+        const resendApiKey = Deno.env.get('RESEND_API_KEY');
+        
+        if (!resendApiKey) {
+          throw new Error('Email service not configured.');
+        }
+
+        console.log(`Sending via SMTP (Resend relay) with custom from: ${senderName} <${connection.from_email}>`);
+
+        const resendResponse = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: `${senderName} <${connection.from_email}>`,
+            to: [toEmail],
+            subject,
+            text: body,
+          }),
+        });
+
+        if (!resendResponse.ok) {
+          const errorData = await resendResponse.text();
+          console.error('Resend API error (SMTP):', errorData);
+          throw new Error(`Failed to send via Business Email: ${errorData}`);
+        }
+
+        const resendData = await resendResponse.json();
+        messageId = resendData.id || null;
+        provider = 'smtp';
+        console.log('Email sent via SMTP (Resend relay):', resendData);
       }
-
-      console.log(`Sending via SMTP with custom from: ${senderName} <${connection.from_email}>`);
-
-      const resendResponse = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: `${senderName} <${connection.from_email}>`,
-          to: [toEmail],
-          subject,
-          text: body,
-        }),
-      });
-
-      if (!resendResponse.ok) {
-        const errorData = await resendResponse.text();
-        console.error('Resend API error (SMTP):', errorData);
-        throw new Error(`Failed to send via Business Email: ${errorData}`);
-      }
-
-      const resendData = await resendResponse.json();
-      messageId = resendData.id || null;
-      provider = 'smtp';
-      console.log('Email sent via SMTP (Resend):', resendData);
     } else {
       // Send via Resend (default)
       const resendApiKey = Deno.env.get('RESEND_API_KEY');

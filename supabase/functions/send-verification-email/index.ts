@@ -9,6 +9,7 @@ const corsHeaders = {
 
 interface VerificationRequest {
   email: string;
+  metadata?: any;
 }
 
 serve(async (req) => {
@@ -67,7 +68,7 @@ serve(async (req) => {
 
     console.log("User authenticated:", user.id);
 
-    const { email }: VerificationRequest = await req.json();
+    const { email, metadata }: VerificationRequest = await req.json();
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return new Response(
@@ -108,7 +109,10 @@ serve(async (req) => {
         from_email: email,
         verification_token: verificationToken,
         verification_expires_at: expiresAt.toISOString(),
-        metadata: { verification_code: verificationCode },
+        metadata: { 
+          verification_code: verificationCode,
+          ...metadata // Merge additional metadata like SMTP config
+        },
       })
       .select()
       .single();
