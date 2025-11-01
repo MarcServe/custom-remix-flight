@@ -28,6 +28,7 @@ const navigation = [
   { name: "Pipeline", href: "/pipeline", icon: TrendingUp },
   { name: "Sequences", href: "/sequences", icon: Mail },
   { name: "Active Campaigns", href: "/company-sequences", icon: Activity },
+  { name: "Campaigns", href: "/campaigns", icon: Briefcase },
   { name: "Integrations", href: "/integrations", icon: Plug2 },
 ];
 

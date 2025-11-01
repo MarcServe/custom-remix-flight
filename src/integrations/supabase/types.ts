@@ -577,6 +577,149 @@ export type Database = {
           },
         ]
       }
+      email_campaign_recipients: {
+        Row: {
+          bounced_at: string | null
+          campaign_id: string
+          clicked_at: string | null
+          created_at: string
+          email: string
+          error_message: string | null
+          external_message_id: string | null
+          id: string
+          name: string
+          opened_at: string | null
+          person_id: string | null
+          personalized_body_html: string
+          personalized_body_text: string
+          personalized_subject: string
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          bounced_at?: string | null
+          campaign_id: string
+          clicked_at?: string | null
+          created_at?: string
+          email: string
+          error_message?: string | null
+          external_message_id?: string | null
+          id?: string
+          name: string
+          opened_at?: string | null
+          person_id?: string | null
+          personalized_body_html: string
+          personalized_body_text: string
+          personalized_subject: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          bounced_at?: string | null
+          campaign_id?: string
+          clicked_at?: string | null
+          created_at?: string
+          email?: string
+          error_message?: string | null
+          external_message_id?: string | null
+          id?: string
+          name?: string
+          opened_at?: string | null
+          person_id?: string | null
+          personalized_body_html?: string
+          personalized_body_text?: string
+          personalized_subject?: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "email_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_campaign_recipients_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_campaigns: {
+        Row: {
+          body_html_template: string
+          body_text_template: string
+          completed_at: string | null
+          created_at: string
+          failed_count: number
+          id: string
+          name: string
+          opened_count: number
+          scheduled_at: string | null
+          sender_connection_id: string | null
+          sent_count: number
+          started_at: string | null
+          status: string
+          subject_template: string
+          total_recipients: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body_html_template: string
+          body_text_template: string
+          completed_at?: string | null
+          created_at?: string
+          failed_count?: number
+          id?: string
+          name: string
+          opened_count?: number
+          scheduled_at?: string | null
+          sender_connection_id?: string | null
+          sent_count?: number
+          started_at?: string | null
+          status?: string
+          subject_template: string
+          total_recipients?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body_html_template?: string
+          body_text_template?: string
+          completed_at?: string | null
+          created_at?: string
+          failed_count?: number
+          id?: string
+          name?: string
+          opened_count?: number
+          scheduled_at?: string | null
+          sender_connection_id?: string | null
+          sent_count?: number
+          started_at?: string | null
+          status?: string
+          subject_template?: string
+          total_recipients?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_campaigns_sender_connection_id_fkey"
+            columns: ["sender_connection_id"]
+            isOneToOne: false
+            referencedRelation: "crm_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_sequences: {
         Row: {
           created_at: string | null

@@ -17,6 +17,7 @@ import Profile from "./pages/Profile";
 import Pipeline from "./pages/Pipeline";
 import Sequences from "./pages/Sequences";
 import CompanySequences from "./pages/CompanySequences";
+import Campaigns from "./pages/Campaigns";
 import Events from "./pages/Events";
 import Integrations from "./pages/Integrations";
 import Auth from "./pages/Auth";
@@ -58,6 +59,7 @@ const App = () => (
                           <Route path="/pipeline" element={<Pipeline />} />
                           <Route path="/sequences" element={<Sequences />} />
                           <Route path="/company-sequences" element={<CompanySequences />} />
+                          <Route path="/campaigns" element={<Campaigns />} />
                           <Route path="/events" element={<Events />} />
                           <Route path="/integrations" element={<Integrations />} />
                           <Route path="*" element={<NotFound />} />
