@@ -636,101 +636,214 @@ Return ONLY valid JSON, no markdown.`;
       });
     }
 
-    // Contact enrichment with GetProspect - Optimized with parallel processing
+    // PHASE 4: Enhanced Contact Discovery with waterfall strategy
     const GETPROSPECT_API_KEY = Deno.env.get("GETPROSPECT_API_KEY");
     
     if (GETPROSPECT_API_KEY && leads.length > 0) {
-      const contactSpan = createSpan(trace, 'getprospect-contact-enrichment', { leadCount: leads.length });
-      console.log("Starting GetProspect contact enrichment for", leads.length, "leads (parallel)");
+      const contactSpan = createSpan(trace, 'waterfall-contact-enrichment', { leadCount: leads.length });
+      console.log("PHASE 4: Starting waterfall contact enrichment for", leads.length, "leads");
 
-      // Process all leads in parallel with 15 second timeout per lead
-      const contactPromises = leads.map(async (lead) => {
+      // Expanded target roles (priority order)
+      const targetRoles = [
+        'Chief Executive Officer', 'CEO',
+        'Chief Technology Officer', 'CTO', 
+        'Chief Marketing Officer', 'CMO',
+        'Chief Revenue Officer', 'CRO',
+        'VP Sales', 'Vice President Sales', 'Sales Director',
+        'VP Marketing', 'Marketing Director',
+        'Business Development Manager',
+        'Founder', 'Co-Founder'
+      ];
+
+      // Helper: Generate email patterns
+      const generateEmailPatterns = (firstName: string, lastName: string, domain: string) => {
+        const patterns = [
+          `${firstName}.${lastName}@${domain}`,
+          `${firstName}${lastName}@${domain}`,
+          `${firstName[0]}${lastName}@${domain}`,
+          `${firstName}@${domain}`,
+        ];
+        return patterns.map(p => p.toLowerCase());
+      };
+
+      // Helper: Extract domain from website
+      const extractDomain = (website: string) => {
         try {
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Contact enrichment timeout')), 15000)
-          );
+          const url = new URL(website.startsWith('http') ? website : `https://${website}`);
+          return url.hostname.replace('www.', '');
+        } catch {
+          return null;
+        }
+      };
 
-          const enrichPromise = (async () => {
-            const contacts: any[] = [];
-            
-            // Strategy: Search by LinkedIn URL OR search for one key role only
-            if (lead.linkedinUrl) {
-              try {
-                const response = await fetch(
-                  `https://api.getprospect.com/public/v1/insights/contact?linkedinUrl=${encodeURIComponent(lead.linkedinUrl)}&apiKey=${GETPROSPECT_API_KEY}`,
-                  { signal: AbortSignal.timeout(5000) }
-                );
-                
-                if (response.ok) {
-                  const data = await response.json();
-                  if (data.contacts && Array.isArray(data.contacts)) {
-                    contacts.push(...data.contacts.slice(0, 3).map((c: any) => ({
-                      name: c.name || 'Unknown',
-                      email: c.email,
-                      emailVerified: c.emailStatus === 'valid',
-                      linkedinUrl: c.linkedinUrl,
-                      title: c.title,
-                      department: c.department,
-                      phone: c.phone,
-                      companyName: lead.name
-                    })));
-                  }
+      // Process all leads in parallel
+      const contactPromises = leads.map(async (lead) => {
+        const contacts: any[] = [];
+        let primaryContact: any = null;
+
+        try {
+          // STRATEGY 1: GetProspect via LinkedIn URL
+          if (lead.linkedinUrl && contacts.length < 3) {
+            try {
+              const response = await fetch(
+                `https://api.getprospect.com/public/v1/insights/contact?linkedinUrl=${encodeURIComponent(lead.linkedinUrl)}&apiKey=${GETPROSPECT_API_KEY}`,
+                { signal: AbortSignal.timeout(5000) }
+              );
+              
+              if (response.ok) {
+                const data = await response.json();
+                if (data.contacts && Array.isArray(data.contacts)) {
+                  contacts.push(...data.contacts.slice(0, 3).map((c: any) => ({
+                    name: c.name || 'Unknown',
+                    email: c.email,
+                    emailVerified: c.emailStatus === 'valid',
+                    linkedinUrl: c.linkedinUrl,
+                    title: c.title,
+                    department: c.department,
+                    phone: c.phone,
+                    companyName: lead.name,
+                    source: 'getprospect-linkedin'
+                  })));
+                  console.log(`GetProspect LinkedIn found ${contacts.length} contacts for ${lead.name}`);
                 }
-              } catch (err) {
-                console.error(`LinkedIn contact search failed for ${lead.name}`);
               }
+            } catch (err) {
+              console.error(`GetProspect LinkedIn search failed for ${lead.name}`);
             }
+          }
+          
+          // STRATEGY 2: GetProspect by top 3 roles
+          if (contacts.length < 3 && lead.name) {
+            const topRoles = targetRoles.slice(0, 6); // Try top 6 roles
             
-            // If no contacts found, try ONE primary role
-            if (contacts.length === 0 && lead.name) {
-              const role = 'Sales Director'; // Focus on one high-value role
+            for (const role of topRoles) {
+              if (contacts.length >= 3) break; // Stop if we have 3+ contacts
               
               try {
                 const findResponse = await fetch(
                   `https://api.getprospect.com/public/v1/email/find?name=${encodeURIComponent(role)}&company=${encodeURIComponent(lead.name)}&apiKey=${GETPROSPECT_API_KEY}`,
-                  { signal: AbortSignal.timeout(5000) }
+                  { signal: AbortSignal.timeout(4000) }
                 );
                 
                 if (findResponse.ok) {
                   const findData = await findResponse.json();
-                  if (findData.email) {
+                  if (findData.email && !contacts.some(c => c.email === findData.email)) {
                     contacts.push({
                       name: findData.name || role,
                       email: findData.email,
-                      emailVerified: false, // Skip verification to save time
+                      emailVerified: false,
                       title: role,
-                      companyName: lead.name
+                      companyName: lead.name,
+                      source: 'getprospect-role'
                     });
+                    console.log(`GetProspect role search found ${role} for ${lead.name}`);
                   }
                 }
               } catch (err) {
-                console.error(`Email search failed for ${lead.name}`);
+                // Continue to next role
               }
             }
-            
-            // Set primary contact (first one)
-            const primaryContact = contacts.length > 0 ? contacts[0] : null;
-            
-            return { contacts, primaryContact };
-          })();
+          }
 
-          const result = await Promise.race([enrichPromise, timeoutPromise]) as { contacts: any[], primaryContact: any };
-          lead.contacts = result.contacts;
-          lead.primaryContact = result.primaryContact;
-          
+          // STRATEGY 3: Perplexity search (if still no contacts)
+          if (contacts.length === 0 && lead.name) {
+            try {
+              const perplexityPrompt = `Find contact email for ${targetRoles[0]} or ${targetRoles[2]} or ${targetRoles[4]} at ${lead.name}${lead.website ? ` (${lead.website})` : ''}. Return ONLY a JSON object with: {name: "...", title: "...", email: "..."}`;
+
+              const response = await fetch(`${supabaseUrl}/functions/v1/ai-provider`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${supabaseAnonKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  provider: 'perplexity',
+                  model: 'sonar-small',
+                  messages: [
+                    { role: 'system', content: 'Return only valid JSON with contact info.' },
+                    { role: 'user', content: perplexityPrompt },
+                  ],
+                  temperature: 0.2,
+                  traceId: trace.id,
+                }),
+              });
+
+              if (response.ok) {
+                const result = await response.json();
+                try {
+                  let cleaned = result.content.trim()
+                    .replace(/```json\n?/g, "").replace(/```\n?/g, "");
+                  const jsonMatch = cleaned.match(/\{[\s\S]*?\}/);
+                  if (jsonMatch) {
+                    const contactData = JSON.parse(jsonMatch[0]);
+                    if (contactData.email) {
+                      contacts.push({
+                        name: contactData.name || 'Contact',
+                        email: contactData.email,
+                        emailVerified: false,
+                        title: contactData.title || 'Executive',
+                        companyName: lead.name,
+                        source: 'perplexity'
+                      });
+                      console.log(`Perplexity found contact for ${lead.name}`);
+                    }
+                  }
+                } catch (e) {
+                  // Perplexity parse failed
+                }
+              }
+            } catch (err) {
+              console.error(`Perplexity contact search failed for ${lead.name}`);
+            }
+          }
+
+          // STRATEGY 4: Pattern-based email guessing (last resort)
+          if (contacts.length === 0 && lead.website && lead.keyExecutives && lead.keyExecutives.length > 0) {
+            const domain = extractDomain(lead.website);
+            if (domain) {
+              // Try to generate emails for key executives
+              for (const exec of lead.keyExecutives.slice(0, 2)) {
+                const nameParts = exec.name.split(' ');
+                if (nameParts.length >= 2) {
+                  const firstName = nameParts[0];
+                  const lastName = nameParts[nameParts.length - 1];
+                  const patterns = generateEmailPatterns(firstName, lastName, domain);
+                  
+                  // Add most likely pattern as unverified contact
+                  contacts.push({
+                    name: exec.name,
+                    email: patterns[0], // Most common pattern
+                    emailVerified: false,
+                    title: exec.title,
+                    companyName: lead.name,
+                    source: 'pattern-guess',
+                    note: 'Email pattern generated - not verified'
+                  });
+                  console.log(`Generated pattern-based email for ${exec.name} at ${lead.name}`);
+                }
+              }
+            }
+          }
+
         } catch (error) {
-          console.error(`Contact enrichment timeout for ${lead.name}`);
-          lead.contacts = [];
-          lead.primaryContact = null;
+          console.error(`Contact enrichment error for ${lead.name}:`, error);
         }
+
+        // Set primary contact (first one with verified email, or just first)
+        primaryContact = contacts.find(c => c.emailVerified) || contacts[0] || null;
+        
+        lead.contacts = contacts;
+        lead.primaryContact = primaryContact;
+        lead.contactCount = contacts.length;
         
         return lead;
       });
 
       await Promise.all(contactPromises);
       
-      console.log("Contact enrichment complete");
-      await endSpan(contactSpan);
+      const leadsWithContacts = leads.filter(l => l.contacts && l.contacts.length > 0).length;
+      console.log(`Contact enrichment complete: ${leadsWithContacts}/${leads.length} leads have contacts`);
+      await endSpan(contactSpan, { leadsWithContacts });
     }
 
     // Filter out leads without contact information
