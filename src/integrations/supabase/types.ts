@@ -679,6 +679,7 @@ export type Database = {
           phone: string | null
           title: string | null
           twitter_url: string | null
+          updated_at: string
         }
         Insert: {
           bio?: string | null
@@ -694,6 +695,7 @@ export type Database = {
           phone?: string | null
           title?: string | null
           twitter_url?: string | null
+          updated_at?: string
         }
         Update: {
           bio?: string | null
@@ -709,6 +711,7 @@ export type Database = {
           phone?: string | null
           title?: string | null
           twitter_url?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
