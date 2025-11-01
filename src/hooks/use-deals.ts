@@ -22,6 +22,7 @@ export function useUpdateDealStage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deals'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-counts'] });
       toast.success('Deal stage updated');
     },
     onError: (error) => {

@@ -235,6 +235,64 @@ export const useEventsRealtime = () => {
 };
 
 /**
+ * Hook to subscribe to real-time updates for deals table (for notifications)
+ */
+export const useDealsRealtimeForNotifications = () => {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('deals-notifications-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'deals',
+        },
+        () => {
+          console.log('Deals table changed, invalidating pending counts');
+          queryClient.invalidateQueries({ queryKey: ['pending-counts'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+};
+
+/**
+ * Hook to subscribe to real-time updates for company_sequences table (for notifications)
+ */
+export const useCampaignsRealtimeForNotifications = () => {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('campaigns-notifications-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'company_sequences',
+        },
+        () => {
+          console.log('Company sequences table changed, invalidating pending counts');
+          queryClient.invalidateQueries({ queryKey: ['pending-counts'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+};
+
+/**
  * Combined hook for all real-time subscriptions
  */
 export const useAllRealtime = () => {
@@ -244,4 +302,6 @@ export const useAllRealtime = () => {
   usePeopleRealtime();
   useCompanySequencesRealtime();
   useEventsRealtime();
+  useDealsRealtimeForNotifications();
+  useCampaignsRealtimeForNotifications();
 };

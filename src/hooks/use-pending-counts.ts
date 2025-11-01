@@ -8,47 +8,64 @@ export const usePendingCounts = () => {
   return useQuery({
     queryKey: ['pending-counts'],
     queryFn: async () => {
-      const now = new Date().toISOString();
-      
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        
-        // Get active deals count (using stage, not status)
-        const { data: dealsData } = await supabase
+        if (!user) return { deals: 0, sequences: 0, campaigns: 0, events: 0 };
+
+        // 1. DEALS: Count active deals not in user_deal_views
+        const { data: allDeals } = await supabase
           .from('deals')
           .select('id')
           .in('stage', ['QUALIFIED', 'CONTACTED', 'MEETING', 'PROPOSAL']);
 
-        // Get active company sequences count
-        const { data: companySequencesData } = await supabase
+        let unviewedDealsCount = 0;
+        if (allDeals && allDeals.length > 0) {
+          const { data: viewedDeals } = await supabase
+            .from('user_deal_views')
+            .select('deal_id')
+            .eq('user_id', user.id);
+
+          const viewedDealIds = new Set(viewedDeals?.map(v => v.deal_id) || []);
+          unviewedDealsCount = allDeals.filter(d => !viewedDealIds.has(d.id)).length;
+        }
+
+        // 2. CAMPAIGNS: Count active campaigns not in user_campaign_views
+        const { data: allCampaigns } = await supabase
           .from('company_sequences')
           .select('id')
           .eq('status', 'active');
 
-        // Count unviewed events
+        let unviewedCampaignsCount = 0;
+        if (allCampaigns && allCampaigns.length > 0) {
+          const { data: viewedCampaigns } = await supabase
+            .from('user_campaign_views')
+            .select('company_sequence_id')
+            .eq('user_id', user.id);
+
+          const viewedCampaignIds = new Set(viewedCampaigns?.map(v => v.company_sequence_id) || []);
+          unviewedCampaignsCount = allCampaigns.filter(c => !viewedCampaignIds.has(c.id)).length;
+        }
+
+        // 3. EVENTS: Count unviewed events
+        const { data: allEvents } = await supabase
+          .from('events')
+          .select('id');
+
         let unviewedEventsCount = 0;
-        if (user) {
-          // Get all event IDs
-          const { data: allEvents } = await supabase
-            .from('events')
-            .select('id');
+        if (allEvents && allEvents.length > 0) {
+          const { data: viewedEvents } = await supabase
+            .from('user_event_views')
+            .select('event_id')
+            .eq('user_id', user.id);
 
-          if (allEvents && allEvents.length > 0) {
-            // Get event IDs that the user has already viewed
-            const { data: viewedEvents } = await supabase
-              .from('user_event_views')
-              .select('event_id')
-              .eq('user_id', user.id);
-
-            const viewedEventIds = new Set(viewedEvents?.map(v => v.event_id) || []);
-            unviewedEventsCount = allEvents.filter(e => !viewedEventIds.has(e.id)).length;
-          }
+          const viewedEventIds = new Set(viewedEvents?.map(v => v.event_id) || []);
+          unviewedEventsCount = allEvents.filter(e => !viewedEventIds.has(e.id)).length;
         }
 
         return {
-          deals: dealsData?.length || 0,
+          deals: unviewedDealsCount,
           sequences: 0, // Not counting sequences for now
-          campaigns: companySequencesData?.length || 0,
+          campaigns: unviewedCampaignsCount,
           events: unviewedEventsCount,
         };
       } catch (error) {

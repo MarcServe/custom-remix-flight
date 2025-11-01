@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useUpdateSequenceStatus } from "@/hooks/use-company-sequences";
+import { useMarkCampaignAsViewed } from "@/hooks/use-campaign-views";
 
 interface CompanySequenceDetailsDialogProps {
   open: boolean;
@@ -71,6 +73,14 @@ export function CompanySequenceDetailsDialog({
   sequence,
 }: CompanySequenceDetailsDialogProps) {
   const updateStatusMutation = useUpdateSequenceStatus();
+  const markCampaignAsViewed = useMarkCampaignAsViewed();
+
+  // Mark campaign as viewed when dialog opens
+  useEffect(() => {
+    if (open && sequence?.id) {
+      markCampaignAsViewed.mutate(sequence.id);
+    }
+  }, [open, sequence?.id]);
 
   const handleStatusChange = async (status: 'active' | 'paused') => {
     await updateStatusMutation.mutateAsync({ id: sequence.id, status });

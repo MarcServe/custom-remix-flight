@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { useDeals, useUpdateDealStage } from "@/hooks/use-deals";
 import { KanbanBoard, KanbanItem } from "@/components/kanban/KanbanBoard";
 import { toast } from "sonner";
+import { useMarkMultipleDealsAsViewed, useMarkDealAsViewed } from "@/hooks/use-deal-views";
 
 export default function Deals() {
   const [view, setView] = useState<"grid" | "kanban">("grid");
@@ -18,6 +19,21 @@ export default function Deals() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const { data: deals, isLoading, refetch } = useDeals();
   const updateDealStage = useUpdateDealStage();
+  const markMultipleDealsAsViewed = useMarkMultipleDealsAsViewed();
+  const markDealAsViewed = useMarkDealAsViewed();
+
+  // Mark all visible active deals as viewed when page loads
+  useEffect(() => {
+    if (deals && deals.length > 0) {
+      const activeDealIds = deals
+        .filter((d: any) => ['QUALIFIED', 'CONTACTED', 'MEETING', 'PROPOSAL'].includes(d.stage))
+        .map((d: any) => d.id);
+      
+      if (activeDealIds.length > 0) {
+        markMultipleDealsAsViewed.mutate(activeDealIds);
+      }
+    }
+  }, [deals]);
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-96">Loading...</div>;
@@ -59,6 +75,7 @@ export default function Deals() {
   };
 
   const handleDealClick = (deal: any) => {
+    markDealAsViewed.mutate(deal.id);
     setSelectedDeal(deal);
     setDetailsDialogOpen(true);
   };

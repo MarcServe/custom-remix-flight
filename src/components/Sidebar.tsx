@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePendingCounts } from "@/hooks/use-pending-counts";
-import { useEventsRealtime } from "@/hooks/use-realtime";
+import { useEventsRealtime, useDealsRealtimeForNotifications, useCampaignsRealtimeForNotifications } from "@/hooks/use-realtime";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: BarChart3 },
@@ -37,6 +37,11 @@ export const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { data: pendingCounts } = usePendingCounts();
+  
+  // Enable real-time updates for notifications
+  useEventsRealtime();
+  useDealsRealtimeForNotifications();
+  useCampaignsRealtimeForNotifications();
 
   // Close mobile menu on route change
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useDealEvents, useDeleteEvent } from "@/hooks/use-events";
 import { EventCard } from "@/components/EventCard";
 import { EventDialog } from "@/components/EventDialog";
+import { useMarkDealAsViewed } from "@/hooks/use-deal-views";
 
 interface Deal {
   id: string;
@@ -63,6 +64,14 @@ export function DealDetailsDialog({
   
   const { data: eventsData, isLoading: eventsLoading } = useDealEvents(deal.id);
   const deleteEventMutation = useDeleteEvent();
+  const markDealAsViewed = useMarkDealAsViewed();
+
+  // Mark deal as viewed when dialog opens
+  useEffect(() => {
+    if (open && deal?.id) {
+      markDealAsViewed.mutate(deal.id);
+    }
+  }, [open, deal?.id]);
 
   const handleAddTag = () => {
     if (tagInput.trim() && !formData.tags?.includes(tagInput.trim())) {

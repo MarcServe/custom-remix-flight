@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -26,6 +26,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useUpdateSequenceStatus, useSendSequenceEmail } from '@/hooks/use-company-sequences';
 import { CompanySequenceDetailsDialog } from '@/components/sequences/CompanySequenceDetailsDialog';
+import { useMarkMultipleCampaignsAsViewed, useMarkCampaignAsViewed } from '@/hooks/use-campaign-views';
 
 interface CompanySequence {
   id: string;
@@ -63,6 +64,8 @@ export default function CompanySequences() {
   
   const updateStatusMutation = useUpdateSequenceStatus();
   const sendEmailMutation = useSendSequenceEmail();
+  const markMultipleCampaignsAsViewed = useMarkMultipleCampaignsAsViewed();
+  const markCampaignAsViewed = useMarkCampaignAsViewed();
 
   const { data: companySequences, isLoading } = useQuery({
     queryKey: ['company-sequences-page', statusFilter, industryFilter],
@@ -87,6 +90,19 @@ export default function CompanySequences() {
       return (data || []) as CompanySequence[];
     }
   });
+
+  // Mark all active campaigns as viewed when page loads
+  useEffect(() => {
+    if (companySequences && companySequences.length > 0) {
+      const activeCampaignIds = companySequences
+        .filter(seq => seq.status === 'active')
+        .map(seq => seq.id);
+      
+      if (activeCampaignIds.length > 0) {
+        markMultipleCampaignsAsViewed.mutate(activeCampaignIds);
+      }
+    }
+  }, [companySequences]);
 
   const filteredSequences = companySequences?.filter(seq => {
     const matchesSearch = !searchQuery || 
@@ -250,6 +266,7 @@ export default function CompanySequences() {
                   key={sequence.id}
                   className="border-2 hover:border-primary/50 transition-all shadow-lg hover:shadow-xl cursor-pointer group"
                   onClick={() => {
+                    markCampaignAsViewed.mutate(sequence.id);
                     setSelectedSequence(sequence);
                     setDetailsDialogOpen(true);
                   }}
