@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus } from "lucide-react";
+import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus, Database, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { GenerateSequenceForCompanyDialog } from "@/components/sequences/GenerateSequenceForCompanyDialog";
@@ -13,6 +13,8 @@ import { EventDialog } from "@/components/EventDialog";
 import { useDeleteCompany } from "@/hooks/use-companies";
 import { useCompanyEvents, useDeleteEvent } from "@/hooks/use-events";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { companiesApi } from "@/lib/api/companies";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Contact {
   id?: string;
@@ -81,6 +83,7 @@ export function CompanyDetailsDialog({
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [emailRecipient, setEmailRecipient] = useState<{
     email: string;
     name: string;
@@ -90,6 +93,7 @@ export function CompanyDetailsDialog({
   const deleteMutation = useDeleteCompany();
   const { data: eventsData } = useCompanyEvents(company?.id || '');
   const deleteEventMutation = useDeleteEvent();
+  const queryClient = useQueryClient();
 
   // Keyboard navigation
   useEffect(() => {
@@ -133,6 +137,84 @@ export function CompanyDetailsDialog({
       contactId: contact.id,
     });
     setEmailDialogOpen(true);
+  };
+
+  const handleSaveToCRM = async () => {
+    if (!company) return;
+
+    setIsSaving(true);
+    try {
+      // Create company
+      const { data: createdCompany, error: companyError } = await companiesApi.createCompany({
+        name: company.name,
+        website: company.website,
+        description: company.description,
+        industry: company.industry,
+        size: company.size,
+        geography: company.geography,
+        linkedin_url: company.linkedinUrl,
+        company_phone: company.companyPhone,
+        general_email: company.generalEmail,
+        social_profiles: company.socialProfiles,
+        key_executives: company.keyExecutives,
+        employee_count: company.employeeCount,
+        enriched_at: company.wasEnriched ? new Date().toISOString() : undefined,
+        enrichment_data: company.wasEnriched ? {
+          products: company.products,
+          recentNews: company.recentNews,
+          fundingInfo: company.fundingInfo,
+        } : undefined,
+      });
+
+      if (companyError) {
+        throw companyError;
+      }
+
+      // Create contacts if they exist
+      if (company.contacts && company.contacts.length > 0 && createdCompany) {
+        const { supabase } = await import("@/integrations/supabase/client");
+        const contactsToInsert = company.contacts.map((contact: any) => ({
+          company_id: createdCompany.id,
+          name: contact.name,
+          email: contact.email,
+          email_verified: contact.emailVerified,
+          linkedin_url: contact.linkedinUrl,
+          title: contact.title,
+          department: contact.department,
+          phone: contact.phone,
+          is_primary_contact: contact === company.primaryContact,
+        }));
+
+        const { error: contactsError } = await supabase
+          .from('contacts')
+          .insert(contactsToInsert);
+
+        if (contactsError) {
+          console.error('Error creating contacts:', contactsError);
+        }
+      }
+
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] });
+
+      toast({
+        title: 'Success',
+        description: `${company.name} has been added to your CRM`,
+      });
+
+      // Close the dialog
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Error saving company:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to save company to CRM',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleFindProspects = async () => {
@@ -502,11 +584,26 @@ export function CompanyDetailsDialog({
 
             {/* Actions Section */}
             <Separator />
-            <div className="flex gap-2">
-              {!hasBeenSaved && !hasContacts && (
-                <div className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-lg">
-                  💡 Save this company to CRM first to find prospects
-                </div>
+            <div className="flex flex-wrap gap-2">
+              {!hasBeenSaved && (
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  onClick={handleSaveToCRM}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Database className="h-3.5 w-3.5 mr-2" />
+                      Save to CRM
+                    </>
+                  )}
+                </Button>
               )}
               {showFindProspectsButton && (
                 <Button 
