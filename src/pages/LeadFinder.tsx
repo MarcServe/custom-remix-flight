@@ -17,6 +17,10 @@ import { companiesApi } from "@/lib/api/companies";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { industryTaxonomy, getIndustryCategories, getIndustrySubcategories, formatIndustryString } from "@/lib/data/industry-taxonomy";
+import { QualityScoreBadge } from "@/components/lead-finder/QualityScoreBadge";
+import { QualityStars } from "@/components/lead-finder/QualityStars";
+import { DataCompletenessBar } from "@/components/lead-finder/DataCompletenessBar";
+import { SourceBadges } from "@/components/lead-finder/SourceBadges";
 
 export default function LeadFinder() {
   const [size, setSize] = useState("");
@@ -616,10 +620,18 @@ export default function LeadFinder() {
                         {/* Company Header Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-sm font-semibold text-foreground truncate">
-                                {company.name}
-                              </h3>
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-semibold text-foreground truncate">
+                                  {company.name}
+                                </h3>
+                                {company.qualityScore !== undefined && (
+                                  <QualityScoreBadge score={company.qualityScore} />
+                                )}
+                              </div>
+                              {company.qualityScore !== undefined && (
+                                <QualityStars score={company.qualityScore} />
+                              )}
                               {company.website && (
                                 <a
                                   href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
@@ -653,6 +665,11 @@ export default function LeadFinder() {
                           </p>
                         )}
 
+                        {/* Data Completeness Bar */}
+                        {company.dataCompleteness !== undefined && (
+                          <DataCompletenessBar percentage={company.dataCompleteness} />
+                        )}
+
                         {/* Enriched Data */}
                         {(company.products || company.recentNews || company.fundingInfo) && (
                           <div className="space-y-1 pt-1">
@@ -676,6 +693,13 @@ export default function LeadFinder() {
                             )}
                           </div>
                         )}
+
+                        {/* Source Badges */}
+                        <SourceBadges
+                          wasEnriched={company.wasEnriched}
+                          hasVerifiedContacts={company.contacts?.some((c: any) => c.emailVerified)}
+                          hasPatternContacts={company.contacts?.some((c: any) => !c.emailVerified)}
+                        />
 
                         {/* Meta Badges */}
                         <div className="flex flex-wrap gap-1.5 pt-1">
