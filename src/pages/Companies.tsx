@@ -27,7 +27,30 @@ export default function Companies() {
         .from("companies")
         .select("*, contacts(*), deals(*), people(*)")
         .order("created_at", { ascending: false });
-      return (data || []) as Company[];
+      
+      // Map database columns to camelCase properties for the dialog
+      return (data || []).map(company => {
+        const enrichmentData = company.enrichment_data as any;
+        return {
+          ...company,
+          // Map snake_case to camelCase
+          linkedinUrl: company.linkedin_url,
+          companyPhone: company.company_phone,
+          generalEmail: company.general_email,
+          employeeCount: company.employee_count,
+          socialProfiles: company.social_profiles as any,
+          keyExecutives: company.key_executives as any,
+          techStack: company.tech_stack,
+          // Extract from enrichment_data JSONB if it exists
+          products: enrichmentData?.products,
+          recentNews: company.recent_news || enrichmentData?.recentNews,
+          fundingInfo: enrichmentData?.fundingInfo || 
+                       (company.funding_stage || company.funding_total 
+                         ? `${company.funding_stage || ''}${company.funding_stage && company.funding_total ? ' - ' : ''}${company.funding_total || ''}` 
+                         : undefined),
+          wasEnriched: company.enrichment_status === 'completed',
+        } as unknown as Company;
+      });
     },
   });
 
