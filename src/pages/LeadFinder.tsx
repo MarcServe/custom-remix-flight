@@ -7,7 +7,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
-import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import { useLeadFinder } from "@/hooks/use-lead-finder";
 import { useProviderStore } from "@/stores/provider-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -31,6 +30,7 @@ export default function LeadFinder() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedCompanyIndices, setSelectedCompanyIndices] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
+  const [currentCompanyIndex, setCurrentCompanyIndex] = useState<number>(0);
   
   const { defaultProvider, defaultModels } = useProviderStore();
   const [providerConfig, setProviderConfig] = useState<{
@@ -78,6 +78,20 @@ export default function LeadFinder() {
       setLeadFinderResults(data.leads);
       setSelectedCompanyIndices(new Set()); // Reset selection on new search
     }
+  };
+
+  const handleNavigateCompany = (direction: 'prev' | 'next') => {
+    if (!results?.leads) return;
+    
+    let newIndex = currentCompanyIndex;
+    if (direction === 'prev' && currentCompanyIndex > 0) {
+      newIndex = currentCompanyIndex - 1;
+    } else if (direction === 'next' && currentCompanyIndex < results.leads.length - 1) {
+      newIndex = currentCompanyIndex + 1;
+    }
+    
+    setCurrentCompanyIndex(newIndex);
+    setSelectedCompany(results.leads[newIndex]);
   };
 
   const handleSaveSelectedCompanies = async () => {
@@ -559,172 +573,136 @@ export default function LeadFinder() {
                 </div>
               </div>
 
-              {/* Carousel Navigation */}
-              <Carousel 
-                className="w-full" 
-                opts={{ loop: false }}
-              >
-                <div className="relative">
-                  <CarouselContent className="-ml-2 md:-ml-4">
-                    {results.leads.map((company: any, idx: number) => (
-                      <CarouselItem key={idx} className="pl-2 md:pl-4 basis-full md:basis-1/2 lg:basis-1/3">
-                        <div className="group relative rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all p-3 md:p-4 h-full">
-                          <div className="flex flex-col h-full gap-3">
-                            {/* Header with checkbox and icon */}
-                            <div className="flex gap-3 md:gap-4">
-                              {/* Selection Checkbox */}
-                              {results.dryRun && (
-                                <div className="flex items-start pt-1">
-                                  <Checkbox
-                                    checked={selectedCompanyIndices.has(idx)}
-                                    onCheckedChange={() => toggleCompanySelection(idx)}
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                </div>
-                              )}
-                              {/* Company Icon */}
-                              <div 
-                                className="shrink-0 cursor-pointer"
-                                onClick={() => {
-                                  setSelectedCompany(company);
-                                  setDialogOpen(true);
-                                }}
-                              >
-                                <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm">
-                                  <Building2 className="h-4 w-4 md:h-5 md:w-5 text-white" />
-                                </div>
-                              </div>
-
-                              {/* Company Header Info */}
-                              <div 
-                                className="flex-1 min-w-0 cursor-pointer"
-                                onClick={() => {
-                                  setSelectedCompany(company);
-                                  setDialogOpen(true);
-                                }}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex-1 min-w-0">
-                                    <h3 className="text-sm font-semibold text-foreground truncate">
-                                      {company.name}
-                                    </h3>
-                                    {company.website && (
-                                      <a
-                                        href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <Globe className="h-3 w-3" />
-                                        {company.website}
-                                        <ExternalLink className="h-2.5 w-2.5" />
-                                      </a>
-                                    )}
-                                  </div>
-                                  {company.wasEnriched && (
-                                    <Badge variant="secondary" className="shrink-0 h-5 text-xs">
-                                      <Sparkles className="h-2.5 w-2.5 mr-1" />
-                                      Enriched
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Company Info */}
-                            <div 
-                              className="flex-1 space-y-2 cursor-pointer"
-                              onClick={() => {
-                                setSelectedCompany(company);
-                                setDialogOpen(true);
-                              }}
-                            >
-                              {/* Description */}
-                              {company.description && (
-                                <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                                  {company.description}
-                                </p>
-                              )}
-
-                              {/* Enriched Data */}
-                              {(company.products || company.recentNews || company.fundingInfo) && (
-                                <div className="space-y-1 pt-1">
-                                  {company.products && (
-                                    <div className="text-xs">
-                                      <span className="font-medium text-foreground">Products:</span>{" "}
-                                      <span className="text-muted-foreground line-clamp-1">{company.products}</span>
-                                    </div>
-                                  )}
-                                  {company.recentNews && (
-                                    <div className="text-xs">
-                                      <span className="font-medium text-foreground">News:</span>{" "}
-                                      <span className="text-muted-foreground line-clamp-1">{company.recentNews}</span>
-                                    </div>
-                                  )}
-                                  {company.fundingInfo && (
-                                    <div className="text-xs">
-                                      <span className="font-medium text-foreground">Funding:</span>{" "}
-                                      <span className="text-muted-foreground line-clamp-1">{company.fundingInfo}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Meta Badges */}
-                              <div className="flex flex-wrap gap-1.5 pt-1">
-                                {company.primaryContact && (
-                                  <Badge variant="outline" className="h-5 text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
-                                    <Mail className="h-3 w-3 mr-1" />
-                                    Contact Available
-                                  </Badge>
-                                )}
-                                {company.industry && (
-                                  <Badge variant="outline" className="h-5 text-xs font-mono">
-                                    {company.industry}
-                                  </Badge>
-                                )}
-                                {company.size && (
-                                  <Badge variant="secondary" className="h-5 text-xs font-mono">
-                                    {company.size}
-                                  </Badge>
-                                )}
-                                {company.employeeCount && (
-                                  <Badge variant="secondary" className="h-5 text-xs font-mono">
-                                    {company.employeeCount} emp
-                                  </Badge>
-                                )}
-                                {company.geography && (
-                                  <Badge variant="outline" className="h-5 text-xs font-mono">
-                                    📍 {company.geography}
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
+              {/* Results Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                {results.leads.map((company: any, idx: number) => (
+                  <div 
+                    key={idx} 
+                    className="group relative rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all p-3 md:p-4 cursor-pointer"
+                    onClick={() => {
+                      setCurrentCompanyIndex(idx);
+                      setSelectedCompany(company);
+                      setDialogOpen(true);
+                    }}
+                  >
+                    <div className="flex flex-col h-full gap-3">
+                      {/* Header with checkbox and icon */}
+                      <div className="flex gap-3 md:gap-4">
+                        {/* Selection Checkbox */}
+                        {results.dryRun && (
+                          <div className="flex items-start pt-1">
+                            <Checkbox
+                              checked={selectedCompanyIndices.has(idx)}
+                              onCheckedChange={() => toggleCompanySelection(idx)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                        )}
+                        {/* Company Icon */}
+                        <div className="shrink-0">
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm">
+                            <Building2 className="h-4 w-4 md:h-5 md:w-5 text-white" />
                           </div>
                         </div>
-                      </CarouselItem>
-                    ))}
-                  </CarouselContent>
-                  
-                  {/* Navigation Controls */}
-                  <div className="absolute -left-12 top-1/2 -translate-y-1/2 hidden xl:block">
-                    <CarouselPrevious className="h-10 w-10" />
-                  </div>
-                  <div className="absolute -right-12 top-1/2 -translate-y-1/2 hidden xl:block">
-                    <CarouselNext className="h-10 w-10" />
-                  </div>
-                </div>
 
-                {/* Mobile Navigation & Position Indicator */}
-                <div className="flex items-center justify-between mt-4 px-2">
-                  <CarouselPrevious className="h-8 w-8 relative left-0 top-0 translate-x-0 translate-y-0 xl:hidden" />
-                  <div className="text-xs text-muted-foreground font-mono">
-                    Lead cards
+                        {/* Company Header Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-sm font-semibold text-foreground truncate">
+                                {company.name}
+                              </h3>
+                              {company.website && (
+                                <a
+                                  href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Globe className="h-3 w-3" />
+                                  {company.website}
+                                  <ExternalLink className="h-2.5 w-2.5" />
+                                </a>
+                              )}
+                            </div>
+                            {company.wasEnriched && (
+                              <Badge variant="secondary" className="shrink-0 h-5 text-xs">
+                                <Sparkles className="h-2.5 w-2.5 mr-1" />
+                                Enriched
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Company Info */}
+                      <div className="flex-1 space-y-2">
+                        {/* Description */}
+                        {company.description && (
+                          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                            {company.description}
+                          </p>
+                        )}
+
+                        {/* Enriched Data */}
+                        {(company.products || company.recentNews || company.fundingInfo) && (
+                          <div className="space-y-1 pt-1">
+                            {company.products && (
+                              <div className="text-xs">
+                                <span className="font-medium text-foreground">Products:</span>{" "}
+                                <span className="text-muted-foreground line-clamp-1">{company.products}</span>
+                              </div>
+                            )}
+                            {company.recentNews && (
+                              <div className="text-xs">
+                                <span className="font-medium text-foreground">News:</span>{" "}
+                                <span className="text-muted-foreground line-clamp-1">{company.recentNews}</span>
+                              </div>
+                            )}
+                            {company.fundingInfo && (
+                              <div className="text-xs">
+                                <span className="font-medium text-foreground">Funding:</span>{" "}
+                                <span className="text-muted-foreground line-clamp-1">{company.fundingInfo}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Meta Badges */}
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {company.primaryContact && (
+                            <Badge variant="outline" className="h-5 text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
+                              <Mail className="h-3 w-3 mr-1" />
+                              Contact Available
+                            </Badge>
+                          )}
+                          {company.industry && (
+                            <Badge variant="outline" className="h-5 text-xs font-mono">
+                              {company.industry}
+                            </Badge>
+                          )}
+                          {company.size && (
+                            <Badge variant="secondary" className="h-5 text-xs font-mono">
+                              {company.size}
+                            </Badge>
+                          )}
+                          {company.employeeCount && (
+                            <Badge variant="secondary" className="h-5 text-xs font-mono">
+                              {company.employeeCount} emp
+                            </Badge>
+                          )}
+                          {company.geography && (
+                            <Badge variant="outline" className="h-5 text-xs font-mono">
+                              📍 {company.geography}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <CarouselNext className="h-8 w-8 relative right-0 top-0 translate-x-0 translate-y-0 xl:hidden" />
-                </div>
-              </Carousel>
+                ))}
+              </div>
 
               {/* Usage Stats Footer */}
               {results.usage && (
@@ -773,6 +751,9 @@ export default function LeadFinder() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         isSearching={isLoading}
+        allCompanies={results?.leads || []}
+        currentIndex={currentCompanyIndex}
+        onNavigate={handleNavigateCompany}
       />
     </div>
   );

@@ -64,7 +64,7 @@ interface CompanyDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isSearching?: boolean;
-  allCompanies?: Company[];
+  allCompanies?: any[];
   currentIndex?: number;
   onNavigate?: (direction: 'prev' | 'next') => void;
 }
