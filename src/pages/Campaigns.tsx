@@ -6,8 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical } from "lucide-react";
 import { format } from "date-fns";
+import { useSearchParams } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +17,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import EmailDeliverability from "./EmailDeliverability";
+import AutomationRules from "./AutomationRules";
+import ABTesting from "./ABTesting";
 
 interface Campaign {
   id: string;
@@ -41,6 +46,8 @@ interface CampaignRecipient {
 
 export default function Campaigns() {
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'overview';
 
   const { data: campaigns, isLoading } = useQuery({
     queryKey: ['email-campaigns'],
@@ -125,13 +132,35 @@ export default function Campaigns() {
             <Mail className="h-6 w-6 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Email Campaigns</h1>
+            <h1 className="text-2xl font-bold">Campaigns Hub</h1>
             <p className="text-sm text-muted-foreground">
-              Track and manage your bulk email campaigns
+              Manage your email campaigns, monitor health, and optimize performance
             </p>
           </div>
         </div>
       </div>
+
+      <Tabs value={activeTab} onValueChange={(value) => setSearchParams({ tab: value })}>
+        <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsTrigger value="overview" className="flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            <span className="hidden sm:inline">Overview</span>
+          </TabsTrigger>
+          <TabsTrigger value="health" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            <span className="hidden sm:inline">Email Health</span>
+          </TabsTrigger>
+          <TabsTrigger value="automation" className="flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            <span className="hidden sm:inline">Automation</span>
+          </TabsTrigger>
+          <TabsTrigger value="testing" className="flex items-center gap-2">
+            <FlaskConical className="h-4 w-4" />
+            <span className="hidden sm:inline">A/B Testing</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-6">
 
       {!campaigns || campaigns.length === 0 ? (
         <Card>
@@ -216,52 +245,66 @@ export default function Campaigns() {
         </Card>
       )}
 
-      {/* Campaign Details Dialog */}
-      <Dialog open={!!selectedCampaign} onOpenChange={() => setSelectedCampaign(null)}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Campaign Recipients</DialogTitle>
-            <DialogDescription>
-              View individual recipient status and details
-            </DialogDescription>
-          </DialogHeader>
-          
-          {recipients && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Recipient</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Sent At</TableHead>
-                  <TableHead>Opened At</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recipients.map((recipient) => (
-                  <TableRow key={recipient.id}>
-                    <TableCell>{recipient.name}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {recipient.email}
-                    </TableCell>
-                    <TableCell>{getRecipientStatusBadge(recipient.status)}</TableCell>
-                    <TableCell className="text-sm">
-                      {recipient.sent_at
-                        ? format(new Date(recipient.sent_at), 'MMM d, HH:mm')
-                        : '-'}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {recipient.opened_at
-                        ? format(new Date(recipient.opened_at), 'MMM d, HH:mm')
-                        : '-'}
-                    </TableCell>
+        {/* Campaign Details Dialog */}
+        <Dialog open={!!selectedCampaign} onOpenChange={() => setSelectedCampaign(null)}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Campaign Recipients</DialogTitle>
+              <DialogDescription>
+                View individual recipient status and details
+              </DialogDescription>
+            </DialogHeader>
+            
+            {recipients && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Recipient</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Sent At</TableHead>
+                    <TableHead>Opened At</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </DialogContent>
-      </Dialog>
+                </TableHeader>
+                <TableBody>
+                  {recipients.map((recipient) => (
+                    <TableRow key={recipient.id}>
+                      <TableCell>{recipient.name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {recipient.email}
+                      </TableCell>
+                      <TableCell>{getRecipientStatusBadge(recipient.status)}</TableCell>
+                      <TableCell className="text-sm">
+                        {recipient.sent_at
+                          ? format(new Date(recipient.sent_at), 'MMM d, HH:mm')
+                          : '-'}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {recipient.opened_at
+                          ? format(new Date(recipient.opened_at), 'MMM d, HH:mm')
+                          : '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </DialogContent>
+        </Dialog>
+        </TabsContent>
+
+        <TabsContent value="health">
+          <EmailDeliverability />
+        </TabsContent>
+
+        <TabsContent value="automation">
+          <AutomationRules />
+        </TabsContent>
+
+        <TabsContent value="testing">
+          <ABTesting />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

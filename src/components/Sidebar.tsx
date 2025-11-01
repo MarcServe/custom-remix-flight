@@ -39,24 +39,14 @@ const navigation: NavigationItem[] = [
     href: "#campaigns", 
     icon: Send,
     children: [
+      { name: "Overview", href: "/campaigns", icon: Briefcase },
       { name: "Sequences", href: "/sequences", icon: Mail },
       { name: "Auto-Responses", href: "/auto-responses", icon: Sparkles },
       { name: "All Campaigns", href: "/all-campaigns", icon: Activity },
       { name: "Active Campaigns", href: "/company-sequences", icon: TrendingUp },
-      { name: "Bulk Campaigns", href: "/campaigns", icon: Briefcase },
     ]
   },
   { name: "Conversations", href: "/conversations", icon: MessageSquare },
-  { 
-    name: "Email Tools", 
-    href: "#email-tools", 
-    icon: Settings,
-    children: [
-      { name: "Email Health", href: "/email-deliverability", icon: Shield },
-      { name: "Automation Rules", href: "/automation-rules", icon: Zap },
-      { name: "A/B Testing", href: "/ab-testing", icon: TrendingUp },
-    ]
-  },
   { 
     name: "Collaboration", 
     href: "#collaboration", 
@@ -66,7 +56,7 @@ const navigation: NavigationItem[] = [
       { name: "Shared Inbox", href: "/shared-inbox", icon: Mail },
     ]
   },
-  { name: "Integrations", href: "/integrations", icon: Plug2 },
+  { name: "Email Settings", href: "/integrations", icon: Plug2 },
 ];
 
 // Helper function to get pending count for a menu item
