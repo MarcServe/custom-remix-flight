@@ -167,6 +167,7 @@ Deno.serve(async (req) => {
         personalized_emails: personalizedEmails,
         status: 'draft',
         current_step: 0,
+        auto_respond_enabled: sequence.auto_respond || false,
         metadata: {
           contact_id: primaryContact.id || null,
           contact_name: primaryContact.name,

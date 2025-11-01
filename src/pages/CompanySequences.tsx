@@ -35,6 +35,7 @@ interface CompanySequence {
   status: 'draft' | 'active' | 'paused' | 'completed';
   current_step: number;
   personalized_emails: any[];
+  auto_respond_enabled: boolean;
   companies: {
     name: string;
     industry?: string;
@@ -43,6 +44,7 @@ interface CompanySequence {
   email_sequences: {
     name: string;
     steps: any[];
+    auto_respond: boolean;
   };
   email_activities: Array<{
     id: string;
@@ -75,7 +77,7 @@ export default function CompanySequences() {
         .select(`
           *,
           companies(name, industry, geography),
-          email_sequences(name, steps),
+          email_sequences(name, steps, auto_respond),
           email_activities(id, step_number, status, sent_at, opened_at, replied_at)
         `)
         .order('created_at', { ascending: false });
@@ -290,6 +292,11 @@ export default function CompanySequences() {
                             <Badge variant="outline" className={getStatusColor(sequence.status)}>
                               {sequence.status}
                             </Badge>
+                            {sequence.auto_respond_enabled && (
+                              <Badge variant="default" className="bg-gradient-primary text-white">
+                                Auto-Response: ON
+                              </Badge>
+                            )}
                             {sequence.companies.industry && (
                               <Badge variant="secondary">{sequence.companies.industry}</Badge>
                             )}

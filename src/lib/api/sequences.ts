@@ -9,6 +9,7 @@ export interface SequenceRequest {
   provider?: 'lovable' | 'openai' | 'perplexity';
   model?: string;
   customInstructions?: string;
+  autoRespond?: boolean;
 }
 
 export interface SequenceResponse {

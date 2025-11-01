@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { PersonalizedSequenceCard } from "@/components/sequences/PersonalizedSequenceCard";
 import { SequenceChatCard } from "@/components/features/sequences/SequenceChatCard";
 import { AutomationMetrics } from "@/components/sequences/AutomationMetrics";
@@ -28,6 +29,7 @@ export default function Sequences() {
   const [steps, setSteps] = useState("3");
   const [tone, setTone] = useState<"professional" | "casual" | "technical">("professional");
   const [customInstructions, setCustomInstructions] = useState("");
+  const [autoRespond, setAutoRespond] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<number[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
   const [selectedSequence, setSelectedSequence] = useState<any>(null);
@@ -89,6 +91,7 @@ export default function Sequences() {
       provider: providerConfig.provider,
       model: providerConfig.model,
       customInstructions: customInstructions || undefined,
+      autoRespond,
     });
 
     if (data) {
@@ -361,6 +364,22 @@ export default function Sequences() {
                       )}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/50">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="auto-respond" className="text-sm font-medium cursor-pointer">
+                      Enable Auto-Response
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      AI will automatically respond to interested prospects without manual review
+                    </p>
+                  </div>
+                  <Switch
+                    id="auto-respond"
+                    checked={autoRespond}
+                    onCheckedChange={setAutoRespond}
+                  />
                 </div>
 
                 <Button

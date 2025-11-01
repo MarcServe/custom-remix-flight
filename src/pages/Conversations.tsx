@@ -30,12 +30,14 @@ interface CompanySequence {
   company_id: string;
   status: string;
   next_action: string;
+  auto_respond_enabled: boolean;
   companies: {
     name: string;
   };
   email_sequences: {
     name: string;
     goal?: string;
+    auto_respond: boolean;
   };
 }
 
@@ -53,7 +55,7 @@ export default function Conversations() {
         .select(`
           *,
           companies(name),
-          email_sequences(name, goal)
+          email_sequences(name, goal, auto_respond)
         `)
         .in('next_action', ['wait_for_response', 'personalized_response'])
         .order('updated_at', { ascending: false });
@@ -202,9 +204,16 @@ export default function Conversations() {
                           Goal: {seq.email_sequences.goal}
                         </div>
                       )}
-                      <Badge className="mt-2" variant="outline">
-                        {seq.next_action.replace(/_/g, ' ')}
-                      </Badge>
+                      <div className="flex gap-2 mt-2">
+                        <Badge variant="outline">
+                          {seq.next_action.replace(/_/g, ' ')}
+                        </Badge>
+                        {seq.auto_respond_enabled && (
+                          <Badge variant="default" className="bg-gradient-primary text-white">
+                            Auto-Response
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -284,27 +293,36 @@ export default function Conversations() {
                 {/* AI Response Section */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold">AI-Generated Response</h3>
-                    <Button
-                      onClick={handleGenerateResponse}
-                      disabled={isGenerating}
-                      size="sm"
-                    >
-                      {isGenerating ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="h-4 w-4 mr-2" />
-                          Generate Response
-                        </>
+                    <div>
+                      <h3 className="font-semibold">AI-Generated Response</h3>
+                      {selectedSeqData?.auto_respond_enabled && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Auto-Response is enabled - AI will send responses automatically
+                        </p>
                       )}
-                    </Button>
+                    </div>
+                    {!selectedSeqData?.auto_respond_enabled && (
+                      <Button
+                        onClick={handleGenerateResponse}
+                        disabled={isGenerating}
+                        size="sm"
+                      >
+                        {isGenerating ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Generate Response
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
 
-                  {generatedResponse && (
+                  {!selectedSeqData?.auto_respond_enabled && generatedResponse && (
                     <div className="space-y-3">
                       <div>
                         <Label>Subject</Label>

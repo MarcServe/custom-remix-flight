@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { size, geography, industry, steps = 3, tone = "professional", provider, model, customInstructions } = await req.json();
+    const { size, geography, industry, steps = 3, tone = "professional", provider, model, customInstructions, autoRespond = false } = await req.json();
 
     console.log("Sequence generation request:", { size, geography, industry, steps, tone, provider, model });
 
@@ -159,6 +159,7 @@ Return ONLY the JSON array.`;
         model: aiResult.model,
         langfuse_trace_id: aiResult.traceId,
         custom_instructions: customInstructions,
+        auto_respond: autoRespond,
       })
       .select()
       .single();

@@ -229,6 +229,7 @@ export type Database = {
       company_sequences: {
         Row: {
           ai_context: Json | null
+          auto_respond_enabled: boolean
           automation_rules: Json | null
           company_id: string
           conversation_history: Json | null
@@ -244,6 +245,7 @@ export type Database = {
         }
         Insert: {
           ai_context?: Json | null
+          auto_respond_enabled?: boolean
           automation_rules?: Json | null
           company_id: string
           conversation_history?: Json | null
@@ -259,6 +261,7 @@ export type Database = {
         }
         Update: {
           ai_context?: Json | null
+          auto_respond_enabled?: boolean
           automation_rules?: Json | null
           company_id?: string
           conversation_history?: Json | null
@@ -732,6 +735,7 @@ export type Database = {
       email_sequences: {
         Row: {
           ai_instructions: string | null
+          auto_respond: boolean
           created_at: string | null
           created_by: string | null
           custom_instructions: string | null
@@ -747,6 +751,7 @@ export type Database = {
         }
         Insert: {
           ai_instructions?: string | null
+          auto_respond?: boolean
           created_at?: string | null
           created_by?: string | null
           custom_instructions?: string | null
@@ -762,6 +767,7 @@ export type Database = {
         }
         Update: {
           ai_instructions?: string | null
+          auto_respond?: boolean
           created_at?: string | null
           created_by?: string | null
           custom_instructions?: string | null
