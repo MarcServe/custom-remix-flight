@@ -30,7 +30,7 @@ export function SendEmailDialog({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [context, setContext] = useState("");
-  const [sender, setSender] = useState<'gmail' | 'resend'>('resend');
+  const [sender, setSender] = useState<'gmail' | 'resend' | 'smtp'>('smtp');
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
@@ -42,7 +42,7 @@ export function SendEmailDialog({
         .from('crm_connections')
         .select('provider, status, from_email')
         .eq('status', 'active')
-        .in('provider', ['gmail', 'outlook']);
+        .in('provider', ['gmail', 'outlook', 'smtp']);
       return data || [];
     },
   });
@@ -150,11 +150,24 @@ export function SendEmailDialog({
 
             <div className="space-y-2">
               <Label htmlFor="sender">Send From</Label>
-              <Select value={sender} onValueChange={(value) => setSender(value as 'gmail' | 'resend')}>
+              <Select value={sender} onValueChange={(value) => setSender(value as 'gmail' | 'resend' | 'smtp')}>
                 <SelectTrigger id="sender">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  {connections?.some(c => c.provider === 'smtp' && c.status === 'active') && (
+                    <SelectItem value="smtp">
+                      <div className="flex items-center gap-2">
+                        <span>✉️</span>
+                        <div>
+                          <div className="font-medium">Business Email</div>
+                          <div className="text-xs text-muted-foreground">
+                            {connections.find(c => c.provider === 'smtp')?.from_email || 'michael.o@bizboosters.co.uk'}
+                          </div>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  )}
                   <SelectItem value="resend">
                     <div className="flex items-center gap-2">
                       <span>📧</span>
@@ -179,6 +192,11 @@ export function SendEmailDialog({
                   )}
                 </SelectContent>
               </Select>
+              {sender === 'smtp' && (
+                <p className="text-xs text-muted-foreground">
+                  ✓ Send from your verified business email • Professional sender identity
+                </p>
+              )}
               {sender === 'gmail' && (
                 <p className="text-xs text-muted-foreground">
                   ✓ Email will appear in your Gmail Sent folder
