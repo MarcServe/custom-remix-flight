@@ -140,25 +140,64 @@ export const nangoClient = {
     // Extract email from username (most SMTP servers use email as username)
     const fromEmail = config.username.includes('@') ? config.username : `${config.username}@${config.host}`;
 
-    const { data, error } = await apiClient.supabase
+    // Check if SMTP connection already exists
+    const { data: existing } = await apiClient.supabase
       .from('crm_connections')
-      .insert({
-        user_id: user.id,
-        provider: 'smtp',
-        connection_id: `smtp_${Date.now()}`,
-        status: 'active',
-        from_email: fromEmail,
-        metadata: {
-          smtp_mode: 'direct', // Default to Direct SMTP for open-source use
-          smtp_host: config.host,
-          smtp_port: config.port,
-          smtp_username: config.username,
-          smtp_password: config.password,
-          smtp_secure: config.secure,
-        },
-      })
-      .select()
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('provider', 'smtp')
       .maybeSingle();
+
+    let data, error;
+
+    if (existing) {
+      // Update existing connection
+      const result = await apiClient.supabase
+        .from('crm_connections')
+        .update({
+          connection_id: `smtp_${Date.now()}`,
+          status: 'active',
+          from_email: fromEmail,
+          metadata: {
+            smtp_mode: 'direct', // Default to Direct SMTP for open-source use
+            smtp_host: config.host,
+            smtp_port: config.port,
+            smtp_username: config.username,
+            smtp_password: config.password,
+            smtp_secure: config.secure,
+          },
+        })
+        .eq('id', existing.id)
+        .select()
+        .maybeSingle();
+      
+      data = result.data;
+      error = result.error;
+    } else {
+      // Insert new connection
+      const result = await apiClient.supabase
+        .from('crm_connections')
+        .insert({
+          user_id: user.id,
+          provider: 'smtp',
+          connection_id: `smtp_${Date.now()}`,
+          status: 'active',
+          from_email: fromEmail,
+          metadata: {
+            smtp_mode: 'direct', // Default to Direct SMTP for open-source use
+            smtp_host: config.host,
+            smtp_port: config.port,
+            smtp_username: config.username,
+            smtp_password: config.password,
+            smtp_secure: config.secure,
+          },
+        })
+        .select()
+        .maybeSingle();
+      
+      data = result.data;
+      error = result.error;
+    }
 
     return { data, error };
   },
