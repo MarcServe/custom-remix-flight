@@ -186,7 +186,7 @@ serve(async (req) => {
             from: `${senderName} <${connection.from_email}>`,
             to: toEmail,
             subject,
-            content: emailBodyText,
+            content: 'auto',
             html: wrappedHtml,
             headers: {},
           });
