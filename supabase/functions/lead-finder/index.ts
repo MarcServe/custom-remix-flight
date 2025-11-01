@@ -183,112 +183,233 @@ Deno.serve(async (req) => {
       queriesRun: 4
     });
 
+    // PHASE 2: Batch processing for better extraction
+    console.log("PHASE 2: Starting batch extraction with enhanced prompts");
+    
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    
+    const batchSize = 20; // Process 20 companies at a time
+    const batches: any[][] = [];
+    
+    for (let i = 0; i < exaData.results.length; i += batchSize) {
+      batches.push(exaData.results.slice(i, i + batchSize));
+    }
+    
+    console.log(`Split ${exaData.results.length} results into ${batches.length} batches`);
+
     // Enhanced extraction prompt with industry context
     const industryGuidance = mainCategory 
       ? `Focus on companies specifically in the ${industryContext} sector within the broader ${mainCategory} industry.`
       : `Focus on companies in the ${industryContext} industry.`;
 
-    const extractionPrompt = `Extract company information from the following search results and return ONLY a valid JSON array of objects.
+    const createExtractionPrompt = (batchResults: any[]) => `Extract company information from the following search results.
 
 ${industryGuidance}
 
 CRITICAL RULES:
-1. Extract ALL companies mentioned in the results, even if data is incomplete
-2. If a field is missing, use null (don't skip the company)
-3. Return ONLY the JSON array - NO markdown, NO explanations, NO code blocks
-4. For the industry field, be as specific as possible using "${industryContext}"${mainCategory ? ` (${mainCategory})` : ''}
+1. Extract ALL companies mentioned, even if data is incomplete
+2. Deduplicate by company name (case-insensitive)
+3. Prioritize companies with LinkedIn URLs or official websites
+4. For missing fields, use null (don't skip the company)
+5. Extract multiple contacts if mentioned (executives, founders)
 
-Each object must have these exact fields:
-- name (string, required)
-- website (string or null)
-- description (string or null, 1-2 sentences highlighting their specific niche)
-- industry (string, use "${industryContext}"${mainCategory ? ` or more specific within ${mainCategory}` : ''})
-- size (string, use "${size}")
-- geography (string, use "${geography}")
-- linkedinUrl (string or null)
+Required fields (always include):
+- name (string, company legal name)
+- website (string or null, official domain only - no LinkedIn URLs here)
+- description (2-3 sentences, what they do and their specific niche)
+- industry (specific: "${industryContext}")
+- size (use: "${size}")
+- geography (use: "${geography}")
+- linkedinUrl (LinkedIn company page URL or null)
+- foundingYear (number or null)
+- revenue (estimated revenue range or null)
 
-Prioritize companies that are a strong match for "${industryContext}" within the search results.
+Optional enrichment (extract if available in the text):
+- companyPhone (international format with country code)
+- generalEmail (info@, contact@, sales@, etc.)
+- keyExecutives (array of {name, title}, e.g., [{name: "John Doe", title: "CEO"}])
+- fundingStage (seed, series A, B, etc.)
+- technologies (tools/platforms they use)
+- employeeCount (number or null)
+
+Return ONLY a JSON array of company objects. NO markdown, NO explanations, NO code blocks.
 
 Search results:
-${JSON.stringify(exaData.results, null, 2)}
+${JSON.stringify(batchResults, null, 2)}
 
 Return ONLY the JSON array now:`;
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    // Process all batches in parallel
+    const aiExtractionSpan = createSpan(trace, 'ai-batch-extraction', { batchCount: batches.length });
     
-    // Call ai-provider function
-    const aiProviderResponse = await fetch(`${supabaseUrl}/functions/v1/ai-provider`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${supabaseAnonKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        provider: provider || 'lovable',
-        model: model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a data extraction assistant. Return only valid JSON arrays, no markdown or explanations.',
+    const batchPromises = batches.map(async (batch, batchIndex) => {
+      try {
+        console.log(`Processing batch ${batchIndex + 1}/${batches.length} with ${batch.length} results`);
+        
+        const aiProviderResponse = await fetch(`${supabaseUrl}/functions/v1/ai-provider`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+            'Content-Type': 'application/json',
           },
-          {
-            role: 'user',
-            content: extractionPrompt,
-          },
-        ],
-        temperature: 0.3,
-        traceId: trace.id,
-      }),
+          body: JSON.stringify({
+            provider: provider || 'lovable',
+            model: model,
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a data extraction assistant. Return only valid JSON arrays, no markdown or explanations.',
+              },
+              {
+                role: 'user',
+                content: createExtractionPrompt(batch),
+              },
+            ],
+            temperature: 0.3,
+            traceId: trace.id,
+          }),
+        });
+
+        if (!aiProviderResponse.ok) {
+          const errorText = await aiProviderResponse.text();
+          console.error(`Batch ${batchIndex + 1} AI Provider error:`, errorText);
+          return { leads: [], usage: null };
+        }
+
+        const aiResult = await aiProviderResponse.json();
+        const extractedText = aiResult.content.trim();
+        
+        // Clean up the response
+        let cleanedText = extractedText;
+        if (cleanedText.startsWith("```json")) {
+          cleanedText = cleanedText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+        } else if (cleanedText.startsWith("```")) {
+          cleanedText = cleanedText.replace(/```\n?/g, "");
+        }
+        
+        try {
+          const batchLeads = JSON.parse(cleanedText);
+          console.log(`Batch ${batchIndex + 1} extracted ${batchLeads.length} leads`);
+          return { 
+            leads: Array.isArray(batchLeads) ? batchLeads : [], 
+            usage: aiResult.usage,
+            provider: aiResult.provider,
+            model: aiResult.model
+          };
+        } catch (parseError) {
+          console.error(`Batch ${batchIndex + 1} JSON parse error:`, parseError);
+          return { leads: [], usage: null };
+        }
+      } catch (error) {
+        console.error(`Batch ${batchIndex + 1} processing error:`, error);
+        return { leads: [], usage: null };
+      }
     });
 
-    if (!aiProviderResponse.ok) {
-      const errorText = await aiProviderResponse.text();
-      console.error("AI Provider error:", errorText);
-      throw new Error(`AI Provider error: ${aiProviderResponse.statusText}`);
-    }
+    const batchResults = await Promise.all(batchPromises);
+    await endSpan(aiExtractionSpan, { batchesProcessed: batches.length });
 
-    const aiResult = await aiProviderResponse.json();
-    const extractedText = aiResult.content.trim();
-    
-    // Clean up the response - remove markdown code blocks if present
-    let cleanedText = extractedText;
-    if (cleanedText.startsWith("```json")) {
-      cleanedText = cleanedText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-    } else if (cleanedText.startsWith("```")) {
-      cleanedText = cleanedText.replace(/```\n?/g, "");
-    }
-    
-    console.log("Extracted text (cleaned):", cleanedText);
-    console.log("AI Provider used:", aiResult.provider, "Model:", aiResult.model);
-    console.log("Usage:", aiResult.usage);
+    // Combine all leads from batches
+    let allLeads: any[] = [];
+    let totalUsage = {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      estimatedCost: 0
+    };
+    let extractionProvider = '';
+    let extractionModel = '';
 
-    let leads;
-    try {
-      leads = JSON.parse(cleanedText);
-      console.log(`Successfully parsed ${leads.length} leads`);
+    batchResults.forEach((result, index) => {
+      if (result.leads.length > 0) {
+        allLeads.push(...result.leads);
+      }
+      if (result.usage) {
+        totalUsage.promptTokens += result.usage.promptTokens || 0;
+        totalUsage.completionTokens += result.usage.completionTokens || 0;
+        totalUsage.totalTokens += result.usage.totalTokens || 0;
+        totalUsage.estimatedCost += result.usage.estimatedCost || 0;
+      }
+      if (index === 0) {
+        extractionProvider = result.provider || provider || 'lovable';
+        extractionModel = result.model || model || 'unknown';
+      }
+    });
+
+    console.log(`Combined ${allLeads.length} leads from all batches`);
+    console.log("AI Provider used:", extractionProvider, "Model:", extractionModel);
+    console.log("Total Usage:", totalUsage);
+
+    // PHASE 2: Deduplicate leads by normalized name
+    const deduplicateLeads = (leads: any[]) => {
+      const seen = new Map();
       
-      // Log each lead for debugging
-      leads.forEach((lead: any, idx: number) => {
-        console.log(`Lead ${idx + 1}:`, {
-          name: lead.name,
-          hasWebsite: !!lead.website,
-          hasLinkedIn: !!lead.linkedinUrl
-        });
+      return leads.filter(lead => {
+        if (!lead.name) return false;
+        
+        // Normalize company name
+        const normalizedName = lead.name.toLowerCase()
+          .replace(/\b(inc|llc|ltd|corp|corporation|limited|company|co)\b\.?/g, '')
+          .replace(/[^\w\s]/g, '')
+          .trim();
+        
+        // Check website domain if available
+        let domain = null;
+        if (lead.website) {
+          try {
+            const url = new URL(lead.website.startsWith('http') ? lead.website : `https://${lead.website}`);
+            domain = url.hostname.replace('www.', '');
+          } catch {
+            // Invalid URL, use normalized name only
+          }
+        }
+        
+        const key = domain || normalizedName;
+        
+        if (seen.has(key)) {
+          // Keep the lead with more complete data
+          const existing = seen.get(key);
+          const existingScore = calculateDataCompleteness(existing);
+          const currentScore = calculateDataCompleteness(lead);
+          
+          if (currentScore > existingScore) {
+            seen.set(key, lead);
+            return false; // Remove existing (will be replaced)
+          }
+          return false; // Skip duplicate
+        }
+        
+        seen.set(key, lead);
+        return true;
       });
-    } catch (parseError) {
-      console.error("JSON parse error:", parseError);
-      console.error("Raw AI response:", extractedText);
-      console.error("Cleaned text:", cleanedText);
-      const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
-      throw new Error(`Failed to parse AI response: ${errorMessage}`);
-    }
+    };
 
-    if (!Array.isArray(leads)) {
-      throw new Error("AI response is not an array");
-    }
+    // Helper function to score data completeness
+    const calculateDataCompleteness = (lead: any) => {
+      let score = 0;
+      if (lead.website) score += 3;
+      if (lead.linkedinUrl) score += 2;
+      if (lead.description && lead.description.length > 50) score += 2;
+      if (lead.companyPhone) score += 1;
+      if (lead.generalEmail) score += 1;
+      if (lead.keyExecutives && lead.keyExecutives.length > 0) score += 2;
+      return score;
+    };
 
-    console.log("Normalized leads:", leads.length);
+    let leads = deduplicateLeads(allLeads);
+    console.log(`After deduplication: ${leads.length} unique leads`);
+    
+    // Log sample leads for debugging
+    leads.slice(0, 3).forEach((lead, idx) => {
+      console.log(`Lead ${idx + 1}:`, {
+        name: lead.name,
+        hasWebsite: !!lead.website,
+        hasLinkedIn: !!lead.linkedinUrl,
+        hasDescription: !!lead.description,
+        completeness: calculateDataCompleteness(lead)
+      });
+    });
 
     // Enrich with Perplexity if requested - Process in parallel for speed
     let enrichmentUsage = null;
@@ -560,9 +681,9 @@ Return ONLY valid JSON, no markdown blocks.`;
               employee_count: lead.employeeCount || null,
               status: "NEW",
               enriched_at: new Date().toISOString(),
-              enrichment_provider: aiResult.provider,
-              enrichment_model: aiResult.model,
-              langfuse_trace_id: aiResult.traceId,
+              enrichment_provider: extractionProvider,
+              enrichment_model: extractionModel,
+              langfuse_trace_id: trace.id,
             },
             {
               onConflict: "website",
@@ -611,12 +732,12 @@ Return ONLY valid JSON, no markdown blocks.`;
         leads,
         inserted: insertedCount,
         dryRun,
-        provider: aiResult.provider,
-        model: aiResult.model,
-        usage: aiResult.usage,
+        provider: extractionProvider,
+        model: extractionModel,
+        usage: totalUsage,
         enrichmentUsage,
         wasEnriched: enrichWithPerplexity,
-        traceUrl: aiResult.traceUrl,
+        traceUrl: `https://cloud.langfuse.com/trace/${trace.id}`,
         filteredCount,
       }),
       {
