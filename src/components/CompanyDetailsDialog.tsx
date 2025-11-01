@@ -272,7 +272,7 @@ export function CompanyDetailsDialog({
         <DialogHeader className="px-6 pt-6 pb-4 bg-gradient-to-br from-primary/5 via-primary/3 to-transparent shrink-0">
           <div className="flex items-start gap-4">
             <div className="w-16 h-16 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg shrink-0">
-              <Building2 className="h-8 w-8 text-white" />
+              <Building2 className="h-8 w-8 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2 mb-2">
