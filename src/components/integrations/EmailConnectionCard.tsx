@@ -7,7 +7,7 @@ import { NangoConnection } from "@/lib/integrations/nango";
 
 interface EmailConnectionCardProps {
   provider: {
-    id: 'gmail' | 'outlook' | 'smtp';
+    id: 'gmail' | 'outlook' | 'smtp' | 'verified_email';
     name: string;
     description: string;
     icon: string;
@@ -24,12 +24,14 @@ export function EmailConnectionCard({
   onDisconnect,
 }: EmailConnectionCardProps) {
   const isConnected = connection?.status === 'active';
+  const isPending = connection?.status === 'pending';
   const hasError = connection?.status === 'error';
 
   const providerColors: Record<string, string> = {
     gmail: "bg-red-50 text-red-600 border-red-200",
     outlook: "bg-blue-50 text-blue-600 border-blue-200",
     smtp: "bg-purple-50 text-purple-600 border-purple-200",
+    verified_email: "bg-green-50 text-green-600 border-green-200",
   };
 
   return (
@@ -51,6 +53,12 @@ export function EmailConnectionCard({
               Connected
             </Badge>
           )}
+          {isPending && (
+            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+              <AlertCircle className="h-3 w-3 mr-1" />
+              Pending
+            </Badge>
+          )}
           {hasError && (
             <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
               <AlertCircle className="h-3 w-3 mr-1" />
@@ -62,11 +70,22 @@ export function EmailConnectionCard({
       <CardContent className="space-y-3">
         {connection && (
           <>
-            {connection.metadata?.email && (
+            {connection.from_email && (
+              <div className="flex items-center gap-2 text-sm">
+                <Mail className="h-4 w-4" />
+                <span className="font-medium">{connection.from_email}</span>
+              </div>
+            )}
+            {connection.metadata?.email && !connection.from_email && (
               <div className="flex items-center gap-2 text-sm">
                 <Mail className="h-4 w-4" />
                 <span className="font-medium">{connection.metadata.email}</span>
               </div>
+            )}
+            {connection.verified_at && (
+              <p className="text-xs text-muted-foreground">
+                Verified: {format(new Date(connection.verified_at), "MMM dd, yyyy 'at' h:mm a")}
+              </p>
             )}
             {connection.last_sync_at && (
               <p className="text-xs text-muted-foreground">

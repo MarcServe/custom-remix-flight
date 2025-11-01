@@ -337,6 +337,7 @@ export type Database = {
         Row: {
           connection_id: string
           created_at: string
+          from_email: string | null
           id: string
           last_sync_at: string | null
           metadata: Json | null
@@ -345,10 +346,14 @@ export type Database = {
           status: string
           updated_at: string
           user_id: string
+          verification_expires_at: string | null
+          verification_token: string | null
+          verified_at: string | null
         }
         Insert: {
           connection_id: string
           created_at?: string
+          from_email?: string | null
           id?: string
           last_sync_at?: string | null
           metadata?: Json | null
@@ -357,10 +362,14 @@ export type Database = {
           status?: string
           updated_at?: string
           user_id: string
+          verification_expires_at?: string | null
+          verification_token?: string | null
+          verified_at?: string | null
         }
         Update: {
           connection_id?: string
           created_at?: string
+          from_email?: string | null
           id?: string
           last_sync_at?: string | null
           metadata?: Json | null
@@ -369,6 +378,9 @@ export type Database = {
           status?: string
           updated_at?: string
           user_id?: string
+          verification_expires_at?: string | null
+          verification_token?: string | null
+          verified_at?: string | null
         }
         Relationships: []
       }

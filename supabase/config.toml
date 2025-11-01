@@ -44,3 +44,9 @@ verify_jwt = false  # OAuth callback from Nango doesn't have JWT
 
 [functions.test-smtp]
 verify_jwt = true
+
+[functions.send-verification-email]
+verify_jwt = true
+
+[functions.verify-email]
+verify_jwt = false  # Allow verification via GET request from email link

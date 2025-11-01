@@ -1,14 +1,17 @@
 import { apiClient } from '../api/client';
 
 export interface NangoConnection {
-  provider: 'gmail' | 'outlook' | 'smtp';
+  provider: 'gmail' | 'outlook' | 'smtp' | 'verified_email';
   connection_id: string;
-  status: 'active' | 'error' | 'disconnected';
+  status: 'active' | 'error' | 'disconnected' | 'pending';
   metadata?: {
     email?: string;
     scopes?: string[];
+    verification_code?: string;
   };
   last_sync_at?: string;
+  from_email?: string;
+  verified_at?: string;
 }
 
 /**
@@ -134,5 +137,31 @@ export const nangoClient = {
   }) {
     const { data, error } = await apiClient.callFunction('test-smtp', config);
     return { data, error };
+  },
+
+  /**
+   * Send email verification
+   */
+  async sendVerificationEmail(email: string) {
+    const { data, error } = await apiClient.callFunction('send-verification-email', { email });
+    return { data, error };
+  },
+
+  /**
+   * Verify email with code
+   */
+  async verifyEmail(code: string, connectionId: string) {
+    const { data, error } = await apiClient.callFunction('verify-email', { 
+      code, 
+      connectionId 
+    });
+    return { data, error };
+  },
+
+  /**
+   * Resend verification email
+   */
+  async resendVerification(email: string) {
+    return this.sendVerificationEmail(email);
   },
 };
