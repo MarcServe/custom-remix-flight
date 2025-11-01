@@ -18,6 +18,7 @@ interface EmailRequest {
   companyId?: string;
   contactId?: string;
   sender?: 'gmail' | 'resend' | 'smtp';
+  testConnection?: boolean; // Test SMTP connection without sending
 }
 
 serve(async (req) => {
@@ -48,7 +49,7 @@ serve(async (req) => {
     }
 
     const emailRequest: EmailRequest = await req.json();
-    const { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, sender = 'resend' } = emailRequest;
+    const { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, sender = 'resend', testConnection = false } = emailRequest;
 
     // Fetch user profile for signature
     const { data: userProfile } = await supabaseClient
@@ -165,8 +166,8 @@ serve(async (req) => {
       const wrappedHtml = wrapEmailContent(emailBodyHtml, senderName, connection.from_email);
 
       if (smtpMode === 'direct' && (connection.metadata as any)?.smtp_host) {
-        // Direct SMTP Connection
-        console.log(`Sending via Direct SMTP: ${(connection.metadata as any).smtp_host}`);
+        // Direct SMTP Connection with automatic fallback to Resend
+        console.log(`Attempting Direct SMTP: ${(connection.metadata as any).smtp_host}`);
 
         const smtpConfig = connection.metadata as any;
         const smtpPort = smtpConfig.smtp_port || 587;
@@ -175,6 +176,15 @@ serve(async (req) => {
         // Port 587 uses STARTTLS (tls: false)
         // Port 25 is unencrypted (tls: false + allowUnsecure: true)
         const useTLS = smtpPort === 465;
+        
+        console.log('Direct SMTP Configuration:', {
+          host: smtpConfig.smtp_host,
+          port: smtpPort,
+          useTLS,
+          username: smtpConfig.smtp_username,
+          from: connection.from_email,
+          to: toEmail,
+        });
         
         const client = new SMTPClient({
           connection: {
@@ -186,25 +196,90 @@ serve(async (req) => {
               password: smtpConfig.smtp_password,
             },
           },
+          debug: {
+            log: true, // Enable debug logging
+            allowUnsecure: smtpPort === 25,
+            noStartTLS: false, // Allow STARTTLS for port 587
+          },
         });
 
         try {
+          // If testConnection is true, just test the connection
+          if (testConnection) {
+            console.log('Testing SMTP connection only...');
+            await client.close();
+            return new Response(
+              JSON.stringify({
+                success: true,
+                message: 'SMTP connection test successful',
+              }),
+              {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+              }
+            );
+          }
+
           await client.send({
             from: `${senderName} <${connection.from_email}>`,
             to: toEmail,
             subject,
             content: 'auto',
             html: wrappedHtml,
-            headers: {},
           });
 
           await client.close();
           messageId = `direct-smtp-${Date.now()}`;
           provider = 'smtp';
-          console.log('Email sent via Direct SMTP');
+          console.log('Email sent successfully via Direct SMTP');
         } catch (smtpError: any) {
-          console.error('Direct SMTP error:', smtpError);
-          throw new Error(`Failed to send via Direct SMTP: ${smtpError.message}`);
+          console.error('Direct SMTP error details:', {
+            message: smtpError.message,
+            name: smtpError.name,
+            stack: smtpError.stack,
+            config: {
+              host: smtpConfig.smtp_host,
+              port: smtpPort,
+              useTLS,
+            }
+          });
+          
+          // Automatic fallback to Resend
+          console.log('Direct SMTP failed, falling back to Resend relay...');
+          
+          const resendApiKey = Deno.env.get('RESEND_API_KEY');
+          
+          if (!resendApiKey) {
+            throw new Error(`Direct SMTP failed: ${smtpError.message}. Resend is not configured for fallback.`);
+          }
+
+          console.log(`Using Resend relay with custom from: ${senderName} <${connection.from_email}>`);
+
+          const resendResponse = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${resendApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: `${senderName} <${connection.from_email}>`,
+              to: [toEmail],
+              subject,
+              text: emailBodyText,
+              html: wrappedHtml,
+            }),
+          });
+
+          if (!resendResponse.ok) {
+            const errorData = await resendResponse.text();
+            console.error('Resend fallback also failed:', errorData);
+            throw new Error(`Both Direct SMTP and Resend fallback failed. SMTP error: ${smtpError.message}`);
+          }
+
+          const resendData = await resendResponse.json();
+          messageId = resendData.id || null;
+          provider = 'smtp';
+          console.log('Email sent via Resend fallback (after SMTP failure):', resendData);
         }
       } else {
         // Send via Resend (default relay mode)
