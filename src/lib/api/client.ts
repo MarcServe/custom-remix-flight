@@ -15,6 +15,33 @@ export const apiClient = {
     body?: any
   ): Promise<{ data: T | null; error: Error | null }> {
     try {
+      // Check for active session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      console.log('Session check:', { 
+        hasSession: !!session, 
+        userId: session?.user?.id,
+        expiresAt: session?.expires_at 
+      });
+
+      if (!session) {
+        console.error('No active session found');
+        return { 
+          data: null, 
+          error: new Error('Your session has expired. Please sign in again.') 
+        };
+      }
+
+      // Check if session is expired
+      if (session.expires_at && session.expires_at * 1000 < Date.now()) {
+        console.error('Session expired');
+        return {
+          data: null,
+          error: new Error('Your session has expired. Please sign in again.')
+        };
+      }
+
+      console.log(`Calling edge function: ${functionName}`);
       const { data, error } = await supabase.functions.invoke(functionName, {
         body,
       });
@@ -24,6 +51,7 @@ export const apiClient = {
         return { data: null, error };
       }
 
+      console.log(`Edge function ${functionName} success:`, data);
       return { data: data as T, error: null };
     } catch (error) {
       console.error(`Edge function ${functionName} exception:`, error);
