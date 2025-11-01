@@ -102,7 +102,7 @@ serve(async (req) => {
       .from("crm_connections")
       .insert({
         user_id: user.id,
-        provider: "verified_email",
+        provider: "smtp",
         connection_id: `verified_${Date.now()}`,
         status: "pending",
         from_email: email,
