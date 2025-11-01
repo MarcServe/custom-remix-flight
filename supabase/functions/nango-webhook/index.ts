@@ -6,6 +6,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Map Nango provider names to our database provider names
+function mapNangoProviderToDbProvider(nangoProvider: string): string {
+  const providerMap: Record<string, string> = {
+    'google-mail': 'gmail',
+    'microsoft-email': 'outlook',
+  };
+  return providerMap[nangoProvider] || nangoProvider;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -63,7 +72,7 @@ serve(async (req) => {
         .from('crm_connections')
         .upsert({
           user_id: userId,
-          provider: providerConfigKey,
+          provider: mapNangoProviderToDbProvider(providerConfigKey),
           connection_id: connectionId,
           status: 'active',
           metadata: {
@@ -129,7 +138,7 @@ serve(async (req) => {
         .from('crm_connections')
         .upsert({
           user_id: userId,
-          provider: provider.provider_config_key,
+          provider: mapNangoProviderToDbProvider(provider.provider_config_key),
           connection_id: connection.id || connection.connection_id,
           status: 'active',
           metadata: {
