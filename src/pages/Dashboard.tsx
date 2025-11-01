@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EventCard } from "@/components/EventCard";
+import { AutomationMetrics } from "@/components/sequences/AutomationMetrics";
 import { useNavigate } from "react-router-dom";
 import { useEvents } from "@/hooks/use-events";
 import { format, isToday, isTomorrow, isFuture } from "date-fns";
@@ -295,6 +296,11 @@ export default function Dashboard() {
               </div>
             </div>
           </Card>
+
+          {/* Automation Metrics - Spans full width */}
+          <div className="lg:col-span-4">
+            <AutomationMetrics />
+          </div>
 
           {/* Recent Activity Feed - Spans full width */}
           
