@@ -35,6 +35,8 @@ const navigation = [
   { name: "Email Health", href: "/email-deliverability", icon: Shield },
   { name: "Automation Rules", href: "/automation-rules", icon: Zap },
   { name: "A/B Testing", href: "/ab-testing", icon: TrendingUp },
+  { name: "Teams", href: "/teams", icon: Users },
+  { name: "Shared Inbox", href: "/shared-inbox", icon: Mail },
   { name: "Integrations", href: "/integrations", icon: Plug2 },
 ];
 

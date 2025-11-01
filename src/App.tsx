@@ -26,6 +26,8 @@ import Integrations from "./pages/Integrations";
 import EmailDeliverability from "./pages/EmailDeliverability";
 import AutomationRules from "./pages/AutomationRules";
 import ABTesting from "./pages/ABTesting";
+import Teams from "./pages/Teams";
+import SharedInbox from "./pages/SharedInbox";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -74,6 +76,8 @@ const App = () => (
                           <Route path="/email-deliverability" element={<EmailDeliverability />} />
                           <Route path="/automation-rules" element={<AutomationRules />} />
                           <Route path="/ab-testing" element={<ABTesting />} />
+                          <Route path="/teams" element={<Teams />} />
+                          <Route path="/shared-inbox" element={<SharedInbox />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </main>

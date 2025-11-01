@@ -14,6 +14,128 @@ export type Database = {
   }
   public: {
     Tables: {
+      assignment_rules: {
+        Row: {
+          assign_to_role: string | null
+          assign_to_user_id: string | null
+          conditions: Json
+          created_at: string
+          description: string | null
+          enabled: boolean | null
+          id: string
+          metadata: Json | null
+          name: string
+          notify_assignee: boolean | null
+          priority: number | null
+          shared_inbox_id: string | null
+          team_id: string
+          updated_at: string
+        }
+        Insert: {
+          assign_to_role?: string | null
+          assign_to_user_id?: string | null
+          conditions?: Json
+          created_at?: string
+          description?: string | null
+          enabled?: boolean | null
+          id?: string
+          metadata?: Json | null
+          name: string
+          notify_assignee?: boolean | null
+          priority?: number | null
+          shared_inbox_id?: string | null
+          team_id: string
+          updated_at?: string
+        }
+        Update: {
+          assign_to_role?: string | null
+          assign_to_user_id?: string | null
+          conditions?: Json
+          created_at?: string
+          description?: string | null
+          enabled?: boolean | null
+          id?: string
+          metadata?: Json | null
+          name?: string
+          notify_assignee?: boolean | null
+          priority?: number | null
+          shared_inbox_id?: string | null
+          team_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignment_rules_shared_inbox_id_fkey"
+            columns: ["shared_inbox_id"]
+            isOneToOne: false
+            referencedRelation: "shared_inboxes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignment_rules_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assignments: {
+        Row: {
+          assigned_by_user_id: string
+          assigned_to_user_id: string
+          completed_at: string | null
+          created_at: string
+          due_date: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          metadata: Json | null
+          notes: string | null
+          status: string | null
+          team_id: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_by_user_id: string
+          assigned_to_user_id: string
+          completed_at?: string | null
+          created_at?: string
+          due_date?: string | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          metadata?: Json | null
+          notes?: string | null
+          status?: string | null
+          team_id: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_by_user_id?: string
+          assigned_to_user_id?: string
+          completed_at?: string | null
+          created_at?: string
+          due_date?: string | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          metadata?: Json | null
+          notes?: string | null
+          status?: string | null
+          team_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignments_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -1372,6 +1494,53 @@ export type Database = {
           },
         ]
       }
+      internal_notes: {
+        Row: {
+          author_id: string
+          content: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          mentions: Json | null
+          metadata: Json | null
+          team_id: string
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          content: string
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          mentions?: Json | null
+          metadata?: Json | null
+          team_id: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          content?: string
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          mentions?: Json | null
+          metadata?: Json | null
+          team_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "internal_notes_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       people: {
         Row: {
           bio: string | null
@@ -1458,6 +1627,118 @@ export type Database = {
           id?: string
           job_title?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      shared_inboxes: {
+        Row: {
+          assignment_strategy: string | null
+          auto_assign: boolean | null
+          created_at: string
+          description: string | null
+          email_address: string | null
+          id: string
+          name: string
+          settings: Json | null
+          team_id: string
+          updated_at: string
+        }
+        Insert: {
+          assignment_strategy?: string | null
+          auto_assign?: boolean | null
+          created_at?: string
+          description?: string | null
+          email_address?: string | null
+          id?: string
+          name: string
+          settings?: Json | null
+          team_id: string
+          updated_at?: string
+        }
+        Update: {
+          assignment_strategy?: string | null
+          auto_assign?: boolean | null
+          created_at?: string
+          description?: string | null
+          email_address?: string | null
+          id?: string
+          name?: string
+          settings?: Json | null
+          team_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shared_inboxes_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          id: string
+          joined_at: string
+          permissions: Json | null
+          role: string
+          team_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          joined_at?: string
+          permissions?: Json | null
+          role?: string
+          team_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          joined_at?: string
+          permissions?: Json | null
+          role?: string
+          team_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_id: string
+          settings: Json | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          owner_id: string
+          settings?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          settings?: Json | null
+          updated_at?: string
         }
         Relationships: []
       }
