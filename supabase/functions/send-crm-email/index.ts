@@ -13,7 +13,7 @@ interface EmailRequest {
   body: string;
   companyId?: string;
   contactId?: string;
-  sender?: 'gmail' | 'resend';
+  sender?: 'gmail' | 'resend' | 'smtp';
 }
 
 serve(async (req) => {
@@ -103,6 +103,60 @@ serve(async (req) => {
       const nangoData = await nangoResponse.json();
       messageId = nangoData.id || null;
       console.log('Email sent via Gmail:', nangoData);
+    } else if (sender === 'smtp') {
+      // Send via SMTP (uses Resend API with custom from_email and business name)
+      const { data: connection, error: connectionError } = await supabaseClient
+        .from('crm_connections')
+        .select('from_email, status')
+        .eq('user_id', user.id)
+        .eq('provider', 'smtp')
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (connectionError || !connection || !connection.from_email) {
+        throw new Error('SMTP/Business Email not configured. Please verify your email in Settings.');
+      }
+
+      // Fetch business profile for company name
+      const { data: businessProfile } = await supabaseClient
+        .from('business_profiles')
+        .select('company_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const senderName = businessProfile?.company_name || 'Your Business';
+      const resendApiKey = Deno.env.get('RESEND_API_KEY');
+      
+      if (!resendApiKey) {
+        throw new Error('Email service not configured.');
+      }
+
+      console.log(`Sending via SMTP with custom from: ${senderName} <${connection.from_email}>`);
+
+      const resendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: `${senderName} <${connection.from_email}>`,
+          to: [toEmail],
+          subject,
+          text: body,
+        }),
+      });
+
+      if (!resendResponse.ok) {
+        const errorData = await resendResponse.text();
+        console.error('Resend API error (SMTP):', errorData);
+        throw new Error(`Failed to send via Business Email: ${errorData}`);
+      }
+
+      const resendData = await resendResponse.json();
+      messageId = resendData.id || null;
+      provider = 'smtp';
+      console.log('Email sent via SMTP (Resend):', resendData);
     } else {
       // Send via Resend (default)
       const resendApiKey = Deno.env.get('RESEND_API_KEY');

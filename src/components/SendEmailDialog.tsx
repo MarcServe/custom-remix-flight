@@ -47,6 +47,21 @@ export function SendEmailDialog({
     },
   });
 
+  const { data: businessProfile } = useQuery({
+    queryKey: ['business-profile'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      
+      const { data } = await supabase
+        .from('business_profiles')
+        .select('company_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      return data;
+    },
+  });
+
   const handleGenerateWithAI = async () => {
     setIsGenerating(true);
     try {
@@ -162,7 +177,7 @@ export function SendEmailDialog({
                         <div>
                           <div className="font-medium">Business Email</div>
                           <div className="text-xs text-muted-foreground">
-                            {connections.find(c => c.provider === 'smtp')?.from_email || 'michael.o@bizboosters.co.uk'}
+                            {businessProfile?.company_name || 'Your Business'} &lt;{connections.find(c => c.provider === 'smtp')?.from_email || 'michael.o@bizboosters.co.uk'}&gt;
                           </div>
                         </div>
                       </div>

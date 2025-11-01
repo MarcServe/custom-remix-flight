@@ -59,9 +59,22 @@ export function PersonDetailsDialog({
   const handleSave = async () => {
     setLoading(true);
     try {
+      // Only include fields that exist in the people table
+      const updateData = {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email,
+        phone: formData.phone,
+        title: formData.title,
+        bio: formData.bio,
+        location: formData.location,
+        linkedin_url: formData.linkedin_url,
+        twitter_url: formData.twitter_url,
+      };
+
       const { error } = await supabase
         .from("people")
-        .update(formData)
+        .update(updateData)
         .eq("id", person.id);
 
       if (error) throw error;
