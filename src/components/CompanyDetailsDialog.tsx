@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus, Database, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -339,8 +340,9 @@ export function CompanyDetailsDialog({
             <TabsTrigger value="activity">Activity Timeline</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-6 pt-4 min-h-0">
+          <TabsContent value="overview" className="data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:flex-1 data-[state=active]:overflow-hidden mt-0">
+            <ScrollArea className="flex-1 h-full">
+              <div className="px-6 pb-6 space-y-6 pt-4">
             {/* Overview Section */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -648,13 +650,14 @@ export function CompanyDetailsDialog({
                    Delete
                  </Button>
                )}
+               </div>
               </div>
-             </div>
-             <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background to-transparent z-10" />
+            </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="activity" className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4 pt-4 min-h-0">
+          <TabsContent value="activity" className="data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:flex-1 data-[state=active]:overflow-hidden mt-0">
+            <ScrollArea className="flex-1 h-full">
+              <div className="px-6 pb-6 space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                     Recent Activity
@@ -690,10 +693,10 @@ export function CompanyDetailsDialog({
                     <CalendarIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
                     <p className="text-sm">No activity yet</p>
                     <p className="text-xs mt-1">Start tracking interactions with this company</p>
-                  </div>
-                 )}
-            </div>
-            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background to-transparent z-10" />
+                   </div>
+                  )}
+              </div>
+            </ScrollArea>
           </TabsContent>
         </Tabs>
       </DialogContent>
