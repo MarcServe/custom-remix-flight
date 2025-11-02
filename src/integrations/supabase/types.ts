@@ -1541,6 +1541,95 @@ export type Database = {
           },
         ]
       }
+      lead_finder_leads: {
+        Row: {
+          company_data: Json
+          contact_status: string
+          created_at: string
+          enrichment_status: string
+          id: string
+          quality_score: number | null
+          search_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_data?: Json
+          contact_status?: string
+          created_at?: string
+          enrichment_status?: string
+          id?: string
+          quality_score?: number | null
+          search_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_data?: Json
+          contact_status?: string
+          created_at?: string
+          enrichment_status?: string
+          id?: string
+          quality_score?: number | null
+          search_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_finder_leads_search_id_fkey"
+            columns: ["search_id"]
+            isOneToOne: false
+            referencedRelation: "lead_finder_searches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_finder_searches: {
+        Row: {
+          created_at: string
+          current_status: string | null
+          error_message: string | null
+          id: string
+          progress: number
+          search_params: Json
+          stats: Json | null
+          status: string
+          trace_url: string | null
+          updated_at: string
+          usage: Json | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_status?: string | null
+          error_message?: string | null
+          id?: string
+          progress?: number
+          search_params?: Json
+          stats?: Json | null
+          status?: string
+          trace_url?: string | null
+          updated_at?: string
+          usage?: Json | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_status?: string | null
+          error_message?: string | null
+          id?: string
+          progress?: number
+          search_params?: Json
+          stats?: Json | null
+          status?: string
+          trace_url?: string | null
+          updated_at?: string
+          usage?: Json | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       people: {
         Row: {
           bio: string | null
