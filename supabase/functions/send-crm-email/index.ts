@@ -411,45 +411,63 @@ serve(async (req) => {
     // ALSO create entry in email_threads for conversation view
     // This is KEY for reply tracking and unified conversation view
     if (activityData) {
-      // Get the user's from_email with priority order
-      const { data: connection } = await supabaseClient
-        .from('crm_connections')
-        .select('from_email')
-        .eq('user_id', user.id)
-        .eq('provider', provider)
-        .eq('status', 'active')
-        .maybeSingle();
+      try {
+        // Get the user's from_email with priority order
+        const { data: connection, error: connError } = await supabaseClient
+          .from('crm_connections')
+          .select('from_email')
+          .eq('user_id', user.id)
+          .eq('provider', provider)
+          .eq('status', 'active')
+          .maybeSingle();
 
-      // Priority: connection.from_email > profiles.email > user.email
-      const fromEmail = connection?.from_email || userProfile?.email || user.email || 'noreply@crm.com';
+        if (connError) {
+          console.error('Error fetching connection for email thread:', connError);
+        }
 
-      const { error: threadError } = await supabaseClient
-        .from('email_threads')
-        .insert({
-          company_sequence_id: linkedSequenceId, // Link to sequence if exists
-          from_email: fromEmail,
-          to_email: toEmail,
-          subject,
-          body_text: emailBodyText,
-          body_html: emailBodyHtml,
-          direction: 'outbound',
-          thread_id: threadId,
-          message_id: messageId,
-          received_at: new Date().toISOString(),
-          metadata: {
-            provider,
-            sent_via: 'crm_direct',
-            to_name: toName,
-            company_id: companyId || null,
-            contact_id: contactId || null,
-            auto_linked: !!linkedSequenceId,
-          },
-        });
+        // Priority: connection.from_email > profiles.email > user.email
+        const fromEmail = connection?.from_email || userProfile?.email || user.email || 'noreply@crm.com';
 
-      if (threadError) {
-        console.error('Failed to create email thread:', threadError);
-      } else {
-        console.log('Email thread created for conversation tracking');
+        console.log(`Creating email thread - From: ${fromEmail}, To: ${toEmail}, ThreadID: ${threadId}`);
+
+        const { data: threadData, error: threadError } = await supabaseClient
+          .from('email_threads')
+          .insert({
+            company_sequence_id: linkedSequenceId, // Link to sequence if exists
+            from_email: fromEmail,
+            to_email: toEmail,
+            subject,
+            body_text: emailBodyText,
+            body_html: emailBodyHtml,
+            direction: 'outbound',
+            thread_id: threadId,
+            message_id: messageId,
+            received_at: new Date().toISOString(),
+            ai_analysis: null,
+            sentiment: null,
+          })
+          .select()
+          .single();
+
+        if (threadError) {
+          console.error('❌ CRITICAL: Failed to create email thread:', {
+            error: threadError,
+            details: {
+              fromEmail,
+              toEmail,
+              threadId,
+              messageId,
+              userId: user.id,
+              provider,
+            }
+          });
+          // Don't throw - email was sent successfully, just log the thread creation failure
+        } else {
+          console.log('✅ Email thread created successfully:', threadData?.id);
+        }
+      } catch (threadCreationError) {
+        console.error('❌ Exception creating email thread:', threadCreationError);
+        // Don't throw - email was sent successfully
       }
     }
 
