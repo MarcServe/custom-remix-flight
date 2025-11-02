@@ -233,6 +233,13 @@ serve(async (req) => {
           provider = 'smtp';
           console.log('Email sent successfully via Direct SMTP');
         } catch (smtpError: any) {
+          // Try to close the client to prevent event loop issues
+          try {
+            await client.close();
+          } catch (closeError) {
+            console.error('Error closing SMTP client:', closeError);
+          }
+
           console.error('Direct SMTP error details:', {
             message: smtpError.message,
             name: smtpError.name,
