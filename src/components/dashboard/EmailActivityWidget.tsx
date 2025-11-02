@@ -1,17 +1,71 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Mail, Eye, MousePointerClick, Reply, TrendingUp, Clock, AlertTriangle } from 'lucide-react';
+import { Mail, Eye, MousePointerClick, Reply, TrendingUp, Clock, AlertTriangle, CheckCircle2, Sparkles } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useEffect } from 'react';
+import { toast } from 'sonner';
+import { Separator } from '@/components/ui/separator';
 
 export function EmailActivityWidget() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  // Real-time subscription for all email activities
+  useEffect(() => {
+    const channel = supabase
+      .channel('dashboard-email-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'email_activities',
+        },
+        (payload) => {
+          console.log('Email activity update:', payload);
+          
+          // Invalidate queries to refetch
+          queryClient.invalidateQueries({ queryKey: ['dashboard-email-activity'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard-email-stats'] });
+          
+          // Show toast for important events
+          if (payload.eventType === 'UPDATE') {
+            const activity = payload.new as any;
+            
+            if (activity.replied_at && !payload.old?.replied_at) {
+              toast.success('Email Reply Received! 🎉', {
+                description: `Got a response: ${activity.subject || 'No subject'}`,
+              });
+            } else if (activity.opened_at && !payload.old?.opened_at) {
+              toast.info('Email Opened 👀', {
+                description: `${activity.subject || 'Email'} was just opened`,
+              });
+            }
+          } else if (payload.eventType === 'INSERT') {
+            const activity = payload.new as any;
+            const metadata = activity.metadata as any;
+            
+            if (metadata?.auto_sent) {
+              toast.success('Auto-Response Sent ✨', {
+                description: `AI responded: ${activity.subject || 'No subject'}`,
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const { data: recentActivity } = useQuery({
     queryKey: ['dashboard-email-activity'],
@@ -31,12 +85,11 @@ export function EmailActivityWidget() {
           )
         `)
         .order('sent_at', { ascending: false })
-        .limit(10);
+        .limit(15);
 
       if (error) throw error;
       return data;
     },
-    refetchInterval: 10000, // Refresh every 10 seconds
   });
 
   const { data: stats } = useQuery({
@@ -67,12 +120,21 @@ export function EmailActivityWidget() {
     },
   });
 
+  // Separate recent replies
+  const recentReplies = recentActivity?.filter(a => a.replied_at).slice(0, 3) || [];
+  const otherActivity = recentActivity?.filter(a => !a.replied_at).slice(0, 7) || [];
+
   const getStatusBadge = (activity: any) => {
     const metadata = activity.metadata as any;
     const trackingEnabled = metadata?.tracking_enabled;
     
     if (activity.replied_at) {
-      return <Badge variant="default" className="bg-green-500">Replied</Badge>;
+      return (
+        <Badge variant="default" className="bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+          <Reply className="h-3 w-3 mr-1" />
+          Replied
+        </Badge>
+      );
     }
     if (metadata?.clicked) {
       return <Badge variant="default" className="bg-purple-500">Clicked</Badge>;
@@ -160,9 +222,68 @@ export function EmailActivityWidget() {
           </div>
         )}
 
+        {/* Recent Replies - Highlighted Section */}
+        {recentReplies.length > 0 && (
+          <>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center">
+                  <Reply className="h-4 w-4 text-white" />
+                </div>
+                <h4 className="text-sm font-semibold">Recent Replies</h4>
+                <Badge variant="default" className="bg-gradient-to-r from-green-500 to-emerald-500 ml-auto">
+                  {recentReplies.length} New
+                </Badge>
+              </div>
+              <div className="space-y-2">
+                {recentReplies.map((activity: any) => {
+                  const metadata = activity.metadata as any;
+                  return (
+                    <div
+                      key={activity.id}
+                      className="p-3 rounded-lg border-2 border-green-500/20 bg-gradient-to-r from-green-500/5 to-emerald-500/5 hover:border-green-500/40 transition-all"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                            <p className="text-sm font-medium truncate">
+                              {activity.company_sequences?.companies?.name || 'Unknown Company'}
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate pl-6">
+                            {activity.subject || 'No subject'}
+                          </p>
+                        </div>
+                        <Badge variant="default" className="bg-gradient-to-r from-green-500 to-emerald-500 text-white shrink-0">
+                          <Reply className="h-3 w-3 mr-1" />
+                          Replied
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground pl-6">
+                        <div className="flex items-center gap-1 text-green-600 font-medium">
+                          <Clock className="h-3 w-3" />
+                          Replied {formatDistanceToNow(new Date(activity.replied_at), { addSuffix: true })}
+                        </div>
+                        {metadata?.auto_sent && (
+                          <Badge variant="secondary" className="text-xs">
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            AI Response
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <Separator className="my-4" />
+          </>
+        )}
+
         {/* Recent Activity List */}
         <div className="space-y-2">
-          <h4 className="text-sm font-semibold mb-3">Recent Activity</h4>
+          <h4 className="text-sm font-semibold mb-3">All Email Activity</h4>
           <ScrollArea className="h-[300px]">
             {!recentActivity || recentActivity.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -171,66 +292,68 @@ export function EmailActivityWidget() {
               </div>
             ) : (
               <div className="space-y-2">
-                {recentActivity.map((activity: any) => (
-                  <div
-                    key={activity.id}
-                    className="p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {activity.company_sequences?.companies?.name || 'Unknown Company'}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {activity.subject || 'No subject'}
-                        </p>
+                {otherActivity.map((activity: any) => {
+                  const metadata = activity.metadata as any;
+                  return (
+                    <div
+                      key={activity.id}
+                      className="p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            {metadata?.auto_sent && (
+                              <Sparkles className="h-3 w-3 text-primary shrink-0" />
+                            )}
+                            <p className="text-sm font-medium truncate">
+                              {activity.company_sequences?.companies?.name || 'Unknown Company'}
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {activity.subject || 'No subject'}
+                          </p>
+                        </div>
+                        {getStatusBadge(activity)}
                       </div>
-                      {getStatusBadge(activity)}
-                    </div>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {formatDistanceToNow(new Date(activity.sent_at), { addSuffix: true })}
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {formatDistanceToNow(new Date(activity.sent_at), { addSuffix: true })}
+                        </div>
+                        {activity.metadata?.provider && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <div className="flex items-center gap-1">
+                                  <Mail className="h-3 w-3" />
+                                  {activity.metadata.provider}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs font-semibold mb-1">Tracking Capabilities:</p>
+                                <p className="text-xs">Opens: {activity.metadata.can_track_opens ? '✓' : '✗'}</p>
+                                <p className="text-xs">Clicks: {activity.metadata.can_track_clicks ? '✓' : '✗'}</p>
+                                <p className="text-xs">Replies: {activity.metadata.can_track_replies ? '✓' : '✗'}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {activity.opened_at && (
+                          <div className="flex items-center gap-1 text-blue-500">
+                            <Eye className="h-3 w-3" />
+                            Opened
+                          </div>
+                        )}
+                        {activity.metadata?.clicked && (
+                          <div className="flex items-center gap-1 text-purple-500">
+                            <MousePointerClick className="h-3 w-3" />
+                            Clicked
+                          </div>
+                        )}
                       </div>
-                      {activity.metadata?.provider && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <div className="flex items-center gap-1">
-                                <Mail className="h-3 w-3" />
-                                {activity.metadata.provider}
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="text-xs font-semibold mb-1">Tracking Capabilities:</p>
-                              <p className="text-xs">Opens: {activity.metadata.can_track_opens ? '✓' : '✗'}</p>
-                              <p className="text-xs">Clicks: {activity.metadata.can_track_clicks ? '✓' : '✗'}</p>
-                              <p className="text-xs">Replies: {activity.metadata.can_track_replies ? '✓' : '✗'}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                      {activity.opened_at && (
-                        <div className="flex items-center gap-1 text-blue-500">
-                          <Eye className="h-3 w-3" />
-                          Opened
-                        </div>
-                      )}
-                      {activity.metadata?.clicked && (
-                        <div className="flex items-center gap-1 text-purple-500">
-                          <MousePointerClick className="h-3 w-3" />
-                          Clicked
-                        </div>
-                      )}
-                      {activity.replied_at && (
-                        <div className="flex items-center gap-1 text-green-500">
-                          <Reply className="h-3 w-3" />
-                          Replied
-                        </div>
-                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </ScrollArea>
