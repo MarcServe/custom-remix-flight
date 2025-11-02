@@ -57,6 +57,41 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
   const isConnected = connection && connection.status === 'active';
   const isPending = connection && connection.status === 'pending';
   const hasIssue = connection && connection.status === 'error';
+  
+  // Assign different gradient styles to each provider
+  const getCardStyle = () => {
+    switch(provider.id) {
+      case 'gmail_direct':
+        return 'bg-gradient-card border-primary/30 hover-lift shadow-lg';
+      case 'resend':
+        return 'bg-gradient-secondary border-secondary/30 hover-lift shadow-lg';
+      case 'sendgrid':
+        return 'bg-gradient-warm border-primary/30 hover-lift shadow-lg';
+      case 'outlook':
+        return 'bg-gradient-accent text-white border-accent/30 hover-lift shadow-lg';
+      case 'smtp':
+        return 'bg-gradient-card border-border hover-lift shadow-md';
+      default:
+        return 'bg-gradient-card border-border hover-lift shadow-md';
+    }
+  };
+  
+  const getButtonVariant = () => {
+    switch(provider.id) {
+      case 'gmail_direct':
+        return 'default';
+      case 'resend':
+        return 'accent';
+      case 'sendgrid':
+        return 'warm';
+      case 'outlook':
+        return 'secondary';
+      case 'smtp':
+        return 'glow';
+      default:
+        return 'default';
+    }
+  };
 
   const handleModeChange = async (mode: 'direct' | 'resend') => {
     if (!connection) return;
@@ -239,7 +274,7 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
         {/* Action Buttons */}
         <div className="flex gap-2">
           {!isConnected && !isPending && (
-            <Button onClick={onConnect} size="sm" className="w-full">
+            <Button onClick={onConnect} size="sm" variant={getButtonVariant() as any} className="w-full">
               Connect
             </Button>
           )}
