@@ -15,18 +15,72 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { 
-      from, 
-      to, 
-      subject, 
-      bodyHtml, 
-      bodyText, 
-      messageId, 
-      threadId,
-      inReplyTo 
-    } = await req.json();
+    // Detect webhook source and parse accordingly
+    const contentType = req.headers.get('content-type') || '';
+    let from: string, to: string, subject: string, bodyHtml: string, bodyText: string;
+    let messageId: string, threadId: string | null = null, inReplyTo: string | null = null;
+    let webhookSource = 'unknown';
 
-    console.log('Processing inbound email:', { from, to, subject, messageId });
+    if (contentType.includes('application/json')) {
+      // Resend webhook format
+      webhookSource = 'resend';
+      const payload = await req.json();
+      from = payload.from;
+      to = payload.to;
+      subject = payload.subject;
+      bodyHtml = payload.bodyHtml || '';
+      bodyText = payload.bodyText || '';
+      messageId = payload.messageId;
+      threadId = payload.threadId || null;
+      inReplyTo = payload.inReplyTo || null;
+      console.log('Processing Resend webhook:', { from, to, subject, messageId });
+    } else if (contentType.includes('multipart/form-data')) {
+      // SendGrid Inbound Parse format
+      webhookSource = 'sendgrid';
+      const formData = await req.formData();
+      
+      from = formData.get('from') as string || '';
+      to = formData.get('to') as string || '';
+      subject = formData.get('subject') as string || '';
+      bodyHtml = formData.get('html') as string || '';
+      bodyText = formData.get('text') as string || '';
+      
+      // Parse headers to extract Message-ID and In-Reply-To
+      const headersStr = formData.get('headers') as string || '';
+      const headerLines = headersStr.split('\n');
+      
+      messageId = ''; // Initialize
+      
+      for (const line of headerLines) {
+        if (line.toLowerCase().startsWith('message-id:')) {
+          messageId = line.substring(11).trim().replace(/[<>]/g, '');
+        } else if (line.toLowerCase().startsWith('in-reply-to:')) {
+          inReplyTo = line.substring(12).trim().replace(/[<>]/g, '');
+        } else if (line.toLowerCase().startsWith('references:')) {
+          // Extract thread ID from References header (first message-id in the chain)
+          const refs = line.substring(11).trim().split(/\s+/);
+          if (refs.length > 0) {
+            threadId = refs[0].replace(/[<>]/g, '');
+          }
+        }
+      }
+      
+      // Fallback: Generate unique ID if message-id not found
+      if (!messageId) {
+        messageId = `sendgrid-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      }
+      
+      // Fallback: use message-id as threadId if not found
+      if (!threadId && messageId) {
+        threadId = messageId;
+      }
+      
+      console.log('Processing SendGrid webhook:', { from, to, subject, messageId, inReplyTo, threadId });
+    } else {
+      throw new Error(`Unsupported content type: ${contentType}`);
+    }
+
+    console.log(`Webhook source: ${webhookSource}`);
 
     // Find the company sequence by matching sender email, thread ID, or In-Reply-To header
     // Step 1: Try matching via In-Reply-To or thread_id (most reliable)
