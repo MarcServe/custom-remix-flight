@@ -53,6 +53,7 @@ interface CompanySequence {
   personalized_emails: any[];
   auto_respond_enabled: boolean;
   automation_rules?: any;
+  created_at: string;
   companies: {
     name: string;
     industry?: string;
@@ -416,6 +417,15 @@ export default function CompanySequences() {
                             {sequence.companies.geography && (
                               <Badge variant="outline">{sequence.companies.geography}</Badge>
                             )}
+                            <Badge variant="outline" className="text-xs">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Created {new Date(sequence.created_at).toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </Badge>
                             {engagement.topProvider && (
                               <TooltipProvider>
                                 <Tooltip>

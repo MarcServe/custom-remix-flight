@@ -58,9 +58,10 @@ export function PersonalizeSequenceDialog({
 
       if (result?.data) {
         const contactName = (result.data as any).contact?.name || 'contact';
+        const timestamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         toast({
           title: 'Sequence Created!',
-          description: `Personalized sequence created as draft for ${contactName}. Review and activate it from the Sequences page.`,
+          description: `Personalized sequence created for ${companyName} (${contactName}) at ${timestamp}. Find it at the top of your Sequences page under "Draft" status.`,
         });
       }
 
