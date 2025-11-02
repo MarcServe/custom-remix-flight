@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SMTPModeToggle } from "./SMTPModeToggle";
+import { ProviderConnectionTest } from "./ProviderConnectionTest";
 import { CheckCircle2, XCircle, ChevronDown, AlertTriangle, Loader2, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -215,6 +216,14 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
             mode={connection.metadata.smtp_mode || 'direct'}
             onModeChange={handleModeChange}
             isLoading={isUpdatingMode}
+          />
+        )}
+
+        {/* Connection Test */}
+        {isConnected && connection && (
+          <ProviderConnectionTest
+            provider={provider.id}
+            connectionId={connection.connection_id}
           />
         )}
 

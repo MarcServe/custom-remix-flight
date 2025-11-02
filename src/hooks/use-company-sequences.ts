@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { companySequencesApi, PersonalizeSequenceRequest } from '@/lib/api/company-sequences';
+import { emailSendingApi } from '@/lib/api/email-sending';
 import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * Hook to personalize a sequence for a company
@@ -114,38 +117,54 @@ export const useDeleteCompanySequence = () => {
 };
 
 /**
- * Hook to send next email in sequence
+ * Hook to send next email in sequence (with provider validation)
  */
 export const useSendSequenceEmail = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   return useMutation({
     mutationFn: ({ companySequenceId, stepNumber }: { companySequenceId: string; stepNumber: number }) =>
-      companySequencesApi.sendSequenceEmail(companySequenceId, stepNumber),
-    onSuccess: (response, variables) => {
-      if (response.error) {
-        toast({
-          title: 'Error',
-          description: response.error.message,
-          variant: 'destructive',
+      emailSendingApi.sendSequenceEmail(companySequenceId, stepNumber),
+    onSuccess: (result, variables) => {
+      if (result.error) {
+        toast.error('Failed to send email', {
+          description: result.error.message,
+          action: result.error.message.includes('No email provider')
+            ? {
+                label: 'Configure Provider',
+                onClick: () => navigate('/integrations/email-providers'),
+              }
+            : undefined,
         });
         return;
       }
 
+      // Show warnings if any
+      if (result.warnings && result.warnings.length > 0) {
+        toast.warning('Email sent with limited tracking', {
+          description: result.warnings[0],
+          action: {
+            label: 'View Providers',
+            onClick: () => navigate('/integrations/email-providers'),
+          },
+        });
+      } else {
+        const providerInfo = (result as any).provider;
+        toast.success('Email sent!', {
+          description: providerInfo
+            ? `Step ${variables.stepNumber + 1} sent via ${providerInfo.provider}`
+            : `Step ${variables.stepNumber + 1} sent successfully`,
+        });
+      }
+
       queryClient.invalidateQueries({ queryKey: ['company-sequences'] });
+      queryClient.invalidateQueries({ queryKey: ['company-sequences-page'] });
       queryClient.invalidateQueries({ queryKey: ['email-activities', variables.companySequenceId] });
-      
-      toast({
-        title: 'Email sent!',
-        description: `Step ${variables.stepNumber + 1} sent successfully`,
-      });
     },
     onError: (error: Error) => {
-      toast({
-        title: 'Error',
+      toast.error('Error sending email', {
         description: error.message,
-        variant: 'destructive',
       });
     },
   });
