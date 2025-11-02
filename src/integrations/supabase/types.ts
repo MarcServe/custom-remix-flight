@@ -721,6 +721,7 @@ export type Database = {
       }
       crm_connections: {
         Row: {
+          capabilities: Json | null
           connection_id: string
           created_at: string
           from_email: string | null
@@ -729,7 +730,9 @@ export type Database = {
           metadata: Json | null
           provider: string
           scopes: string[] | null
+          sending_method: string | null
           status: string
+          tracking_enabled: boolean | null
           updated_at: string
           user_id: string
           verification_expires_at: string | null
@@ -737,6 +740,7 @@ export type Database = {
           verified_at: string | null
         }
         Insert: {
+          capabilities?: Json | null
           connection_id: string
           created_at?: string
           from_email?: string | null
@@ -745,7 +749,9 @@ export type Database = {
           metadata?: Json | null
           provider: string
           scopes?: string[] | null
+          sending_method?: string | null
           status?: string
+          tracking_enabled?: boolean | null
           updated_at?: string
           user_id: string
           verification_expires_at?: string | null
@@ -753,6 +759,7 @@ export type Database = {
           verified_at?: string | null
         }
         Update: {
+          capabilities?: Json | null
           connection_id?: string
           created_at?: string
           from_email?: string | null
@@ -761,7 +768,9 @@ export type Database = {
           metadata?: Json | null
           provider?: string
           scopes?: string[] | null
+          sending_method?: string | null
           status?: string
+          tracking_enabled?: boolean | null
           updated_at?: string
           user_id?: string
           verification_expires_at?: string | null
