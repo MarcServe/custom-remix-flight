@@ -564,7 +564,7 @@ export default function LeadFinder() {
               <Separator orientation="vertical" className="h-4" />
               <div className="flex items-center gap-2">
                 <Zap className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="font-mono">${results.usage.estimatedCost.toFixed(4)}</span>
+                <span className="font-mono">${(results.usage.estimatedCost ?? 0).toFixed(4)}</span>
               </div>
             </div>}
         </div>
@@ -1139,7 +1139,7 @@ export default function LeadFinder() {
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground font-medium">Cost</div>
                       <div className="text-xs font-mono font-semibold">
-                        ${filteredAndSortedResults.usage.estimatedCost.toFixed(4)}
+                        ${(filteredAndSortedResults.usage.estimatedCost ?? 0).toFixed(4)}
                       </div>
                     </div>
                     {filteredAndSortedResults.traceUrl && <div className="space-y-1">
