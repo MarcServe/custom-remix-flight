@@ -44,7 +44,7 @@ serve(async (req) => {
     // Get campaign details
     const { data: campaign, error: campaignError } = await supabaseClient
       .from('email_campaigns')
-      .select('*, crm_connections(*)')
+      .select('*')
       .eq('id', campaignId)
       .eq('user_id', user.id)
       .single();
@@ -115,20 +115,32 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .single();
 
-    const emailProvider = businessProfile?.email_provider || 'resend';
-    console.log(`Using email provider: ${emailProvider}`);
+    // Get optimal provider based on tracking capabilities
+    const { data: connections, error: connectionsError } = await supabaseClient
+      .from('crm_connections')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .order('tracking_enabled', { ascending: false });
+
+    if (!connections || connections.length === 0) {
+      throw new Error('No active email connections found. Please configure an email provider.');
+    }
+
+    // Priority: Providers with tracking > Resend/SendGrid > Gmail/Outlook > SMTP Direct
+    const optimalConnection = connections.find(c => c.tracking_enabled && ['resend', 'sendgrid'].includes(c.provider))
+      || connections.find(c => c.tracking_enabled && ['gmail', 'outlook'].includes(c.provider))
+      || connections[0];
+
+    const emailProvider = optimalConnection.provider;
+    console.log(`Using optimal email provider: ${emailProvider} (tracking: ${optimalConnection.tracking_enabled})`);
 
     // Send emails with rate limiting
     for (const recipient of recipients) {
       try {
         let messageId: string | null = null;
-        const connection = campaign.crm_connections;
 
-        if (!connection) {
-          throw new Error('No email connection configured');
-        }
-
-        if (connection.provider === 'gmail') {
+        if (optimalConnection.provider === 'gmail') {
           // Send via Gmail/Nango
           const nangoSecretKey = Deno.env.get('NANGO_SECRET_KEY');
           if (!nangoSecretKey) throw new Error('Gmail not configured');
@@ -137,7 +149,7 @@ serve(async (req) => {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${nangoSecretKey}`,
-              'Connection-Id': connection.connection_id,
+              'Connection-Id': optimalConnection.connection_id,
               'Provider-Config-Key': 'google-mail',
               'Content-Type': 'application/json',
             },
@@ -157,20 +169,20 @@ serve(async (req) => {
 
           const nangoData = await nangoResponse.json();
           messageId = nangoData.id || null;
-        } else if (connection.provider === 'smtp') {
+        } else if (optimalConnection.provider === 'smtp') {
           // Send via SMTP
           const senderName = businessProfile?.company_name || 'Your Business';
           const wrappedHtml = wrapEmailContent(
             recipient.personalized_body_html, 
             senderName, 
-            connection.from_email
+            optimalConnection.from_email
           );
 
-          const smtpMode = (connection.metadata as any)?.smtp_mode || 'direct'; // Default to 'direct' for open-source use
+          const smtpMode = (optimalConnection.metadata as any)?.smtp_mode || 'direct'; // Default to 'direct' for open-source use
 
-          if (smtpMode === 'direct' && (connection.metadata as any)?.smtp_host) {
+          if (smtpMode === 'direct' && (optimalConnection.metadata as any)?.smtp_host) {
             // Direct SMTP
-            const smtpConfig = connection.metadata as any;
+            const smtpConfig = optimalConnection.metadata as any;
             const client = new SMTPClient({
               connection: {
                 hostname: smtpConfig.smtp_host,
@@ -184,7 +196,7 @@ serve(async (req) => {
             });
 
             await client.send({
-              from: `${senderName} <${connection.from_email}>`,
+              from: `${senderName} <${optimalConnection.from_email}>`,
               to: recipient.email,
               subject: recipient.personalized_subject,
               content: recipient.personalized_body_text,
@@ -205,7 +217,7 @@ serve(async (req) => {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                from: `${senderName} <${connection.from_email}>`,
+                from: `${senderName} <${optimalConnection.from_email}>`,
                 to: [recipient.email],
                 subject: recipient.personalized_subject,
                 text: recipient.personalized_body_text,
@@ -226,7 +238,7 @@ serve(async (req) => {
           if (!sendgridApiKey) throw new Error('SendGrid not configured');
 
           const senderName = businessProfile?.company_name || 'Your Business';
-          const fromEmail = connection.from_email || 'noreply@yourdomain.com';
+          const fromEmail = optimalConnection.from_email || 'noreply@yourdomain.com';
           const wrappedHtml = wrapEmailContent(
             recipient.personalized_body_html, 
             senderName, 
@@ -272,7 +284,7 @@ serve(async (req) => {
           messageId = sendgridResponse.headers.get('X-Message-Id') || null;
         }
 
-        // Update recipient status
+        // Update recipient status with tracking metadata
         await supabaseClient
           .from('email_campaign_recipients')
           .update({
@@ -281,6 +293,30 @@ serve(async (req) => {
             external_message_id: messageId,
           })
           .eq('id', recipient.id);
+
+        // Record detailed email activity with provider tracking info
+        await supabaseClient
+          .from('email_activities')
+          .insert({
+            contact_id: recipient.person_id,
+            step_number: 0,
+            subject: recipient.personalized_subject,
+            body: recipient.personalized_body_text,
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+            external_message_id: messageId,
+            metadata: {
+              campaign_id: campaignId,
+              provider: optimalConnection.provider,
+              sending_method: optimalConnection.sending_method,
+              tracking_enabled: optimalConnection.tracking_enabled,
+              can_track_opens: optimalConnection.capabilities?.opens || false,
+              can_track_clicks: optimalConnection.capabilities?.clicks || false,
+              can_track_replies: optimalConnection.capabilities?.replies || false,
+              recipient_email: recipient.email,
+              recipient_name: recipient.name,
+            },
+          });
 
         sentCount++;
 

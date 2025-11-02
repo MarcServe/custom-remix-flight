@@ -72,21 +72,25 @@ Deno.serve(async (req) => {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    const emailProvider = businessProfile?.email_provider || 'resend';
-    console.log(`Using email provider: ${emailProvider}`);
-
-    // Get appropriate connection based on provider
-    const { data: connection } = await supabase
+    // Get optimal provider based on tracking capabilities
+    const { data: connections } = await supabase
       .from('crm_connections')
       .select('*')
       .eq('user_id', user.id)
-      .eq('provider', emailProvider === 'sendgrid' || emailProvider === 'resend' ? 'smtp' : 'gmail')
       .eq('status', 'active')
-      .maybeSingle();
+      .order('tracking_enabled', { ascending: false });
 
-    if (!connection && emailProvider === 'gmail') {
-      throw new Error('No active Gmail connection found. Please connect your Gmail account first.');
+    if (!connections || connections.length === 0) {
+      throw new Error('No active email connections found. Please configure an email provider.');
     }
+
+    // Priority: Providers with tracking > Resend/SendGrid > Gmail/Outlook > SMTP Direct
+    const connection = connections.find(c => c.tracking_enabled && ['resend', 'sendgrid'].includes(c.provider))
+      || connections.find(c => c.tracking_enabled && ['gmail', 'outlook'].includes(c.provider))
+      || connections[0];
+
+    const emailProvider = connection.provider;
+    console.log(`Using optimal email provider: ${emailProvider} (tracking: ${connection.tracking_enabled})`);
 
     const sentEmails = [];
     const errors = [];
@@ -213,7 +217,7 @@ Deno.serve(async (req) => {
           emailMessageId = resendData.id || null;
         }
 
-        // Record email activity
+        // Record email activity with detailed tracking metadata
         await supabase
           .from('email_activities')
           .insert({
@@ -227,6 +231,13 @@ Deno.serve(async (req) => {
             external_message_id: emailMessageId,
             metadata: {
               provider: emailProvider,
+              sending_method: connection.sending_method,
+              tracking_enabled: connection.tracking_enabled,
+              can_track_opens: connection.capabilities?.opens || false,
+              can_track_clicks: connection.capabilities?.clicks || false,
+              can_track_replies: connection.capabilities?.replies || false,
+              sequence_name: companySequence.email_sequences?.name,
+              company_name: companySequence.companies?.name,
             },
           });
 
