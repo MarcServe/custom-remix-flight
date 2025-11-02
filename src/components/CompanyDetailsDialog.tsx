@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus, Database, Loader2, Phone, TrendingUp, Award } from "lucide-react";
+import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus, Database, Loader2, Phone, TrendingUp, Award, CheckCircle2, XCircle, Circle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { GenerateSequenceForCompanyDialog } from "@/components/sequences/GenerateSequenceForCompanyDialog";
@@ -16,6 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { companiesApi } from "@/lib/api/companies";
 import { useQueryClient } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
 
 interface Contact {
   id?: string;
@@ -180,34 +181,53 @@ export function CompanyDetailsDialog({
   const canGoPrev = showNavigation && currentIndex > 0;
   const canGoNext = showNavigation && allCompanies && currentIndex < allCompanies.length - 1;
 
-  // Calculate data completeness
-  const calculateCompleteness = () => {
-    const fields = [
-      company.name,
-      company.website,
-      company.description,
-      company.industry,
-      company.size,
-      company.geography,
-      normalizedCompany.linkedinUrl,
-      normalizedCompany.employeeCount,
-      normalizedCompany.foundingYear,
-      normalizedCompany.revenue,
-      normalizedCompany.companyPhone,
-      normalizedCompany.generalEmail,
-      normalizedCompany.products,
-      normalizedCompany.recentNews,
-      normalizedCompany.fundingInfo,
-      normalizedCompany.technologies?.length > 0,
-      normalizedCompany.keyExecutives?.length > 0,
-      normalizedCompany.socialProfiles && Object.keys(normalizedCompany.socialProfiles).length > 0,
-      hasContacts,
-    ];
-    const filledFields = fields.filter(Boolean).length;
-    return Math.round((filledFields / fields.length) * 100);
+  // Calculate data completeness with field breakdown
+  const dataFields = {
+    core: [
+      { name: 'Name', value: company.name, required: true },
+      { name: 'Website', value: company.website, required: false },
+      { name: 'Description', value: company.description, required: false },
+      { name: 'Industry', value: company.industry, required: true },
+      { name: 'Size', value: company.size, required: true },
+      { name: 'Geography', value: company.geography, required: true },
+    ],
+    enrichment: [
+      { name: 'LinkedIn URL', value: normalizedCompany.linkedinUrl, required: false },
+      { name: 'Employee Count', value: normalizedCompany.employeeCount, required: false },
+      { name: 'Founding Year', value: normalizedCompany.foundingYear, required: false },
+      { name: 'Revenue', value: normalizedCompany.revenue, required: false },
+      { name: 'Company Phone', value: normalizedCompany.companyPhone, required: false },
+      { name: 'General Email', value: normalizedCompany.generalEmail, required: false },
+      { name: 'Products', value: normalizedCompany.products, required: false },
+      { name: 'Recent News', value: normalizedCompany.recentNews, required: false },
+      { name: 'Funding Info', value: normalizedCompany.fundingInfo, required: false },
+      { name: 'Technologies', value: normalizedCompany.technologies?.length > 0, required: false },
+      { name: 'Key Executives', value: normalizedCompany.keyExecutives?.length > 0, required: false },
+      { name: 'Social Profiles', value: normalizedCompany.socialProfiles && Object.keys(normalizedCompany.socialProfiles).length > 0, required: false },
+      { name: 'Contacts', value: hasContacts, required: false },
+    ],
   };
 
-  const completeness = calculateCompleteness();
+  const allFields = [...dataFields.core, ...dataFields.enrichment];
+  const filledFields = allFields.filter(f => f.value).length;
+  const completeness = Math.round((filledFields / allFields.length) * 100);
+
+  // Determine data sources
+  const getDataSources = () => {
+    const sources: string[] = [];
+    if (isSearching) {
+      sources.push('Exa Search');
+      if (company.wasEnriched || company.enrichmentTier) {
+        sources.push('Perplexity AI');
+      }
+      if (hasContacts) {
+        sources.push('GetProspect');
+      }
+    }
+    return sources;
+  };
+
+  const dataSources = getDataSources();
 
   const handleSendEmailToContact = (contact: Contact) => {
     if (!contact.email) {
@@ -442,6 +462,63 @@ export function CompanyDetailsDialog({
           <TabsContent value="overview" className="data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:flex-1 data-[state=active]:overflow-hidden mt-0">
             <ScrollArea className="flex-1 px-6 pb-6">
               <div className="space-y-6 pt-4">
+            
+            {/* Data Completeness Panel - Only show for Lead Finder results */}
+            {isSearching && (
+              <div className="space-y-3 p-4 rounded-lg border bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Database className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-semibold">Data Completeness</h3>
+                  </div>
+                  <Badge variant="outline" className="bg-background">
+                    {filledFields}/{allFields.length} fields
+                  </Badge>
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Overall Progress</span>
+                    <span className="font-medium">{completeness}%</span>
+                  </div>
+                  <Progress value={completeness} className="h-2" />
+                </div>
+
+                {/* Data Sources */}
+                {dataSources.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <span className="text-xs text-muted-foreground">Sources:</span>
+                    {dataSources.map((source, idx) => (
+                      <Badge key={idx} variant="secondary" className="text-xs">
+                        {source}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                {/* Field Status Grid */}
+                <div className="pt-2 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Field Status:</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    {allFields.map((field, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5 text-xs">
+                        {field.value ? (
+                          <CheckCircle2 className="h-3 w-3 text-green-600" />
+                        ) : field.required ? (
+                          <XCircle className="h-3 w-3 text-red-600" />
+                        ) : (
+                          <Circle className="h-3 w-3 text-muted-foreground/40" />
+                        )}
+                        <span className={field.value ? "text-foreground" : "text-muted-foreground"}>
+                          {field.name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Overview Section */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
@@ -527,7 +604,12 @@ export function CompanyDetailsDialog({
                         <Package className="h-4 w-4 text-blue-500" />
                       </div>
                       <h3 className="text-sm font-semibold">Products & Services</h3>
-                      {isSearching && <Badge variant="outline" className="text-xs">From Lead Finder</Badge>}
+                      {isSearching && (
+                        <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/20">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Enriched
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
                       {normalizedCompany.products}
@@ -543,7 +625,12 @@ export function CompanyDetailsDialog({
                         <Sparkles className="h-4 w-4 text-indigo-500" />
                       </div>
                       <h3 className="text-sm font-semibold">Technology Stack</h3>
-                      {isSearching && <Badge variant="outline" className="text-xs">From Lead Finder</Badge>}
+                      {isSearching && (
+                        <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/20">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Enriched
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-2 pl-10">
                       {normalizedCompany.technologies.map((tech, idx) => (
@@ -563,7 +650,12 @@ export function CompanyDetailsDialog({
                         <Newspaper className="h-4 w-4 text-purple-500" />
                       </div>
                       <h3 className="text-sm font-semibold">Recent News & Updates</h3>
-                      {isSearching && <Badge variant="outline" className="text-xs">From Lead Finder</Badge>}
+                      {isSearching && (
+                        <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/20">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Enriched
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
                       {normalizedCompany.recentNews}
@@ -579,7 +671,12 @@ export function CompanyDetailsDialog({
                         <DollarSign className="h-4 w-4 text-green-500" />
                       </div>
                       <h3 className="text-sm font-semibold">Funding & Investment</h3>
-                      {isSearching && <Badge variant="outline" className="text-xs">From Lead Finder</Badge>}
+                      {isSearching && (
+                        <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/20">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Enriched
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
                       {normalizedCompany.fundingInfo}
@@ -595,7 +692,12 @@ export function CompanyDetailsDialog({
                         <Users className="h-4 w-4 text-amber-500" />
                       </div>
                       <h3 className="text-sm font-semibold">Leadership Team</h3>
-                      {isSearching && <Badge variant="outline" className="text-xs">From Lead Finder</Badge>}
+                      {isSearching && (
+                        <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/20">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Enriched
+                        </Badge>
+                      )}
                     </div>
                     <div className="space-y-2 pl-10">
                       {normalizedCompany.keyExecutives.map((exec, idx) => (
@@ -670,7 +772,12 @@ export function CompanyDetailsDialog({
                       <Users className="h-4 w-4 text-cyan-500" />
                     </div>
                     <h3 className="text-sm font-semibold">Team Contacts ({company.contacts.length})</h3>
-                    {isSearching && <Badge variant="outline" className="text-xs">From Lead Finder</Badge>}
+                    {isSearching && (
+                      <Badge variant="outline" className="text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
+                        <Database className="h-3 w-3 mr-1" />
+                        GetProspect
+                      </Badge>
+                    )}
                   </div>
                   
                   <div className="space-y-3 pl-10">
