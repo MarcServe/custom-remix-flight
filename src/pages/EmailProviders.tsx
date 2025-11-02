@@ -16,10 +16,11 @@ import { EMAIL_PROVIDER_CONFIG } from "@/config/email-providers";
 
 const emailProviders = [
   {
-    id: 'gmail' as const,
-    name: 'Gmail OAuth',
-    description: EMAIL_PROVIDER_CONFIG.default_gmail === 'direct' ? 'Direct OAuth, no limits' : 'Quick setup, reliable',
-    icon: '📧',
+    id: 'gmail_direct' as const,
+    name: 'Gmail',
+    description: 'Connect with Google OAuth',
+    icon: 'https://www.google.com/favicon.ico',
+    isGoogleIcon: true,
     capabilities: {
       tracking: true,
       opens: true,
@@ -33,8 +34,8 @@ const emailProviders = [
   },
   {
     id: 'resend' as const,
-    name: 'Resend API',
-    description: 'Best deliverability',
+    name: 'Resend',
+    description: 'API-based, best deliverability',
     icon: '🚀',
     capabilities: {
       tracking: true,
@@ -49,8 +50,8 @@ const emailProviders = [
   },
   {
     id: 'sendgrid' as const,
-    name: 'SendGrid API',
-    description: 'Enterprise-grade',
+    name: 'SendGrid',
+    description: 'API-based, enterprise scale',
     icon: '📬',
     capabilities: {
       tracking: true,
@@ -66,9 +67,10 @@ const emailProviders = [
   },
   {
     id: 'outlook' as const,
-    name: 'Outlook OAuth',
-    description: 'Microsoft integration',
-    icon: '📨',
+    name: 'Outlook',
+    description: 'Connect with Microsoft',
+    icon: 'https://upload.wikimedia.org/wikipedia/commons/d/df/Microsoft_Office_Outlook_%282018%E2%80%93present%29.svg',
+    isOutlookIcon: true,
     capabilities: {
       tracking: true,
       opens: true,
@@ -82,8 +84,8 @@ const emailProviders = [
   },
   {
     id: 'smtp' as const,
-    name: 'SMTP Direct',
-    description: 'Direct SMTP server',
+    name: 'Custom SMTP',
+    description: 'Your own email server',
     icon: '⚙️',
     capabilities: {
       tracking: false,
@@ -183,16 +185,9 @@ export default function EmailProviders() {
       return;
     }
 
-    // Gmail, Outlook, and SMTP use the OAuth/setup dialog
-    if (providerId === 'gmail' || providerId === 'outlook' || providerId === 'smtp') {
-      // Check if Gmail should use Direct OAuth based on config
-      let actualProvider: 'gmail' | 'gmail_direct' | 'outlook' | 'smtp' = providerId as any;
-      
-      if (providerId === 'gmail' && EMAIL_PROVIDER_CONFIG.default_gmail === 'direct') {
-        actualProvider = 'gmail_direct';
-      }
-      
-      setSelectedProvider(actualProvider);
+    // Gmail Direct, Outlook, and SMTP use the OAuth/setup dialog
+    if (providerId === 'gmail_direct' || providerId === 'outlook' || providerId === 'smtp') {
+      setSelectedProvider(providerId as 'gmail_direct' | 'outlook' | 'smtp');
       setConnectDialogOpen(true);
     }
   };
@@ -284,19 +279,11 @@ export default function EmailProviders() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {emailProviders.map((provider) => {
-              // Handle Gmail Direct connections - check both 'gmail' and 'gmail_direct' providers
-              let connection;
-              if (provider.id === 'gmail') {
-                connection = connections?.find(
-                  (c) => (c.provider === 'gmail' || c.provider === 'gmail_direct') && c.status !== 'disconnected'
-                );
-              } else {
-                connection = connections?.find(
-                  (c) => c.provider === provider.id && c.status !== 'disconnected'
-                );
-              }
+              const connection = connections?.find(
+                (c) => c.provider === provider.id && c.status !== 'disconnected'
+              );
               
               return (
                 <EmailProviderCard
