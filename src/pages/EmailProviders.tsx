@@ -2,13 +2,16 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { EmailProviderCard } from "@/components/integrations/EmailProviderCard";
 import { ConnectEmailDialog } from "@/components/integrations/ConnectEmailDialog";
 import { VerifiedEmailDialog } from "@/components/integrations/VerifiedEmailDialog";
 import { nangoClient } from "@/lib/integrations/nango";
 import { toast } from "sonner";
-import { Mail, AlertTriangle, Info } from "lucide-react";
+import { Mail, AlertTriangle, Info, Webhook, ArrowRight, CheckCircle2, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 const emailProviders = [
   {
@@ -337,6 +340,189 @@ export default function EmailProviders() {
                 </AlertDescription>
               </Alert>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Reply Tracking Setup Guide */}
+      {hasTrackingEnabled && (
+        <Card className="border-2 border-primary/20">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center">
+                <Webhook className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-xl">Email Reply Tracking Setup</CardTitle>
+                <CardDescription>
+                  Configure webhooks to automatically detect and track email responses
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <Alert className="border-blue-500/20 bg-blue-500/5">
+              <Info className="h-4 w-4 text-blue-500" />
+              <AlertDescription>
+                <strong>How it works:</strong> When prospects reply to your emails, webhooks notify our system in real-time. 
+                This allows you to see replies instantly in your dashboard and triggers auto-response workflows.
+              </AlertDescription>
+            </Alert>
+
+            <div className="space-y-4">
+              <h4 className="font-semibold flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary" />
+                Setup Instructions by Provider
+              </h4>
+
+              {/* Resend Webhook Setup */}
+              {connections.some(c => c.provider === 'resend' && c.status === 'active') && (
+                <div className="p-4 rounded-lg border-2 bg-card space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">🚀</span>
+                      <h5 className="font-semibold">Resend Webhooks</h5>
+                    </div>
+                  </div>
+                  <Separator />
+                  <ol className="space-y-2 text-sm">
+                    <li className="flex items-start gap-2">
+                      <span className="font-semibold shrink-0">1.</span>
+                      <span>Go to <a href="https://resend.com/webhooks" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Resend Webhooks Dashboard</a></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-semibold shrink-0">2.</span>
+                      <span>Create a new webhook endpoint with this URL:</span>
+                    </li>
+                    <li className="ml-6">
+                      <div className="flex items-center gap-2 p-2 bg-muted rounded border font-mono text-xs">
+                        <code className="flex-1">
+                          https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook
+                        </code>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
+                          onClick={() => {
+                            navigator.clipboard.writeText('https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook');
+                            toast.success('Webhook URL copied');
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-semibold shrink-0">3.</span>
+                      <span>Enable these events: <code className="bg-muted px-1 py-0.5 rounded text-xs">email.delivered</code>, <code className="bg-muted px-1 py-0.5 rounded text-xs">email.bounced</code>, <code className="bg-muted px-1 py-0.5 rounded text-xs">email.complained</code></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-semibold shrink-0">4.</span>
+                      <span>For reply tracking, configure your domain's inbound email forwarding to your CRM email address</span>
+                    </li>
+                  </ol>
+                </div>
+              )}
+
+              {/* SendGrid Webhook Setup */}
+              {connections.some(c => c.provider === 'sendgrid' && c.status === 'active') && (
+                <div className="p-4 rounded-lg border-2 bg-card space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">📬</span>
+                      <h5 className="font-semibold">SendGrid Event Webhooks</h5>
+                    </div>
+                  </div>
+                  <Separator />
+                  <ol className="space-y-2 text-sm">
+                    <li className="flex items-start gap-2">
+                      <span className="font-semibold shrink-0">1.</span>
+                      <span>Go to <a href="https://app.sendgrid.com/settings/mail_settings" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">SendGrid Mail Settings</a></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-semibold shrink-0">2.</span>
+                      <span>Navigate to Mail Settings → Event Webhook</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-semibold shrink-0">3.</span>
+                      <span>Add this HTTP Post URL:</span>
+                    </li>
+                    <li className="ml-6">
+                      <div className="flex items-center gap-2 p-2 bg-muted rounded border font-mono text-xs">
+                        <code className="flex-1">
+                          https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook
+                        </code>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
+                          onClick={() => {
+                            navigator.clipboard.writeText('https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook');
+                            toast.success('Webhook URL copied');
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-semibold shrink-0">4.</span>
+                      <span>Enable tracking for: Delivered, Opened, Clicked, Bounced, Spam Reports</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-semibold shrink-0">5.</span>
+                      <span>Set up Inbound Parse webhook for reply tracking</span>
+                    </li>
+                  </ol>
+                </div>
+              )}
+
+              {/* Gmail/Outlook OAuth */}
+              {connections.some(c => ['gmail', 'outlook'].includes(c.provider) && c.status === 'active') && (
+                <div className="p-4 rounded-lg border-2 bg-card space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">📧</span>
+                      <h5 className="font-semibold">Gmail / Outlook OAuth</h5>
+                    </div>
+                    <Badge variant="outline" className="bg-success/10 text-success">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Auto-Configured
+                    </Badge>
+                  </div>
+                  <Separator />
+                  <Alert className="border-success/20 bg-success/5">
+                    <CheckCircle2 className="h-4 w-4 text-success" />
+                    <AlertDescription className="text-sm">
+                      <strong>Good news!</strong> Reply tracking for OAuth providers (Gmail/Outlook) is automatically enabled. 
+                      The system periodically checks your inbox for new responses and updates the dashboard in real-time.
+                    </AlertDescription>
+                  </Alert>
+                  <div className="text-sm text-muted-foreground space-y-1">
+                    <p className="flex items-center gap-2">
+                      <ArrowRight className="h-4 w-4" />
+                      Replies are detected within 5 minutes
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <ArrowRight className="h-4 w-4" />
+                      Email threads are automatically tracked
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <ArrowRight className="h-4 w-4" />
+                      Auto-responses can be configured per sequence
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Alert className="border-primary/20 bg-primary/5">
+              <Info className="h-4 w-4 text-primary" />
+              <AlertDescription>
+                <strong>Need help?</strong> Once webhooks are configured, responses will appear in your Dashboard 
+                within seconds. Test by sending yourself an email and replying to it.
+              </AlertDescription>
+            </Alert>
           </CardContent>
         </Card>
       )}
