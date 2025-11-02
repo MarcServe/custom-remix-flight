@@ -32,6 +32,7 @@ export default function Profile() {
     target_audience: "",
     value_proposition: "",
     tone_preference: "professional",
+    email_provider: "resend",
     auto_response_daily_limit: 10,
     auto_response_paused: false,
     auto_response_count_today: 0,
@@ -96,6 +97,7 @@ export default function Profile() {
           target_audience: data.target_audience || "",
           value_proposition: data.value_proposition || "",
           tone_preference: data.tone_preference || "professional",
+          email_provider: data.email_provider || "resend",
           auto_response_daily_limit: data.auto_response_daily_limit || 10,
           auto_response_paused: data.auto_response_paused || false,
           auto_response_count_today: data.auto_response_count_today || 0,
@@ -395,6 +397,25 @@ export default function Profile() {
                     <SelectItem value="technical">Technical</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email_provider">Email Provider</Label>
+                <Select
+                  value={businessProfile.email_provider}
+                  onValueChange={(value) => setBusinessProfile({ ...businessProfile, email_provider: value })}
+                >
+                  <SelectTrigger id="email_provider">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="resend">Resend</SelectItem>
+                    <SelectItem value="sendgrid">SendGrid</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Choose which service to use for sending emails from the CRM
+                </p>
               </div>
 
               <div className="flex justify-end pt-4">
