@@ -106,13 +106,27 @@ serve(async (req) => {
 
     console.log(`Webhook source: ${webhookSource}`);
 
-    // Find the company sequence by matching sender email, thread ID, or In-Reply-To header
+    // Helper function to calculate subject similarity (Levenshtein-based)
+    const calculateSubjectSimilarity = (subject1: string, subject2: string): number => {
+      const s1 = subject1.toLowerCase().replace(/^(re:|fwd:)\s*/gi, '').trim();
+      const s2 = subject2.toLowerCase().replace(/^(re:|fwd:)\s*/gi, '').trim();
+      
+      // Simple similarity: check if subjects share common words
+      const words1 = s1.split(/\s+/);
+      const words2 = s2.split(/\s+/);
+      const commonWords = words1.filter(w => words2.includes(w) && w.length > 3);
+      
+      return commonWords.length / Math.max(words1.length, words2.length);
+    };
+
+    // Find the company sequence by matching sender email, thread ID, In-Reply-To, or subject similarity
     // Step 1: Try matching via In-Reply-To or thread_id (most reliable)
     let matchedSequence = null;
     let matchedActivity = null;
+    let matchMethod = '';
 
     if (inReplyTo || threadId) {
-      console.log('Attempting to match by In-Reply-To or thread_id:', { inReplyTo, threadId });
+      console.log('🔍 Step 1: Attempting to match by In-Reply-To or thread_id:', { inReplyTo, threadId });
       
       const { data: activities } = await supabaseClient
         .from('email_activities')
@@ -121,15 +135,16 @@ serve(async (req) => {
         .limit(1);
 
       if (activities && activities.length > 0) {
-        console.log('Matched email via In-Reply-To/thread_id');
+        console.log('✅ Matched email via In-Reply-To/thread_id');
         matchedActivity = activities[0];
         matchedSequence = matchedActivity.company_sequences;
+        matchMethod = 'thread_id';
       }
     }
 
     // Step 2: Fallback - Match by sender email
     if (!matchedSequence) {
-      console.log('Fallback: matching by sender email from:', from);
+      console.log('🔍 Step 2: Fallback - matching by sender email from:', from);
       
       const { data: sequences, error: seqError } = await supabaseClient
         .from('company_sequences')
@@ -137,7 +152,7 @@ serve(async (req) => {
           *,
           email_sequences(goal, ai_instructions, created_by),
           companies(name, industry, description),
-          email_activities(id, external_message_id, thread_id, metadata)
+          email_activities(id, external_message_id, thread_id, subject, metadata)
         `)
         .eq('status', 'active')
         .not('next_action', 'eq', 'completed');
@@ -155,8 +170,59 @@ serve(async (req) => {
         if (matching) {
           matchedSequence = seq;
           matchedActivity = matching;
-          console.log('Matched via email address in activities');
+          matchMethod = 'sender_email';
+          console.log('✅ Matched via email address in activities');
           break;
+        }
+      }
+    }
+
+    // Step 3: Final fallback - Match by subject line similarity (for threading issues)
+    if (!matchedSequence) {
+      console.log('🔍 Step 3: Final fallback - matching by subject similarity for:', subject);
+      
+      const { data: recentActivities } = await supabaseClient
+        .from('email_activities')
+        .select(`
+          *,
+          company_sequences(
+            *,
+            email_sequences(goal, ai_instructions, created_by),
+            companies(name, industry, description)
+          )
+        `)
+        .eq('status', 'sent')
+        .order('sent_at', { ascending: false })
+        .limit(20); // Check last 20 sent emails
+
+      if (recentActivities && recentActivities.length > 0) {
+        let bestMatch = null;
+        let bestSimilarity = 0;
+
+        for (const activity of recentActivities) {
+          if (activity.subject && activity.company_sequences) {
+            const similarity = calculateSubjectSimilarity(subject, activity.subject);
+            
+            // Also check if sender email matches recipient in metadata
+            const recipientMatches = 
+              activity.metadata?.to_email === from || 
+              activity.metadata?.recipient_email === from;
+            
+            // Boost similarity if recipient also matches
+            const finalSimilarity = recipientMatches ? similarity + 0.3 : similarity;
+            
+            if (finalSimilarity > bestSimilarity && finalSimilarity > 0.4) {
+              bestSimilarity = finalSimilarity;
+              bestMatch = activity;
+            }
+          }
+        }
+
+        if (bestMatch) {
+          matchedActivity = bestMatch;
+          matchedSequence = bestMatch.company_sequences;
+          matchMethod = 'subject_similarity';
+          console.log(`✅ Matched via subject similarity (${Math.round(bestSimilarity * 100)}%)`);
         }
       }
     }
@@ -197,7 +263,7 @@ serve(async (req) => {
       );
     }
 
-    console.log('✅ Matched sequence:', matchedSequence.id, 'Company:', matchedSequence.companies?.name);
+    console.log(`✅ Matched sequence: ${matchedSequence.id} (${matchedSequence.companies?.name}) via ${matchMethod}`);
 
     // Analyze email with AI
     let sentiment = 'neutral';
@@ -297,14 +363,21 @@ Return a JSON object with: sentiment, keyPoints (array), questionsAsked (array),
 
     // Update email_activities with replied_at timestamp if we matched an activity
     if (matchedActivity) {
-      console.log('Updating email activity with reply timestamp');
+      console.log('✅ Updating email activity with reply timestamp');
       await supabaseClient
         .from('email_activities')
         .update({ 
           replied_at: new Date().toISOString(),
-          status: 'replied'
+          status: 'replied',
+          metadata: {
+            ...matchedActivity.metadata,
+            reply_detected: true,
+            reply_method: matchMethod,
+          }
         })
         .eq('id', matchedActivity.id);
+    } else {
+      console.log('⚠️ No specific activity matched, updating sequence only');
     }
 
     // Update conversation history

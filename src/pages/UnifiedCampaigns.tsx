@@ -39,6 +39,7 @@ interface SequenceCampaign {
     status: string;
     sent_at?: string;
     opened_at?: string;
+    replied_at?: string;
   }>;
 }
 
@@ -136,7 +137,7 @@ export default function UnifiedCampaigns() {
           *,
           companies(name, industry),
           email_sequences(name, steps),
-          email_activities(status, sent_at, opened_at)
+          email_activities(status, sent_at, opened_at, replied_at)
         `)
         .order('created_at', { ascending: false });
       
@@ -313,13 +314,18 @@ export default function UnifiedCampaigns() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <Badge variant={activity.status === 'sent' ? 'default' : 'secondary'}>
+                        <div className="flex items-center gap-4">
+                        <div className="text-right flex flex-wrap gap-2 justify-end">
+                          <Badge variant={activity.status === 'sent' ? 'default' : activity.status === 'replied' ? 'default' : 'secondary'}>
                             {activity.status}
                           </Badge>
                           {activity.details?.opened && (
-                            <Badge variant="outline" className="ml-2">Opened</Badge>
+                            <Badge variant="outline">📬 Opened</Badge>
+                          )}
+                          {activity.details?.replied && (
+                            <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                              💬 Replied
+                            </Badge>
                           )}
                         </div>
                         <div className="text-sm text-muted-foreground min-w-[100px] text-right">
@@ -412,9 +418,11 @@ export default function UnifiedCampaigns() {
                   {sequenceCampaigns.map((sequence) => {
                     const totalSteps = sequence.email_sequences.steps?.length || 0;
                     const sentEmails = sequence.email_activities?.length || 0;
+                    const repliedEmails = sequence.email_activities?.filter(a => a.replied_at).length || 0;
+                    const openedEmails = sequence.email_activities?.filter(a => a.opened_at).length || 0;
                     
                     return (
-                      <div key={sequence.id} className="p-4 rounded-lg border bg-card">
+                      <div key={sequence.id} className="p-4 rounded-lg border bg-card hover:shadow-md transition-shadow">
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-start gap-3">
                             <div className="w-10 h-10 rounded-lg bg-gradient-primary flex items-center justify-center">
@@ -437,10 +445,26 @@ export default function UnifiedCampaigns() {
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span>Step {sequence.current_step + 1} of {totalSteps}</span>
-                          <span>•</span>
-                          <span>{sentEmails} emails sent</span>
+                        <div className="flex items-center gap-4 text-sm">
+                          <span className="text-muted-foreground">
+                            Step {sequence.current_step + 1} of {totalSteps}
+                          </span>
+                          <span className="text-muted-foreground">•</span>
+                          <span className="text-muted-foreground">{sentEmails} sent</span>
+                          {openedEmails > 0 && (
+                            <>
+                              <span className="text-muted-foreground">•</span>
+                              <Badge variant="outline" className="text-xs">📬 {openedEmails} opened</Badge>
+                            </>
+                          )}
+                          {repliedEmails > 0 && (
+                            <>
+                              <span className="text-muted-foreground">•</span>
+                              <Badge className="bg-green-500 hover:bg-green-600 text-xs">
+                                💬 {repliedEmails} replied
+                              </Badge>
+                            </>
+                          )}
                         </div>
                       </div>
                     );

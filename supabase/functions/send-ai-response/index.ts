@@ -5,6 +5,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { renderEmailTemplate } from '../_shared/professional-template.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -61,13 +62,17 @@ serve(async (req) => {
 
     const { data: businessProfile } = await supabase
       .from('business_profiles')
-      .select('company_name, auto_response_daily_limit, auto_response_paused, auto_response_count_today, auto_response_last_reset_date, ai_model, ai_response_style, ai_temperature, email_logo_url, email_brand_color, email_footer_text, email_signature, email_template_style')
+      .select('company_name, email_provider, auto_response_daily_limit, auto_response_paused, auto_response_count_today, auto_response_last_reset_date, ai_model, ai_response_style, ai_temperature, email_logo_url, email_brand_color, email_footer_text, email_signature, email_template_style')
       .eq('user_id', userId)
       .single();
 
     if (!businessProfile) {
       throw new Error('Business profile not found');
     }
+
+    // Get email provider preference
+    const emailProvider = businessProfile.email_provider || 'resend';
+    console.log(`Using email provider: ${emailProvider}`);
 
     // Check if auto-response is paused globally
     if (businessProfile.auto_response_paused) {
@@ -256,7 +261,57 @@ serve(async (req) => {
       console.log('AI response sent via Gmail:', messageId);
 
     } else {
-      // Fallback to Resend
+      // SendGrid or Resend fallback
+      if (emailProvider === 'sendgrid' && SENDGRID_API_KEY) {
+        console.log('Sending AI response via SendGrid (fallback)');
+
+        const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SENDGRID_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            personalizations: [{
+              to: [{ email: recipientEmailAddress, name: contactName || '' }],
+              subject: subject,
+            }],
+            from: {
+              email: senderEmail,
+              name: senderName,
+            },
+            reply_to: {
+              email: senderEmail,
+              name: senderName,
+            },
+            content: [
+              {
+                type: 'text/plain',
+                value: body,
+              },
+              {
+                type: 'text/html',
+                value: wrappedHtml,
+              },
+            ],
+            custom_args: {
+              company_sequence_id: companySequenceId,
+              auto_sent: 'true',
+            },
+          }),
+        });
+
+        if (!sendgridResponse.ok) {
+          const errorText = await sendgridResponse.text();
+          throw new Error(`Failed to send via SendGrid: ${errorText}`);
+        }
+
+        messageId = sendgridResponse.headers.get('X-Message-Id') || `sendgrid-${Date.now()}`;
+        provider = 'sendgrid';
+        console.log('AI response sent via SendGrid:', messageId);
+        
+      } else {
+        // Fallback to Resend
       if (!RESEND_API_KEY) {
         throw new Error('No email provider configured. Please set up SMTP or Gmail in Settings.');
       }
@@ -299,6 +354,7 @@ serve(async (req) => {
       const resendData = await resendResponse.json();
       messageId = resendData.id;
       console.log('AI response sent via Resend:', messageId);
+      }
     }
 
     // Create email_threads record for outbound email

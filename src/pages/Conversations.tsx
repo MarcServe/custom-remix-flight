@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { MessageSquare, Loader2, Send, ArrowLeft, ArrowRight, Sparkles, Filter } from "lucide-react";
+import { MessageSquare, Loader2, Send, ArrowLeft, ArrowRight, Sparkles, Filter, Settings } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +15,8 @@ import { Label } from "@/components/ui/label";
 import { PendingReviewsBadge } from "@/components/sequences/PendingReviewsBadge";
 import { AutoResponseReviewModal } from "@/components/sequences/AutoResponseReviewModal";
 import { usePendingReviews, PendingReview } from "@/hooks/use-pending-reviews";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useNavigate } from "react-router-dom";
 
 interface EmailThread {
   id: string;
@@ -61,6 +63,7 @@ interface Conversation {
 
 export default function Conversations() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null);
   const [generatedResponse, setGeneratedResponse] = useState<{ subject: string; body: string } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -317,6 +320,21 @@ export default function Conversations() {
           <PendingReviewsBadge />
         </div>
       </div>
+
+      {/* Webhook Setup Alert */}
+      <Alert className="mb-6">
+        <Settings className="h-4 w-4" />
+        <AlertDescription>
+          <strong>Enable Reply Detection:</strong> To receive and auto-respond to emails, configure your inbound email webhook.{' '}
+          <Button
+            variant="link"
+            className="p-0 h-auto font-semibold underline"
+            onClick={() => navigate('/webhook-setup')}
+          >
+            Set up webhooks →
+          </Button>
+        </AlertDescription>
+      </Alert>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Pending Reviews Alert */}
