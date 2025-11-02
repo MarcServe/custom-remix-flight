@@ -219,11 +219,19 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
           />
         )}
 
-        {/* Connection Test */}
-        {isConnected && connection && (
+        {/* Connection Test - Only for OAuth/SMTP providers with actual connection records */}
+        {isConnected && connection && !['resend', 'sendgrid'].includes(provider.id) && (
           <ProviderConnectionTest
             provider={provider.id}
             connectionId={connection.connection_id}
+          />
+        )}
+        
+        {/* API-key provider test - For Resend/SendGrid */}
+        {['resend', 'sendgrid'].includes(provider.id) && (
+          <ProviderConnectionTest
+            provider={provider.id}
+            connectionId="" 
           />
         )}
 

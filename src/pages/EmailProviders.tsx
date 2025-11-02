@@ -101,16 +101,14 @@ export default function EmailProviders() {
   const { data: connections, isLoading } = useQuery({
     queryKey: ['nango-connections'],
     queryFn: async () => {
+      // Get OAuth/SMTP connections from Nango
       const { data } = await nangoClient.getConnections();
       
-      // Check if Resend/SendGrid API keys are configured
-      // Note: We check if the secrets exist by trying to see if connections have these providers
-      const { data: allConnections } = await supabase
-        .from('crm_connections')
-        .select('*')
-        .in('provider', ['resend', 'sendgrid', 'gmail', 'outlook', 'smtp']);
+      // Note: Resend/SendGrid are configured via API keys in Supabase secrets
+      // They don't create connection records, so they won't appear here
+      // The UI handles them differently in the connect flow
       
-      return allConnections || data || [];
+      return data || [];
     },
   });
 
