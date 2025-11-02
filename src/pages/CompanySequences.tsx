@@ -22,7 +22,8 @@ import {
   TrendingUp,
   ArrowUpRight,
   Eye,
-  Send
+  Send,
+  Bot
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUpdateSequenceStatus, useSendSequenceEmail } from '@/hooks/use-company-sequences';
@@ -37,6 +38,7 @@ interface CompanySequence {
   current_step: number;
   personalized_emails: any[];
   auto_respond_enabled: boolean;
+  automation_rules?: any;
   companies: {
     name: string;
     industry?: string;
@@ -335,7 +337,14 @@ export default function CompanySequences() {
                             </Badge>
                             {sequence.auto_respond_enabled && (
                               <Badge variant="default" className="bg-gradient-primary text-white">
-                                Auto-Response: ON
+                                <Bot className="h-3 w-3 mr-1" />
+                                Auto-Response
+                              </Badge>
+                            )}
+                            {sequence.automation_rules?.enabled && (
+                              <Badge variant="secondary" className="border border-primary/20">
+                                <Clock className="h-3 w-3 mr-1" />
+                                Auto-Send
                               </Badge>
                             )}
                             {sequence.companies.industry && (

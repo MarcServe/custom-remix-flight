@@ -118,4 +118,33 @@ export const companySequencesApi = {
 
     return { data, error };
   },
+
+  /**
+   * Update sequence settings (auto-respond and automation rules)
+   */
+  async updateSequenceSettings(
+    id: string,
+    autoRespondEnabled: boolean,
+    automationRules: {
+      enabled: boolean;
+      rules: Array<{
+        type: string;
+        action: string;
+        wait_hours: number;
+      }>;
+    }
+  ) {
+    const { data, error } = await apiClient.supabase
+      .from('company_sequences')
+      .update({
+        auto_respond_enabled: autoRespondEnabled,
+        automation_rules: automationRules,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    return { data, error };
+  },
 };

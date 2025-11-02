@@ -161,3 +161,41 @@ export const useEmailActivities = (companySequenceId: string) => {
     enabled: !!companySequenceId,
   });
 };
+
+/**
+ * Hook to update sequence settings (auto-respond and automation rules)
+ */
+export const useUpdateSequenceSettings = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: (params: {
+      id: string;
+      autoRespondEnabled: boolean;
+      automationRules: {
+        enabled: boolean;
+        rules: Array<{
+          type: string;
+          action: string;
+          wait_hours: number;
+        }>;
+      };
+    }) => companySequencesApi.updateSequenceSettings(params.id, params.autoRespondEnabled, params.automationRules),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['company-sequences'] });
+      queryClient.invalidateQueries({ queryKey: ['company-sequences-page'] });
+      toast({
+        title: 'Settings updated',
+        description: 'Sequence settings saved successfully',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+};

@@ -30,6 +30,7 @@ import {
 import { format } from "date-fns";
 import { useUpdateSequenceStatus } from "@/hooks/use-company-sequences";
 import { useMarkCampaignAsViewed } from "@/hooks/use-campaign-views";
+import { SequenceSettingsCard } from "./SequenceSettingsCard";
 
 interface CompanySequenceDetailsDialogProps {
   open: boolean;
@@ -39,6 +40,8 @@ interface CompanySequenceDetailsDialogProps {
     status: string;
     current_step: number;
     created_at?: string;
+    auto_respond_enabled?: boolean;
+    automation_rules?: any;
     companies: {
       name: string;
       industry?: string;
@@ -246,6 +249,20 @@ export function CompanySequenceDetailsDialog({
                 </div>
               </CardContent>
             </Card>
+
+            {/* Sequence Settings */}
+            <SequenceSettingsCard
+              sequenceId={sequence.id}
+              autoRespondEnabled={sequence.auto_respond_enabled || false}
+              automationRules={sequence.automation_rules || {
+                enabled: true,
+                rules: [
+                  { type: 'no_open', action: 'send_next', wait_hours: 48 },
+                  { type: 'opened_not_clicked', action: 'send_next', wait_hours: 72 },
+                  { type: 'clicked_not_replied', action: 'send_next', wait_hours: 96 },
+                ],
+              }}
+            />
 
             <Separator />
 
