@@ -327,14 +327,34 @@ serve(async (req) => {
       console.log('Email sent via Resend:', resendData);
     }
 
+    // Check if company has an active sequence
+    let linkedSequenceId: string | null = null;
+    
+    if (companyId) {
+      console.log(`Checking for active sequences for company ${companyId}`);
+      const { data: activeSequences, error: seqError } = await supabaseClient
+        .from('company_sequences')
+        .select('id, status')
+        .eq('company_id', companyId)
+        .in('status', ['active', 'draft'])
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      
+      if (!seqError && activeSequences && activeSequences.length > 0) {
+        linkedSequenceId = activeSequences[0].id;
+        console.log(`Linking email to sequence ${linkedSequenceId}`);
+      } else {
+        console.log('No active sequences found for company, creating standalone email');
+      }
+    }
+
     // Log to email_activities for tracking
-    // Note: company_sequence_id is now nullable to support standalone CRM emails
     const { data: activityData, error: activityError } = await supabaseClient
       .from('email_activities')
       .insert({
         contact_id: contactId || null,
-        company_sequence_id: null, // Standalone email, not part of a sequence
-        step_number: 0,
+        company_sequence_id: linkedSequenceId, // Link to sequence if exists, otherwise null
+        step_number: linkedSequenceId ? 1 : 0, // If linked to sequence, it's step 1
         status: 'sent',
         subject,
         body: emailBodyText,
@@ -348,6 +368,7 @@ serve(async (req) => {
           to_email: toEmail,
           to_name: toName,
           company_id: companyId || null,
+          auto_linked: !!linkedSequenceId,
         },
       })
       .select()
@@ -355,6 +376,23 @@ serve(async (req) => {
 
     if (activityError) {
       console.error('Failed to log email activity:', activityError);
+    }
+
+    // If linked to sequence, update the sequence's current_step and updated_at
+    if (linkedSequenceId && activityData) {
+      const { error: updateError } = await supabaseClient
+        .from('company_sequences')
+        .update({
+          current_step: 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', linkedSequenceId);
+      
+      if (updateError) {
+        console.error('Failed to update sequence step:', updateError);
+      } else {
+        console.log('Sequence updated with new step');
+      }
     }
 
     // ALSO create entry in email_threads for conversation view
@@ -374,7 +412,7 @@ serve(async (req) => {
       const { error: threadError } = await supabaseClient
         .from('email_threads')
         .insert({
-          company_sequence_id: null, // Standalone email from CRM
+          company_sequence_id: linkedSequenceId, // Link to sequence if exists
           from_email: fromEmail,
           to_email: toEmail,
           subject,
@@ -390,6 +428,7 @@ serve(async (req) => {
             to_name: toName,
             company_id: companyId || null,
             contact_id: contactId || null,
+            auto_linked: !!linkedSequenceId,
           },
         });
 
