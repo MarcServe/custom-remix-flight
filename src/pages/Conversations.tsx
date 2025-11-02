@@ -516,9 +516,9 @@ export default function Conversations() {
         {/* Conversation Thread */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <CardTitle className="truncate">
                   {selectedConversation
                     ? selectedConversation.type === 'sequence' 
                       ? `${selectedConversation.title} - ${selectedConversation.subtitle}`
@@ -526,7 +526,7 @@ export default function Conversations() {
                     : 'Select a conversation'}
                 </CardTitle>
                 {selectedConversation?.goal && (
-                  <CardDescription>Goal: {selectedConversation.goal}</CardDescription>
+                  <CardDescription className="truncate">Goal: {selectedConversation.goal}</CardDescription>
                 )}
               </div>
               {selectedSequence && (
@@ -534,6 +534,7 @@ export default function Conversations() {
                   variant="outline"
                   size="sm"
                   onClick={() => setFilterAutoSent(!filterAutoSent)}
+                  className="shrink-0"
                 >
                   <Filter className="h-4 w-4 mr-2" />
                   {filterAutoSent ? "Show All" : "Auto-Sent Only"}
@@ -564,39 +565,39 @@ export default function Conversations() {
                         className={`flex ${thread.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
                       >
                         <div
-                          className={`max-w-[80%] rounded-lg p-4 ${
+                          className={`max-w-[85%] sm:max-w-[80%] rounded-lg p-4 min-w-0 ${
                             thread.direction === 'outbound'
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-muted'
                           }`}
                         >
-                          <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {thread.direction === 'outbound' ? (
-                              <ArrowRight className="h-4 w-4" />
+                              <ArrowRight className="h-4 w-4 shrink-0" />
                             ) : (
-                              <ArrowLeft className="h-4 w-4" />
+                              <ArrowLeft className="h-4 w-4 shrink-0" />
                             )}
-                            <span className="text-xs font-medium">
+                            <span className="text-xs font-medium truncate break-all">
                               {thread.direction === 'outbound' ? 'You' : thread.from_email}
                             </span>
                             {thread.metadata?.auto_sent && (
-                              <Badge variant="secondary" className="text-xs">
+                              <Badge variant="secondary" className="text-xs shrink-0">
                                 <Sparkles className="h-3 w-3 mr-1" />
                                 Auto-Sent
                               </Badge>
                             )}
                             {thread.sentiment && getSentimentBadge(thread.sentiment)}
                           </div>
-                          <div className="text-sm font-semibold mb-2">{thread.subject}</div>
-                          <div className="text-sm whitespace-pre-wrap">{thread.body_text}</div>
+                          <div className="text-sm font-semibold mb-2 break-words">{thread.subject}</div>
+                          <div className="text-sm whitespace-pre-wrap break-words">{thread.body_text}</div>
                           <div className="text-xs opacity-70 mt-2">
                             {format(new Date(thread.received_at), 'MMM d, HH:mm')}
                           </div>
                           {thread.ai_analysis && (
                             <div className="mt-2 pt-2 border-t border-current/20 text-xs">
-                              <div>Intent: {thread.ai_analysis.intent}</div>
+                              <div className="break-words">Intent: {thread.ai_analysis.intent}</div>
                               {thread.ai_analysis.questionsAsked?.length > 0 && (
-                                <div>Questions: {thread.ai_analysis.questionsAsked.join(', ')}</div>
+                                <div className="break-words">Questions: {thread.ai_analysis.questionsAsked.join(', ')}</div>
                               )}
                             </div>
                           )}
