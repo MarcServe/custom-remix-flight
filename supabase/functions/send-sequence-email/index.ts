@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -63,11 +64,92 @@ serve(async (req) => {
 
     const contact = contacts[0];
 
-    // Send email via Resend (or your email provider)
+    // Get the user who owns this sequence to check email provider preference
+    const authHeader = req.headers.get('Authorization');
+    const token = authHeader ? authHeader.replace('Bearer ', '') : null;
+    const { data: { user } } = token 
+      ? await supabase.auth.getUser(token)
+      : { data: { user: null } };
+
+    // Get business profile for email provider preference
+    let emailProvider = 'resend';
+    let fromEmail = 'noreply@yourdomain.com';
+    let senderName = 'Your Company';
+
+    if (user) {
+      const { data: businessProfile } = await supabase
+        .from('business_profiles')
+        .select('email_provider, company_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      emailProvider = businessProfile?.email_provider || 'resend';
+      senderName = businessProfile?.company_name || 'Your Company';
+
+      // Get SMTP connection for from_email
+      const { data: connection } = await supabase
+        .from('crm_connections')
+        .select('from_email')
+        .eq('user_id', user.id)
+        .eq('provider', 'smtp')
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (connection?.from_email) {
+        fromEmail = connection.from_email;
+      }
+    }
+
+    console.log(`Sending via ${emailProvider} from ${fromEmail}`);
+
+    // Send email via configured provider
     let emailResult;
     let externalMessageId;
 
-    if (RESEND_API_KEY) {
+    if (emailProvider === 'sendgrid' && SENDGRID_API_KEY) {
+      const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SENDGRID_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          personalizations: [{
+            to: [{ email: contact.email, name: contact.name }],
+            subject: emailStep.subject,
+          }],
+          from: {
+            email: fromEmail,
+            name: senderName,
+          },
+          reply_to: {
+            email: fromEmail,
+            name: senderName,
+          },
+          content: [
+            {
+              type: 'text/plain',
+              value: emailStep.body,
+            },
+            {
+              type: 'text/html',
+              value: emailStep.body.replace(/\n/g, '<br>'),
+            },
+          ],
+          custom_args: {
+            company_sequence_id: companySequenceId,
+            step_number: stepNumber.toString(),
+          },
+        }),
+      });
+
+      if (!sendgridResponse.ok) {
+        const errorText = await sendgridResponse.text();
+        throw new Error(`Email send failed via SendGrid: ${errorText}`);
+      }
+
+      externalMessageId = sendgridResponse.headers.get('X-Message-Id') || `sendgrid-${crypto.randomUUID()}`;
+    } else if (RESEND_API_KEY) {
       const resendResponse = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -75,7 +157,7 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'Your Company <noreply@yourdomain.com>', // Configure this
+          from: `${senderName} <${fromEmail}>`,
           to: contact.email,
           subject: emailStep.subject,
           html: emailStep.body.replace(/\n/g, '<br>'),
@@ -112,7 +194,8 @@ serve(async (req) => {
         external_message_id: externalMessageId,
         metadata: {
           to: contact.email,
-          from: 'noreply@yourdomain.com',
+          from: fromEmail,
+          provider: emailProvider,
         },
       });
 

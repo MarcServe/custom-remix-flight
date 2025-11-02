@@ -65,15 +65,26 @@ Deno.serve(async (req) => {
       throw new Error('Invalid authorization');
     }
 
+    // Get business profile for email provider preference
+    const { data: businessProfile } = await supabase
+      .from('business_profiles')
+      .select('email_provider, company_name')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const emailProvider = businessProfile?.email_provider || 'resend';
+    console.log(`Using email provider: ${emailProvider}`);
+
+    // Get appropriate connection based on provider
     const { data: connection } = await supabase
       .from('crm_connections')
       .select('*')
       .eq('user_id', user.id)
-      .eq('provider', 'gmail')
+      .eq('provider', emailProvider === 'sendgrid' || emailProvider === 'resend' ? 'smtp' : 'gmail')
       .eq('status', 'active')
-      .single();
+      .maybeSingle();
 
-    if (!connection) {
+    if (!connection && emailProvider === 'gmail') {
       throw new Error('No active Gmail connection found. Please connect your Gmail account first.');
     }
 
@@ -98,31 +109,109 @@ Deno.serve(async (req) => {
       }
 
       try {
-        console.log(`Sending email step ${i + 1}/${personalizedEmails.length}`);
+        console.log(`Sending email step ${i + 1}/${personalizedEmails.length} via ${emailProvider}`);
 
-        // Send via Nango Gmail API
-        const nangoResponse = await fetch(`https://api.nango.dev/gmail/messages/send`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${NANGO_SECRET_KEY}`,
-            'Connection-Id': connection.connection_id,
-            'Provider-Config-Key': 'gmail',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            to: contact.email,
-            subject: emailData.subject,
-            body: emailData.body,
-            from: user.email,
-          }),
-        });
+        let emailMessageId = null;
 
-        if (!nangoResponse.ok) {
-          const errorText = await nangoResponse.text();
-          throw new Error(`Failed to send email: ${errorText}`);
+        if (emailProvider === 'gmail') {
+          // Send via Nango Gmail API
+          const nangoResponse = await fetch(`https://api.nango.dev/gmail/messages/send`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${NANGO_SECRET_KEY}`,
+              'Connection-Id': connection.connection_id,
+              'Provider-Config-Key': 'gmail',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              to: contact.email,
+              subject: emailData.subject,
+              body: emailData.body,
+              from: user.email,
+            }),
+          });
+
+          if (!nangoResponse.ok) {
+            const errorText = await nangoResponse.text();
+            throw new Error(`Failed to send email: ${errorText}`);
+          }
+
+          const nangoData = await nangoResponse.json();
+          emailMessageId = nangoData.id || null;
+        } else if (emailProvider === 'sendgrid') {
+          // Send via SendGrid
+          const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY');
+          if (!SENDGRID_API_KEY) {
+            throw new Error('SendGrid API key not configured');
+          }
+
+          const fromEmail = connection?.from_email || 'noreply@yourdomain.com';
+          const senderName = businessProfile?.company_name || 'Your Business';
+
+          const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${SENDGRID_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              personalizations: [{
+                to: [{ email: contact.email, name: contact.name }],
+                subject: emailData.subject,
+              }],
+              from: {
+                email: fromEmail,
+                name: senderName,
+              },
+              reply_to: {
+                email: fromEmail,
+                name: senderName,
+              },
+              content: [{
+                type: 'text/plain',
+                value: emailData.body,
+              }],
+            }),
+          });
+
+          if (!sendgridResponse.ok) {
+            const errorText = await sendgridResponse.text();
+            throw new Error(`Failed to send via SendGrid: ${errorText}`);
+          }
+
+          emailMessageId = sendgridResponse.headers.get('X-Message-Id') || null;
+        } else {
+          // Send via Resend (default)
+          const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+          if (!RESEND_API_KEY) {
+            throw new Error('Resend API key not configured');
+          }
+
+          const fromEmail = connection?.from_email || 'onboarding@resend.dev';
+          const senderName = businessProfile?.company_name || 'CRM';
+
+          const resendResponse = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${RESEND_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: `${senderName} <${fromEmail}>`,
+              to: [contact.email],
+              subject: emailData.subject,
+              text: emailData.body,
+            }),
+          });
+
+          if (!resendResponse.ok) {
+            const errorText = await resendResponse.text();
+            throw new Error(`Failed to send via Resend: ${errorText}`);
+          }
+
+          const resendData = await resendResponse.json();
+          emailMessageId = resendData.id || null;
         }
-
-        const nangoData = await nangoResponse.json();
 
         // Record email activity
         await supabase
@@ -135,7 +224,10 @@ Deno.serve(async (req) => {
             body: emailData.body,
             status: 'sent',
             sent_at: new Date().toISOString(),
-            external_message_id: nangoData.id || null,
+            external_message_id: emailMessageId,
+            metadata: {
+              provider: emailProvider,
+            },
           });
 
         sentEmails.push({

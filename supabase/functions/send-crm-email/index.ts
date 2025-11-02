@@ -48,25 +48,8 @@ serve(async (req) => {
     }
 
     const emailRequest: EmailRequest = await req.json();
-    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, sender = 'resend', testConnection = false } = emailRequest;
+    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, testConnection = false } = emailRequest;
     
-    // If no sender specified, check user's preferred provider from business profile
-    if (!sender || sender === 'resend') {
-      const { data: businessProfile } = await supabaseClient
-        .from('business_profiles')
-        .select('email_provider')
-        .eq('user_id', user.id)
-        .single();
-      
-      // Use SendGrid if set as preferred, otherwise default to Resend
-      if (businessProfile?.email_provider === 'sendgrid') {
-        sender = 'sendgrid';
-      }
-    }
-
-    // Generate thread_id for email threading (used across all sending methods)
-    const threadId = `crm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
     // Fetch user profile for signature
     const { data: userProfile } = await supabaseClient
       .from('profiles')
@@ -74,12 +57,20 @@ serve(async (req) => {
       .eq('id', user.id)
       .single();
 
-    // Fetch business profile for company name
+    // Fetch business profile for company name and email provider preference
     const { data: businessProfile } = await supabaseClient
       .from('business_profiles')
-      .select('company_name')
+      .select('company_name, email_provider')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
+    
+    // Determine sender based on business profile preference
+    let sender: 'gmail' | 'resend' | 'smtp' | 'sendgrid' = emailRequest.sender || businessProfile?.email_provider || 'resend';
+    
+    console.log(`Email provider preference: ${businessProfile?.email_provider}, Using: ${sender}`);
+
+    // Generate thread_id for email threading (used across all sending methods)
+    const threadId = `crm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Build email signature
     const signatureText = `\n\nBest regards,\n${userProfile?.full_name || 'Team'}\n${userProfile?.job_title ? `${userProfile.job_title}\n` : ''}${businessProfile?.company_name || ''}`;
