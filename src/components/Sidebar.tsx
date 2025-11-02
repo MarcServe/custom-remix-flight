@@ -118,9 +118,44 @@ export const Sidebar = () => {
           filter: `user_id=eq.${user?.id}`,
         },
         (payload) => {
-          if (payload.new && (payload.new as any).status === 'running') {
-            setActiveSearch(payload.new);
-          } else if (payload.eventType === 'DELETE' || (payload.new as any)?.status !== 'running') {
+          const newSearch = payload.new as any;
+          const oldSearch = payload.old as any;
+
+          if (payload.eventType === 'UPDATE' && oldSearch?.status === 'running' && newSearch?.status === 'complete') {
+            // Search completed - show notification if not on lead finder page
+            if (location.pathname !== '/lead-finder') {
+              const leadsCount = (newSearch.stats as any)?.totalFound || 0;
+              // Use toast from context or create a simple notification
+              const notification = document.createElement('div');
+              notification.className = 'fixed bottom-4 right-4 bg-card border rounded-lg shadow-lg p-4 max-w-sm z-50 animate-in slide-in-from-bottom-5';
+              notification.innerHTML = `
+                <div class="flex items-start gap-3">
+                  <div class="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                    <svg class="h-4 w-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                  </div>
+                  <div class="flex-1">
+                    <h4 class="text-sm font-semibold mb-1">Lead Search Complete</h4>
+                    <p class="text-xs text-muted-foreground mb-2">Found ${leadsCount} companies</p>
+                    <button onclick="window.location.href='/lead-finder'" class="text-xs text-primary hover:underline font-medium">
+                      View Results →
+                    </button>
+                  </div>
+                  <button onclick="this.parentElement.parentElement.remove()" class="text-muted-foreground hover:text-foreground">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                  </button>
+                </div>
+              `;
+              document.body.appendChild(notification);
+              setTimeout(() => notification.remove(), 8000);
+            }
+            setActiveSearch(null);
+          } else if (newSearch && newSearch.status === 'running') {
+            setActiveSearch(newSearch);
+          } else if (payload.eventType === 'DELETE' || newSearch?.status !== 'running') {
             setActiveSearch(null);
           }
         }
@@ -130,7 +165,7 @@ export const Sidebar = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, location.pathname]);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -211,33 +246,55 @@ export const Sidebar = () => {
       {/* Global Search Indicator */}
       {activeSearch && (
         <div 
-          onClick={() => navigate('/lead-finder')}
           className={cn(
-            "mx-3 mt-4 p-3 rounded-lg bg-primary/10 border border-primary/20 cursor-pointer hover:bg-primary/20 transition-colors",
+            "mx-3 mt-4 p-3 rounded-lg bg-primary/10 border border-primary/20 transition-colors group",
             isCollapsed && "p-2"
           )}
         >
           {isCollapsed ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex justify-center">
+                <div 
+                  className="flex justify-center cursor-pointer"
+                  onClick={() => navigate('/lead-finder')}
+                >
                   <Search className="h-5 w-5 text-primary animate-pulse" />
                 </div>
               </TooltipTrigger>
               <TooltipContent side="right">
-                <p>Lead search in progress ({activeSearch.progress}%)</p>
+                <div className="space-y-1">
+                  <p className="font-semibold">Lead search in progress</p>
+                  <p className="text-xs">{activeSearch.progress}% complete</p>
+                  <p className="text-xs text-muted-foreground">{activeSearch.current_status}</p>
+                </div>
               </TooltipContent>
             </Tooltip>
           ) : (
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-primary animate-pulse" />
-                <span className="text-sm font-medium text-primary">Lead Search Active</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Search className="h-4 w-4 text-primary animate-pulse" />
+                  <span className="text-sm font-medium text-primary">Lead Search Active</span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    await supabase
+                      .from('lead_finder_searches')
+                      .update({ status: 'paused' })
+                      .eq('id', activeSearch.id);
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
               </div>
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{activeSearch.current_status}</span>
-                  <span>{activeSearch.progress}%</span>
+                  <span className="truncate">{activeSearch.current_status}</span>
+                  <span className="font-mono">{activeSearch.progress}%</span>
                 </div>
                 <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                   <div 
@@ -246,7 +303,12 @@ export const Sidebar = () => {
                   />
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">Click to view details</p>
+              <button
+                onClick={() => navigate('/lead-finder')}
+                className="w-full text-xs text-primary hover:underline text-left font-medium"
+              >
+                View Details →
+              </button>
             </div>
           )}
         </div>
