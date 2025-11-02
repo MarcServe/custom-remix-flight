@@ -37,13 +37,28 @@ interface Company {
   size?: string;
   geography?: string;
   linkedinUrl?: string;
+  linkedin_url?: string; // Database format
   wasEnriched?: boolean;
   products?: string;
   recentNews?: string;
+  recent_news?: string; // Database format
   fundingInfo?: string;
+  funding_stage?: string; // Database format
+  funding_total?: string; // Database format
   employeeCount?: number;
+  employee_count?: number; // Database format
   companyPhone?: string;
+  company_phone?: string; // Database format
   generalEmail?: string;
+  general_email?: string; // Database format
+  tech_stack?: string[]; // Database format
+  technologies?: string[]; // Lead finder format
+  enrichment_data?: {
+    products?: string;
+    fundingInfo?: string;
+    recentNews?: string;
+    technologies?: string[];
+  };
   socialProfiles?: {
     linkedin?: string;
     twitter?: string;
@@ -51,7 +66,18 @@ interface Company {
     instagram?: string;
     youtube?: string;
   };
+  social_profiles?: { // Database format
+    linkedin?: string;
+    twitter?: string;
+    facebook?: string;
+    instagram?: string;
+    youtube?: string;
+  };
   keyExecutives?: Array<{
+    name: string;
+    title: string;
+  }>;
+  key_executives?: Array<{ // Database format
     name: string;
     title: string;
   }>;
@@ -113,9 +139,27 @@ export function CompanyDetailsDialog({
   
   if (!company) return null;
 
-  const hasContacts = company.contacts && company.contacts.length > 0;
+  // Normalize company data to handle both lead finder format (camelCase) and database format (snake_case)
+  const normalizedCompany = {
+    ...company,
+    // Use camelCase versions if they exist, otherwise map from snake_case
+    linkedinUrl: company.linkedinUrl || company.linkedin_url,
+    recentNews: company.recentNews || company.recent_news || (company.enrichment_data as any)?.recentNews,
+    fundingInfo: company.fundingInfo || 
+                 (company.funding_stage && company.funding_total ? `${company.funding_stage} - ${company.funding_total}` : null) ||
+                 (company.enrichment_data as any)?.fundingInfo,
+    products: company.products || (company.enrichment_data as any)?.products,
+    technologies: company.technologies || company.tech_stack || (company.enrichment_data as any)?.technologies,
+    employeeCount: company.employeeCount || company.employee_count,
+    companyPhone: company.companyPhone || company.company_phone,
+    generalEmail: company.generalEmail || company.general_email,
+    socialProfiles: company.socialProfiles || company.social_profiles,
+    keyExecutives: company.keyExecutives || company.key_executives,
+  };
+
+  const hasContacts = normalizedCompany.contacts && normalizedCompany.contacts.length > 0;
   const hasBeenSaved = !!company.id;
-  const showFindProspectsButton = !hasContacts && !isSearching && hasBeenSaved && company.linkedinUrl;
+  const showFindProspectsButton = !hasContacts && !isSearching && hasBeenSaved && normalizedCompany.linkedinUrl;
   
   const showNavigation = allCompanies && currentIndex !== undefined && onNavigate;
   const canGoPrev = showNavigation && currentIndex > 0;
@@ -218,7 +262,7 @@ export function CompanyDetailsDialog({
   };
 
   const handleFindProspects = async () => {
-    if (!company.linkedinUrl) {
+    if (!normalizedCompany.linkedinUrl) {
       toast({
         title: "LinkedIn URL required",
         description: "This company needs a LinkedIn URL to find prospects.",
@@ -360,28 +404,28 @@ export function CompanyDetailsDialog({
                     <span className="text-muted-foreground">{company.geography}</span>
                   </div>
                 )}
-                {company.employeeCount && (
+                {normalizedCompany.employeeCount && (
                   <div className="flex items-center gap-2 text-sm">
                     <Users className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">Employees:</span>
-                    <span className="text-muted-foreground">{company.employeeCount}</span>
+                    <span className="text-muted-foreground">{normalizedCompany.employeeCount}</span>
                   </div>
                 )}
-                {company.companyPhone && (
+                {normalizedCompany.companyPhone && (
                   <div className="flex items-center gap-2 text-sm">
                     <Mail className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">Phone:</span>
-                    <a href={`tel:${company.companyPhone}`} className="text-primary hover:underline">
-                      {company.companyPhone}
+                    <a href={`tel:${normalizedCompany.companyPhone}`} className="text-primary hover:underline">
+                      {normalizedCompany.companyPhone}
                     </a>
                   </div>
                 )}
-                {company.generalEmail && (
+                {normalizedCompany.generalEmail && (
                   <div className="flex items-center gap-2 text-sm">
                     <Mail className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">Email:</span>
-                    <a href={`mailto:${company.generalEmail}`} className="text-primary hover:underline">
-                      {company.generalEmail}
+                    <a href={`mailto:${normalizedCompany.generalEmail}`} className="text-primary hover:underline">
+                      {normalizedCompany.generalEmail}
                     </a>
                   </div>
                 )}
@@ -389,12 +433,13 @@ export function CompanyDetailsDialog({
             </div>
 
             {/* Enriched Data Sections - Show if ANY enriched data exists */}
-            {(company.wasEnriched || company.products || company.recentNews || company.fundingInfo || 
-              company.keyExecutives?.length > 0 || (company.socialProfiles && Object.keys(company.socialProfiles).length > 0)) && (
+            {(normalizedCompany.wasEnriched || normalizedCompany.products || normalizedCompany.recentNews || normalizedCompany.fundingInfo || 
+              normalizedCompany.technologies?.length > 0 || normalizedCompany.keyExecutives?.length > 0 || 
+              (normalizedCompany.socialProfiles && Object.keys(normalizedCompany.socialProfiles).length > 0)) && (
               <>
                 <Separator />
                 
-                {company.products && (
+                {normalizedCompany.products && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -403,12 +448,30 @@ export function CompanyDetailsDialog({
                       <h3 className="text-sm font-semibold">Products & Services</h3>
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
-                      {company.products}
+                      {normalizedCompany.products}
                     </p>
                   </div>
                 )}
 
-                {company.recentNews && (
+                {normalizedCompany.technologies && normalizedCompany.technologies.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                        <Sparkles className="h-4 w-4 text-indigo-500" />
+                      </div>
+                      <h3 className="text-sm font-semibold">Technologies</h3>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pl-10">
+                      {normalizedCompany.technologies.map((tech, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {tech}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {normalizedCompany.recentNews && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
@@ -417,12 +480,12 @@ export function CompanyDetailsDialog({
                       <h3 className="text-sm font-semibold">Recent News</h3>
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
-                      {company.recentNews}
+                      {normalizedCompany.recentNews}
                     </p>
                   </div>
                 )}
 
-                {company.fundingInfo && (
+                {normalizedCompany.fundingInfo && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
@@ -431,12 +494,12 @@ export function CompanyDetailsDialog({
                       <h3 className="text-sm font-semibold">Funding Information</h3>
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
-                      {company.fundingInfo}
+                      {normalizedCompany.fundingInfo}
                     </p>
                   </div>
                 )}
 
-                {company.keyExecutives && company.keyExecutives.length > 0 && (
+                {normalizedCompany.keyExecutives && normalizedCompany.keyExecutives.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
@@ -445,7 +508,7 @@ export function CompanyDetailsDialog({
                       <h3 className="text-sm font-semibold">Key Executives</h3>
                     </div>
                     <div className="space-y-2 pl-10">
-                      {company.keyExecutives.map((exec, idx) => (
+                      {normalizedCompany.keyExecutives.map((exec, idx) => (
                         <div key={idx} className="text-sm">
                           <span className="font-medium text-foreground">{exec.name}</span>
                           {" - "}
@@ -456,7 +519,7 @@ export function CompanyDetailsDialog({
                   </div>
                 )}
 
-                {company.socialProfiles && Object.keys(company.socialProfiles).length > 0 && (
+                {normalizedCompany.socialProfiles && Object.keys(normalizedCompany.socialProfiles).length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center">
@@ -465,37 +528,37 @@ export function CompanyDetailsDialog({
                       <h3 className="text-sm font-semibold">Social Profiles</h3>
                     </div>
                     <div className="flex flex-wrap gap-2 pl-10">
-                      {company.socialProfiles.linkedin && (
+                      {normalizedCompany.socialProfiles.linkedin && (
                         <Button variant="outline" size="sm" asChild>
-                          <a href={company.socialProfiles.linkedin} target="_blank" rel="noopener noreferrer">
+                          <a href={normalizedCompany.socialProfiles.linkedin} target="_blank" rel="noopener noreferrer">
                             LinkedIn
                           </a>
                         </Button>
                       )}
-                      {company.socialProfiles.twitter && (
+                      {normalizedCompany.socialProfiles.twitter && (
                         <Button variant="outline" size="sm" asChild>
-                          <a href={company.socialProfiles.twitter} target="_blank" rel="noopener noreferrer">
+                          <a href={normalizedCompany.socialProfiles.twitter} target="_blank" rel="noopener noreferrer">
                             Twitter
                           </a>
                         </Button>
                       )}
-                      {company.socialProfiles.facebook && (
+                      {normalizedCompany.socialProfiles.facebook && (
                         <Button variant="outline" size="sm" asChild>
-                          <a href={company.socialProfiles.facebook} target="_blank" rel="noopener noreferrer">
+                          <a href={normalizedCompany.socialProfiles.facebook} target="_blank" rel="noopener noreferrer">
                             Facebook
                           </a>
                         </Button>
                       )}
-                      {company.socialProfiles.instagram && (
+                      {normalizedCompany.socialProfiles.instagram && (
                         <Button variant="outline" size="sm" asChild>
-                          <a href={company.socialProfiles.instagram} target="_blank" rel="noopener noreferrer">
+                          <a href={normalizedCompany.socialProfiles.instagram} target="_blank" rel="noopener noreferrer">
                             Instagram
                           </a>
                         </Button>
                       )}
-                      {company.socialProfiles.youtube && (
+                      {normalizedCompany.socialProfiles.youtube && (
                         <Button variant="outline" size="sm" asChild>
-                          <a href={company.socialProfiles.youtube} target="_blank" rel="noopener noreferrer">
+                          <a href={normalizedCompany.socialProfiles.youtube} target="_blank" rel="noopener noreferrer">
                             YouTube
                           </a>
                         </Button>
@@ -628,10 +691,10 @@ export function CompanyDetailsDialog({
                 <Wand2 className="h-3.5 w-3.5 mr-2" />
                 Generate Sequence
               </Button>
-              {company.linkedinUrl && (
+              {normalizedCompany.linkedinUrl && (
                 <Button variant="outline" size="sm" asChild>
                   <a
-                    href={company.linkedinUrl}
+                    href={normalizedCompany.linkedinUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
