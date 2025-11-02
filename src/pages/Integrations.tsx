@@ -16,7 +16,7 @@ import { nangoClient } from "@/lib/integrations/nango";
 import { toast } from "sonner";
 import { Mail, Shield, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 
 const emailProviders = [
   {
@@ -212,40 +212,32 @@ export default function Integrations() {
         </div>
       </div>
 
-      <Tabs defaultValue="providers" className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-1">
-          <TabsTrigger value="providers">Email Providers</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="providers" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl">Connected Email Providers</CardTitle>
-              <CardDescription>
-                Connect Gmail, Outlook, or your own SMTP server. Each provider shows detailed capabilities and connection status.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {emailProviders.map((provider) => {
-                  const connection = connections?.find(
-                    (c) => c.provider === provider.id && c.status !== 'disconnected'
-                  );
-                  return (
-                    <EmailProviderCard
-                      key={provider.id}
-                      provider={provider}
-                      connection={connection}
-                      onConnect={() => handleConnect(provider.id)}
-                      onDisconnect={handleDisconnect}
-                    />
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl">Connected Email Providers</CardTitle>
+          <CardDescription>
+            Connect Gmail, Outlook, or your own SMTP server. Each provider shows detailed capabilities and connection status.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {emailProviders.map((provider) => {
+              const connection = connections?.find(
+                (c) => c.provider === provider.id && c.status !== 'disconnected'
+              );
+              return (
+                <EmailProviderCard
+                  key={provider.id}
+                  provider={provider}
+                  connection={connection}
+                  onConnect={() => handleConnect(provider.id)}
+                  onDisconnect={handleDisconnect}
+                />
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       <ConnectEmailDialog
         open={connectDialogOpen}
