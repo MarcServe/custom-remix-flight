@@ -61,6 +61,33 @@ export const useSequence = (id: string) => {
 };
 
 /**
+ * Hook to update a sequence
+ */
+export const useUpdateSequence = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: any }) => 
+      sequencesApi.updateSequence(id, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sequences'] });
+      toast({
+        title: 'Success',
+        description: 'Sequence updated successfully',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+};
+
+/**
  * Hook to delete a sequence
  */
 export const useDeleteSequence = () => {

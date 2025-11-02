@@ -68,6 +68,39 @@ export const sequencesApi = {
   },
 
   /**
+   * Update a sequence
+   */
+  async updateSequence(id: string, updates: { 
+    name?: string; 
+    steps?: Array<{
+      subject: string;
+      body: string;
+      delayDays?: number;
+      automation_rule?: {
+        type: 'wait_for_open' | 'wait_for_click' | 'time_based' | 'none';
+        wait_hours?: number;
+      };
+    }>;
+    segment_filters?: any;
+    custom_instructions?: string;
+  }) {
+    // Serialize steps to JSON string array format expected by database
+    const dbUpdates: any = { ...updates };
+    if (updates.steps) {
+      dbUpdates.steps = updates.steps.map(step => JSON.stringify(step));
+    }
+
+    const { data, error } = await apiClient.supabase
+      .from('email_sequences')
+      .update(dbUpdates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    return { data, error };
+  },
+
+  /**
    * Delete a sequence
    */
   async deleteSequence(id: string) {
