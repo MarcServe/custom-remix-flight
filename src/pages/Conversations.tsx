@@ -45,6 +45,17 @@ interface CompanySequence {
   };
 }
 
+interface Conversation {
+  id: string;
+  type: 'sequence' | 'standalone';
+  title: string;
+  subtitle?: string;
+  goal?: string;
+  latest_activity: string;
+  sequenceData?: CompanySequence;
+  recipientEmail?: string;
+}
+
 export default function Conversations() {
   const { toast } = useToast();
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null);
@@ -52,41 +63,80 @@ export default function Conversations() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [filterAutoSent, setFilterAutoSent] = useState(false);
 
-  const { data: sequences, isLoading } = useQuery({
+  const { data: conversations, isLoading } = useQuery({
     queryKey: ['active-conversations'],
     queryFn: async () => {
-      // Get all email threads grouped by company_id or recipient
+      const allConversations: Conversation[] = [];
+
+      // Get all email threads
       const { data: threadsData, error: threadsError } = await supabase
         .from('email_threads')
-        .select('company_sequence_id')
+        .select('company_sequence_id, from_email, to_email, subject, received_at, direction')
         .order('received_at', { ascending: false });
 
       if (threadsError) throw threadsError;
 
-      // Get unique company_sequence_ids (filter out nulls for standalone emails)
+      // 1. Group threads by company_sequence_id (sequence-based)
       const sequenceIds = [...new Set(
         threadsData
           ?.map(t => t.company_sequence_id)
           .filter((id): id is string => id !== null) || []
       )];
 
-      if (sequenceIds.length === 0) {
-        return [];
+      if (sequenceIds.length > 0) {
+        const { data: sequences, error: seqError } = await supabase
+          .from('company_sequences')
+          .select(`
+            *,
+            companies(name),
+            email_sequences(name, goal, auto_respond)
+          `)
+          .in('id', sequenceIds)
+          .order('updated_at', { ascending: false });
+
+        if (!seqError && sequences) {
+          sequences.forEach((seq) => {
+            const latestThread = threadsData?.find(t => t.company_sequence_id === seq.id);
+            allConversations.push({
+              id: seq.id,
+              type: 'sequence',
+              title: seq.companies.name,
+              subtitle: seq.email_sequences.name,
+              goal: seq.email_sequences.goal,
+              latest_activity: latestThread?.received_at || seq.updated_at,
+              sequenceData: seq,
+            });
+          });
+        }
       }
 
-      // Fetch sequences with their companies and email_sequences data
-      const { data, error } = await supabase
-        .from('company_sequences')
-        .select(`
-          *,
-          companies(name),
-          email_sequences(name, goal, auto_respond)
-        `)
-        .in('id', sequenceIds)
-        .order('updated_at', { ascending: false });
+      // 2. Group standalone threads by recipient email
+      const standaloneThreads = threadsData?.filter(t => t.company_sequence_id === null) || [];
+      const standaloneByRecipient = standaloneThreads.reduce((acc, thread) => {
+        const recipientEmail = thread.direction === 'outbound' ? thread.to_email : thread.from_email;
+        if (!acc[recipientEmail]) {
+          acc[recipientEmail] = [];
+        }
+        acc[recipientEmail].push(thread);
+        return acc;
+      }, {} as Record<string, typeof standaloneThreads>);
 
-      if (error) throw error;
-      return data as CompanySequence[];
+      Object.entries(standaloneByRecipient).forEach(([email, threads]) => {
+        const latestThread = threads[0];
+        allConversations.push({
+          id: `standalone-${email}`,
+          type: 'standalone',
+          title: email,
+          subtitle: latestThread.subject || 'No subject',
+          latest_activity: latestThread.received_at,
+          recipientEmail: email,
+        });
+      });
+
+      // Sort by latest activity
+      return allConversations.sort((a, b) => 
+        new Date(b.latest_activity).getTime() - new Date(a.latest_activity).getTime()
+      );
     },
   });
 
@@ -94,11 +144,22 @@ export default function Conversations() {
     queryKey: ['email-threads', selectedSequence],
     enabled: !!selectedSequence,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('email_threads')
-        .select('*')
-        .eq('company_sequence_id', selectedSequence!)
-        .order('received_at', { ascending: true });
+      const selectedConv = conversations?.find(c => c.id === selectedSequence);
+      if (!selectedConv) return [];
+
+      let query = supabase.from('email_threads').select('*');
+
+      if (selectedConv.type === 'sequence') {
+        query = query.eq('company_sequence_id', selectedSequence!);
+      } else {
+        // Standalone: filter by recipient email and null company_sequence_id
+        const recipientEmail = selectedConv.recipientEmail!;
+        query = query
+          .is('company_sequence_id', null)
+          .or(`from_email.eq.${recipientEmail},to_email.eq.${recipientEmail}`);
+      }
+
+      const { data, error } = await query.order('received_at', { ascending: true });
 
       if (error) throw error;
       return data as EmailThread[];
@@ -110,7 +171,8 @@ export default function Conversations() {
     ? threads?.filter(t => t.metadata?.auto_sent === true)
     : threads;
 
-  const selectedSeqData = sequences?.find(s => s.id === selectedSequence);
+  const selectedConversation = conversations?.find(c => c.id === selectedSequence);
+  const selectedSeqData = selectedConversation?.sequenceData;
 
   const handleGenerateResponse = async () => {
     if (!selectedSequence) return;
@@ -255,42 +317,49 @@ export default function Conversations() {
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[600px]">
-              {!sequences || sequences.length === 0 ? (
+              {!conversations || conversations.length === 0 ? (
                 <div className="text-center py-12">
                   <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-sm text-muted-foreground">No active conversations</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {sequences.map((seq) => (
+                  {conversations.map((conv) => (
                     <div
-                      key={seq.id}
-                      onClick={() => setSelectedSequence(seq.id)}
+                      key={conv.id}
+                      onClick={() => setSelectedSequence(conv.id)}
                       className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                        selectedSequence === seq.id
+                        selectedSequence === conv.id
                           ? 'bg-primary/10 border-primary'
                           : 'hover:bg-muted'
                       }`}
                     >
-                      <div className="font-medium">{seq.companies.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {seq.email_sequences.name}
-                      </div>
-                      {seq.email_sequences.goal && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Goal: {seq.email_sequences.goal}
-                        </div>
-                      )}
-                      <div className="flex gap-2 mt-2">
-                        <Badge variant="outline">
-                          {seq.next_action.replace(/_/g, ' ')}
-                        </Badge>
-                        {seq.auto_respond_enabled && (
-                          <Badge variant="default" className="bg-gradient-primary text-white">
-                            Auto-Response
-                          </Badge>
+                      <div className="flex items-center gap-2">
+                        <div className="font-medium">{conv.title}</div>
+                        {conv.type === 'standalone' && (
+                          <Badge variant="secondary" className="text-xs">Standalone</Badge>
                         )}
                       </div>
+                      <div className="text-sm text-muted-foreground">
+                        {conv.subtitle}
+                      </div>
+                      {conv.goal && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Goal: {conv.goal}
+                        </div>
+                      )}
+                      {conv.type === 'sequence' && conv.sequenceData && (
+                        <div className="flex gap-2 mt-2">
+                          <Badge variant="outline">
+                            {conv.sequenceData.next_action.replace(/_/g, ' ')}
+                          </Badge>
+                          {conv.sequenceData.auto_respond_enabled && (
+                            <Badge variant="default" className="bg-gradient-primary text-white">
+                              Auto-Response
+                            </Badge>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -305,12 +374,14 @@ export default function Conversations() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>
-                  {selectedSeqData
-                    ? `${selectedSeqData.companies.name} - ${selectedSeqData.email_sequences.name}`
+                  {selectedConversation
+                    ? selectedConversation.type === 'sequence' 
+                      ? `${selectedConversation.title} - ${selectedConversation.subtitle}`
+                      : selectedConversation.title
                     : 'Select a conversation'}
                 </CardTitle>
-                {selectedSeqData?.email_sequences.goal && (
-                  <CardDescription>Goal: {selectedSeqData.email_sequences.goal}</CardDescription>
+                {selectedConversation?.goal && (
+                  <CardDescription>Goal: {selectedConversation.goal}</CardDescription>
                 )}
               </div>
               {selectedSequence && (
