@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus, Database, Loader2, Phone, TrendingUp, Award, CheckCircle2, XCircle, Circle } from "lucide-react";
+import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus, Database, Loader2, Phone, TrendingUp, Award, CheckCircle2, XCircle, Circle, Copy, Linkedin, Shield } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { GenerateSequenceForCompanyDialog } from "@/components/sequences/GenerateSequenceForCompanyDialog";
@@ -17,13 +17,17 @@ import { companiesApi } from "@/lib/api/companies";
 import { useQueryClient } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Contact {
   id?: string;
   name: string;
   email?: string;
   emailVerified?: boolean;
+  emailConfidence?: number; // Lead finder format
+  email_confidence?: number; // Database format
   linkedinUrl?: string;
+  linkedin_url?: string; // Database format
   title?: string;
   department?: string;
   phone?: string;
@@ -245,6 +249,14 @@ export function CompanyDetailsDialog({
       contactId: contact.id,
     });
     setEmailDialogOpen(true);
+  };
+
+  const handleCopyEmail = (email: string, contactName: string) => {
+    navigator.clipboard.writeText(email);
+    toast({
+      title: "Email Copied",
+      description: `${email} copied to clipboard`,
+    });
   };
 
   const handleSaveToCRM = async () => {
@@ -781,66 +793,156 @@ export function CompanyDetailsDialog({
                   </div>
                   
                   <div className="space-y-3 pl-10">
-                    {company.contacts.map((contact, idx) => (
-                      <div key={idx} className="p-3 rounded-lg border bg-card/50 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm">{contact.name}</span>
-                            {contact.emailVerified && (
-                              <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
-                                Verified
-                              </Badge>
-                            )}
-                            {contact === company.primaryContact && (
-                              <Badge className="text-xs bg-primary/10 text-primary border-primary/20">
-                                Primary
-                              </Badge>
+                    {company.contacts.map((contact, idx) => {
+                      const emailConfidence = contact.emailConfidence || contact.email_confidence;
+                      const contactLinkedIn = contact.linkedinUrl || contact.linkedin_url;
+                      
+                      return (
+                        <div key={idx} className="p-4 rounded-lg border bg-card/50 hover:bg-card/70 transition-colors space-y-3">
+                          {/* Header with name and badges */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-sm">{contact.name}</span>
+                                
+                                {/* Verification Badge */}
+                                {contact.emailVerified && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger>
+                                        <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
+                                          <Shield className="h-3 w-3 mr-1" />
+                                          Verified
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Email address has been verified</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                                
+                                {/* Email Confidence Score */}
+                                {emailConfidence && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger>
+                                        <Badge 
+                                          variant="outline" 
+                                          className={`text-xs ${
+                                            emailConfidence >= 90 
+                                              ? 'bg-green-500/10 text-green-600 border-green-500/20' 
+                                              : emailConfidence >= 70 
+                                              ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20'
+                                              : 'bg-orange-500/10 text-orange-600 border-orange-500/20'
+                                          }`}
+                                        >
+                                          <TrendingUp className="h-3 w-3 mr-1" />
+                                          {emailConfidence}% confidence
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Email accuracy confidence score</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                                
+                                {/* Primary Contact Badge */}
+                                {contact === company.primaryContact && (
+                                  <Badge className="text-xs bg-primary/10 text-primary border-primary/20">
+                                    Primary
+                                  </Badge>
+                                )}
+                              </div>
+                              
+                              {/* Title and Department */}
+                              {contact.title && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {contact.title}
+                                  {contact.department && ` • ${contact.department}`}
+                                </p>
+                              )}
+                            </div>
+                            
+                            {/* Action Button */}
+                            {contact.email && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSendEmailToContact(contact);
+                                }}
+                              >
+                                <Mail className="h-4 w-4 mr-1" />
+                                Send
+                              </Button>
                             )}
                           </div>
-                          {contact.email && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSendEmailToContact(contact);
-                              }}
-                            >
-                              <Mail className="h-4 w-4 mr-1" />
-                              Email
-                            </Button>
-                          )}
+                          
+                          {/* Contact Details */}
+                          <div className="space-y-2">
+                            {/* Email with Copy Button */}
+                            {contact.email && (
+                              <div className="flex items-center gap-2 group">
+                                <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                <a 
+                                  href={`mailto:${contact.email}`}
+                                  className="text-xs text-primary hover:underline font-mono flex-1 min-w-0 truncate"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {contact.email}
+                                </a>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCopyEmail(contact.email!, contact.name);
+                                  }}
+                                  title="Copy email"
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            )}
+                            
+                            {/* Phone */}
+                            {contact.phone && (
+                              <div className="flex items-center gap-2">
+                                <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                <a 
+                                  href={`tel:${contact.phone}`}
+                                  className="text-xs text-primary hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {contact.phone}
+                                </a>
+                              </div>
+                            )}
+                            
+                            {/* LinkedIn Profile */}
+                            {contactLinkedIn && (
+                              <div className="flex items-center gap-2">
+                                <Linkedin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                <a 
+                                  href={contactLinkedIn}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  View LinkedIn Profile
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        
-                        {contact.title && (
-                          <p className="text-xs text-muted-foreground">{contact.title}</p>
-                        )}
-                        
-                        {contact.email && (
-                          <a 
-                            href={`mailto:${contact.email}`}
-                            className="text-xs text-primary hover:underline font-mono inline-flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Mail className="h-3 w-3" />
-                            {contact.email}
-                          </a>
-                        )}
-                        
-                        {contact.linkedinUrl && (
-                          <a 
-                            href={contact.linkedinUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            LinkedIn Profile
-                          </a>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </>
