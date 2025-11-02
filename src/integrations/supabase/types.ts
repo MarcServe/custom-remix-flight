@@ -1397,7 +1397,7 @@ export type Database = {
           ai_analysis: Json | null
           body_html: string | null
           body_text: string | null
-          company_sequence_id: string
+          company_sequence_id: string | null
           created_at: string
           direction: string
           from_email: string
@@ -1413,7 +1413,7 @@ export type Database = {
           ai_analysis?: Json | null
           body_html?: string | null
           body_text?: string | null
-          company_sequence_id: string
+          company_sequence_id?: string | null
           created_at?: string
           direction: string
           from_email: string
@@ -1429,7 +1429,7 @@ export type Database = {
           ai_analysis?: Json | null
           body_html?: string | null
           body_text?: string | null
-          company_sequence_id?: string
+          company_sequence_id?: string | null
           created_at?: string
           direction?: string
           from_email?: string
