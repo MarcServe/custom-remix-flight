@@ -15,12 +15,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
 import { nangoClient } from "@/lib/integrations/nango";
+import { gmailDirectClient } from "@/lib/integrations/gmail-direct";
 import { NangoSetupInstructions } from "./NangoSetupInstructions";
+import { EMAIL_PROVIDER_CONFIG } from "@/config/email-providers";
 
 interface ConnectEmailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  provider: 'gmail' | 'outlook' | 'smtp';
+  provider: 'gmail' | 'gmail_direct' | 'outlook' | 'smtp';
   onSuccess: () => void;
 }
 
@@ -39,6 +41,36 @@ export function ConnectEmailDialog({
     password: "",
     secure: true,
   });
+
+  const handleDirectGmailConnect = async () => {
+    setLoading(true);
+    try {
+      const { success, error } = await gmailDirectClient.connectWithPopup();
+      
+      if (error) {
+        console.error('Direct Gmail OAuth error:', error);
+        toast.error("Failed to connect Gmail", {
+          description: error.message
+        });
+        return;
+      }
+
+      if (success) {
+        toast.success("Gmail connected successfully!", {
+          description: "Your Gmail account is now connected"
+        });
+        onSuccess();
+        onOpenChange(false);
+      }
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      toast.error("Connection failed", {
+        description: "An unexpected error occurred. Please try again."
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleOAuthConnect = async () => {
     setLoading(true);
@@ -156,11 +188,13 @@ export function ConnectEmailDialog({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
-            Connect {provider === 'gmail' ? 'Gmail' : provider === 'outlook' ? 'Outlook' : 'Business Email'}
+            Connect {provider === 'gmail_direct' ? 'Gmail (Direct)' : provider === 'gmail' ? 'Gmail' : provider === 'outlook' ? 'Outlook' : 'Business Email'}
           </DialogTitle>
           <DialogDescription>
             {provider === 'smtp'
               ? 'Enter your email server details to start sending'
+              : provider === 'gmail_direct'
+              ? 'Sign in with your Google account using direct OAuth'
               : `Sign in with your ${provider === 'gmail' ? 'Google' : 'Microsoft'} account`}
           </DialogDescription>
         </DialogHeader>
@@ -252,6 +286,25 @@ export function ConnectEmailDialog({
               </Button>
             </div>
           </ScrollArea>
+        ) : provider === 'gmail_direct' ? (
+          <div className="space-y-4">
+            <Alert className="border-primary/50 bg-primary/5">
+              <Info className="h-4 w-4 text-primary" />
+              <AlertDescription className="text-sm">
+                Direct Gmail integration. A new window will open to sign in. Make sure pop-ups are allowed in your browser.
+              </AlertDescription>
+            </Alert>
+
+            <Button
+              onClick={handleDirectGmailConnect}
+              disabled={loading}
+              className="w-full"
+              size="lg"
+            >
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {loading ? 'Connecting...' : 'Sign in with Google'}
+            </Button>
+          </div>
         ) : (
           <div className="space-y-4">
             {showSetupInstructions ? (

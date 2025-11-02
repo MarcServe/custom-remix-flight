@@ -3,6 +3,15 @@ project_id = "kgndpwzqohepotahnfeo"
 [functions.ai-provider]
 verify_jwt = true
 
+[functions.gmail-oauth-init]
+verify_jwt = true
+
+[functions.gmail-oauth-callback]
+verify_jwt = false  # OAuth callback from Google doesn't have JWT
+
+[functions.gmail-oauth-refresh]
+verify_jwt = true
+
 [functions.lead-finder]
 verify_jwt = true
 
