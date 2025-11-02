@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { EmailProviderCard } from "@/components/integrations/EmailProviderCard";
 import { ConnectEmailDialog } from "@/components/integrations/ConnectEmailDialog";
+import { VerifiedEmailDialog } from "@/components/integrations/VerifiedEmailDialog";
 import { nangoClient } from "@/lib/integrations/nango";
 import { toast } from "sonner";
 import { Mail, AlertTriangle, Info } from "lucide-react";
@@ -96,21 +97,45 @@ const emailProviders = [
 export default function EmailProviders() {
   const queryClient = useQueryClient();
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
+  const [verifiedEmailDialogOpen, setVerifiedEmailDialogOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'outlook' | 'smtp'>('gmail');
+  const [selectedApiProvider, setSelectedApiProvider] = useState<'resend' | 'sendgrid'>('resend');
 
-  const { data: connections, isLoading } = useQuery({
+  const { data: oauthConnections, isLoading: isLoadingOAuth } = useQuery({
     queryKey: ['nango-connections'],
     queryFn: async () => {
       // Get OAuth/SMTP connections from Nango
       const { data } = await nangoClient.getConnections();
-      
-      // Note: Resend/SendGrid are configured via API keys in Supabase secrets
-      // They don't create connection records, so they won't appear here
-      // The UI handles them differently in the connect flow
-      
       return data || [];
     },
   });
+
+  // Query for API-key provider connections (Resend/SendGrid)
+  const { data: apiConnections, isLoading: isLoadingApi } = useQuery({
+    queryKey: ['api-key-connections'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('crm_connections')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('provider', ['resend', 'sendgrid'])
+        .eq('status', 'active');
+
+      if (error) {
+        console.error('Error fetching API connections:', error);
+        return [];
+      }
+
+      return data || [];
+    },
+  });
+
+  // Merge both connection types
+  const connections = [...(oauthConnections || []), ...(apiConnections || [])];
+  const isLoading = isLoadingOAuth || isLoadingApi;
 
   // Real-time subscription for automatic updates
   useEffect(() => {
@@ -125,6 +150,7 @@ export default function EmailProviders() {
         },
         () => {
           queryClient.invalidateQueries({ queryKey: ['nango-connections'], refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: ['api-key-connections'], refetchType: 'active' });
         }
       )
       .subscribe();
@@ -146,32 +172,47 @@ export default function EmailProviders() {
   });
 
   const handleConnect = (providerId: string) => {
-    // Resend and SendGrid use API keys, not OAuth
+    // Resend and SendGrid now use the verified email dialog
     if (providerId === 'resend' || providerId === 'sendgrid') {
-      toast.info(`${providerId === 'resend' ? 'Resend' : 'SendGrid'} API Key Configuration`, {
-        description: 'Please configure the API key in your Supabase secrets to enable this provider.',
-        duration: 5000,
-        action: {
-          label: 'View Docs',
-          onClick: () => window.open('https://docs.lovable.dev/features/email', '_blank'),
-        },
-      });
+      setSelectedApiProvider(providerId as 'resend' | 'sendgrid');
+      setVerifiedEmailDialogOpen(true);
       return;
     }
 
-    // Only Gmail, Outlook, and SMTP use the OAuth/setup dialog
+    // Gmail, Outlook, and SMTP use the OAuth/setup dialog
     if (providerId === 'gmail' || providerId === 'outlook' || providerId === 'smtp') {
       setSelectedProvider(providerId as 'gmail' | 'outlook' | 'smtp');
       setConnectDialogOpen(true);
     }
   };
 
-  const handleDisconnect = (connectionId: string) => {
-    disconnectMutation.mutate(connectionId);
+  const handleDisconnect = async (connectionId: string) => {
+    // Check if this is an API-key connection (stored in crm_connections)
+    const apiConnection = apiConnections?.find(c => c.id === connectionId);
+    
+    if (apiConnection) {
+      // Delete from crm_connections table
+      const { error } = await supabase
+        .from('crm_connections')
+        .delete()
+        .eq('id', connectionId);
+
+      if (error) {
+        toast.error('Failed to disconnect');
+        console.error('Error disconnecting:', error);
+      } else {
+        toast.success('Connection removed');
+        queryClient.invalidateQueries({ queryKey: ['api-key-connections'] });
+      }
+    } else {
+      // OAuth/SMTP connection - use Nango
+      disconnectMutation.mutate(connectionId);
+    }
   };
 
   const handleConnectionSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ['nango-connections'], refetchType: 'active' });
+    queryClient.invalidateQueries({ queryKey: ['api-key-connections'], refetchType: 'active' });
   };
 
   // Check if user has any tracking-enabled connections
@@ -304,6 +345,13 @@ export default function EmailProviders() {
         open={connectDialogOpen}
         onOpenChange={setConnectDialogOpen}
         provider={selectedProvider}
+        onSuccess={handleConnectionSuccess}
+      />
+
+      <VerifiedEmailDialog
+        open={verifiedEmailDialogOpen}
+        onOpenChange={setVerifiedEmailDialogOpen}
+        provider={selectedApiProvider}
         onSuccess={handleConnectionSuccess}
       />
     </div>
