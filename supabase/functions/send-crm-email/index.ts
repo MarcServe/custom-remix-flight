@@ -255,6 +255,7 @@ serve(async (req) => {
 
           console.log(`Using Resend relay with custom from: ${senderName} <${connection.from_email}>`);
 
+          // Use Resend's default email as fallback since custom domain may not be verified
           const resendResponse = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
@@ -262,7 +263,7 @@ serve(async (req) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              from: `${senderName} <${connection.from_email}>`,
+              from: 'CRM <onboarding@resend.dev>',
               to: [toEmail],
               subject,
               text: emailBodyText,
