@@ -113,7 +113,7 @@ export function CompanySequenceDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-5xl h-[90vh] overflow-hidden">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -157,7 +157,7 @@ export function CompanySequenceDetailsDialog({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
+        <ScrollArea className="h-[calc(90vh-120px)] pr-4">
           <div className="space-y-6 py-4">
             {/* Overall Progress */}
             <Card className="border-2">
