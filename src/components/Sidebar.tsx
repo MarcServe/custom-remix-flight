@@ -64,7 +64,6 @@ const navigation: NavigationItem[] = [
     href: "#email-settings", 
     icon: Plug2,
     children: [
-      { name: "Quick Setup", href: "/integrations", icon: Plug2 },
       { name: "Email Providers", href: "/integrations/email-providers", icon: Send },
     ]
   },
