@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +52,7 @@ export function PersonDetailsDialog({
   onOpenChange,
   onUpdate,
 }: PersonDetailsDialogProps) {
+  const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState(person);
   const [loading, setLoading] = useState(false);
@@ -81,6 +83,7 @@ export function PersonDetailsDialog({
 
       toast.success("Person updated successfully");
       setIsEditing(false);
+      await queryClient.invalidateQueries({ queryKey: ["people"] });
       onUpdate?.();
     } catch (error) {
       console.error("Error updating person:", error);
@@ -104,6 +107,7 @@ export function PersonDetailsDialog({
 
       toast.success("Person deleted successfully");
       onOpenChange(false);
+      await queryClient.invalidateQueries({ queryKey: ["people"] });
       onUpdate?.();
     } catch (error) {
       console.error("Error deleting person:", error);
