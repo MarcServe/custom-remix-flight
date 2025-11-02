@@ -116,7 +116,16 @@ Deno.serve(async (req) => {
 
         if (!sendgridResponse.ok) {
           const errorText = await sendgridResponse.text();
-          throw new Error(`Failed to send test email via SendGrid: ${errorText}`);
+          console.error('SendGrid API error:', errorText);
+          
+          // Try to parse SendGrid error for better message
+          try {
+            const errorJson = JSON.parse(errorText);
+            const errorMsg = errorJson.errors?.[0]?.message || errorText;
+            throw new Error(`SendGrid error: ${errorMsg}`);
+          } catch {
+            throw new Error(`SendGrid error: ${errorText}`);
+          }
         }
 
         messageId = sendgridResponse.headers.get('X-Message-Id') || 'sendgrid-sent';
@@ -315,11 +324,19 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
         }),
       });
 
-      if (!sendgridResponse.ok) {
-        const errorText = await sendgridResponse.text();
-        console.error('SendGrid API error:', errorText);
-        throw new Error('Failed to send test email via SendGrid');
-      }
+        if (!sendgridResponse.ok) {
+          const errorText = await sendgridResponse.text();
+          console.error('SendGrid API error:', errorText);
+          
+          // Try to parse SendGrid error for better message
+          try {
+            const errorJson = JSON.parse(errorText);
+            const errorMsg = errorJson.errors?.[0]?.message || errorText;
+            throw new Error(`SendGrid error: ${errorMsg}`);
+          } catch {
+            throw new Error(`SendGrid error: ${errorText}`);
+          }
+        }
 
       messageId = sendgridResponse.headers.get('X-Message-Id') || 'sendgrid-sent';
       console.log('Test email sent successfully via SendGrid:', messageId);
