@@ -22,19 +22,31 @@ serve(async (req: Request) => {
     // Get user from request
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
+      console.error('No authorization header present');
       throw new Error('No authorization header');
     }
 
+    console.log('Auth header present, creating Supabase client...');
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
       { global: { headers: { Authorization: authHeader } } }
     );
 
+    console.log('Getting user from auth token...');
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      throw new Error('Unauthorized');
+    
+    if (userError) {
+      console.error('Error getting user:', userError);
+      throw new Error(`Failed to authenticate user: ${userError.message}`);
     }
+    
+    if (!user) {
+      console.error('No user found in session');
+      throw new Error('User not found in session');
+    }
+    
+    console.log('User authenticated successfully:', user.id);
 
     // Build OAuth URL
     const redirectUri = `${SUPABASE_URL}/functions/v1/gmail-oauth-callback`;
