@@ -383,7 +383,8 @@ export function CompanyDetailsDialog({
             <TabsTrigger value="activity">Activity Timeline</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="flex-1 overflow-y-auto px-6 pb-6 space-y-6 pt-4 mt-0 data-[state=inactive]:hidden">
+          <TabsContent value="overview" className="data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:flex-1 data-[state=active]:overflow-hidden mt-0">
+            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-6 pt-4">
             {/* Overview Section */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -712,9 +713,11 @@ export function CompanyDetailsDialog({
                  </Button>
                )}
                 </div>
+              </div>
           </TabsContent>
 
-          <TabsContent value="activity" className="flex-1 overflow-y-auto px-6 pb-6 space-y-4 pt-4 mt-0 data-[state=inactive]:hidden">
+          <TabsContent value="activity" className="data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:flex-1 data-[state=active]:overflow-hidden mt-0">
+            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                     Recent Activity
@@ -752,6 +755,7 @@ export function CompanyDetailsDialog({
                      <p className="text-xs mt-1">Start tracking interactions with this company</p>
                  </div>
                 )}
+               </div>
           </TabsContent>
         </Tabs>
       </DialogContent>
