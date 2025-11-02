@@ -156,26 +156,6 @@ export function CompanySequenceDetailsDialog({
     setEditedContent({ subject: '', body: '' });
   };
 
-  const handleActivateAndSend = async () => {
-    try {
-      // First activate the sequence
-      await updateStatusMutation.mutateAsync({ id: sequence.id, status: 'active' });
-      
-      // Wait for database update to propagate
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Then send the first email
-      await sendEmailMutation.mutateAsync({
-        companySequenceId: sequence.id,
-        stepNumber: 0
-      });
-      toast.success('Sequence activated and first email sent!');
-    } catch (error) {
-      console.error('Failed to activate sequence:', error);
-      toast.error('Failed to activate sequence. Please try again.');
-    }
-  };
-
   const totalSteps = sequence.email_sequences.steps?.length || 0;
   const progress = totalSteps > 0 ? Math.round(((sequence.current_step + 1) / totalSteps) * 100) : 0;
 
@@ -225,12 +205,12 @@ export function CompanySequenceDetailsDialog({
                 <Button
                   size="sm"
                   variant="default"
-                  onClick={handleActivateAndSend}
-                  disabled={updateStatusMutation.isPending || sendEmailMutation.isPending}
+                  onClick={() => handleStatusChange('active')}
+                  disabled={updateStatusMutation.isPending}
                   className="bg-gradient-primary"
                 >
-                  <Send className="h-4 w-4 mr-2" />
-                  {sendEmailMutation.isPending ? 'Sending...' : 'Activate & Send First Email'}
+                  <Play className="h-4 w-4 mr-2" />
+                  Activate Sequence
                 </Button>
               )}
               {sequence.status === 'active' && (

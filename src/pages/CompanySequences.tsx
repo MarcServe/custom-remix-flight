@@ -448,30 +448,12 @@ export default function CompanySequences() {
                         {sequence.status === 'draft' && (
                           <Button
                             size="sm"
-                            onClick={async () => {
-                              try {
-                                // First activate the sequence
-                                await handleStatusChange(sequence.id, 'active');
-                                
-                                // Wait for database update to propagate
-                                await new Promise(resolve => setTimeout(resolve, 500));
-                                
-                                // Then send the first email
-                                await sendEmailMutation.mutateAsync({
-                                  companySequenceId: sequence.id,
-                                  stepNumber: 0
-                                });
-                                toast.success('Sequence activated and first email sent!');
-                              } catch (error) {
-                                console.error('Failed to activate sequence:', error);
-                                toast.error('Failed to activate sequence. Please try again.');
-                              }
-                            }}
-                            disabled={sendEmailMutation.isPending || updateStatusMutation.isPending}
+                            onClick={() => handleStatusChange(sequence.id, 'active')}
+                            disabled={updateStatusMutation.isPending}
                             className="bg-gradient-primary hover:opacity-90"
                           >
-                            <Send className="h-4 w-4 mr-2" />
-                            {sendEmailMutation.isPending ? 'Sending...' : 'Activate & Send First Email'}
+                            <Play className="h-4 w-4 mr-2" />
+                            Activate Sequence
                           </Button>
                         )}
                         {sequence.status === 'active' && (
