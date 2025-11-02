@@ -1074,13 +1074,6 @@ export type Database = {
             referencedRelation: "company_sequences"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "email_activities_contact_id_fkey"
-            columns: ["contact_id"]
-            isOneToOne: false
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
-          },
         ]
       }
       email_bounce_events: {
