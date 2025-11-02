@@ -38,15 +38,22 @@ const navigation: NavigationItem[] = [
   { name: "Lead Finder", href: "/lead-finder", icon: Sparkles },
   { name: "Pipeline", href: "/pipeline", icon: TrendingUp },
   { 
+    name: "Sequences", 
+    href: "#sequences", 
+    icon: Mail,
+    children: [
+      { name: "All Sequences", href: "/sequences", icon: Mail },
+      { name: "Auto-Responses", href: "/auto-responses", icon: Sparkles },
+      { name: "Active Campaigns", href: "/company-sequences", icon: TrendingUp },
+    ]
+  },
+  { 
     name: "Campaigns", 
     href: "#campaigns", 
     icon: Send,
     children: [
       { name: "Overview", href: "/campaigns", icon: Briefcase },
-      { name: "Sequences", href: "/sequences", icon: Mail },
-      { name: "Auto-Responses", href: "/auto-responses", icon: Sparkles },
       { name: "All Campaigns", href: "/all-campaigns", icon: Activity },
-      { name: "Active Campaigns", href: "/company-sequences", icon: TrendingUp },
     ]
   },
   { name: "Conversations", href: "/conversations", icon: MessageSquare },

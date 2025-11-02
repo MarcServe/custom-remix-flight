@@ -554,7 +554,7 @@ export default function Sequences() {
                 </Card>
 
                 {/* Apply to Company Section */}
-                <Card className="border-2 border-primary/20 shadow-md">
+                <Card className="border-2 border-primary/20 shadow-md" data-apply-section>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
                       <Building2 className="h-5 w-5 text-primary" />
@@ -713,18 +713,44 @@ export default function Sequences() {
                             <Layers className="h-4 w-4 text-primary" />
                             {sequence.steps?.length || 0} steps
                           </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(sequence.id);
-                            }}
-                            disabled={deleteMutation.isPending}
-                            className="h-8 hover:bg-destructive/10 hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Ask user to select a company first
+                                if (!personalizeCompanyId) {
+                                  toast({
+                                    title: "Select a Company",
+                                    description: "Please select a company from the 'Apply to Company' section below to start this sequence.",
+                                  });
+                                  // Scroll to the apply section
+                                  const applySection = document.querySelector('[data-apply-section]');
+                                  applySection?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                  return;
+                                }
+                                setSelectedSequence(sequence);
+                                setPersonalizeDialogOpen(true);
+                              }}
+                              className="h-8 text-xs"
+                            >
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              Start
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(sequence.id);
+                              }}
+                              disabled={deleteMutation.isPending}
+                              className="h-8 hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                         {sequence.steps?.[0] && (
                           <div className="text-xs border-t pt-3 space-y-1">
@@ -783,11 +809,13 @@ export default function Sequences() {
             if (!open) {
               setPersonalizeCompanyId("");
               setPersonalizeCompanyName("");
+              setSelectedSequence(null);
             }
           }}
           companyId={personalizeCompanyId}
           companyName={personalizeCompanyName}
           defaultSendImmediately={sendImmediately}
+          defaultSequenceId={selectedSequence?.id}
         />
       )}
     </div>

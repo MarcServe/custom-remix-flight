@@ -18,6 +18,7 @@ interface PersonalizeSequenceDialogProps {
   companyName: string;
   contactId?: string;
   defaultSendImmediately?: boolean;
+  defaultSequenceId?: string;
 }
 
 export function PersonalizeSequenceDialog({
@@ -27,8 +28,9 @@ export function PersonalizeSequenceDialog({
   companyName,
   contactId,
   defaultSendImmediately = false,
+  defaultSequenceId,
 }: PersonalizeSequenceDialogProps) {
-  const [selectedSequenceId, setSelectedSequenceId] = useState<string>("");
+  const [selectedSequenceId, setSelectedSequenceId] = useState<string>(defaultSequenceId || "");
   const [tone, setTone] = useState<'professional' | 'casual' | 'technical'>('professional');
   const [sendImmediately, setSendImmediately] = useState(defaultSendImmediately);
   const [showPreview, setShowPreview] = useState(false);
@@ -45,12 +47,15 @@ export function PersonalizeSequenceDialog({
 
   const sequences = sequencesData?.data || [];
 
-  // Sync sendImmediately with the prop when dialog opens
+  // Sync with props when dialog opens
   useEffect(() => {
     if (open) {
       setSendImmediately(defaultSendImmediately);
+      if (defaultSequenceId) {
+        setSelectedSequenceId(defaultSequenceId);
+      }
     }
-  }, [open, defaultSendImmediately]);
+  }, [open, defaultSendImmediately, defaultSequenceId]);
 
   const handlePersonalize = async () => {
     if (!selectedSequenceId) return;
