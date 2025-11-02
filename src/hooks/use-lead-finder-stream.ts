@@ -182,22 +182,10 @@ export const useLeadFinderStream = () => {
             usage: stored.usage,
             traceUrl: stored.traceUrl,
             hasActiveSearch: false,
+            hasStoredResults: false,
             progress: 100,
             currentStatus: 'Restored from previous search',
           }));
-
-          // Calculate age of results
-          const ageInMinutes = Math.floor((Date.now() - stored.timestamp) / 60000);
-          const ageText = ageInMinutes < 60 
-            ? `${ageInMinutes} minutes ago`
-            : `${Math.floor(ageInMinutes / 60)} hours ago`;
-
-          // Show toast notification
-          toast({
-            title: '✨ Previous Search Restored',
-            description: `Displaying ${stored.leads.length} leads from ${ageText}`,
-            duration: 5000,
-          });
         }
       } catch (error) {
         console.error('Error loading search from DB:', error);
