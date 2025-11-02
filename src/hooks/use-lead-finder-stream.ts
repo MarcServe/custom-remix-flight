@@ -137,11 +137,12 @@ export const useLeadFinderStream = () => {
 
           const leadData = leads?.map(l => l.company_data as unknown as Lead) || [];
 
-          console.log('Active search found:', leadData.length, 'leads');
+          console.log('Active search found:', leadData.length, 'leads in DB');
 
           setState(prev => ({
             ...prev,
-            leads: leadData,
+            // Only use DB leads if we don't already have leads from localStorage
+            leads: prev.leads.length > 0 ? prev.leads : leadData,
             stats: (activeSearch.stats as unknown as Stats) || prev.stats,
             usage: activeSearch.usage ? {
               promptTokens: (activeSearch.usage as any).promptTokens || 0,
@@ -215,8 +216,17 @@ export const useLeadFinderStream = () => {
             hasActiveSearch: search.status !== 'complete',
           }));
 
-          // If search is complete, cleanup
+          // If search is complete, save results and cleanup
           if (search.status === 'complete') {
+            // Don't reload - keep existing leads in state
+            setState(prev => ({
+              ...prev,
+              isLoading: false,
+              hasActiveSearch: false,
+              currentStatus: 'Search complete',
+              progress: 100,
+            }));
+            
             if (realtimeChannelRef.current) {
               supabase.removeChannel(realtimeChannelRef.current);
             }
@@ -293,7 +303,7 @@ export const useLeadFinderStream = () => {
 
         if (!search) return;
 
-        // Update search state
+        // Update search state but never clear leads
         setState(prev => ({
           ...prev,
           progress: search.progress || prev.progress,
@@ -310,25 +320,47 @@ export const useLeadFinderStream = () => {
           hasActiveSearch: search.status !== 'complete',
         }));
 
-        // Load leads
-        const { data: leads } = await supabase
+        // Load new leads from database (append only, don't replace)
+        const { data: dbLeads } = await supabase
           .from('lead_finder_leads')
           .select('*')
           .eq('search_id', searchId)
           .order('created_at', { ascending: true });
 
-        if (leads) {
-          const leadData = leads.map(l => l.company_data as unknown as Lead);
-          setState(prev => ({
-            ...prev,
-            leads: leadData,
-          }));
+        if (dbLeads && dbLeads.length > 0) {
+          const leadData = dbLeads.map(l => l.company_data as unknown as Lead);
+          setState(prev => {
+            // Only update if we got more leads than we have
+            if (leadData.length > prev.leads.length) {
+              console.log(`Polling found ${leadData.length} leads (had ${prev.leads.length})`);
+              return {
+                ...prev,
+                leads: leadData,
+              };
+            }
+            return prev;
+          });
         }
 
-        // Stop polling if search is complete
+        // Stop polling and save results when complete
         if (search.status === 'complete' && pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
+
+          // Save final results to localStorage
+          setState(prev => {
+            if (prev.leads.length > 0) {
+              leadFinderStorage.save({
+                leads: prev.leads,
+                stats: prev.stats,
+                usage: prev.usage,
+                traceUrl: prev.traceUrl,
+                searchParams: searchParamsRef.current!,
+              });
+              leadFinderStorage.markSearchComplete(searchId);
+            }
+            return prev;
+          });
         }
       } catch (error) {
         console.error('Polling error:', error);
