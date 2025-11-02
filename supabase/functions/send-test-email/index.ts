@@ -26,6 +26,7 @@ Deno.serve(async (req) => {
       companyName,
       footerText,
       signature,
+      provider, // New field to specify provider directly
     } = await req.json();
     
     console.log('Sending test email to:', testEmail);
@@ -45,15 +46,21 @@ Deno.serve(async (req) => {
       throw new Error('Invalid authorization');
     }
 
-    // Get sender connection
-    const { data: connection, error: connError } = await supabase
-      .from('crm_connections')
-      .select('*')
-      .eq('id', senderConnectionId)
-      .single();
+    // Get sender connection (optional for API-key providers like Resend/SendGrid)
+    let connection = null;
+    if (senderConnectionId) {
+      const { data: conn } = await supabase
+        .from('crm_connections')
+        .select('*')
+        .eq('id', senderConnectionId)
+        .single();
+      connection = conn;
+    }
 
-    if (connError || !connection) {
-      throw new Error('Sender connection not found');
+    // For API-key providers (resend, sendgrid), connection is optional
+    // For OAuth providers (gmail, outlook), connection is required
+    if (!connection && provider && !['resend', 'sendgrid'].includes(provider)) {
+      throw new Error('Sender connection required for this provider');
     }
 
     // Get user profile for signature
@@ -70,7 +77,8 @@ Deno.serve(async (req) => {
       .single();
 
     // Determine which email provider to use
-    const emailProvider = businessProfile?.email_provider || 'resend';
+    const emailProvider = provider || businessProfile?.email_provider || 'resend';
+    console.log('Using email provider:', emailProvider);
     
     // For template preview test
     if (templateStyle) {
@@ -111,7 +119,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
               subject: '🎨 Test Email - Your Email Template Preview',
             }],
             from: {
-              email: connection.from_email || 'noreply@yourdomain.com',
+              email: connection?.from_email || 'noreply@yourdomain.com',
               name: companyName || 'CRM',
             },
             content: [
@@ -167,10 +175,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
       );
     }
 
-    // Original bulk campaign test logic
-    if (!connection) {
-      throw new Error('Connection required for bulk campaign test');
-    }
+    // Original bulk campaign test logic (connection optional for API-key providers)
 
     // Personalize content using the first recipient's data
     const personalizedSubject2 = subject
@@ -190,7 +195,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
     const bodyHtml = renderEmailTemplate('professional', {
       body: personalizedBody2 + signatureText,
       senderName: userProfile?.full_name || 'Team',
-      senderEmail: connection.from_email || (connection.metadata as any)?.email || '',
+      senderEmail: connection?.from_email || (connection?.metadata as any)?.email || user.email || '',
       senderTitle: userProfile?.job_title,
       companyName: businessProfile?.company_name,
     });
@@ -211,7 +216,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
             subject: `[TEST] ${personalizedSubject2}`,
           }],
           from: {
-            email: connection.from_email || 'noreply@yourdomain.com',
+            email: connection?.from_email || user.email || 'noreply@yourdomain.com',
             name: userProfile?.full_name || 'Team',
           },
           content: [
@@ -247,7 +252,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: connection.from_email || `${userProfile?.full_name || 'Team'} <onboarding@resend.dev>`,
+          from: connection?.from_email || `${userProfile?.full_name || 'Team'} <onboarding@resend.dev>`,
           to: [testEmail],
           subject: `[TEST] ${personalizedSubject2}`,
           html: bodyHtml,

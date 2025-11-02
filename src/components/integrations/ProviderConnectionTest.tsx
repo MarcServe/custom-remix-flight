@@ -35,8 +35,10 @@ export function ProviderConnectionTest({ provider, connectionId }: ProviderConne
       const { data, error } = await supabase.functions.invoke('send-test-email', {
         body: {
           provider,
-          connectionId,
+          senderConnectionId: connectionId,
           testEmail: user.email,
+          recipientName: user.user_metadata?.full_name || 'Test User',
+          recipientEmail: user.email,
         },
       });
 
