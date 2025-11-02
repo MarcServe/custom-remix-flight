@@ -9,63 +9,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { EmailProviderCard } from "@/components/integrations/EmailProviderCard";
+import { EmailConnectionCard } from "@/components/integrations/EmailConnectionCard";
 import { ConnectEmailDialog } from "@/components/integrations/ConnectEmailDialog";
 import { EmailDeliverabilityDialog } from "@/components/integrations/EmailDeliverabilityDialog";
 import { nangoClient } from "@/lib/integrations/nango";
 import { toast } from "sonner";
-import { Mail, Shield, Loader2 } from "lucide-react";
+import { Mail, Shield, HelpCircle, Loader2, ArrowRight, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const emailProviders = [
   {
     id: 'gmail' as const,
     name: 'Gmail',
-    description: 'Quick connect with Google OAuth',
+    description: 'Quick connect with Google',
     icon: '📧',
-    capabilities: {
-      tracking: false,
-      opens: false,
-      clicks: false,
-      replies: false,
-      bounceDetection: false,
-      dailyLimit: 500,
-      webhookSupport: false,
-      sendingMethod: 'direct' as const,
-    },
   },
   {
     id: 'outlook' as const,
     name: 'Outlook',
-    description: 'Quick connect with Microsoft OAuth',
+    description: 'Quick connect with Microsoft',
     icon: '📨',
-    capabilities: {
-      tracking: false,
-      opens: false,
-      clicks: false,
-      replies: false,
-      bounceDetection: false,
-      dailyLimit: 300,
-      webhookSupport: false,
-      sendingMethod: 'direct' as const,
-    },
   },
   {
     id: 'smtp' as const,
     name: 'Business Email',
-    description: 'SMTP with optional Resend relay for tracking',
+    description: 'Use your own email server',
     icon: '⚙️',
-    capabilities: {
-      tracking: false,
-      opens: false,
-      clicks: false,
-      replies: false,
-      bounceDetection: false,
-      dailyLimit: null,
-      webhookSupport: false,
-      sendingMethod: 'direct' as const,
-    },
   },
 ];
 
@@ -74,6 +43,7 @@ export default function Integrations() {
   const queryClient = useQueryClient();
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'outlook' | 'smtp'>('gmail');
+  const [deliverabilityDialogOpen, setDeliverabilityDialogOpen] = useState(false);
   const [testEmailDialogOpen, setTestEmailDialogOpen] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
@@ -168,10 +138,10 @@ export default function Integrations() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <Mail className="h-7 w-7 text-primary" />
-            Email Connections
+            Email Settings
           </h1>
           <p className="text-muted-foreground mt-1">
-            Connect and manage your email accounts with detailed tracking capabilities
+            Connect your email account in just a few clicks to start sending campaigns
           </p>
         </div>
         <div className="flex gap-2">
@@ -190,7 +160,7 @@ export default function Integrations() {
                 }}
               >
                 <Mail className="h-4 w-4 mr-2" />
-                Send Test
+                Test Email
               </Button>
             </TooltipTrigger>
             <TooltipContent>Send a test email to verify your connection</TooltipContent>
@@ -204,54 +174,144 @@ export default function Integrations() {
                 onClick={() => window.open('/campaigns?tab=health', '_self')}
               >
                 <Shield className="h-4 w-4 mr-2" />
-                Email Health
+                Check Health
               </Button>
             </TooltipTrigger>
-            <TooltipContent>View email deliverability metrics</TooltipContent>
+            <TooltipContent>View email deliverability and health metrics</TooltipContent>
           </Tooltip>
         </div>
       </div>
 
-      <Tabs defaultValue="providers" className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-1">
-          <TabsTrigger value="providers">Email Providers</TabsTrigger>
-        </TabsList>
+      {/* New Email Providers Management Banner */}
+      <Alert className="border-info bg-info/10">
+        <Info className="h-4 w-4 text-info" />
+        <AlertDescription className="flex items-center justify-between">
+          <div>
+            <strong className="text-info">New!</strong> 
+            <span className="text-info ml-2">
+              Manage all your email providers in one place with clear tracking status and capabilities.
+            </span>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => navigate('/integrations/email-providers')}
+            className="ml-4 border-info text-info hover:bg-info/10"
+          >
+            View Email Providers
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Button>
+        </AlertDescription>
+      </Alert>
 
-        <TabsContent value="providers" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl">Connected Email Providers</CardTitle>
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="text-xl">Your Email Accounts</CardTitle>
               <CardDescription>
-                Connect Gmail, Outlook, or your own SMTP server. Each provider shows detailed capabilities and connection status.
+                Choose how you want to send emails. Quick connect with Gmail or Outlook, or use your own business email server.
               </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {emailProviders.map((provider) => {
-                  const connection = connections?.find(
-                    (c) => c.provider === provider.id && c.status !== 'disconnected'
-                  );
-                  return (
-                    <EmailProviderCard
-                      key={provider.id}
-                      provider={provider}
-                      connection={connection}
-                      onConnect={() => handleConnect(provider.id)}
-                      onDisconnect={handleDisconnect}
-                    />
-                  );
-                })}
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <HelpCircle className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="max-w-xs">
+                <p className="text-sm">
+                  <strong>Quick Connect (Recommended):</strong> Use Gmail or Outlook for instant setup with OAuth authentication.
+                  <br /><br />
+                  <strong>Business Email:</strong> Use SMTP if you have your own email server or use a service like Resend for better deliverability.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            {emailProviders.map((provider) => {
+              const connection = connections?.find(
+                (c) => c.provider === provider.id && c.status !== 'disconnected'
+              );
+              return (
+                <EmailConnectionCard
+                  key={provider.id}
+                  provider={provider}
+                  connection={connection}
+                  onConnect={() => handleConnect(provider.id)}
+                  onDisconnect={handleDisconnect}
+                />
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="text-xl">Email Health</CardTitle>
+              <CardDescription>
+                Test your email content for spam triggers and deliverability
+              </CardDescription>
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <HelpCircle className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="max-w-xs">
+                <p className="text-sm">
+                  Check your email content before sending to avoid spam filters and improve delivery rates. 
+                  We analyze subject lines, body content, and technical setup to give you a health score.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {businessDomain ? (
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Domain: {businessDomain}</p>
+                  <p className="text-sm text-muted-foreground">Your email domain is set up</p>
+                </div>
+                <Badge variant="outline" className="bg-success/10 text-success border-success/20">
+                  🟢 Active
+                </Badge>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            </div>
+          ) : (
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground">Connect a business email to see domain health</p>
+            </div>
+          )}
+          
+          <Button 
+            variant="outline" 
+            onClick={() => setDeliverabilityDialogOpen(true)}
+            className="w-full"
+          >
+            Test Email Content
+          </Button>
+        </CardContent>
+      </Card>
 
       <ConnectEmailDialog
         open={connectDialogOpen}
         onOpenChange={setConnectDialogOpen}
         provider={selectedProvider}
         onSuccess={handleConnectionSuccess}
+      />
+      
+      <EmailDeliverabilityDialog
+        open={deliverabilityDialogOpen}
+        onOpenChange={setDeliverabilityDialogOpen}
       />
 
       {/* Test Email Dialog */}
