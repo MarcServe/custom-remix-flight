@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 export default function EmailWebhookSetup() {
-  const webhookUrl = `https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/process-inbound-emails`;
+  const inboundWebhookUrl = `https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/process-inbound-emails`;
+  const engagementWebhookUrl = `https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook`;
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -30,17 +31,35 @@ export default function EmailWebhookSetup() {
         </AlertDescription>
       </Alert>
 
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-4">Webhook Endpoint URL</h2>
-        <div className="flex items-center gap-2 p-3 bg-muted rounded-md font-mono text-sm">
-          <code className="flex-1 overflow-x-auto">{webhookUrl}</code>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => copyToClipboard(webhookUrl)}
-          >
-            <Copy className="h-4 w-4" />
-          </Button>
+      <Card className="p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold mb-2">Inbound Email Webhook</h2>
+          <p className="text-sm text-muted-foreground mb-3">For processing replies and inbound emails</p>
+          <div className="flex items-center gap-2 p-3 bg-muted rounded-md font-mono text-sm">
+            <code className="flex-1 overflow-x-auto">{inboundWebhookUrl}</code>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => copyToClipboard(inboundWebhookUrl)}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-lg font-semibold mb-2">Email Engagement Webhook</h2>
+          <p className="text-sm text-muted-foreground mb-3">For tracking opens, clicks, bounces, and other events</p>
+          <div className="flex items-center gap-2 p-3 bg-muted rounded-md font-mono text-sm">
+            <code className="flex-1 overflow-x-auto">{engagementWebhookUrl}</code>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => copyToClipboard(engagementWebhookUrl)}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -117,11 +136,11 @@ export default function EmailWebhookSetup() {
                 <div>
                   <strong>Destination URL:</strong>
                   <div className="flex items-center gap-2 mt-1">
-                    <code className="flex-1 px-2 py-1 bg-background rounded overflow-x-auto text-xs">{webhookUrl}</code>
+                    <code className="flex-1 px-2 py-1 bg-background rounded overflow-x-auto text-xs">{inboundWebhookUrl}</code>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => copyToClipboard(webhookUrl)}
+                      onClick={() => copyToClipboard(inboundWebhookUrl)}
                     >
                       <Copy className="h-3 w-3" />
                     </Button>
@@ -202,11 +221,11 @@ export default function EmailWebhookSetup() {
                 <div>
                   <strong>Endpoint URL:</strong>
                   <div className="flex items-center gap-2 mt-1">
-                    <code className="flex-1 px-2 py-1 bg-background rounded overflow-x-auto text-xs">{webhookUrl}</code>
+                    <code className="flex-1 px-2 py-1 bg-background rounded overflow-x-auto text-xs">{inboundWebhookUrl}</code>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => copyToClipboard(webhookUrl)}
+                      onClick={() => copyToClipboard(inboundWebhookUrl)}
                     >
                       <Copy className="h-3 w-3" />
                     </Button>
@@ -249,14 +268,96 @@ export default function EmailWebhookSetup() {
       </Tabs>
 
       <Card className="p-6 bg-muted/50">
+        <h3 className="text-lg font-semibold mb-3">Engagement Tracking Setup</h3>
+        <p className="text-sm text-muted-foreground mb-3">
+          In addition to inbound email webhooks, you should configure engagement tracking webhooks to receive notifications when recipients open emails, click links, or when emails bounce.
+        </p>
+        
+        <Tabs defaultValue="sendgrid-engagement" className="w-full mt-4">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="sendgrid-engagement">SendGrid</TabsTrigger>
+            <TabsTrigger value="resend-engagement">Resend</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="sendgrid-engagement" className="space-y-3 mt-4">
+            <div className="text-sm space-y-2">
+              <h4 className="font-semibold">Configure SendGrid Event Webhook:</h4>
+              <ol className="list-decimal list-inside space-y-2 ml-2">
+                <li>Go to <a href="https://app.sendgrid.com/settings/mail_settings" target="_blank" rel="noopener noreferrer" className="underline">SendGrid Mail Settings</a></li>
+                <li>Enable "Event Webhook"</li>
+                <li>
+                  Set the HTTP Post URL to:
+                  <div className="flex items-center gap-2 mt-1 p-2 bg-background rounded font-mono text-xs">
+                    <code className="flex-1 overflow-x-auto">{engagementWebhookUrl}</code>
+                    <Button variant="ghost" size="sm" onClick={() => copyToClipboard(engagementWebhookUrl)}>
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </li>
+                <li>
+                  Select these events to track:
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    <Badge variant="secondary">Delivered</Badge>
+                    <Badge variant="secondary">Opened</Badge>
+                    <Badge variant="secondary">Clicked</Badge>
+                    <Badge variant="secondary">Bounced</Badge>
+                    <Badge variant="secondary">Spam Report</Badge>
+                  </div>
+                </li>
+                <li>Save settings and test by sending an email</li>
+              </ol>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="resend-engagement" className="space-y-3 mt-4">
+            <div className="text-sm space-y-2">
+              <h4 className="font-semibold">Configure Resend Event Webhook:</h4>
+              <ol className="list-decimal list-inside space-y-2 ml-2">
+                <li>Go to <a href="https://resend.com/webhooks" target="_blank" rel="noopener noreferrer" className="underline">Resend Webhooks</a></li>
+                <li>Create a new webhook with:
+                  <div className="flex items-center gap-2 mt-1 p-2 bg-background rounded font-mono text-xs">
+                    <code className="flex-1 overflow-x-auto">{engagementWebhookUrl}</code>
+                    <Button variant="ghost" size="sm" onClick={() => copyToClipboard(engagementWebhookUrl)}>
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </li>
+                <li>
+                  Select these events:
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    <Badge variant="secondary">email.delivered</Badge>
+                    <Badge variant="secondary">email.opened</Badge>
+                    <Badge variant="secondary">email.clicked</Badge>
+                    <Badge variant="secondary">email.bounced</Badge>
+                  </div>
+                </li>
+                <li>Save and test the webhook</li>
+              </ol>
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        <Button
+          variant="outline"
+          className="mt-4"
+          onClick={() => window.open(`https://supabase.com/dashboard/project/kgndpwzqohepotahnfeo/functions/email-webhook/logs`, '_blank')}
+        >
+          <ExternalLink className="h-4 w-4 mr-2" />
+          View Engagement Webhook Logs
+        </Button>
+      </Card>
+
+      <Card className="p-6 bg-muted/50">
         <h3 className="text-lg font-semibold mb-3">Testing Your Setup</h3>
         <ol className="space-y-2 text-sm list-decimal list-inside">
-          <li>Configure the webhook as described above</li>
+          <li>Configure both webhooks (inbound + engagement) as described above</li>
           <li>Start a sequence with a company and send the first email</li>
-          <li>Reply to that email from the recipient's email address</li>
-          <li>Check the function logs to verify the webhook received the reply</li>
-          <li>Check the Conversations page to see the reply appear in the thread</li>
-          <li>If auto-response is enabled, verify an AI response was generated</li>
+          <li>Open the email to trigger an "opened" event</li>
+          <li>Click a link in the email to trigger a "clicked" event</li>
+          <li>Reply to the email to test inbound reply detection</li>
+          <li>Check function logs to verify webhooks are receiving events</li>
+          <li>Check the Conversations and Campaigns pages to see real-time updates</li>
+          <li>If auto-response is enabled, verify AI responses are generated for replies</li>
         </ol>
       </Card>
     </div>

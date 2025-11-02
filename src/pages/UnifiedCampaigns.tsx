@@ -10,6 +10,7 @@ import { Mail, Building2, Send, TrendingUp, Users, Activity, ArrowRight, Sparkle
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { Progress } from '@/components/ui/progress';
+import { useEmailActivitiesRealtime, useCompanySequencesRealtime } from '@/hooks/use-realtime';
 
 interface BulkCampaign {
   id: string;
@@ -56,6 +57,11 @@ interface UnifiedActivity {
 export default function UnifiedCampaigns() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  
+  // Subscribe to realtime updates
+  useEmailActivitiesRealtime();
+  useCompanySequencesRealtime();
+  
   const [selectedTab, setSelectedTab] = useState('all');
 
   // Real-time updates for email activities

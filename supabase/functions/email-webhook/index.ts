@@ -20,19 +20,43 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Parse the event type and data
-    // This structure depends on your email provider (Resend, SendGrid, etc.)
-    const { type, data } = payload;
-    
-    if (!type || !data) {
-      throw new Error('Invalid webhook payload');
-    }
+    // Parse webhook based on provider
+    let eventType: string;
+    let emailId: string;
+    let eventData: any;
 
-    const emailId = data.email_id || data.id;
+    // Detect provider and normalize webhook format
+    if (payload.type && payload.data) {
+      // Resend format
+      eventType = payload.type;
+      eventData = payload.data;
+      emailId = eventData.email_id || eventData.id;
+      console.log('Detected Resend webhook format');
+    } else if (payload.event && payload.sg_message_id) {
+      // SendGrid format
+      const sgEventMap: Record<string, string> = {
+        'delivered': 'email.delivered',
+        'open': 'email.opened',
+        'click': 'email.clicked',
+        'bounce': 'email.bounced',
+        'dropped': 'email.bounced',
+        'spamreport': 'email.spam',
+        'unsubscribe': 'email.unsubscribed',
+      };
+      eventType = sgEventMap[payload.event] || payload.event;
+      emailId = payload.sg_message_id;
+      eventData = payload;
+      console.log('Detected SendGrid webhook format:', payload.event);
+    } else {
+      console.error('Unknown webhook format:', payload);
+      throw new Error('Invalid webhook payload format');
+    }
     
     if (!emailId) {
       throw new Error('No email ID in webhook payload');
     }
+
+    console.log(`Processing event: ${eventType} for email: ${emailId}`);
 
     // Find the email activity by external message ID
     const { data: activity, error: findError } = await supabase
@@ -52,32 +76,39 @@ serve(async (req) => {
     // Update based on event type
     const updates: any = { metadata: activity.metadata || {} };
 
-    switch (type) {
+    switch (eventType) {
       case 'email.opened':
         updates.opened_at = new Date().toISOString();
         updates.metadata.opened = true;
         updates.metadata.open_count = (updates.metadata.open_count || 0) + 1;
+        updates.metadata.last_open = new Date().toISOString();
+        console.log(`Email opened: ${emailId}, count: ${updates.metadata.open_count}`);
         break;
 
       case 'email.clicked':
         updates.metadata.clicked = true;
         updates.metadata.click_count = (updates.metadata.click_count || 0) + 1;
         updates.metadata.last_click = new Date().toISOString();
-        if (data.link) {
+        const clickedUrl = eventData.link || eventData.url;
+        if (clickedUrl) {
           updates.metadata.clicked_links = [
             ...(updates.metadata.clicked_links || []),
-            data.link,
+            clickedUrl,
           ];
         }
+        console.log(`Email clicked: ${emailId}, link: ${clickedUrl}`);
         break;
 
       case 'email.bounced':
         updates.bounced_at = new Date().toISOString();
         updates.status = 'bounced';
-        updates.metadata.bounce_reason = data.reason || 'Unknown';
+        updates.metadata.bounce_reason = eventData.reason || eventData.type || 'Unknown';
         
         // Determine bounce type (hard or soft)
-        const bounceType = data.bounce_type || (data.reason?.toLowerCase().includes('permanent') ? 'hard' : 'soft');
+        const bounceType = eventData.bounce_type || eventData.type || 
+          (eventData.reason?.toLowerCase().includes('permanent') ? 'hard' : 'soft');
+        
+        console.log(`Email bounced: ${emailId}, type: ${bounceType}, reason: ${updates.metadata.bounce_reason}`);
         
         // Track bounce event
         const { data: sequenceData } = await supabase
@@ -92,12 +123,12 @@ serve(async (req) => {
             .insert({
               user_id: (sequenceData.sequence as any)?.user_id,
               email_activity_id: activity.id,
-              recipient_email: data.email || 'unknown',
+              recipient_email: eventData.email || 'unknown',
               bounce_type: bounceType,
-              bounce_reason: data.reason || 'No reason provided',
+              bounce_reason: eventData.reason || eventData.type || 'No reason provided',
               external_message_id: emailId,
               occurred_at: new Date().toISOString(),
-              metadata: data,
+              metadata: eventData,
             });
         }
         
@@ -149,14 +180,16 @@ serve(async (req) => {
             .insert({
               user_id: (spamSequenceData.sequence as any)?.user_id,
               email_activity_id: activity.id,
-              recipient_email: data.email || 'unknown',
+              recipient_email: eventData.email || 'unknown',
               bounce_type: 'complaint',
               bounce_reason: 'Marked as spam',
               external_message_id: emailId,
               occurred_at: new Date().toISOString(),
-              metadata: data,
+              metadata: eventData,
             });
         }
+        
+        console.log(`Email marked as spam: ${emailId}`);
         
         // Stop the sequence if marked as spam
         await supabase
@@ -165,11 +198,23 @@ serve(async (req) => {
           .eq('id', activity.company_sequence_id);
         break;
 
+      case 'email.unsubscribed':
+        updates.status = 'unsubscribed';
+        updates.metadata.unsubscribed_at = new Date().toISOString();
+        console.log(`Email unsubscribed: ${emailId}`);
+        
+        // Stop the sequence if unsubscribed
+        await supabase
+          .from('company_sequences')
+          .update({ status: 'completed' })
+          .eq('id', activity.company_sequence_id);
+        break;
+
       default:
-        console.log(`Unknown event type: ${type}`);
-        updates.metadata[type] = {
+        console.log(`Unknown event type: ${eventType}`);
+        updates.metadata[eventType] = {
           timestamp: new Date().toISOString(),
-          data,
+          data: eventData,
         };
     }
 
@@ -183,10 +228,10 @@ serve(async (req) => {
       throw new Error(`Failed to update activity: ${updateError.message}`);
     }
 
-    console.log(`Updated email activity ${activity.id} for event ${type}`);
+    console.log(`✅ Updated email activity ${activity.id} for event ${eventType}`);
 
     return new Response(
-      JSON.stringify({ success: true, activityId: activity.id, event: type }),
+      JSON.stringify({ success: true, activityId: activity.id, event: eventType }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }

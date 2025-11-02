@@ -293,6 +293,83 @@ export const useCampaignsRealtimeForNotifications = () => {
 };
 
 /**
+ * Hook to subscribe to real-time updates for email_activities table
+ */
+export const useEmailActivitiesRealtime = () => {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('email-activities-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'email_activities',
+        },
+        (payload: RealtimePostgresChangesPayload<any>) => {
+          console.log('Email activities realtime update:', payload.eventType);
+          
+          queryClient.invalidateQueries({ queryKey: ['email-activities'] });
+          queryClient.invalidateQueries({ queryKey: ['active-conversations'] });
+          queryClient.invalidateQueries({ queryKey: ['company-sequences'] });
+          
+          if (payload.eventType === 'UPDATE') {
+            const activityId = payload.new?.id;
+            if (activityId) {
+              queryClient.invalidateQueries({ queryKey: ['email-activity', activityId] });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+};
+
+/**
+ * Hook to subscribe to real-time updates for email_threads table
+ */
+export const useEmailThreadsRealtime = () => {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('email-threads-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'email_threads',
+        },
+        (payload: RealtimePostgresChangesPayload<any>) => {
+          console.log('Email threads realtime update:', payload.eventType);
+          
+          queryClient.invalidateQueries({ queryKey: ['email-threads'] });
+          queryClient.invalidateQueries({ queryKey: ['active-conversations'] });
+          
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const threadId = payload.new?.id;
+            if (threadId) {
+              queryClient.invalidateQueries({ queryKey: ['email-thread', threadId] });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+};
+
+/**
  * Combined hook for all real-time subscriptions
  */
 export const useAllRealtime = () => {
@@ -304,4 +381,6 @@ export const useAllRealtime = () => {
   useEventsRealtime();
   useDealsRealtimeForNotifications();
   useCampaignsRealtimeForNotifications();
+  useEmailActivitiesRealtime();
+  useEmailThreadsRealtime();
 };

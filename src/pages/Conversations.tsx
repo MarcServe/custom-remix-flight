@@ -17,6 +17,7 @@ import { AutoResponseReviewModal } from "@/components/sequences/AutoResponseRevi
 import { usePendingReviews, PendingReview } from "@/hooks/use-pending-reviews";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useNavigate } from "react-router-dom";
+import { useEmailThreadsRealtime } from "@/hooks/use-realtime";
 
 interface EmailThread {
   id: string;
@@ -64,6 +65,10 @@ interface Conversation {
 export default function Conversations() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  
+  // Subscribe to realtime updates for email threads
+  useEmailThreadsRealtime();
+  
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null);
   const [generatedResponse, setGeneratedResponse] = useState<{ subject: string; body: string } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
