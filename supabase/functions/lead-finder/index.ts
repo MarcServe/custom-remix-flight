@@ -216,7 +216,9 @@ async function enrichBatchProgressively(
   supabaseAnonKey: string,
   traceId: string,
   batchNumber: number,
-  sendEvent: (data: any) => Promise<void>
+  sendEvent: (data: any) => Promise<void>,
+  supabase: any,
+  searchId: string
 ) {
   const needsBasic = leads.filter(l => !l.website || !l.description || l.description.length < 30);
   const needsDeep = leads.filter(l => l.qualityScore >= 50 && !needsBasic.includes(l));
@@ -273,6 +275,16 @@ async function enrichBatchProgressively(
       lead.qualityScore = calculateFinalQualityScore(lead);
       lead.dataCompleteness = calculateDataCompleteness(lead);
       lead.enrichmentStatus = 'completed';
+
+      // Update lead in database
+      await supabase
+        .from('lead_finder_leads')
+        .update({
+          company_data: lead,
+          enrichment_status: 'enriched'
+        })
+        .eq('search_id', searchId)
+        .eq('company_data->>name', lead.name);
 
       // Stream the enriched lead update
       await sendEvent({
@@ -348,6 +360,16 @@ async function enrichBatchProgressively(
       lead.dataCompleteness = calculateDataCompleteness(lead);
       lead.enrichmentStatus = 'completed';
 
+      // Update lead in database
+      await supabase
+        .from('lead_finder_leads')
+        .update({
+          company_data: lead,
+          enrichment_status: 'enriched'
+        })
+        .eq('search_id', searchId)
+        .eq('company_data->>name', lead.name);
+
       // Stream the deep-enriched lead update
       await sendEvent({
         type: 'lead-update',
@@ -372,7 +394,9 @@ async function findContactsProgressively(
   supabaseAnonKey: string,
   traceId: string,
   batchNumber: number,
-  sendEvent: (data: any) => Promise<void>
+  sendEvent: (data: any) => Promise<void>,
+  supabase: any,
+  searchId: string
 ) {
   const targetRoles = ['CEO', 'CTO', 'CMO', 'Founder', 'Co-Founder'];
 
@@ -475,6 +499,16 @@ async function findContactsProgressively(
     // Recalculate quality score with contacts
     lead.qualityScore = calculateFinalQualityScore(lead);
 
+    // Update lead in database
+    await supabase
+      .from('lead_finder_leads')
+      .update({
+        company_data: lead,
+        contact_status: contacts.length > 0 ? 'found' : 'none'
+      })
+      .eq('search_id', searchId)
+      .eq('company_data->>name', lead.name);
+
     // Stream the contact update
     await sendEvent({
       type: 'lead-update',
@@ -492,8 +526,25 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity } = await req.json();
-  console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity });
+  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId } = await req.json();
+  console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId });
+
+  // Initialize Supabase with authenticated user
+  const authHeader = req.headers.get('Authorization')!;
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } }
+  });
+
+  // Get authenticated user
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
 
   // Create SSE stream
   const stream = new TransformStream();
@@ -510,15 +561,62 @@ Deno.serve(async (req) => {
 
   // Process in background and stream results
   (async () => {
+    let currentSearchId = searchId;
+    let searchRecord: any = null;
+
     try {
       await sendEvent({ type: 'status', message: 'Initializing search...', progress: 5 });
 
-      const trace = createTrace('lead-finder', undefined, { size, geography, industry });
+      // Create or resume search record
+      if (currentSearchId) {
+        // Try to resume existing search
+        const { data: existing } = await supabase
+          .from('lead_finder_searches')
+          .select('*')
+          .eq('id', currentSearchId)
+          .eq('user_id', user.id)
+          .single();
+        
+        if (existing && existing.status !== 'complete') {
+          searchRecord = existing;
+          console.log('Resuming search:', currentSearchId);
+        }
+      }
+
+      // Create new search if not resuming
+      if (!searchRecord) {
+        const { data: newSearch, error: searchError } = await supabase
+          .from('lead_finder_searches')
+          .insert({
+            user_id: user.id,
+            search_params: { size, geography, industry, provider, model, enrichWithPerplexity },
+            status: 'running',
+            progress: 5,
+            current_status: 'Initializing search...'
+          })
+          .select()
+          .single();
+
+        if (searchError) throw searchError;
+        searchRecord = newSearch;
+        currentSearchId = newSearch.id;
+        console.log('Created new search:', currentSearchId);
+      }
+
+      // Send search ID to frontend
+      await sendEvent({ type: 'search-created', searchId: currentSearchId });
+
+      const trace = createTrace('lead-finder', undefined, { size, geography, industry, searchId: currentSearchId });
       const EXA_API_KEY = Deno.env.get("EXA_API_KEY");
       if (!EXA_API_KEY) throw new Error("Missing EXA_API_KEY");
 
       // PHASE 1: Exa Search
       await sendEvent({ type: 'status', message: 'Searching with Exa AI...', progress: 10 });
+      await supabase
+        .from('lead_finder_searches')
+        .update({ progress: 10, current_status: 'Searching with Exa AI...' })
+        .eq('id', currentSearchId);
+      
       const exaSpan = createSpan(trace, 'exa-search');
 
       let industryContext = industry;
@@ -562,10 +660,12 @@ Deno.serve(async (req) => {
       await endSpan(exaSpan, { totalResults: allResults.length, uniqueResults: deduplicatedResults.length });
 
       await sendEvent({ type: 'status', message: `Found ${deduplicatedResults.length} companies. Processing...`, progress: 20 });
+      await supabase
+        .from('lead_finder_searches')
+        .update({ progress: 20, current_status: `Found ${deduplicatedResults.length} companies. Processing...` })
+        .eq('id', currentSearchId);
 
       // PHASE 2: Batch Processing (10 at a time)
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
       const GETPROSPECT_API_KEY = Deno.env.get("GETPROSPECT_API_KEY");
       
       const batchSize = 10;
@@ -594,7 +694,12 @@ ${JSON.stringify(batch, null, 2)}`;
       for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
         try {
           const progressPercent = 20 + Math.floor((batchIndex / batches.length) * 60);
-          await sendEvent({ type: 'status', message: `Processing batch ${batchIndex + 1}/${batches.length}...`, progress: progressPercent });
+          const statusMessage = `Processing batch ${batchIndex + 1}/${batches.length}...`;
+          await sendEvent({ type: 'status', message: statusMessage, progress: progressPercent });
+          await supabase
+            .from('lead_finder_searches')
+            .update({ progress: progressPercent, current_status: statusMessage })
+            .eq('id', currentSearchId);
 
           // Extract
           const aiResponse = await fetch(`${supabaseUrl}/functions/v1/ai-provider`, {
@@ -646,6 +751,23 @@ ${JSON.stringify(batch, null, 2)}`;
           const qualifiedLeads = batchLeads.filter(l => l.qualityScore >= 25);
           allLeads.push(...qualifiedLeads);
 
+          // Save leads to database immediately (batch insert)
+          if (qualifiedLeads.length > 0 && !dryRun) {
+            const leadInserts = qualifiedLeads.map(lead => ({
+              search_id: currentSearchId,
+              user_id: user.id,
+              company_data: lead,
+              enrichment_status: 'pending',
+              contact_status: 'pending',
+              quality_score: lead.qualityScore
+            }));
+
+            await supabase
+              .from('lead_finder_leads')
+              .insert(leadInserts)
+              .select();
+          }
+
           // PHASE 1: STREAM BATCH IMMEDIATELY
           if (qualifiedLeads.length > 0) {
             await sendEvent({
@@ -666,6 +788,10 @@ ${JSON.stringify(batch, null, 2)}`;
         message: 'All companies extracted. Starting background enrichment...',
         progress: 80
       });
+      await supabase
+        .from('lead_finder_searches')
+        .update({ progress: 80, current_status: 'All companies extracted. Starting background enrichment...' })
+        .eq('id', currentSearchId);
 
       // Final deduplication BEFORE background tasks
       const leads = deduplicateLeads(allLeads);
@@ -683,6 +809,10 @@ ${JSON.stringify(batch, null, 2)}`;
                 message: `Starting enrichment for ${enrichmentLeads.length} companies...`,
                 progress: 85
               });
+              await supabase
+                .from('lead_finder_searches')
+                .update({ progress: 85, current_status: `Enriching ${enrichmentLeads.length} companies...` })
+                .eq('id', currentSearchId);
 
               await enrichBatchProgressively(
                 enrichmentLeads,
@@ -690,7 +820,9 @@ ${JSON.stringify(batch, null, 2)}`;
                 supabaseAnonKey,
                 trace.id,
                 0,
-                sendEvent
+                sendEvent,
+                supabase,
+                currentSearchId
               );
             }
           }
@@ -704,6 +836,10 @@ ${JSON.stringify(batch, null, 2)}`;
                 message: `Finding contacts for ${contactLeads.length} companies...`,
                 progress: 92
               });
+              await supabase
+                .from('lead_finder_searches')
+                .update({ progress: 92, current_status: `Finding contacts for ${contactLeads.length} companies...` })
+                .eq('id', currentSearchId);
 
               await findContactsProgressively(
                 contactLeads,
@@ -712,7 +848,9 @@ ${JSON.stringify(batch, null, 2)}`;
                 supabaseAnonKey,
                 trace.id,
                 0,
-                sendEvent
+                sendEvent,
+                supabase,
+                currentSearchId
               );
             }
           }
@@ -821,9 +959,23 @@ ${JSON.stringify(batch, null, 2)}`;
       // Don't await - let it run in background
       if (insertPromise) insertPromise.catch(console.error);
 
+      // Update search record as complete
+      await supabase
+        .from('lead_finder_searches')
+        .update({
+          status: 'complete',
+          progress: 100,
+          current_status: 'Search completed',
+          stats,
+          usage: totalUsage,
+          trace_url: `https://cloud.langfuse.com/trace/${trace.id}`
+        })
+        .eq('id', currentSearchId);
+
       // Send complete event
       await sendEvent({
         type: 'complete',
+        searchId: currentSearchId,
         stats,
         inserted: 0, // DB insertion happens asynchronously in background
         dryRun,
@@ -837,6 +989,19 @@ ${JSON.stringify(batch, null, 2)}`;
       await writer.close();
     } catch (error) {
       console.error("Stream processing error:", error);
+      
+      // Update search record as error
+      if (currentSearchId) {
+        await supabase
+          .from('lead_finder_searches')
+          .update({
+            status: 'error',
+            current_status: 'Error occurred',
+            error_message: error instanceof Error ? error.message : 'Unknown error'
+          })
+          .eq('id', currentSearchId);
+      }
+
       await sendEvent({
         type: 'error',
         message: error instanceof Error ? error.message : 'Unknown error'
