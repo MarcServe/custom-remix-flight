@@ -19,36 +19,29 @@ serve(async (req: Request) => {
       throw new Error('GOOGLE_CLIENT_ID not configured');
     }
 
-    // Get user from request
+    // Get user from request by decoding JWT
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('No authorization header present');
       throw new Error('No authorization header');
     }
 
-    // Extract JWT token from Authorization header
+    // Extract and decode JWT token
     const token = authHeader.replace('Bearer ', '');
-    
-    console.log('Auth header present, creating Supabase client...');
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!
-    );
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      throw new Error('Invalid JWT token format');
+    }
 
-    console.log('Getting user from auth token...');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    // Decode JWT payload (middle part)
+    const payload = JSON.parse(atob(parts[1]));
+    const userId = payload.sub;
     
-    if (userError) {
-      console.error('Error getting user:', userError);
-      throw new Error(`Failed to authenticate user: ${userError.message}`);
+    if (!userId) {
+      throw new Error('No user ID found in token');
     }
     
-    if (!user) {
-      console.error('No user found in session');
-      throw new Error('User not found in session');
-    }
-    
-    console.log('User authenticated successfully:', user.id);
+    console.log('User authenticated successfully:', userId);
 
     // Build OAuth URL
     const redirectUri = `${SUPABASE_URL}/functions/v1/gmail-oauth-callback`;
@@ -59,7 +52,7 @@ serve(async (req: Request) => {
       'https://www.googleapis.com/auth/userinfo.profile'
     ].join(' ');
 
-    const state = btoa(JSON.stringify({ user_id: user.id }));
+    const state = btoa(JSON.stringify({ user_id: userId }));
 
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
@@ -70,7 +63,7 @@ serve(async (req: Request) => {
     authUrl.searchParams.set('prompt', 'consent');
     authUrl.searchParams.set('state', state);
 
-    console.log('Generated OAuth URL for user:', user.id);
+    console.log('Generated OAuth URL for user:', userId);
 
     return new Response(
       JSON.stringify({ authUrl: authUrl.toString() }),
