@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,6 +16,7 @@ interface PersonalizeSequenceDialogProps {
   companyId: string;
   companyName: string;
   contactId?: string;
+  defaultSendImmediately?: boolean;
 }
 
 export function PersonalizeSequenceDialog({
@@ -24,10 +25,11 @@ export function PersonalizeSequenceDialog({
   companyId,
   companyName,
   contactId,
+  defaultSendImmediately = false,
 }: PersonalizeSequenceDialogProps) {
   const [selectedSequenceId, setSelectedSequenceId] = useState<string>("");
   const [tone, setTone] = useState<'professional' | 'casual' | 'technical'>('professional');
-  const [sendImmediately, setSendImmediately] = useState(false);
+  const [sendImmediately, setSendImmediately] = useState(defaultSendImmediately);
   const [isSending, setIsSending] = useState(false);
 
   const { data: sequencesData, isLoading: isLoadingSequences } = useSequences();
@@ -35,6 +37,13 @@ export function PersonalizeSequenceDialog({
   const { toast } = useToast();
 
   const sequences = sequencesData?.data || [];
+
+  // Sync sendImmediately with the prop when dialog opens
+  useEffect(() => {
+    if (open) {
+      setSendImmediately(defaultSendImmediately);
+    }
+  }, [open, defaultSendImmediately]);
 
   const handlePersonalize = async () => {
     if (!selectedSequenceId) return;

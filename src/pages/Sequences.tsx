@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users, Eye } from "lucide-react";
+import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users, Eye, Building2 } from "lucide-react";
 import { useGenerateSequence, useSequences, useDeleteSequence } from "@/hooks/use-sequences";
 import { useCompanySequences, useUpdateSequenceStatus, useDeleteCompanySequence } from "@/hooks/use-company-sequences";
 import { useProviderStore } from "@/stores/provider-store";
@@ -19,6 +19,7 @@ import { PersonalizedSequenceCard } from "@/components/sequences/PersonalizedSeq
 import { SequenceChatCard } from "@/components/features/sequences/SequenceChatCard";
 import { AutomationMetrics } from "@/components/sequences/AutomationMetrics";
 import { SequenceDetailsDialog } from "@/components/sequences/SequenceDetailsDialog";
+import { PersonalizeSequenceDialog } from "@/components/sequences/PersonalizeSequenceDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 
@@ -30,10 +31,14 @@ export default function Sequences() {
   const [tone, setTone] = useState<"professional" | "casual" | "technical">("professional");
   const [customInstructions, setCustomInstructions] = useState("");
   const [autoRespond, setAutoRespond] = useState(false);
+  const [sendImmediately, setSendImmediately] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<number[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
   const [selectedSequence, setSelectedSequence] = useState<any>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [personalizeDialogOpen, setPersonalizeDialogOpen] = useState(false);
+  const [personalizeCompanyId, setPersonalizeCompanyId] = useState<string>("");
+  const [personalizeCompanyName, setPersonalizeCompanyName] = useState<string>("");
   const { toast } = useToast();
 
   const { defaultProvider, defaultModels } = useProviderStore();
@@ -102,6 +107,7 @@ export default function Sequences() {
       setGeography("");
       setIndustry("");
       setCustomInstructions("");
+      setSendImmediately(false);
     }
   };
 
@@ -382,6 +388,22 @@ export default function Sequences() {
                   />
                 </div>
 
+                <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/50">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="send-immediately" className="text-sm font-medium cursor-pointer">
+                      Send First Email Immediately
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      When applying to a company, automatically send the first email and activate the sequence
+                    </p>
+                  </div>
+                  <Switch
+                    id="send-immediately"
+                    checked={sendImmediately}
+                    onCheckedChange={setSendImmediately}
+                  />
+                </div>
+
                 <Button
                   onClick={handleGenerate}
                   disabled={!isFormValid || isGenerating}
@@ -515,6 +537,51 @@ export default function Sequences() {
                         </div>
                       ))}
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* Apply to Company Section */}
+                <Card className="border-2 border-primary/20 shadow-md">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Building2 className="h-5 w-5 text-primary" />
+                      Apply to Company
+                    </CardTitle>
+                    <CardDescription>
+                      Select a company to personalize and send this sequence
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="apply-company">Select Company</Label>
+                      <Select
+                        value={personalizeCompanyId}
+                        onValueChange={(value) => {
+                          setPersonalizeCompanyId(value);
+                          const company = companiesData?.find(c => c.id === value);
+                          setPersonalizeCompanyName(company?.name || "");
+                        }}
+                      >
+                        <SelectTrigger id="apply-company">
+                          <SelectValue placeholder="Choose a company" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {companiesData?.map((company) => (
+                            <SelectItem key={company.id} value={company.id}>
+                              {company.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      onClick={() => setPersonalizeDialogOpen(true)}
+                      disabled={!personalizeCompanyId}
+                      className="w-full"
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      {sendImmediately ? 'Personalize & Send' : 'Personalize Sequence'}
+                    </Button>
                   </CardContent>
                 </Card>
 
@@ -675,6 +742,23 @@ export default function Sequences() {
           open={detailsDialogOpen}
           onOpenChange={setDetailsDialogOpen}
           sequence={selectedSequence}
+        />
+      )}
+
+      {/* Personalize Sequence Dialog */}
+      {personalizeCompanyId && personalizeCompanyName && (
+        <PersonalizeSequenceDialog
+          open={personalizeDialogOpen}
+          onOpenChange={(open) => {
+            setPersonalizeDialogOpen(open);
+            if (!open) {
+              setPersonalizeCompanyId("");
+              setPersonalizeCompanyName("");
+            }
+          }}
+          companyId={personalizeCompanyId}
+          companyName={personalizeCompanyName}
+          defaultSendImmediately={sendImmediately}
         />
       )}
     </div>
