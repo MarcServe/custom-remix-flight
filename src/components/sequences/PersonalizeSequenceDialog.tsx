@@ -87,6 +87,15 @@ export function PersonalizeSequenceDialog({
         if (sendImmediately && companySequenceId) {
           setIsSending(true);
           try {
+            // Update status to active FIRST before sending
+            const { error: statusError } = await supabase
+              .from('company_sequences')
+              .update({ status: 'active' })
+              .eq('id', companySequenceId);
+
+            if (statusError) throw statusError;
+
+            // Now send the first email
             const { data: sendData, error: sendError } = await supabase.functions.invoke(
               'send-sequence-email',
               {
@@ -98,14 +107,6 @@ export function PersonalizeSequenceDialog({
             );
 
             if (sendError) throw sendError;
-
-            // Update status to active
-            const { error: statusError } = await supabase
-              .from('company_sequences')
-              .update({ status: 'active' })
-              .eq('id', companySequenceId);
-
-            if (statusError) throw statusError;
 
             const contactName = (result.data as any).contact?.name || 'contact';
             toast({
