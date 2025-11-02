@@ -479,13 +479,13 @@ export default function Conversations() {
                           : 'hover:bg-muted'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <div className="font-medium">{conv.title}</div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="font-medium truncate flex-1">{conv.title}</div>
                         {conv.type === 'standalone' && (
-                          <Badge variant="secondary" className="text-xs">Standalone</Badge>
+                          <Badge variant="secondary" className="text-xs shrink-0">Standalone</Badge>
                         )}
                       </div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="text-sm text-muted-foreground line-clamp-2 break-words">
                         {conv.subtitle}
                       </div>
                       {conv.goal && (

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users, Eye, Building2 } from "lucide-react";
 import { useGenerateSequence, useSequences, useDeleteSequence } from "@/hooks/use-sequences";
 import { useCompanySequences, useUpdateSequenceStatus, useDeleteCompanySequence } from "@/hooks/use-company-sequences";
@@ -39,6 +40,8 @@ export default function Sequences() {
   const [personalizeDialogOpen, setPersonalizeDialogOpen] = useState(false);
   const [personalizeCompanyId, setPersonalizeCompanyId] = useState<string>("");
   const [personalizeCompanyName, setPersonalizeCompanyName] = useState<string>("");
+  const [companySelectorOpen, setCompanySelectorOpen] = useState(false);
+  const [pendingSequenceId, setPendingSequenceId] = useState<string>("");
   const { toast } = useToast();
 
   const scrollToAssistant = () => {
@@ -719,19 +722,9 @@ export default function Sequences() {
                               variant="default"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                // Ask user to select a company first
-                                if (!personalizeCompanyId) {
-                                  toast({
-                                    title: "Select a Company",
-                                    description: "Please select a company from the 'Apply to Company' section below to start this sequence.",
-                                  });
-                                  // Scroll to the apply section
-                                  const applySection = document.querySelector('[data-apply-section]');
-                                  applySection?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                                  return;
-                                }
                                 setSelectedSequence(sequence);
-                                setPersonalizeDialogOpen(true);
+                                setPendingSequenceId(sequence.id);
+                                setCompanySelectorOpen(true);
                               }}
                               className="h-8 text-xs"
                             >
@@ -800,6 +793,74 @@ export default function Sequences() {
         />
       )}
 
+      {/* Company Selector Dialog for Saved Sequences */}
+      <Dialog open={companySelectorOpen} onOpenChange={setCompanySelectorOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select Company</DialogTitle>
+            <DialogDescription>
+              Choose a company to personalize this sequence for
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="company-selector">Company</Label>
+              <Select
+                value={personalizeCompanyId}
+                onValueChange={(value) => {
+                  setPersonalizeCompanyId(value);
+                  const company = companiesData?.find(c => c.id === value);
+                  setPersonalizeCompanyName(company?.name || "");
+                }}
+              >
+                <SelectTrigger id="company-selector">
+                  <SelectValue placeholder="Choose a company" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companiesData?.map((company) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4" />
+                        {company.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCompanySelectorOpen(false);
+                setPersonalizeCompanyId("");
+                setPersonalizeCompanyName("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!personalizeCompanyId) {
+                  toast({
+                    title: "No Company Selected",
+                    description: "Please select a company to continue",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                setCompanySelectorOpen(false);
+                setPersonalizeDialogOpen(true);
+              }}
+              disabled={!personalizeCompanyId}
+            >
+              Continue
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Personalize Sequence Dialog */}
       {personalizeCompanyId && personalizeCompanyName && (
         <PersonalizeSequenceDialog
@@ -810,12 +871,13 @@ export default function Sequences() {
               setPersonalizeCompanyId("");
               setPersonalizeCompanyName("");
               setSelectedSequence(null);
+              setPendingSequenceId("");
             }
           }}
           companyId={personalizeCompanyId}
           companyName={personalizeCompanyName}
           defaultSendImmediately={sendImmediately}
-          defaultSequenceId={selectedSequence?.id}
+          defaultSequenceId={pendingSequenceId || selectedSequence?.id}
         />
       )}
     </div>
