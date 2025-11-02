@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus, Database, Loader2 } from "lucide-react";
+import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus, Database, Loader2, Phone, TrendingUp, Award } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { GenerateSequenceForCompanyDialog } from "@/components/sequences/GenerateSequenceForCompanyDialog";
@@ -15,6 +15,7 @@ import { useCompanyEvents, useDeleteEvent } from "@/hooks/use-events";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { companiesApi } from "@/lib/api/companies";
 import { useQueryClient } from "@tanstack/react-query";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Contact {
   id?: string;
@@ -178,6 +179,35 @@ export function CompanyDetailsDialog({
   const showNavigation = allCompanies && currentIndex !== undefined && onNavigate;
   const canGoPrev = showNavigation && currentIndex > 0;
   const canGoNext = showNavigation && allCompanies && currentIndex < allCompanies.length - 1;
+
+  // Calculate data completeness
+  const calculateCompleteness = () => {
+    const fields = [
+      company.name,
+      company.website,
+      company.description,
+      company.industry,
+      company.size,
+      company.geography,
+      normalizedCompany.linkedinUrl,
+      normalizedCompany.employeeCount,
+      normalizedCompany.foundingYear,
+      normalizedCompany.revenue,
+      normalizedCompany.companyPhone,
+      normalizedCompany.generalEmail,
+      normalizedCompany.products,
+      normalizedCompany.recentNews,
+      normalizedCompany.fundingInfo,
+      normalizedCompany.technologies?.length > 0,
+      normalizedCompany.keyExecutives?.length > 0,
+      normalizedCompany.socialProfiles && Object.keys(normalizedCompany.socialProfiles).length > 0,
+      hasContacts,
+    ];
+    const filledFields = fields.filter(Boolean).length;
+    return Math.round((filledFields / fields.length) * 100);
+  };
+
+  const completeness = calculateCompleteness();
 
   const handleSendEmailToContact = (contact: Contact) => {
     if (!contact.email) {
@@ -386,6 +416,18 @@ export function CompanyDetailsDialog({
                 {company.size && (
                   <Badge variant="outline">{company.size}</Badge>
                 )}
+                {isSearching && (
+                  <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">
+                    <Database className="h-3 w-3 mr-1" />
+                    {completeness}% Complete
+                  </Badge>
+                )}
+                {company.qualityScore !== undefined && (
+                  <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
+                    <Award className="h-3 w-3 mr-1" />
+                    Score: {company.qualityScore}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -398,18 +440,22 @@ export function CompanyDetailsDialog({
           </TabsList>
 
           <TabsContent value="overview" className="data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:flex-1 data-[state=active]:overflow-hidden mt-0">
-            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-6 pt-4">
+            <ScrollArea className="flex-1 px-6 pb-6">
+              <div className="space-y-6 pt-4">
             {/* Overview Section */}
             <div className="space-y-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Overview
-              </h3>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <Building2 className="h-4 w-4 text-blue-500" />
+                </div>
+                <h3 className="text-sm font-semibold">Company Overview</h3>
+              </div>
               {company.description && (
-                <p className="text-sm text-foreground leading-relaxed">
+                <p className="text-sm text-foreground leading-relaxed pl-10">
                   {company.description}
                 </p>
               )}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 pl-10">
                 {company.geography && (
                   <div className="flex items-center gap-2 text-sm">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
@@ -447,7 +493,7 @@ export function CompanyDetailsDialog({
                 )}
                 {normalizedCompany.companyPhone && (
                   <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <Phone className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">Phone:</span>
                     <a href={`tel:${normalizedCompany.companyPhone}`} className="text-primary hover:underline">
                       {normalizedCompany.companyPhone}
@@ -473,6 +519,7 @@ export function CompanyDetailsDialog({
               <>
                 <Separator />
                 
+                {/* Products & Services */}
                 {normalizedCompany.products && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
@@ -480,6 +527,7 @@ export function CompanyDetailsDialog({
                         <Package className="h-4 w-4 text-blue-500" />
                       </div>
                       <h3 className="text-sm font-semibold">Products & Services</h3>
+                      {isSearching && <Badge variant="outline" className="text-xs">From Lead Finder</Badge>}
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
                       {normalizedCompany.products}
@@ -487,13 +535,15 @@ export function CompanyDetailsDialog({
                   </div>
                 )}
 
+                {/* Technologies */}
                 {normalizedCompany.technologies && normalizedCompany.technologies.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
                         <Sparkles className="h-4 w-4 text-indigo-500" />
                       </div>
-                      <h3 className="text-sm font-semibold">Technologies</h3>
+                      <h3 className="text-sm font-semibold">Technology Stack</h3>
+                      {isSearching && <Badge variant="outline" className="text-xs">From Lead Finder</Badge>}
                     </div>
                     <div className="flex flex-wrap gap-2 pl-10">
                       {normalizedCompany.technologies.map((tech, idx) => (
@@ -505,13 +555,15 @@ export function CompanyDetailsDialog({
                   </div>
                 )}
 
+                {/* Recent News */}
                 {normalizedCompany.recentNews && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
                         <Newspaper className="h-4 w-4 text-purple-500" />
                       </div>
-                      <h3 className="text-sm font-semibold">Recent News</h3>
+                      <h3 className="text-sm font-semibold">Recent News & Updates</h3>
+                      {isSearching && <Badge variant="outline" className="text-xs">From Lead Finder</Badge>}
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
                       {normalizedCompany.recentNews}
@@ -519,13 +571,15 @@ export function CompanyDetailsDialog({
                   </div>
                 )}
 
+                {/* Funding Information */}
                 {normalizedCompany.fundingInfo && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
                         <DollarSign className="h-4 w-4 text-green-500" />
                       </div>
-                      <h3 className="text-sm font-semibold">Funding Information</h3>
+                      <h3 className="text-sm font-semibold">Funding & Investment</h3>
+                      {isSearching && <Badge variant="outline" className="text-xs">From Lead Finder</Badge>}
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
                       {normalizedCompany.fundingInfo}
@@ -533,13 +587,15 @@ export function CompanyDetailsDialog({
                   </div>
                 )}
 
+                {/* Key Executives */}
                 {normalizedCompany.keyExecutives && normalizedCompany.keyExecutives.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
                         <Users className="h-4 w-4 text-amber-500" />
                       </div>
-                      <h3 className="text-sm font-semibold">Key Executives</h3>
+                      <h3 className="text-sm font-semibold">Leadership Team</h3>
+                      {isSearching && <Badge variant="outline" className="text-xs">From Lead Finder</Badge>}
                     </div>
                     <div className="space-y-2 pl-10">
                       {normalizedCompany.keyExecutives.map((exec, idx) => (
@@ -553,13 +609,14 @@ export function CompanyDetailsDialog({
                   </div>
                 )}
 
+                {/* Social Profiles */}
                 {normalizedCompany.socialProfiles && Object.keys(normalizedCompany.socialProfiles).length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center">
                         <Globe className="h-4 w-4 text-pink-500" />
                       </div>
-                      <h3 className="text-sm font-semibold">Social Profiles</h3>
+                      <h3 className="text-sm font-semibold">Social Media Presence</h3>
                     </div>
                     <div className="flex flex-wrap gap-2 pl-10">
                       {normalizedCompany.socialProfiles.linkedin && (
@@ -612,7 +669,8 @@ export function CompanyDetailsDialog({
                     <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
                       <Users className="h-4 w-4 text-cyan-500" />
                     </div>
-                    <h3 className="text-sm font-semibold">Team Contacts</h3>
+                    <h3 className="text-sm font-semibold">Team Contacts ({company.contacts.length})</h3>
+                    {isSearching && <Badge variant="outline" className="text-xs">From Lead Finder</Badge>}
                   </div>
                   
                   <div className="space-y-3 pl-10">
@@ -749,10 +807,12 @@ export function CompanyDetailsDialog({
                )}
                 </div>
               </div>
+            </ScrollArea>
           </TabsContent>
 
           <TabsContent value="activity" className="data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:flex-1 data-[state=active]:overflow-hidden mt-0">
-            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4 pt-4">
+            <ScrollArea className="flex-1 px-6 pb-6">
+              <div className="space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                     Recent Activity
@@ -790,7 +850,8 @@ export function CompanyDetailsDialog({
                      <p className="text-xs mt-1">Start tracking interactions with this company</p>
                  </div>
                 )}
-               </div>
+              </div>
+            </ScrollArea>
           </TabsContent>
         </Tabs>
       </DialogContent>
