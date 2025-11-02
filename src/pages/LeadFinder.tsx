@@ -1007,8 +1007,8 @@ export default function LeadFinder() {
                   </p>
                 </div>
                 
-                {/* Restore Stored Results */}
-                {streamingSearch.hasStoredResults && (
+                {/* Restore Stored Results - Only show if results aren't already displayed */}
+                {streamingSearch.hasStoredResults && streamingSearch.leads.length === 0 && (
                   <div className="pt-4 border-t">
                     <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-4 space-y-3">
                       <div className="flex items-start gap-3">
