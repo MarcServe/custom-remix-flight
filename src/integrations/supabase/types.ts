@@ -1015,7 +1015,7 @@ export type Database = {
         Row: {
           body: string | null
           bounced_at: string | null
-          company_sequence_id: string
+          company_sequence_id: string | null
           contact_id: string | null
           created_at: string
           external_message_id: string | null
@@ -1033,7 +1033,7 @@ export type Database = {
         Insert: {
           body?: string | null
           bounced_at?: string | null
-          company_sequence_id: string
+          company_sequence_id?: string | null
           contact_id?: string | null
           created_at?: string
           external_message_id?: string | null
@@ -1051,7 +1051,7 @@ export type Database = {
         Update: {
           body?: string | null
           bounced_at?: string | null
-          company_sequence_id?: string
+          company_sequence_id?: string | null
           contact_id?: string | null
           created_at?: string
           external_message_id?: string | null

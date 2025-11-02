@@ -55,7 +55,7 @@ export default function Conversations() {
   const { data: sequences, isLoading } = useQuery({
     queryKey: ['active-conversations'],
     queryFn: async () => {
-      // Get all company_sequences that have email threads (both sequences and direct CRM emails)
+      // Get all email threads grouped by company_id or recipient
       const { data: threadsData, error: threadsError } = await supabase
         .from('email_threads')
         .select('company_sequence_id')
@@ -63,8 +63,12 @@ export default function Conversations() {
 
       if (threadsError) throw threadsError;
 
-      // Get unique company_sequence_ids
-      const sequenceIds = [...new Set(threadsData?.map(t => t.company_sequence_id) || [])];
+      // Get unique company_sequence_ids (filter out nulls for standalone emails)
+      const sequenceIds = [...new Set(
+        threadsData
+          ?.map(t => t.company_sequence_id)
+          .filter((id): id is string => id !== null) || []
+      )];
 
       if (sequenceIds.length === 0) {
         return [];

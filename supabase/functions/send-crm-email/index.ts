@@ -240,11 +240,12 @@ serve(async (req) => {
     }
 
     // Log to email_activities for tracking
+    // Note: company_sequence_id is now nullable to support standalone CRM emails
     const { data: activityData, error: activityError } = await supabaseClient
       .from('email_activities')
       .insert({
         contact_id: contactId || null,
-        company_sequence_id: companyId || null,
+        company_sequence_id: null, // Standalone email, not part of a sequence
         step_number: 0,
         status: 'sent',
         subject,
@@ -258,6 +259,7 @@ serve(async (req) => {
           has_html: !!emailBodyHtml,
           to_email: toEmail,
           to_name: toName,
+          company_id: companyId || null,
         },
       })
       .select()
@@ -269,7 +271,7 @@ serve(async (req) => {
 
     // ALSO create entry in email_threads for conversation view
     // This is KEY for reply tracking and unified conversation view
-    if (companyId && activityData) {
+    if (activityData) {
       // Get the user's from_email
       const { data: connection } = await supabaseClient
         .from('crm_connections')
@@ -284,7 +286,7 @@ serve(async (req) => {
       const { error: threadError } = await supabaseClient
         .from('email_threads')
         .insert({
-          company_sequence_id: companyId,
+          company_sequence_id: null, // Standalone email from CRM
           from_email: fromEmail,
           to_email: toEmail,
           subject,
@@ -298,6 +300,8 @@ serve(async (req) => {
             provider,
             sent_via: 'crm_direct',
             to_name: toName,
+            company_id: companyId || null,
+            contact_id: contactId || null,
           },
         });
 
