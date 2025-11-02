@@ -333,11 +333,14 @@ export const useEmailActivitiesRealtime = () => {
 
 /**
  * Hook to subscribe to real-time updates for email_threads table
+ * Enhanced with more aggressive invalidation for conversations
  */
 export const useEmailThreadsRealtime = () => {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    console.log('🔴 Setting up email_threads realtime subscription');
+    
     const channel = supabase
       .channel('email-threads-changes')
       .on(
@@ -348,22 +351,34 @@ export const useEmailThreadsRealtime = () => {
           table: 'email_threads',
         },
         (payload: RealtimePostgresChangesPayload<any>) => {
-          console.log('Email threads realtime update:', payload.eventType);
+          console.log('✅ Email threads realtime update:', payload.eventType, payload.new);
           
+          // Aggressively invalidate all conversation-related queries
           queryClient.invalidateQueries({ queryKey: ['email-threads'] });
           queryClient.invalidateQueries({ queryKey: ['active-conversations'] });
+          queryClient.invalidateQueries({ queryKey: ['company-sequences'] });
+          queryClient.invalidateQueries({ queryKey: ['pending-reviews'] });
           
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const threadId = payload.new?.id;
+            const sequenceId = payload.new?.company_sequence_id;
+            
             if (threadId) {
               queryClient.invalidateQueries({ queryKey: ['email-thread', threadId] });
+            }
+            
+            if (sequenceId) {
+              queryClient.invalidateQueries({ queryKey: ['email-threads', sequenceId] });
             }
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Email threads subscription status:', status);
+      });
 
     return () => {
+      console.log('🔴 Cleaning up email_threads realtime subscription');
       supabase.removeChannel(channel);
     };
   }, [queryClient]);

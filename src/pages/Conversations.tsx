@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { MessageSquare, Loader2, Send, ArrowLeft, ArrowRight, Sparkles, Filter, Settings } from "lucide-react";
+import { MessageSquare, Loader2, Send, ArrowLeft, ArrowRight, Sparkles, Filter, Settings, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
@@ -65,6 +65,7 @@ interface Conversation {
 export default function Conversations() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   
   // Subscribe to realtime updates for email threads
   useEmailThreadsRealtime();
@@ -75,12 +76,28 @@ export default function Conversations() {
   const [filterAutoSent, setFilterAutoSent] = useState(false);
   const [selectedReview, setSelectedReview] = useState<PendingReview | null>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
 
   const { data: pendingReviews } = usePendingReviews();
 
-  const { data: conversations, isLoading } = useQuery({
+  // Polling fallback - refetch conversations every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      console.log('Auto-refreshing conversations...');
+      queryClient.invalidateQueries({ queryKey: ['active-conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['email-threads'] });
+      setLastSyncTime(new Date());
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [queryClient]);
+
+  const { data: conversations, isLoading, refetch: refetchConversations } = useQuery({
     queryKey: ['active-conversations'],
     queryFn: async () => {
+      console.log('Fetching active conversations...');
+      setLastSyncTime(new Date());
       const allConversations: Conversation[] = [];
 
       // Get all email threads
@@ -90,6 +107,8 @@ export default function Conversations() {
         .order('received_at', { ascending: false });
 
       if (threadsError) throw threadsError;
+      
+      console.log(`Loaded ${threadsData?.length || 0} email threads`);
 
       // 1. Group threads by company_sequence_id (sequence-based)
       const sequenceIds = [...new Set(
@@ -155,10 +174,12 @@ export default function Conversations() {
     },
   });
 
-  const { data: threads } = useQuery({
+  const { data: threads, refetch: refetchThreads } = useQuery({
     queryKey: ['email-threads', selectedSequence],
     enabled: !!selectedSequence,
+    refetchInterval: 15000, // Refetch every 15 seconds when conversation is selected
     queryFn: async () => {
+      console.log(`Fetching threads for conversation: ${selectedSequence}`);
       const selectedConv = conversations?.find(c => c.id === selectedSequence);
       if (!selectedConv) return [];
 
@@ -177,6 +198,7 @@ export default function Conversations() {
       const { data, error } = await query.order('received_at', { ascending: true });
 
       if (error) throw error;
+      console.log(`Loaded ${data?.length || 0} threads for conversation`);
       return data as EmailThread[];
     },
   });
@@ -284,6 +306,30 @@ export default function Conversations() {
     }
   };
 
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        refetchConversations(),
+        refetchThreads(),
+      ]);
+      setLastSyncTime(new Date());
+      toast({
+        title: "Refreshed",
+        description: "Conversations updated successfully",
+      });
+    } catch (error) {
+      console.error('Error refreshing:', error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh conversations",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const getSentimentBadge = (sentiment?: string) => {
     if (!sentiment) return null;
 
@@ -322,7 +368,26 @@ export default function Conversations() {
               </p>
             </div>
           </div>
-          <PendingReviewsBadge />
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">
+                Last synced: {format(lastSyncTime, 'HH:mm:ss')}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Auto-refresh: 30s
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <PendingReviewsBadge />
+          </div>
         </div>
       </div>
 
