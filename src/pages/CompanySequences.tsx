@@ -9,6 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   Mail, 
   Building2, 
@@ -23,7 +31,11 @@ import {
   ArrowUpRight,
   Eye,
   Send,
-  Bot
+  Bot,
+  MoreVertical,
+  Trash2,
+  Settings,
+  ExternalLink
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUpdateSequenceStatus, useSendSequenceEmail } from '@/hooks/use-company-sequences';
@@ -170,12 +182,29 @@ export default function CompanySequences() {
     });
   };
 
+  const handleDeleteSequence = async (sequenceId: string) => {
+    if (confirm('Are you sure you want to delete this sequence? This action cannot be undone.')) {
+      await updateStatusMutation.mutateAsync({ id: sequenceId, status: 'completed' });
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-500/10 text-green-600 border-green-500/20';
       case 'paused': return 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20';
       case 'completed': return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
+      case 'draft': return 'bg-gray-500/10 text-gray-600 border-gray-500/20';
       default: return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'active': return Play;
+      case 'paused': return Pause;
+      case 'completed': return CheckCircle2;
+      case 'draft': return Clock;
+      default: return Clock;
     }
   };
 
@@ -309,7 +338,7 @@ export default function CompanySequences() {
               return (
                 <Card 
                   key={sequence.id}
-                  className="border-2 hover:border-primary/50 transition-all shadow-lg hover:shadow-xl cursor-pointer group"
+                  className="border-2 hover:border-primary/50 transition-all shadow-lg hover:shadow-xl cursor-pointer group relative overflow-hidden"
                   onClick={() => {
                     markCampaignAsViewed.mutate(sequence.id);
                     setSelectedSequence(sequence);
@@ -317,9 +346,22 @@ export default function CompanySequences() {
                   }}
                 >
                   <CardContent className="p-6">
+                    {/* Status Banner */}
+                    <div className={`absolute top-0 left-0 right-0 h-1.5 ${
+                      sequence.status === 'active' ? 'bg-green-500' :
+                      sequence.status === 'paused' ? 'bg-yellow-500' :
+                      sequence.status === 'completed' ? 'bg-blue-500' :
+                      'bg-gray-500'
+                    }`} />
+
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-start gap-4 flex-1">
-                        <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm shrink-0">
+                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center shadow-sm shrink-0 ${
+                          sequence.status === 'active' ? 'bg-green-500' :
+                          sequence.status === 'paused' ? 'bg-yellow-500' :
+                          sequence.status === 'completed' ? 'bg-blue-500' :
+                          'bg-gray-500'
+                        }`}>
                           <Building2 className="h-5 w-5 text-white" />
                         </div>
                         
@@ -332,8 +374,15 @@ export default function CompanySequences() {
                             {sequence.email_sequences.name}
                           </p>
                           <div className="flex flex-wrap gap-2">
-                            <Badge variant="outline" className={getStatusColor(sequence.status)}>
-                              {sequence.status}
+                            <Badge 
+                              variant="outline" 
+                              className={`${getStatusColor(sequence.status)} font-semibold`}
+                            >
+                              {(() => {
+                                const StatusIcon = getStatusIcon(sequence.status);
+                                return <StatusIcon className="h-3 w-3 mr-1" />;
+                              })()}
+                              {sequence.status.toUpperCase()}
                             </Badge>
                             {sequence.auto_respond_enabled && (
                               <Badge variant="default" className="bg-gradient-primary text-white">
@@ -358,6 +407,7 @@ export default function CompanySequences() {
                       </div>
 
                       <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                        {/* Primary Action Buttons */}
                         {sequence.status === 'draft' && (
                           <Button
                             size="sm"
@@ -376,41 +426,92 @@ export default function CompanySequences() {
                             className="bg-gradient-primary hover:opacity-90"
                           >
                             <Send className="h-4 w-4 mr-2" />
-                            {sendEmailMutation.isPending ? 'Sending...' : 'Send First Email'}
+                            {sendEmailMutation.isPending ? 'Sending...' : 'Start Sequence'}
                           </Button>
                         )}
                         {sequence.status === 'active' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleStatusChange(sequence.id, 'paused')}
-                            disabled={updateStatusMutation.isPending}
-                          >
-                            <Pause className="h-4 w-4 mr-2" />
-                            Pause
-                          </Button>
+                          <>
+                            {sequence.current_step < totalSteps && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleSendNext(sequence)}
+                                disabled={sendEmailMutation.isPending}
+                              >
+                                <Send className="h-4 w-4 mr-2" />
+                                Send Next
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleStatusChange(sequence.id, 'paused')}
+                              disabled={updateStatusMutation.isPending}
+                            >
+                              <Pause className="h-4 w-4 mr-2" />
+                              Pause
+                            </Button>
+                          </>
                         )}
                         {sequence.status === 'paused' && (
                           <Button
                             size="sm"
-                            variant="outline"
                             onClick={() => handleStatusChange(sequence.id, 'active')}
                             disabled={updateStatusMutation.isPending}
+                            className="bg-green-500 hover:bg-green-600 text-white"
                           >
                             <Play className="h-4 w-4 mr-2" />
                             Resume
                           </Button>
                         )}
-                        {sequence.status === 'active' && sequence.current_step < totalSteps && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleSendNext(sequence)}
-                            disabled={sendEmailMutation.isPending}
-                          >
-                            <Send className="h-4 w-4 mr-2" />
-                            Send Next
-                          </Button>
-                        )}
+
+                        {/* Quick Actions Dropdown */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedSequence(sequence);
+                                setDetailsDialogOpen(true);
+                              }}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedSequence(sequence);
+                                setDetailsDialogOpen(true);
+                              }}
+                            >
+                              <Settings className="h-4 w-4 mr-2" />
+                              Settings
+                            </DropdownMenuItem>
+                            {sequence.companies.industry && (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  navigate(`/companies?filter=${sequence.companies.name}`);
+                                }}
+                              >
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                View Company
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteSequence(sequence.id)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Sequence
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
 
