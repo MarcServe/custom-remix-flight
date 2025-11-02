@@ -247,7 +247,7 @@ export default function LeadFinder() {
   };
   const availableSubcategories = industryCategory ? getIndustrySubcategories(industryCategory) : [];
   const filteredSubcategories = availableSubcategories.filter(sub => sub.toLowerCase().includes(subcategorySearch.toLowerCase()));
-  const isFormValid = size && geography && industryCategory;
+  const isFormValid = (size && geography && industryCategory) || (customSearchText.trim().length > 0);
   const isLoading = streamingSearch.isLoading;
 
   // Create results object compatible with existing code
