@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -34,6 +34,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<'admin' | 'sales_rep' | 'viewer' | null>(null);
   const { toast } = useToast();
+  const initialLoadRef = useRef(true);
 
   // Fetch user role when user changes
   useEffect(() => {
@@ -59,8 +60,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(session?.user ?? null);
         setLoading(false);
 
-        // Handle auth events
-        if (event === 'SIGNED_IN') {
+        // Handle auth events - only show welcome toast for actual sign-ins, not initial session restoration
+        if (event === 'SIGNED_IN' && !initialLoadRef.current) {
           toast({
             title: "Welcome back!",
             description: "You've successfully signed in.",
@@ -80,6 +81,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      // Mark initial load as complete
+      initialLoadRef.current = false;
     });
 
     return () => subscription.unsubscribe();
