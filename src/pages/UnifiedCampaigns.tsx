@@ -11,6 +11,8 @@ import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { Progress } from '@/components/ui/progress';
 import { useEmailActivitiesRealtime, useCompanySequencesRealtime } from '@/hooks/use-realtime';
+import { CampaignAnalytics } from '@/components/campaigns/CampaignAnalytics';
+import { EngagementTimeline } from '@/components/campaigns/EngagementTimeline';
 
 interface BulkCampaign {
   id: string;
@@ -37,10 +39,13 @@ interface SequenceCampaign {
     steps: any[];
   };
   email_activities: Array<{
+    id: string;
     status: string;
     sent_at?: string;
     opened_at?: string;
     replied_at?: string;
+    subject?: string;
+    metadata?: any;
   }>;
 }
 
@@ -143,7 +148,7 @@ export default function UnifiedCampaigns() {
           *,
           companies(name, industry),
           email_sequences(name, steps),
-          email_activities(status, sent_at, opened_at, replied_at)
+          email_activities(id, status, sent_at, opened_at, replied_at, subject, metadata)
         `)
         .order('created_at', { ascending: false });
       
@@ -199,6 +204,33 @@ export default function UnifiedCampaigns() {
     autoResponsesEnabled: sequenceCampaigns?.filter(s => s.auto_respond_enabled).length || 0,
   };
 
+  // Calculate engagement metrics across all campaigns
+  const allEmailActivities = sequenceCampaigns?.flatMap(s => s.email_activities || []) || [];
+  const engagementMetrics = {
+    totalSent: allEmailActivities.length,
+    opened: allEmailActivities.filter(a => a.opened_at).length,
+    clicked: allEmailActivities.filter(a => a.metadata?.clicked).length || 0,
+    replied: allEmailActivities.filter(a => a.replied_at).length,
+    bounced: allEmailActivities.filter(a => a.status === 'bounced').length,
+    unsubscribed: allEmailActivities.filter(a => a.status === 'unsubscribed').length || 0,
+  };
+
+  // Create engagement timeline events
+  const timelineEvents = allEmailActivities.slice(0, 50).map(activity => ({
+    id: activity.id || Math.random().toString(),
+    type: (activity.replied_at ? 'replied' : 
+          activity.opened_at ? 'opened' : 
+          activity.status === 'bounced' ? 'bounced' :
+          activity.metadata?.clicked ? 'clicked' : 'sent') as 'sent' | 'opened' | 'clicked' | 'replied' | 'bounced',
+    timestamp: activity.sent_at || new Date().toISOString(),
+    recipientEmail: activity.metadata?.recipient_email as string | undefined,
+    metadata: {
+      subject: activity.subject as string | undefined,
+      link: activity.metadata?.clicked_links?.[0] as string | undefined,
+      bounce_reason: activity.metadata?.bounce_reason as string | undefined,
+    },
+  }));
+
   return (
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="mb-6">
@@ -213,6 +245,18 @@ export default function UnifiedCampaigns() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Engagement Analytics */}
+      <div className="mb-6">
+        <CampaignAnalytics
+          totalSent={engagementMetrics.totalSent}
+          opened={engagementMetrics.opened}
+          clicked={engagementMetrics.clicked}
+          replied={engagementMetrics.replied}
+          bounced={engagementMetrics.bounced}
+          unsubscribed={engagementMetrics.unsubscribed}
+        />
       </div>
 
       {/* Stats Overview */}
@@ -271,6 +315,9 @@ export default function UnifiedCampaigns() {
 
         {/* All Activity Tab */}
         <TabsContent value="all" className="space-y-4">
+          {/* Engagement Timeline */}
+          <EngagementTimeline events={timelineEvents} />
+          
           <Card>
             <CardHeader>
               <CardTitle>Recent Email Activity</CardTitle>
