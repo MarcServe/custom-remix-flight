@@ -72,6 +72,17 @@ export function ConnectEmailDialog({
           return;
         }
         
+        // Handle connection limit errors
+        if (error.message.includes('connection limit') || 
+            error.message.includes('resource_capped') ||
+            error.message.includes('maximum number of connections')) {
+          toast.error("Nango Connection Limit Reached", {
+            description: "Your Nango account has reached its maximum connections. Please upgrade your plan or disconnect unused connections at https://app.nango.dev",
+            duration: 10000,
+          });
+          return;
+        }
+        
         // Handle configuration errors
         if (error.message.includes('NANGO_SECRET_KEY') || 
             error.message.includes('integration not configured') ||
