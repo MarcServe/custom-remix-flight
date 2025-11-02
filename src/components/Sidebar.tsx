@@ -59,6 +59,16 @@ const navigation: NavigationItem[] = [
     ]
   },
   { name: "Email Settings", href: "/integrations", icon: Plug2 },
+  { 
+    name: "Settings", 
+    href: "#settings", 
+    icon: Settings,
+    children: [
+      { name: "Webhook Setup", href: "/webhook-setup", icon: Zap },
+      { name: "Automation Rules", href: "/automation-rules", icon: Zap },
+      { name: "A/B Testing", href: "/ab-testing", icon: Activity },
+    ]
+  },
 ];
 
 // Helper function to get pending count for a menu item

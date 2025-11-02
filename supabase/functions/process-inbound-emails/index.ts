@@ -10,6 +10,9 @@ serve(async (req) => {
   }
 
   try {
+    console.log('=== INBOUND EMAIL WEBHOOK RECEIVED ===');
+    console.log('Headers:', Object.fromEntries(req.headers.entries()));
+    
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -20,30 +23,43 @@ serve(async (req) => {
     let from: string, to: string, subject: string, bodyHtml: string, bodyText: string;
     let messageId: string, threadId: string | null = null, inReplyTo: string | null = null;
     let webhookSource = 'unknown';
+    
+    console.log('Content-Type:', contentType);
 
     if (contentType.includes('application/json')) {
       // Resend webhook format
       webhookSource = 'resend';
       const payload = await req.json();
+      console.log('Resend payload keys:', Object.keys(payload));
+      
       from = payload.from;
       to = payload.to;
       subject = payload.subject;
-      bodyHtml = payload.bodyHtml || '';
-      bodyText = payload.bodyText || '';
-      messageId = payload.messageId;
-      threadId = payload.threadId || null;
-      inReplyTo = payload.inReplyTo || null;
-      console.log('Processing Resend webhook:', { from, to, subject, messageId });
-    } else if (contentType.includes('multipart/form-data')) {
+      bodyHtml = payload.bodyHtml || payload.html || '';
+      bodyText = payload.bodyText || payload.text || '';
+      messageId = payload.messageId || payload.message_id || `resend-${Date.now()}`;
+      threadId = payload.threadId || payload.thread_id || null;
+      inReplyTo = payload.inReplyTo || payload.in_reply_to || null;
+      
+      console.log('✅ Resend webhook parsed:', { from, to, subject, messageId, hasBody: !!bodyText });
+    } else if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
       // SendGrid Inbound Parse format
       webhookSource = 'sendgrid';
       const formData = await req.formData();
+      
+      console.log('SendGrid form data keys:', Array.from(formData.keys()));
       
       from = formData.get('from') as string || '';
       to = formData.get('to') as string || '';
       subject = formData.get('subject') as string || '';
       bodyHtml = formData.get('html') as string || '';
       bodyText = formData.get('text') as string || '';
+      
+      // Extract email from "Name <email@domain.com>" format
+      const emailMatch = from.match(/<([^>]+)>/);
+      if (emailMatch) {
+        from = emailMatch[1];
+      }
       
       // Parse headers to extract Message-ID and In-Reply-To
       const headersStr = formData.get('headers') as string || '';
@@ -75,7 +91,15 @@ serve(async (req) => {
         threadId = messageId;
       }
       
-      console.log('Processing SendGrid webhook:', { from, to, subject, messageId, inReplyTo, threadId });
+      console.log('✅ SendGrid webhook parsed:', { 
+        from, 
+        to, 
+        subject, 
+        messageId, 
+        inReplyTo, 
+        threadId,
+        hasBody: !!bodyText 
+      });
     } else {
       throw new Error(`Unsupported content type: ${contentType}`);
     }
@@ -138,14 +162,42 @@ serve(async (req) => {
     }
 
     if (!matchedSequence) {
-      console.log('No matching sequence found for email from:', from);
+      console.log('⚠️ No matching sequence found for email from:', from);
+      console.log('This is normal for first-time contacts or emails not part of an active sequence');
+      
+      // Still store the email for visibility, without a sequence
+      await supabaseClient
+        .from('email_threads')
+        .insert({
+          company_sequence_id: null,
+          message_id: messageId,
+          thread_id: threadId,
+          direction: 'inbound',
+          subject,
+          body_html: bodyHtml,
+          body_text: bodyText,
+          from_email: from,
+          to_email: to,
+          metadata: {
+            webhook_source: webhookSource,
+            unmatched: true,
+          },
+        });
+      
       return new Response(
-        JSON.stringify({ message: 'No matching sequence found' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          success: true,
+          message: 'Email received but no active sequence found',
+          stored: true 
+        }),
+        { 
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
       );
     }
 
-    console.log('Matched sequence:', matchedSequence.id);
+    console.log('✅ Matched sequence:', matchedSequence.id, 'Company:', matchedSequence.companies?.name);
 
     // Analyze email with AI
     let sentiment = 'neutral';
