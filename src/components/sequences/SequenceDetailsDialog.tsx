@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -67,7 +67,24 @@ export function SequenceDetailsDialog({
     });
   };
 
-  const steps = sequence.steps || [];
+  // Parse steps - they may be stored as JSON strings in the database
+  const steps = useMemo(() => {
+    if (!sequence.steps || sequence.steps.length === 0) return [];
+    
+    return sequence.steps.map(step => {
+      // If step is a string, parse it
+      if (typeof step === 'string') {
+        try {
+          return JSON.parse(step);
+        } catch (e) {
+          console.error('Failed to parse step:', e);
+          return step;
+        }
+      }
+      // Already an object
+      return step;
+    });
+  }, [sequence.steps]);
 
   const handleEditClick = () => {
     setEditedSteps(JSON.parse(JSON.stringify(steps)));

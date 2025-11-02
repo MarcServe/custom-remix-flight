@@ -334,10 +334,10 @@ export default function UnifiedCampaigns() {
                   {activities.map((activity) => (
                     <div
                       key={activity.id}
-                      className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                      className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
                     >
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      <div className="flex items-center gap-4 flex-1 min-w-0 w-full sm:w-auto">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
                           activity.type === 'auto_response' 
                             ? 'bg-gradient-primary' 
                             : 'bg-primary/10'
@@ -350,38 +350,44 @@ export default function UnifiedCampaigns() {
                         </div>
                         
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <span className="font-medium truncate">
                               {activity.campaign_name}
                             </span>
                             {activity.type === 'auto_response' && (
-                              <Badge variant="default" className="bg-gradient-primary text-white text-xs">
+                              <Badge variant="default" className="bg-gradient-primary text-white text-xs shrink-0">
                                 AI Response
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground truncate">
-                            To: {activity.recipient_info}
-                            {activity.details?.subject && ` • ${activity.details.subject}`}
-                          </p>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <p className="truncate break-all">
+                              To: {activity.recipient_info}
+                            </p>
+                            {activity.details?.subject && (
+                              <p className="truncate break-words text-xs">
+                                Subject: {activity.details.subject}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                        <div className="flex items-center gap-4">
-                        <div className="text-right flex flex-wrap gap-2 justify-end">
-                          <Badge variant={activity.status === 'sent' ? 'default' : activity.status === 'replied' ? 'default' : 'secondary'}>
+                      <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end shrink-0">
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <Badge variant={activity.status === 'sent' ? 'default' : activity.status === 'replied' ? 'default' : 'secondary'} className="shrink-0">
                             {activity.status}
                           </Badge>
                           {activity.details?.opened && (
-                            <Badge variant="outline">📬 Opened</Badge>
+                            <Badge variant="outline" className="shrink-0">📬 Opened</Badge>
                           )}
                           {activity.details?.replied && (
-                            <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                            <Badge variant="default" className="bg-green-500 hover:bg-green-600 shrink-0">
                               💬 Replied
                             </Badge>
                           )}
                         </div>
-                        <div className="text-sm text-muted-foreground min-w-[100px] text-right">
+                        <div className="text-sm text-muted-foreground whitespace-nowrap">
                           {format(new Date(activity.timestamp), 'MMM d, HH:mm')}
                         </div>
                       </div>

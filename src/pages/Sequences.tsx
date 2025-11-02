@@ -162,8 +162,7 @@ export default function Sequences() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
             {/* Generation Form */}
             <Card className="border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card via-card to-primary/5">
               <CardHeader className="pb-4">
@@ -717,7 +716,11 @@ export default function Sequences() {
                           <div className="text-xs border-t pt-3 space-y-1">
                             <div className="text-muted-foreground font-medium">First email:</div>
                             <div className="text-foreground truncate font-medium">
-                              {sequence.steps[0].subject}
+                              {(() => {
+                                const step = sequence.steps[0];
+                                const parsedStep = typeof step === 'string' ? JSON.parse(step) : step;
+                                return parsedStep.subject || 'No subject';
+                              })()}
                             </div>
                           </div>
                         )}
@@ -727,14 +730,26 @@ export default function Sequences() {
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Chat Interface */}
-          <div className="lg:sticky lg:top-6 h-[600px]">
-            <SequenceChatCard />
+            {/* AI Sequence Builder - Full Width at Bottom */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="h-1 flex-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent rounded-full" />
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <Sparkles className="h-6 w-6 text-primary animate-pulse" />
+                  AI Sequence Assistant
+                </h2>
+                <div className="h-1 flex-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent rounded-full" />
+              </div>
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 rounded-2xl blur-xl" />
+                <div className="relative h-[600px]">
+                  <SequenceChatCard />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
       {/* Sequence Details Dialog */}
       {selectedSequence && (
