@@ -358,6 +358,27 @@ export default function CompanySequences() {
                       </div>
 
                       <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                        {sequence.status === 'draft' && (
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                await sendEmailMutation.mutateAsync({
+                                  companySequenceId: sequence.id,
+                                  stepNumber: 0
+                                });
+                                await handleStatusChange(sequence.id, 'active');
+                              } catch (error) {
+                                console.error('Failed to send first email:', error);
+                              }
+                            }}
+                            disabled={sendEmailMutation.isPending || updateStatusMutation.isPending}
+                            className="bg-gradient-primary hover:opacity-90"
+                          >
+                            <Send className="h-4 w-4 mr-2" />
+                            {sendEmailMutation.isPending ? 'Sending...' : 'Send First Email'}
+                          </Button>
+                        )}
                         {sequence.status === 'active' && (
                           <Button
                             size="sm"
