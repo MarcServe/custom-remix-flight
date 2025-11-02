@@ -26,10 +26,10 @@ Deno.serve(async (req) => {
       companyName,
       footerText,
       signature,
-      provider, // New field to specify provider directly
+      provider, // Provider can be specified directly for API-key providers
     } = await req.json();
     
-    console.log('Sending test email to:', testEmail);
+    console.log('Sending test email to:', testEmail, 'using provider:', provider);
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -57,16 +57,18 @@ Deno.serve(async (req) => {
       connection = conn;
     }
 
+    console.log('Connection found:', !!connection, 'Provider:', provider);
+
     // For API-key providers (resend, sendgrid), connection is optional
     // For OAuth providers (gmail, outlook), connection is required
-    if (!connection && provider && !['resend', 'sendgrid'].includes(provider)) {
+    if (!connection && provider && !['resend', 'sendgrid'].includes(provider.toLowerCase())) {
       throw new Error('Sender connection required for this provider');
     }
 
-    // Get user profile for signature
+    // Get user profile for signature and business email
     const { data: userProfile } = await supabase
       .from('profiles')
-      .select('full_name, job_title')
+      .select('full_name, job_title, email')
       .eq('id', user.id)
       .single();
 
@@ -77,8 +79,113 @@ Deno.serve(async (req) => {
       .single();
 
     // Determine which email provider to use
-    const emailProvider = provider || businessProfile?.email_provider || 'resend';
+    const emailProvider = provider?.toLowerCase() || businessProfile?.email_provider || 'resend';
     console.log('Using email provider:', emailProvider);
+
+    // Get API-key provider connection for verified from_email
+    const { data: apiKeyConnection } = await supabase
+      .from('crm_connections')
+      .select('from_email, capabilities, metadata')
+      .eq('user_id', user.id)
+      .eq('provider', emailProvider)
+      .eq('status', 'active')
+      .maybeSingle();
+    
+    // Simple test email case (just provider test, no template/campaign)
+    if (!templateStyle && !body) {
+      const testSubject = 'Test Email - Provider Configuration Check';
+      const testBody = `Hi there,\n\nThis is a test email from your CRM to verify your ${emailProvider} configuration is working correctly.\n\nIf you're seeing this, your email provider is set up properly!\n\nBest regards,\nYour CRM Team`;
+      
+      let messageId;
+      
+      if (emailProvider === 'sendgrid' && SENDGRID_API_KEY) {
+        const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SENDGRID_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            personalizations: [{
+              to: [{ email: testEmail }],
+              subject: testSubject,
+            }],
+            from: {
+              email: apiKeyConnection?.from_email || connection?.from_email || userProfile?.email || user.email || 'noreply@yourdomain.com',
+              name: userProfile?.full_name || 'CRM',
+            },
+            content: [
+              {
+                type: 'text/plain',
+                value: testBody,
+              },
+            ],
+          }),
+        });
+
+        if (!sendgridResponse.ok) {
+          const errorText = await sendgridResponse.text();
+          console.error('SendGrid API error:', errorText);
+          
+          // Try to parse SendGrid error for better message
+          try {
+            const errorJson = JSON.parse(errorText);
+            const errorMsg = errorJson.errors?.[0]?.message || errorText;
+            throw new Error(`SendGrid error: ${errorMsg}`);
+          } catch {
+            throw new Error(`SendGrid error: ${errorText}`);
+          }
+        }
+
+        messageId = sendgridResponse.headers.get('X-Message-Id') || 'sendgrid-sent';
+        console.log('Test email sent via SendGrid:', messageId);
+      } else {
+        if (!RESEND_API_KEY) {
+          throw new Error('Resend API key not configured');
+        }
+        
+        const resendResponse = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: apiKeyConnection?.from_email 
+              ? `CRM <${apiKeyConnection.from_email}>` 
+              : connection?.from_email 
+                ? `CRM <${connection.from_email}>` 
+                : userProfile?.email 
+                  ? `CRM <${userProfile.email}>` 
+                  : `CRM <onboarding@resend.dev>`,
+            to: [testEmail],
+            subject: testSubject,
+            text: testBody,
+          }),
+        });
+
+        if (!resendResponse.ok) {
+          const errorText = await resendResponse.text();
+          throw new Error(`Failed to send test email via Resend: ${errorText}`);
+        }
+
+        const data = await resendResponse.json();
+        messageId = data.id;
+        console.log('Test email sent via Resend:', messageId);
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          messageId, 
+          provider: emailProvider,
+          trackingEnabled: ['resend', 'sendgrid'].includes(emailProvider),
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
     
     // For template preview test
     if (templateStyle) {
@@ -119,7 +226,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
               subject: '🎨 Test Email - Your Email Template Preview',
             }],
             from: {
-              email: connection?.from_email || 'noreply@yourdomain.com',
+              email: apiKeyConnection?.from_email || connection?.from_email || userProfile?.email || 'noreply@yourdomain.com',
               name: companyName || 'CRM',
             },
             content: [
@@ -150,7 +257,13 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: `${companyName || 'CRM'} <onboarding@resend.dev>`,
+            from: apiKeyConnection?.from_email 
+              ? `${companyName || 'CRM'} <${apiKeyConnection.from_email}>` 
+              : connection?.from_email 
+                ? `${companyName || 'CRM'} <${connection.from_email}>` 
+                : userProfile?.email 
+                  ? `${companyName || 'CRM'} <${userProfile.email}>` 
+                  : `${companyName || 'CRM'} <onboarding@resend.dev>`,
             to: [recipientEmail],
             subject: '🎨 Test Email - Your Email Template Preview',
             html,
@@ -216,7 +329,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
             subject: `[TEST] ${personalizedSubject2}`,
           }],
           from: {
-            email: connection?.from_email || user.email || 'noreply@yourdomain.com',
+            email: apiKeyConnection?.from_email || connection?.from_email || userProfile?.email || user.email || 'noreply@yourdomain.com',
             name: userProfile?.full_name || 'Team',
           },
           content: [
@@ -232,11 +345,19 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
         }),
       });
 
-      if (!sendgridResponse.ok) {
-        const errorText = await sendgridResponse.text();
-        console.error('SendGrid API error:', errorText);
-        throw new Error('Failed to send test email via SendGrid');
-      }
+        if (!sendgridResponse.ok) {
+          const errorText = await sendgridResponse.text();
+          console.error('SendGrid API error:', errorText);
+          
+          // Try to parse SendGrid error for better message
+          try {
+            const errorJson = JSON.parse(errorText);
+            const errorMsg = errorJson.errors?.[0]?.message || errorText;
+            throw new Error(`SendGrid error: ${errorMsg}`);
+          } catch {
+            throw new Error(`SendGrid error: ${errorText}`);
+          }
+        }
 
       messageId = sendgridResponse.headers.get('X-Message-Id') || 'sendgrid-sent';
       console.log('Test email sent successfully via SendGrid:', messageId);
@@ -252,7 +373,13 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: connection?.from_email || `${userProfile?.full_name || 'Team'} <onboarding@resend.dev>`,
+          from: apiKeyConnection?.from_email 
+            ? `${userProfile?.full_name || 'Team'} <${apiKeyConnection.from_email}>` 
+            : connection?.from_email 
+              ? `${userProfile?.full_name || 'Team'} <${connection.from_email}>` 
+              : userProfile?.email 
+                ? `${userProfile?.full_name || 'Team'} <${userProfile.email}>` 
+                : `${userProfile?.full_name || 'Team'} <onboarding@resend.dev>`,
           to: [testEmail],
           subject: `[TEST] ${personalizedSubject2}`,
           html: bodyHtml,

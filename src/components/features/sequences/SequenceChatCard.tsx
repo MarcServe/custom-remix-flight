@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Sparkles, Send, Loader2, MessageSquare, Zap } from 'lucide-react';
+import { Sparkles, Send, Loader2, MessageSquare, Zap, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -25,8 +27,11 @@ export const SequenceChatCard = () => {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [extractedParams, setExtractedParams] = useState<ExtractedParams>({});
+  const [generatedSequence, setGeneratedSequence] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const examplePrompts = [
     "Create a 4-step sequence for B2B SaaS companies in the UK",
@@ -102,6 +107,17 @@ export const SequenceChatCard = () => {
             // Handle parameter extraction
             if (parsed.params) {
               setExtractedParams(prev => ({ ...prev, ...parsed.params }));
+            }
+            
+            // Handle sequence generation
+            if (parsed.sequence) {
+              setGeneratedSequence(parsed.sequence);
+              // Invalidate sequences query to refresh the list
+              queryClient.invalidateQueries({ queryKey: ['sequences'] });
+              toast({
+                title: "Sequence Generated!",
+                description: "Your email sequence has been created and saved.",
+              });
             }
             
             // Handle content delta
@@ -190,6 +206,24 @@ export const SequenceChatCard = () => {
                   Steps: {extractedParams.steps}
                 </Badge>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Generated Sequence Success */}
+        {generatedSequence && (
+          <div className="p-4 border-b bg-gradient-to-r from-green-500/10 to-emerald-500/10">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              <div>
+                <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                  Sequence Generated Successfully!
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Your {generatedSequence.sequence?.length || extractedParams.steps}-step sequence has been saved. 
+                  Scroll down to see it in "Your Saved Sequences".
+                </p>
+              </div>
             </div>
           </div>
         )}

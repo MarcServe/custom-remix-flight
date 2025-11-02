@@ -167,37 +167,56 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
           </Alert>
         )}
 
-        {/* Connection Details */}
+        {/* Connection Details - Always show for API providers, collapsible for others */}
         {isConnected && connection && (
-          <Collapsible open={showDetails} onOpenChange={setShowDetails}>
-            <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <ChevronDown className={`h-4 w-4 transition-transform ${showDetails ? 'transform rotate-180' : ''}`} />
-              Connection Details
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-3 space-y-2">
-              {connection.from_email && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Email:</span>
-                  <span className="font-mono">{connection.from_email}</span>
+          <>
+            {['resend', 'sendgrid'].includes(provider.id) ? (
+              // Always show email for API providers
+              <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
+                {connection.from_email && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Sending from:</span>
+                    <span className="font-mono font-medium">{connection.from_email}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <CheckCircle2 className="h-3 w-3 text-success" />
+                  <span>Configured and ready to send</span>
                 </div>
-              )}
-              {connection.verified_at && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Verified:</span>
-                  <span className="text-success flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3" />
-                    {new Date(connection.verified_at).toLocaleDateString()}
-                  </span>
-                </div>
-              )}
-              {connection.last_sync_at && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Last Active:</span>
-                  <span>{new Date(connection.last_sync_at).toLocaleDateString()}</span>
-                </div>
-              )}
-            </CollapsibleContent>
-          </Collapsible>
+              </div>
+            ) : (
+              // Collapsible for OAuth/SMTP providers
+              <Collapsible open={showDetails} onOpenChange={setShowDetails}>
+                <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <ChevronDown className={`h-4 w-4 transition-transform ${showDetails ? 'transform rotate-180' : ''}`} />
+                  Connection Details
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3 space-y-2">
+                  {connection.from_email && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Email:</span>
+                      <span className="font-mono">{connection.from_email}</span>
+                    </div>
+                  )}
+                  {connection.verified_at && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Verified:</span>
+                      <span className="text-success flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" />
+                        {new Date(connection.verified_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  )}
+                  {connection.last_sync_at && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Last Active:</span>
+                      <span>{new Date(connection.last_sync_at).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </>
         )}
 
         {/* Error Message */}
@@ -219,11 +238,11 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
           />
         )}
 
-        {/* Connection Test */}
+        {/* Connection Test - Only show for connected providers */}
         {isConnected && connection && (
           <ProviderConnectionTest
             provider={provider.id}
-            connectionId={connection.connection_id}
+            connectionId={connection.connection_id || ''}
           />
         )}
 
@@ -237,7 +256,7 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
           {isConnected && (
             <Button 
               variant="outline" 
-              onClick={() => connection && onDisconnect(connection.connection_id)}
+              onClick={() => connection && onDisconnect(connection.id)}
               className="w-full"
             >
               Disconnect

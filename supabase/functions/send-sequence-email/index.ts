@@ -77,6 +77,13 @@ serve(async (req) => {
     let senderName = 'Your Company';
 
     if (user) {
+      // Get user profile for business email
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('id', user.id)
+        .maybeSingle();
+
       const { data: businessProfile } = await supabase
         .from('business_profiles')
         .select('email_provider, company_name')
@@ -86,18 +93,18 @@ serve(async (req) => {
       emailProvider = businessProfile?.email_provider || 'resend';
       senderName = businessProfile?.company_name || 'Your Company';
 
-      // Get SMTP connection for from_email
+      // Get provider connection for verified from_email
       const { data: connection } = await supabase
         .from('crm_connections')
         .select('from_email')
         .eq('user_id', user.id)
-        .eq('provider', 'smtp')
+        .in('provider', [emailProvider, 'smtp']) // Check both the configured provider and SMTP
         .eq('status', 'active')
+        .order('provider', { ascending: emailProvider === 'smtp' }) // Prioritize exact match
         .maybeSingle();
 
-      if (connection?.from_email) {
-        fromEmail = connection.from_email;
-      }
+      // Priority: connection.from_email > profiles.email > default
+      fromEmail = connection?.from_email || userProfile?.email || 'noreply@yourdomain.com';
     }
 
     console.log(`Sending via ${emailProvider} from ${fromEmail}`);

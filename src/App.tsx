@@ -26,7 +26,6 @@ import Events from "./pages/Events";
 import Integrations from "./pages/Integrations";
 import EmailProviders from "./pages/EmailProviders";
 import EmailDeliverability from "./pages/EmailDeliverability";
-import EmailWebhookSetup from "./pages/EmailWebhookSetup";
 import AutomationRules from "./pages/AutomationRules";
 import ABTesting from "./pages/ABTesting";
 import Teams from "./pages/Teams";
@@ -79,7 +78,6 @@ const App = () => (
                           <Route path="/integrations" element={<Integrations />} />
                           <Route path="/integrations/email-providers" element={<EmailProviders />} />
                           <Route path="/email-deliverability" element={<EmailDeliverability />} />
-                          <Route path="/webhook-setup" element={<EmailWebhookSetup />} />
                           <Route path="/automation-rules" element={<AutomationRules />} />
                           <Route path="/ab-testing" element={<ABTesting />} />
                           <Route path="/teams" element={<Teams />} />

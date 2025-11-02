@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users, Eye, Building2 } from "lucide-react";
 import { useGenerateSequence, useSequences, useDeleteSequence } from "@/hooks/use-sequences";
 import { useCompanySequences, useUpdateSequenceStatus, useDeleteCompanySequence } from "@/hooks/use-company-sequences";
@@ -39,7 +40,13 @@ export default function Sequences() {
   const [personalizeDialogOpen, setPersonalizeDialogOpen] = useState(false);
   const [personalizeCompanyId, setPersonalizeCompanyId] = useState<string>("");
   const [personalizeCompanyName, setPersonalizeCompanyName] = useState<string>("");
+  const [companySelectorOpen, setCompanySelectorOpen] = useState(false);
+  const [pendingSequenceId, setPendingSequenceId] = useState<string>("");
   const { toast } = useToast();
+
+  const scrollToAssistant = () => {
+    document.getElementById('ai-assistant')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const { defaultProvider, defaultModels } = useProviderStore();
   const [providerConfig, setProviderConfig] = useState({
@@ -144,26 +151,35 @@ export default function Sequences() {
         <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
         <div className="relative px-6 py-12">
           <div className="max-w-7xl mx-auto">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
-                <Mail className="h-6 w-6 text-purple-500" />
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
+                  <Mail className="h-6 w-6 text-purple-500" />
+                </div>
+                <div>
+                  <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent">
+                    Email Sequences
+                  </h1>
+                  <p className="text-muted-foreground mt-1">
+                    AI-powered automated campaigns tailored to your target segments
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent">
-                  Email Sequences
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                  AI-powered automated campaigns tailored to your target segments
-                </p>
-              </div>
+              <Button 
+                onClick={scrollToAssistant}
+                size="lg"
+                className="gap-2 shadow-lg"
+              >
+                <Sparkles className="h-5 w-5" />
+                AI Sequence Assistant
+              </Button>
             </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
             {/* Generation Form */}
             <Card className="border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card via-card to-primary/5">
               <CardHeader className="pb-4">
@@ -541,7 +557,7 @@ export default function Sequences() {
                 </Card>
 
                 {/* Apply to Company Section */}
-                <Card className="border-2 border-primary/20 shadow-md">
+                <Card className="border-2 border-primary/20 shadow-md" data-apply-section>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2">
                       <Building2 className="h-5 w-5 text-primary" />
@@ -700,24 +716,44 @@ export default function Sequences() {
                             <Layers className="h-4 w-4 text-primary" />
                             {sequence.steps?.length || 0} steps
                           </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(sequence.id);
-                            }}
-                            disabled={deleteMutation.isPending}
-                            className="h-8 hover:bg-destructive/10 hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedSequence(sequence);
+                                setPendingSequenceId(sequence.id);
+                                setCompanySelectorOpen(true);
+                              }}
+                              className="h-8 text-xs"
+                            >
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              Start
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(sequence.id);
+                              }}
+                              disabled={deleteMutation.isPending}
+                              className="h-8 hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                         {sequence.steps?.[0] && (
                           <div className="text-xs border-t pt-3 space-y-1">
                             <div className="text-muted-foreground font-medium">First email:</div>
                             <div className="text-foreground truncate font-medium">
-                              {sequence.steps[0].subject}
+                              {(() => {
+                                const step = sequence.steps[0];
+                                const parsedStep = typeof step === 'string' ? JSON.parse(step) : step;
+                                return parsedStep.subject || 'No subject';
+                              })()}
                             </div>
                           </div>
                         )}
@@ -727,14 +763,26 @@ export default function Sequences() {
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Chat Interface */}
-          <div className="lg:sticky lg:top-6 h-[600px]">
-            <SequenceChatCard />
+            {/* AI Sequence Builder - Full Width at Bottom */}
+            <div id="ai-assistant" className="space-y-4 scroll-mt-8">
+              <div className="flex items-center gap-3">
+                <div className="h-1 flex-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent rounded-full" />
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <Sparkles className="h-6 w-6 text-primary animate-pulse" />
+                  AI Sequence Assistant
+                </h2>
+                <div className="h-1 flex-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent rounded-full" />
+              </div>
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 rounded-2xl blur-xl" />
+                <div className="relative h-[600px]">
+                  <SequenceChatCard />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
       {/* Sequence Details Dialog */}
       {selectedSequence && (
@@ -745,6 +793,74 @@ export default function Sequences() {
         />
       )}
 
+      {/* Company Selector Dialog for Saved Sequences */}
+      <Dialog open={companySelectorOpen} onOpenChange={setCompanySelectorOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select Company</DialogTitle>
+            <DialogDescription>
+              Choose a company to personalize this sequence for
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="company-selector">Company</Label>
+              <Select
+                value={personalizeCompanyId}
+                onValueChange={(value) => {
+                  setPersonalizeCompanyId(value);
+                  const company = companiesData?.find(c => c.id === value);
+                  setPersonalizeCompanyName(company?.name || "");
+                }}
+              >
+                <SelectTrigger id="company-selector">
+                  <SelectValue placeholder="Choose a company" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companiesData?.map((company) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4" />
+                        {company.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCompanySelectorOpen(false);
+                setPersonalizeCompanyId("");
+                setPersonalizeCompanyName("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!personalizeCompanyId) {
+                  toast({
+                    title: "No Company Selected",
+                    description: "Please select a company to continue",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                setCompanySelectorOpen(false);
+                setPersonalizeDialogOpen(true);
+              }}
+              disabled={!personalizeCompanyId}
+            >
+              Continue
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Personalize Sequence Dialog */}
       {personalizeCompanyId && personalizeCompanyName && (
         <PersonalizeSequenceDialog
@@ -754,11 +870,14 @@ export default function Sequences() {
             if (!open) {
               setPersonalizeCompanyId("");
               setPersonalizeCompanyName("");
+              setSelectedSequence(null);
+              setPendingSequenceId("");
             }
           }}
           companyId={personalizeCompanyId}
           companyName={personalizeCompanyName}
           defaultSendImmediately={sendImmediately}
+          defaultSequenceId={pendingSequenceId || selectedSequence?.id}
         />
       )}
     </div>

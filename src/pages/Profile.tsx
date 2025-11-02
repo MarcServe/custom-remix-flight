@@ -24,6 +24,7 @@ export default function Profile() {
   const [profile, setProfile] = useState({
     full_name: "",
     job_title: "",
+    email: "",
   });
   const [businessProfile, setBusinessProfile] = useState({
     company_name: "",
@@ -67,7 +68,7 @@ export default function Profile() {
       // Load personal profile
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("full_name, job_title")
+        .select("full_name, job_title, email")
         .eq("id", user.id)
         .single();
 
@@ -75,6 +76,7 @@ export default function Profile() {
         setProfile({
           full_name: profileData.full_name || "",
           job_title: profileData.job_title || "",
+          email: profileData.email || user.email || "",
         });
       }
 
@@ -135,6 +137,7 @@ export default function Profile() {
         .update({
           full_name: profile.full_name,
           job_title: profile.job_title,
+          email: profile.email,
         })
         .eq("id", user.id);
 
@@ -232,16 +235,17 @@ export default function Profile() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Business Email *</Label>
                 <Input
                   id="email"
                   type="email"
-                  value={user?.email || ""}
-                  disabled
-                  className="bg-muted"
+                  value={profile.email}
+                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                  placeholder="e.g., michael.o@bizboosters.co.uk"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Contact support to change your email address
+                <p className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1">
+                  <Mail className="h-3 w-3" />
+                  This email will be used as the FROM address when sending emails. Make sure it's verified in your email provider (SendGrid/Resend).
                 </p>
               </div>
 
@@ -286,7 +290,7 @@ export default function Profile() {
               <div className="flex justify-end pt-4">
                 <Button
                   onClick={handleSaveProfile}
-                  disabled={saving || !profile.full_name || !profile.job_title}
+                  disabled={saving || !profile.full_name || !profile.job_title || !profile.email}
                 >
                   {saving ? (
                     <>

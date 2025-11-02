@@ -224,6 +224,36 @@ export const useEventsRealtime = () => {
               queryClient.invalidateQueries({ queryKey: ['event', eventId] });
             }
           }
+          
+          // Show notification for new events
+          if (payload.eventType === 'INSERT' && payload.new) {
+            const event = payload.new as any;
+            const notification = document.createElement('div');
+            notification.className = 'fixed bottom-4 right-4 bg-card border rounded-lg shadow-lg p-4 max-w-sm z-50 animate-in slide-in-from-bottom-5';
+            notification.innerHTML = `
+              <div class="flex items-start gap-3">
+                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                  <svg class="h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                  </svg>
+                </div>
+                <div class="flex-1">
+                  <h4 class="text-sm font-semibold mb-1">New Event Created</h4>
+                  <p class="text-xs text-muted-foreground mb-2">${event.title || 'Event'}</p>
+                  <button onclick="window.location.href='/events'" class="text-xs text-primary hover:underline font-medium">
+                    View Events →
+                  </button>
+                </div>
+                <button onclick="this.parentElement.parentElement.remove()" class="text-muted-foreground hover:text-foreground">
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+              </div>
+            `;
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 8000);
+          }
         }
       )
       .subscribe();
@@ -333,11 +363,14 @@ export const useEmailActivitiesRealtime = () => {
 
 /**
  * Hook to subscribe to real-time updates for email_threads table
+ * Enhanced with more aggressive invalidation for conversations
  */
 export const useEmailThreadsRealtime = () => {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    console.log('🔴 Setting up email_threads realtime subscription');
+    
     const channel = supabase
       .channel('email-threads-changes')
       .on(
@@ -348,22 +381,34 @@ export const useEmailThreadsRealtime = () => {
           table: 'email_threads',
         },
         (payload: RealtimePostgresChangesPayload<any>) => {
-          console.log('Email threads realtime update:', payload.eventType);
+          console.log('✅ Email threads realtime update:', payload.eventType, payload.new);
           
+          // Aggressively invalidate all conversation-related queries
           queryClient.invalidateQueries({ queryKey: ['email-threads'] });
           queryClient.invalidateQueries({ queryKey: ['active-conversations'] });
+          queryClient.invalidateQueries({ queryKey: ['company-sequences'] });
+          queryClient.invalidateQueries({ queryKey: ['pending-reviews'] });
           
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const threadId = payload.new?.id;
+            const sequenceId = payload.new?.company_sequence_id;
+            
             if (threadId) {
               queryClient.invalidateQueries({ queryKey: ['email-thread', threadId] });
+            }
+            
+            if (sequenceId) {
+              queryClient.invalidateQueries({ queryKey: ['email-threads', sequenceId] });
             }
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Email threads subscription status:', status);
+      });
 
     return () => {
+      console.log('🔴 Cleaning up email_threads realtime subscription');
       supabase.removeChannel(channel);
     };
   }, [queryClient]);

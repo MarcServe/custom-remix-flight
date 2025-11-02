@@ -29,7 +29,6 @@ import { QualityScoreBadge } from "@/components/lead-finder/QualityScoreBadge";
 import { QualityStars } from "@/components/lead-finder/QualityStars";
 import { DataCompletenessBar } from "@/components/lead-finder/DataCompletenessBar";
 import { SourceBadges } from "@/components/lead-finder/SourceBadges";
-
 export default function LeadFinder() {
   const [size, setSize] = useState("");
   const [geography, setGeography] = useState("");
@@ -43,42 +42,48 @@ export default function LeadFinder() {
   const [selectedCompanyIndices, setSelectedCompanyIndices] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [currentCompanyIndex, setCurrentCompanyIndex] = useState<number>(0);
-  
+
   // Batch operation states
   const [isEnriching, setIsEnriching] = useState(false);
   const [isFindingContacts, setIsFindingContacts] = useState(false);
-  
+
   // Filter states
   const [minQualityScore, setMinQualityScore] = useState<number>(0);
   const [mustHaveContacts, setMustHaveContacts] = useState(false);
   const [mustHaveLinkedIn, setMustHaveLinkedIn] = useState(false);
   const [mustHaveNews, setMustHaveNews] = useState(false);
   const [mustHaveFunding, setMustHaveFunding] = useState(false);
-  
+
   // Sorting state
   const [sortBy, setSortBy] = useState<'quality' | 'completeness' | 'alphabetical' | 'employees'>('quality');
-  
-  const { defaultProvider, defaultModels } = useProviderStore();
+  const {
+    defaultProvider,
+    defaultModels
+  } = useProviderStore();
   const [providerConfig, setProviderConfig] = useState<{
     provider: 'lovable' | 'openai' | 'perplexity';
     model: string | undefined;
   }>({
     provider: 'openai',
-    model: 'gpt-4o-mini',
+    model: 'gpt-4o-mini'
   });
 
   // Sync provider config with store changes
   useEffect(() => {
     setProviderConfig({
       provider: defaultProvider,
-      model: defaultModels[defaultProvider] as string | undefined,
+      model: defaultModels[defaultProvider] as string | undefined
     });
   }, [defaultProvider, defaultModels]);
-
-  const { leadFinderResults, setLeadFinderResults } = useUIStore();
+  const {
+    leadFinderResults,
+    setLeadFinderResults
+  } = useUIStore();
   const streamingSearch = useLeadFinderStream();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const {
+    toast
+  } = useToast();
 
   // Handle page visibility changes - refresh when user returns
   useEffect(() => {
@@ -92,17 +97,14 @@ export default function LeadFinder() {
         }
       }
     };
-    
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [streamingSearch.hasActiveSearch]);
-
-  const handleSearch = async (options?: { forceSave?: boolean }) => {
+  const handleSearch = async (options?: {
+    forceSave?: boolean;
+  }) => {
     const shouldDryRun = options?.forceSave ? false : dryRun;
-    const industryString = industrySubcategory 
-      ? formatIndustryString(industryCategory, industrySubcategory)
-      : industryCategory;
-    
+    const industryString = industrySubcategory ? formatIndustryString(industryCategory, industrySubcategory) : industryCategory;
     await streamingSearch.findLeads({
       size,
       geography,
@@ -110,41 +112,37 @@ export default function LeadFinder() {
       dryRun: shouldDryRun,
       provider: providerConfig.provider,
       model: providerConfig.model,
-      enrichWithPerplexity,
+      enrichWithPerplexity
     });
   };
-
   const handleCancelSearch = () => {
     streamingSearch.cancelSearch();
   };
-
   const handleNavigateCompany = (direction: 'prev' | 'next') => {
     if (!filteredAndSortedResults?.leads) return;
-    
     let newIndex = currentCompanyIndex;
     if (direction === 'prev' && currentCompanyIndex > 0) {
       newIndex = currentCompanyIndex - 1;
     } else if (direction === 'next' && currentCompanyIndex < filteredAndSortedResults.leads.length - 1) {
       newIndex = currentCompanyIndex + 1;
     }
-    
     setCurrentCompanyIndex(newIndex);
     setSelectedCompany(filteredAndSortedResults.leads[newIndex]);
   };
-
   const handleSaveSelectedCompanies = async () => {
     if (!filteredAndSortedResults?.leads || selectedCompanyIndices.size === 0) return;
-
     setIsSaving(true);
     try {
       const selectedCompanies = Array.from(selectedCompanyIndices).map(idx => filteredAndSortedResults.leads[idx]);
       let successCount = 0;
       let errorCount = 0;
-
       for (const company of selectedCompanies) {
         try {
           // Create company
-          const { data: createdCompany, error: companyError } = await companiesApi.createCompany({
+          const {
+            data: createdCompany,
+            error: companyError
+          } = await companiesApi.createCompany({
             name: company.name,
             website: company.website,
             description: company.description,
@@ -161,10 +159,9 @@ export default function LeadFinder() {
             enrichment_data: company.wasEnriched ? {
               products: company.products,
               recentNews: company.recentNews,
-              fundingInfo: company.fundingInfo,
-            } : undefined,
+              fundingInfo: company.fundingInfo
+            } : undefined
           });
-
           if (companyError) {
             console.error('Error creating company:', companyError);
             errorCount++;
@@ -173,7 +170,9 @@ export default function LeadFinder() {
 
           // Create contacts if they exist
           if (company.contacts && company.contacts.length > 0 && createdCompany) {
-            const { supabase } = await import("@/integrations/supabase/client");
+            const {
+              supabase
+            } = await import("@/integrations/supabase/client");
             const contactsToInsert = company.contacts.map((contact: any) => ({
               company_id: createdCompany.id,
               name: contact.name,
@@ -183,18 +182,15 @@ export default function LeadFinder() {
               title: contact.title,
               department: contact.department,
               phone: contact.phone,
-              is_primary_contact: contact === company.primaryContact,
+              is_primary_contact: contact === company.primaryContact
             }));
-
-            const { error: contactsError } = await supabase
-              .from('contacts')
-              .insert(contactsToInsert);
-
+            const {
+              error: contactsError
+            } = await supabase.from('contacts').insert(contactsToInsert);
             if (contactsError) {
               console.error('Error creating contacts:', contactsError);
             }
           }
-
           successCount++;
         } catch (error) {
           console.error('Error saving company:', error);
@@ -203,12 +199,15 @@ export default function LeadFinder() {
       }
 
       // Invalidate queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ['companies'] });
-      queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] });
-
+      queryClient.invalidateQueries({
+        queryKey: ['companies']
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['pipeline-stats']
+      });
       toast({
         title: 'Success',
-        description: `Added ${successCount} ${successCount === 1 ? 'company' : 'companies'} to CRM${errorCount > 0 ? ` (${errorCount} failed)` : ''}`,
+        description: `Added ${successCount} ${successCount === 1 ? 'company' : 'companies'} to CRM${errorCount > 0 ? ` (${errorCount} failed)` : ''}`
       });
 
       // Clear selection after saving
@@ -218,13 +217,12 @@ export default function LeadFinder() {
       toast({
         title: 'Error',
         description: 'Failed to save companies to CRM',
-        variant: 'destructive',
+        variant: 'destructive'
       });
     } finally {
       setIsSaving(false);
     }
   };
-
   const toggleCompanySelection = (index: number) => {
     setSelectedCompanyIndices(prev => {
       const newSet = new Set(prev);
@@ -236,28 +234,19 @@ export default function LeadFinder() {
       return newSet;
     });
   };
-
   const toggleSelectAll = () => {
     if (!filteredAndSortedResults?.leads) return;
-    
     if (selectedCompanyIndices.size === filteredAndSortedResults.leads.length) {
       setSelectedCompanyIndices(new Set());
     } else {
       setSelectedCompanyIndices(new Set(filteredAndSortedResults.leads.map((_, idx) => idx)));
     }
   };
-
-  const availableSubcategories = industryCategory 
-    ? getIndustrySubcategories(industryCategory)
-    : [];
-
-  const filteredSubcategories = availableSubcategories.filter(sub =>
-    sub.toLowerCase().includes(subcategorySearch.toLowerCase())
-  );
-
+  const availableSubcategories = industryCategory ? getIndustrySubcategories(industryCategory) : [];
+  const filteredSubcategories = availableSubcategories.filter(sub => sub.toLowerCase().includes(subcategorySearch.toLowerCase()));
   const isFormValid = size && geography && industryCategory;
   const isLoading = streamingSearch.isLoading;
-  
+
   // Create results object compatible with existing code
   const results = streamingSearch.leads.length > 0 ? {
     leads: streamingSearch.leads,
@@ -265,7 +254,12 @@ export default function LeadFinder() {
     dryRun,
     provider: providerConfig.provider,
     model: providerConfig.model || '',
-    usage: streamingSearch.usage || { promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 },
+    usage: streamingSearch.usage || {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      estimatedCost: 0
+    },
     wasEnriched: enrichWithPerplexity,
     traceUrl: streamingSearch.traceUrl || '',
     stats: streamingSearch.stats
@@ -288,27 +282,26 @@ export default function LeadFinder() {
         if (company.qualityScore !== undefined && company.qualityScore < minQualityScore) {
           return false;
         }
-        
+
         // Must have contacts filter
         if (mustHaveContacts && (!company.contacts || company.contacts.length === 0)) {
           return false;
         }
-        
+
         // Must have LinkedIn filter
         if (mustHaveLinkedIn && !company.linkedinUrl) {
           return false;
         }
-        
+
         // Must have news filter
         if (mustHaveNews && !company.recentNews) {
           return false;
         }
-        
+
         // Must have funding filter
         if (mustHaveFunding && !company.fundingInfo) {
           return false;
         }
-        
         return true;
       });
 
@@ -327,11 +320,9 @@ export default function LeadFinder() {
             return 0;
         }
       });
-
       return sorted;
     })()
   } : null;
-
   const clearFilters = () => {
     setMinQualityScore(0);
     setMustHaveContacts(false);
@@ -340,7 +331,6 @@ export default function LeadFinder() {
     setMustHaveFunding(false);
     setSortBy('quality');
   };
-
   const hasActiveFilters = minQualityScore > 0 || mustHaveContacts || mustHaveLinkedIn || mustHaveNews || mustHaveFunding || sortBy !== 'quality';
 
   // Copy email to clipboard
@@ -349,55 +339,50 @@ export default function LeadFinder() {
     navigator.clipboard.writeText(email);
     toast({
       title: 'Copied',
-      description: 'Email copied to clipboard',
+      description: 'Email copied to clipboard'
     });
   };
 
   // Batch action handlers
   const handleExportSelected = () => {
     if (!filteredAndSortedResults?.leads || selectedCompanyIndices.size === 0) return;
-    
     const selectedCompanies = Array.from(selectedCompanyIndices).map(idx => filteredAndSortedResults.leads[idx]);
     exportCompaniesToCSV(selectedCompanies, 'selected_leads');
-    
     toast({
       title: 'Success',
-      description: `Exported ${selectedCompanies.length} ${selectedCompanies.length === 1 ? 'company' : 'companies'} to CSV`,
+      description: `Exported ${selectedCompanies.length} ${selectedCompanies.length === 1 ? 'company' : 'companies'} to CSV`
     });
   };
-
   const handleExportAll = () => {
     if (!filteredAndSortedResults?.leads) return;
-    
     exportCompaniesToCSV(filteredAndSortedResults.leads, 'all_leads');
-    
     toast({
       title: 'Success',
-      description: `Exported ${filteredAndSortedResults.leads.length} ${filteredAndSortedResults.leads.length === 1 ? 'company' : 'companies'} to CSV`,
+      description: `Exported ${filteredAndSortedResults.leads.length} ${filteredAndSortedResults.leads.length === 1 ? 'company' : 'companies'} to CSV`
     });
   };
-
   const handleEnrichSelected = async () => {
     if (!filteredAndSortedResults?.leads || selectedCompanyIndices.size === 0) return;
-    
     setIsEnriching(true);
     try {
       const selectedCompanies = Array.from(selectedCompanyIndices).map(idx => filteredAndSortedResults.leads[idx]);
-      const { supabase } = await import("@/integrations/supabase/client");
-      
+      const {
+        supabase
+      } = await import("@/integrations/supabase/client");
       let enrichedCount = 0;
       let errorCount = 0;
-
       for (const company of selectedCompanies) {
         try {
-          const { data, error } = await supabase.functions.invoke('generate-email-with-ai', {
+          const {
+            data,
+            error
+          } = await supabase.functions.invoke('generate-email-with-ai', {
             body: {
               companyName: company.name,
               companyWebsite: company.website,
               enrichOnly: true
             }
           });
-
           if (error) throw error;
           enrichedCount++;
         } catch (error) {
@@ -405,10 +390,9 @@ export default function LeadFinder() {
           errorCount++;
         }
       }
-
       toast({
         title: 'Enrichment Complete',
-        description: `Enriched ${enrichedCount} ${enrichedCount === 1 ? 'company' : 'companies'}${errorCount > 0 ? ` (${errorCount} failed)` : ''}`,
+        description: `Enriched ${enrichedCount} ${enrichedCount === 1 ? 'company' : 'companies'}${errorCount > 0 ? ` (${errorCount} failed)` : ''}`
       });
 
       // Trigger a re-search to get updated data
@@ -420,40 +404,40 @@ export default function LeadFinder() {
       toast({
         title: 'Error',
         description: 'Failed to enrich selected companies',
-        variant: 'destructive',
+        variant: 'destructive'
       });
     } finally {
       setIsEnriching(false);
     }
   };
-
   const handleFindMoreContacts = async () => {
     if (!filteredAndSortedResults?.leads || selectedCompanyIndices.size === 0) return;
-    
     setIsFindingContacts(true);
     try {
       const selectedCompanies = Array.from(selectedCompanyIndices).map(idx => {
         const company = filteredAndSortedResults.leads[idx];
         return {
           name: company.name,
-          website: company.website,
+          website: company.website
         };
       });
-      
-      const { supabase } = await import("@/integrations/supabase/client");
-      
-      const { data, error } = await supabase.functions.invoke('find-additional-contacts', {
-        body: { companies: selectedCompanies }
+      const {
+        supabase
+      } = await import("@/integrations/supabase/client");
+      const {
+        data,
+        error
+      } = await supabase.functions.invoke('find-additional-contacts', {
+        body: {
+          companies: selectedCompanies
+        }
       });
-
       if (error) throw error;
-
       const totalFound = data?.totalContactsFound || 0;
       const companiesWithContacts = data?.companiesWithContacts || 0;
-
       toast({
         title: 'Contact Discovery Complete',
-        description: `Found ${totalFound} additional contacts across ${companiesWithContacts} ${companiesWithContacts === 1 ? 'company' : 'companies'}`,
+        description: `Found ${totalFound} additional contacts across ${companiesWithContacts} ${companiesWithContacts === 1 ? 'company' : 'companies'}`
       });
 
       // Optionally trigger a re-search to refresh data
@@ -465,18 +449,15 @@ export default function LeadFinder() {
       toast({
         title: 'Error',
         description: 'Failed to find additional contacts',
-        variant: 'destructive',
+        variant: 'destructive'
       });
     } finally {
       setIsFindingContacts(false);
     }
   };
-
-  return (
-    <div className="h-screen flex flex-col bg-background">
+  return <div className="h-screen flex flex-col bg-background">
       {/* Active Search Recovery Banner */}
-      {streamingSearch.hasActiveSearch && !streamingSearch.isLoading && streamingSearch.currentStatus !== 'Complete' && (
-        <Alert className="sticky top-0 z-20 rounded-none border-x-0 border-t-0 bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900">
+      {streamingSearch.hasActiveSearch && !streamingSearch.isLoading && streamingSearch.currentStatus !== 'Complete' && <Alert className="sticky top-0 z-20 rounded-none border-x-0 border-t-0 bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900">
           <RefreshCw className="h-4 w-4 text-orange-600 dark:text-orange-400" />
           <AlertDescription className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex-1 min-w-0">
@@ -488,45 +469,36 @@ export default function LeadFinder() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs text-orange-700 dark:text-orange-300 hover:text-orange-900 dark:hover:text-orange-100 hover:bg-orange-100 dark:hover:bg-orange-900/50"
-                onClick={() => {
-                  streamingSearch.resumeActiveSearch();
-                  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                  toast({
-                    title: 'Viewing Partial Results',
-                    description: `Currently showing ${streamingSearch.leads.length} leads found so far`,
-                  });
-                }}
-              >
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-orange-700 dark:text-orange-300 hover:text-orange-900 dark:hover:text-orange-100 hover:bg-orange-100 dark:hover:bg-orange-900/50" onClick={() => {
+            streamingSearch.resumeActiveSearch();
+            window.scrollTo({
+              top: document.body.scrollHeight,
+              behavior: 'smooth'
+            });
+            toast({
+              title: 'Viewing Partial Results',
+              description: `Currently showing ${streamingSearch.leads.length} leads found so far`
+            });
+          }}>
                 <Eye className="h-3 w-3 mr-1" />
                 View Progress
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs text-orange-700 dark:text-orange-300 hover:text-orange-900 dark:hover:text-orange-100 hover:bg-orange-100 dark:hover:bg-orange-900/50"
-                onClick={() => {
-                  streamingSearch.clearActiveSearch();
-                  toast({
-                    title: 'Search Cancelled',
-                    description: 'Active search has been cancelled',
-                  });
-                }}
-              >
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-orange-700 dark:text-orange-300 hover:text-orange-900 dark:hover:text-orange-100 hover:bg-orange-100 dark:hover:bg-orange-900/50" onClick={() => {
+            streamingSearch.clearActiveSearch();
+            toast({
+              title: 'Search Cancelled',
+              description: 'Active search has been cancelled'
+            });
+          }}>
                 <X className="h-3 w-3 mr-1" />
                 Cancel
               </Button>
             </div>
           </AlertDescription>
-        </Alert>
-      )}
+        </Alert>}
 
       {/* Stored Results Banner */}
-      {streamingSearch.hasStoredResults && streamingSearch.leads.length > 0 && !streamingSearch.hasActiveSearch && (
-        <Alert className="sticky top-0 z-10 rounded-none border-x-0 border-t-0 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
+      {streamingSearch.hasStoredResults && streamingSearch.leads.length > 0 && !streamingSearch.hasActiveSearch && <Alert className="sticky top-0 z-10 rounded-none border-x-0 border-t-0 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
           <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           <AlertDescription className="flex items-center justify-between">
             <span className="text-sm text-blue-900 dark:text-blue-100 font-medium">
@@ -534,11 +506,7 @@ export default function LeadFinder() {
             </span>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 hover:bg-blue-100 dark:hover:bg-blue-900/50"
-                >
+                <Button variant="ghost" size="sm" className="h-7 text-xs text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 hover:bg-blue-100 dark:hover:bg-blue-900/50">
                   <X className="h-3 w-3 mr-1" />
                   Clear
                 </Button>
@@ -553,22 +521,17 @@ export default function LeadFinder() {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => streamingSearch.clearStoredResults()}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
+                  <AlertDialogAction onClick={() => streamingSearch.clearStoredResults()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                     Clear Results
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
           </AlertDescription>
-        </Alert>
-      )}
+        </Alert>}
       
       {/* Background Search Indicator (Floating) */}
-      {streamingSearch.hasActiveSearch && streamingSearch.isLoading && (
-        <div className="fixed bottom-4 right-4 z-50 bg-card border shadow-lg rounded-lg p-3 max-w-xs animate-in slide-in-from-bottom-4">
+      {streamingSearch.hasActiveSearch && streamingSearch.isLoading && <div className="fixed bottom-4 right-4 z-50 bg-card border shadow-lg rounded-lg p-3 max-w-xs animate-in slide-in-from-bottom-4">
           <div className="flex items-start gap-3">
             <Loader2 className="h-4 w-4 animate-spin text-primary flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
@@ -577,8 +540,7 @@ export default function LeadFinder() {
               <Progress value={streamingSearch.progress} className="h-1 mt-2" />
             </div>
           </div>
-        </div>
-      )}
+        </div>}
       
       {/* Top Bar */}
       <div className="border-b bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
@@ -593,8 +555,7 @@ export default function LeadFinder() {
             </div>
           </div>
           
-          {results && (
-            <div className="hidden md:flex items-center gap-4 text-xs">
+          {results && <div className="hidden md:flex items-center gap-4 text-xs">
               <div className="flex items-center gap-2">
                 <Database className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="font-mono">{results.leads.length}</span>
@@ -603,10 +564,9 @@ export default function LeadFinder() {
               <Separator orientation="vertical" className="h-4" />
               <div className="flex items-center gap-2">
                 <Zap className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="font-mono">${results.usage.estimatedCost.toFixed(4)}</span>
+                <span className="font-mono">${(results.usage.estimatedCost ?? 0).toFixed(4)}</span>
               </div>
-            </div>
-          )}
+            </div>}
         </div>
       </div>
 
@@ -640,96 +600,59 @@ export default function LeadFinder() {
 
                   <div className="space-y-1.5">
                     <Label htmlFor="geography" className="text-xs font-medium">Geography</Label>
-                    <Input
-                      id="geography"
-                      placeholder="e.g., United Kingdom"
-                      value={geography}
-                      onChange={(e) => setGeography(e.target.value)}
-                      className="h-9 text-xs"
-                    />
+                    <Input id="geography" placeholder="e.g., United Kingdom" value={geography} onChange={e => setGeography(e.target.value)} className="h-9 text-xs" />
                   </div>
 
                   <div className="space-y-1.5">
                     <Label htmlFor="industry-category" className="text-xs font-medium">Industry Category</Label>
-                    <Select 
-                      value={industryCategory} 
-                      onValueChange={(value) => {
-                        setIndustryCategory(value);
-                        setIndustrySubcategory("");
-                        setSubcategorySearch("");
-                      }}
-                    >
+                    <Select value={industryCategory} onValueChange={value => {
+                    setIndustryCategory(value);
+                    setIndustrySubcategory("");
+                    setSubcategorySearch("");
+                  }}>
                       <SelectTrigger id="industry-category" className="h-9 text-xs">
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent className="max-h-[300px]">
-                        {getIndustryCategories().map(category => (
-                          <SelectItem key={category} value={category}>{category}</SelectItem>
-                        ))}
+                        {getIndustryCategories().map(category => <SelectItem key={category} value={category}>{category}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {industryCategory && (
-                    <div className="space-y-1.5">
+                  {industryCategory && <div className="space-y-1.5">
                       <Label htmlFor="industry-subcategory" className="text-xs font-medium">Subcategory (Optional)</Label>
                       <Popover>
                         <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            className="w-full h-9 justify-between text-xs font-normal"
-                          >
+                          <Button variant="outline" role="combobox" className="w-full h-9 justify-between text-xs font-normal">
                             {industrySubcategory || "Select subcategory"}
                             <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                           <div className="p-2">
-                            <Input
-                              placeholder="Search..."
-                              value={subcategorySearch}
-                              onChange={(e) => setSubcategorySearch(e.target.value)}
-                              className="h-8 text-xs mb-2"
-                            />
+                            <Input placeholder="Search..." value={subcategorySearch} onChange={e => setSubcategorySearch(e.target.value)} className="h-8 text-xs mb-2" />
                             <ScrollArea className="h-[200px]">
                               <div className="space-y-1">
-                                <Button
-                                  variant="ghost"
-                                  className="w-full h-8 justify-start text-xs font-normal"
-                                  onClick={() => {
-                                    setIndustrySubcategory("");
-                                    setSubcategorySearch("");
-                                  }}
-                                >
+                                <Button variant="ghost" className="w-full h-8 justify-start text-xs font-normal" onClick={() => {
+                              setIndustrySubcategory("");
+                              setSubcategorySearch("");
+                            }}>
                                   None
                                 </Button>
-                                {filteredSubcategories.length > 0 ? (
-                                  filteredSubcategories.map((subcategory) => (
-                                    <Button
-                                      key={subcategory}
-                                      variant="ghost"
-                                      className="w-full h-8 justify-start text-xs font-normal"
-                                      onClick={() => {
-                                        setIndustrySubcategory(subcategory);
-                                        setSubcategorySearch("");
-                                      }}
-                                    >
+                                {filteredSubcategories.length > 0 ? filteredSubcategories.map(subcategory => <Button key={subcategory} variant="ghost" className="w-full h-8 justify-start text-xs font-normal" onClick={() => {
+                              setIndustrySubcategory(subcategory);
+                              setSubcategorySearch("");
+                            }}>
                                       {subcategory}
-                                    </Button>
-                                  ))
-                                ) : (
-                                  <div className="p-2 text-xs text-muted-foreground text-center">
+                                    </Button>) : <div className="p-2 text-xs text-muted-foreground text-center">
                                     No results found
-                                  </div>
-                                )}
+                                  </div>}
                               </div>
                             </ScrollArea>
                           </div>
                         </PopoverContent>
                       </Popover>
-                    </div>
-                  )}
+                    </div>}
                 </div>
               </div>
 
@@ -742,15 +665,10 @@ export default function LeadFinder() {
                 </h2>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Provider</Label>
-                  <Select 
-                    value={providerConfig.provider} 
-                    onValueChange={(value: any) => setProviderConfig({
-                      provider: value,
-                      model: value === 'lovable' ? 'google/gemini-2.5-flash' : 
-                             value === 'perplexity' ? 'sonar' : 
-                             'gpt-4o-mini'
-                    })}
-                  >
+                  <Select value={providerConfig.provider} onValueChange={(value: any) => setProviderConfig({
+                  provider: value,
+                  model: value === 'lovable' ? 'google/gemini-2.5-flash' : value === 'perplexity' ? 'sonar' : 'gpt-4o-mini'
+                })}>
                     <SelectTrigger className="h-9 text-xs">
                       <SelectValue />
                     </SelectTrigger>
@@ -764,33 +682,27 @@ export default function LeadFinder() {
 
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Model</Label>
-                  <Select 
-                    value={providerConfig.model} 
-                    onValueChange={(model) => setProviderConfig({ ...providerConfig, model })}
-                  >
+                  <Select value={providerConfig.model} onValueChange={model => setProviderConfig({
+                  ...providerConfig,
+                  model
+                })}>
                     <SelectTrigger className="h-9 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {providerConfig.provider === 'lovable' && (
-                        <>
+                      {providerConfig.provider === 'lovable' && <>
                           <SelectItem value="google/gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
                           <SelectItem value="google/gemini-2.5-pro">Gemini 2.5 Pro</SelectItem>
                           <SelectItem value="google/gemini-2.5-flash-lite">Gemini Flash Lite</SelectItem>
-                        </>
-                      )}
-                      {providerConfig.provider === 'openai' && (
-                        <>
+                        </>}
+                      {providerConfig.provider === 'openai' && <>
                           <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
                           <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-                        </>
-                      )}
-                      {providerConfig.provider === 'perplexity' && (
-                        <>
+                        </>}
+                      {providerConfig.provider === 'perplexity' && <>
                           <SelectItem value="sonar">Sonar</SelectItem>
                           <SelectItem value="sonar-pro">Sonar Pro</SelectItem>
-                        </>
-                      )}
+                        </>}
                     </SelectContent>
                   </Select>
                 </div>
@@ -805,22 +717,14 @@ export default function LeadFinder() {
                 </h2>
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="dryRun"
-                      checked={dryRun}
-                      onCheckedChange={(checked) => setDryRun(checked as boolean)}
-                    />
+                    <Checkbox id="dryRun" checked={dryRun} onCheckedChange={checked => setDryRun(checked as boolean)} />
                     <Label htmlFor="dryRun" className="text-xs font-normal cursor-pointer">
                       Preview only (no CRM insert)
                     </Label>
                   </div>
 
                   <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="enrichWithPerplexity"
-                      checked={enrichWithPerplexity}
-                      onCheckedChange={(checked) => setEnrichWithPerplexity(checked as boolean)}
-                    />
+                    <Checkbox id="enrichWithPerplexity" checked={enrichWithPerplexity} onCheckedChange={checked => setEnrichWithPerplexity(checked as boolean)} />
                     <Label htmlFor="enrichWithPerplexity" className="text-xs font-normal cursor-pointer flex items-center gap-1">
                       <Sparkles className="h-3 w-3 text-primary" />
                       Enrich with Perplexity
@@ -830,8 +734,7 @@ export default function LeadFinder() {
               </div>
 
               {/* Filters & Sorting */}
-              {results && (
-                <>
+              {results && <>
                   <Separator />
                   
                   <div className="space-y-3">
@@ -839,17 +742,10 @@ export default function LeadFinder() {
                       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Filters & Sorting
                       </h2>
-                      {hasActiveFilters && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={clearFilters}
-                          className="h-6 text-xs px-2"
-                        >
+                      {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-6 text-xs px-2">
                           <FilterX className="h-3 w-3 mr-1" />
                           Clear
-                        </Button>
-                      )}
+                        </Button>}
                     </div>
 
                     {/* Quality Score Slider */}
@@ -858,14 +754,7 @@ export default function LeadFinder() {
                         <Label className="text-xs font-medium">Min Quality Score</Label>
                         <span className="text-xs font-mono text-muted-foreground">{minQualityScore}</span>
                       </div>
-                      <Slider
-                        value={[minQualityScore]}
-                        onValueChange={(value) => setMinQualityScore(value[0])}
-                        min={0}
-                        max={100}
-                        step={5}
-                        className="py-2"
-                      />
+                      <Slider value={[minQualityScore]} onValueChange={value => setMinQualityScore(value[0])} min={0} max={100} step={5} className="py-2" />
                     </div>
 
                     {/* Sort Dropdown */}
@@ -887,96 +776,62 @@ export default function LeadFinder() {
                     {/* Filter Checkboxes */}
                     <div className="space-y-2 pt-1">
                       <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="mustHaveContacts"
-                          checked={mustHaveContacts}
-                          onCheckedChange={(checked) => setMustHaveContacts(checked as boolean)}
-                        />
+                        <Checkbox id="mustHaveContacts" checked={mustHaveContacts} onCheckedChange={checked => setMustHaveContacts(checked as boolean)} />
                         <Label htmlFor="mustHaveContacts" className="text-xs font-normal cursor-pointer">
                           Must have contacts
                         </Label>
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="mustHaveLinkedIn"
-                          checked={mustHaveLinkedIn}
-                          onCheckedChange={(checked) => setMustHaveLinkedIn(checked as boolean)}
-                        />
+                        <Checkbox id="mustHaveLinkedIn" checked={mustHaveLinkedIn} onCheckedChange={checked => setMustHaveLinkedIn(checked as boolean)} />
                         <Label htmlFor="mustHaveLinkedIn" className="text-xs font-normal cursor-pointer">
                           Must have LinkedIn URL
                         </Label>
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="mustHaveNews"
-                          checked={mustHaveNews}
-                          onCheckedChange={(checked) => setMustHaveNews(checked as boolean)}
-                        />
+                        <Checkbox id="mustHaveNews" checked={mustHaveNews} onCheckedChange={checked => setMustHaveNews(checked as boolean)} />
                         <Label htmlFor="mustHaveNews" className="text-xs font-normal cursor-pointer">
                           Must have recent news
                         </Label>
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="mustHaveFunding"
-                          checked={mustHaveFunding}
-                          onCheckedChange={(checked) => setMustHaveFunding(checked as boolean)}
-                        />
+                        <Checkbox id="mustHaveFunding" checked={mustHaveFunding} onCheckedChange={checked => setMustHaveFunding(checked as boolean)} />
                         <Label htmlFor="mustHaveFunding" className="text-xs font-normal cursor-pointer">
                           Must have funding info
                         </Label>
                       </div>
                     </div>
                   </div>
-                </>
-              )}
+                </>}
             </div>
           </div>
 
           {/* Action Button */}
           <div className="p-4 md:p-6 border-t bg-card/50">
-            <Button
-              onClick={() => handleSearch()}
-              disabled={!isFormValid || isLoading}
-              className="w-full h-9 md:h-10"
-              size="default"
-            >
-              {isLoading ? (
-                <>
+            <Button onClick={() => handleSearch()} disabled={!isFormValid || isLoading} className="w-full h-9 md:h-10" size="default">
+              {isLoading ? <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   <span className="text-xs font-medium">Searching...</span>
-                </>
-              ) : (
-                <>
+                </> : <>
                   <Search className="mr-2 h-4 w-4" />
                   <span className="text-xs font-medium">Find Companies</span>
-                </>
-              )}
+                </>}
             </Button>
             
             {/* Stop Search Button */}
-            {isLoading && (
-              <Button
-                onClick={handleCancelSearch}
-                variant="outline"
-                className="w-full h-9 md:h-10 mt-2"
-                size="default"
-              >
+            {isLoading && <Button onClick={handleCancelSearch} variant="outline" className="w-full h-9 md:h-10 mt-2" size="default">
                 <StopCircle className="mr-2 h-4 w-4" />
                 <span className="text-xs font-medium">Stop Search</span>
-              </Button>
-            )}
+              </Button>}
           </div>
         </div>
 
         {/* Right Panel - Results */}
         <div className="flex-1 overflow-y-auto">
           {/* Progress Indicator */}
-          {isLoading && (
-            <div className="p-4 md:p-6 space-y-3 border-b bg-secondary/20">
+          {isLoading && <div className="p-4 md:p-6 space-y-3 border-b bg-secondary/20">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -985,17 +840,13 @@ export default function LeadFinder() {
                 <span className="text-xs text-muted-foreground">{streamingSearch.leads.length} found</span>
               </div>
               <Progress value={streamingSearch.progress} className="h-2" />
-            </div>
-          )}
+            </div>}
 
-          {isLoading && streamingSearch.leads.length === 0 ? (
-            <div className="p-4 md:p-6 space-y-3 md:space-y-4">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <LeadCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : !results && !isLoading && streamingSearch.leads.length === 0 ? (
-            <div className="h-full flex items-center justify-center p-4">
+          {isLoading && streamingSearch.leads.length === 0 ? <div className="p-4 md:p-6 space-y-3 md:space-y-4">
+              {Array.from({
+            length: 5
+          }).map((_, i) => <LeadCardSkeleton key={i} />)}
+            </div> : !results && !isLoading && streamingSearch.leads.length === 0 ? <div className="h-full flex items-center justify-center p-4">
               <div className="text-center space-y-4 max-w-md px-4">
                 <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center">
                   <Search className="h-8 w-8 text-primary/40" />
@@ -1008,69 +859,35 @@ export default function LeadFinder() {
                 </div>
                 
                 {/* Restore Stored Results */}
-                {streamingSearch.hasStoredResults && (
-                  <div className="pt-4 border-t">
-                    <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg p-4 space-y-3">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
-                          <Database className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div className="flex-1 text-left">
-                          <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                            Previous Search Found
-                          </h4>
-                          <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
-                            You have saved results from a previous search. Would you like to restore them?
-                          </p>
-                          <Button
-                            size="sm"
-                            variant="default"
-                            className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white"
-                            onClick={async () => {
-                              console.log('View Saved Results clicked');
-                              const restored = streamingSearch.restoreStoredResults();
-                              
-                              if (restored) {
-                                // Wait for state update
-                                await new Promise(resolve => setTimeout(resolve, 150));
-                                
-                                // Check the actual leads count after restoration
-                                const leadsCount = streamingSearch.leads.length;
-                                
-                                if (leadsCount > 0) {
-                                  toast({
-                                    title: '✨ Results Restored',
-                                    description: `Displaying ${leadsCount} saved leads from your previous search`,
-                                  });
-                                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                                } else {
-                                  toast({
-                                    title: 'No Results Found',
-                                    description: 'Previous search had no results',
-                                    variant: 'destructive',
-                                  });
-                                }
-                              } else {
-                                toast({
-                                  title: 'No Saved Results',
-                                  description: 'Could not find any previous search results',
-                                  variant: 'destructive',
-                                });
-                              }
-                            }}
-                          >
+                {streamingSearch.hasStoredResults && streamingSearch.leads.length === 0 && <div className="pt-4 border-t">
+                    <Alert className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
+                      <Database className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <AlertDescription className="text-xs">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold mb-1 text-blue-900 dark:text-blue-100">Previous Results Available</p>
+                            <p className="text-blue-700 dark:text-blue-300">You have saved results from a previous search.</p>
+                          </div>
+                          <Button size="sm" onClick={() => {
+                            const restored = streamingSearch.restoreStoredResults();
+                            if (!restored) {
+                              toast({
+                                title: 'No Results',
+                                description: 'No previous results found',
+                                variant: 'destructive'
+                              });
+                            }
+                          }} className="h-7 text-xs whitespace-nowrap">
                             <RefreshCw className="h-3 w-3 mr-1" />
-                            View Saved Results
+                            Load Results
                           </Button>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                      </AlertDescription>
+                    </Alert>
+                  </div>}
                 
                 {/* Resume Active Search */}
-                {streamingSearch.hasActiveSearch && !isLoading && (
-                  <div className="pt-4 border-t">
+                {streamingSearch.hasActiveSearch && !isLoading && <div className="pt-4 border-t">
                     <Alert className="bg-primary/5 border-primary/20">
                       <AlertCircle className="h-4 w-4 text-primary" />
                       <AlertDescription className="text-xs text-foreground">
@@ -1080,31 +897,27 @@ export default function LeadFinder() {
                             <p className="text-muted-foreground mb-2">
                               {streamingSearch.currentStatus || 'Background search is running...'}
                             </p>
-                            {streamingSearch.progress > 0 && (
-                              <div className="space-y-1">
+                            {streamingSearch.progress > 0 && <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
                                   <span>Progress</span>
                                   <span className="font-mono">{streamingSearch.progress}%</span>
                                 </div>
                                 <Progress value={streamingSearch.progress} className="h-1.5" />
-                              </div>
-                            )}
+                              </div>}
                           </div>
                           <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                if (streamingSearch.leads.length > 0) {
-                                  toast({
-                                    title: 'Viewing Current Results',
-                                    description: `${streamingSearch.leads.length} leads found so far`,
-                                  });
-                                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                                }
-                              }}
-                              className="h-7 text-xs"
-                            >
+                            <Button size="sm" variant="outline" onClick={() => {
+                        if (streamingSearch.leads.length > 0) {
+                          toast({
+                            title: 'Viewing Current Results',
+                            description: `${streamingSearch.leads.length} leads found so far`
+                          });
+                          window.scrollTo({
+                            top: 0,
+                            behavior: 'smooth'
+                          });
+                        }
+                      }} className="h-7 text-xs">
                               <Eye className="h-3 w-3 mr-1" />
                               View ({streamingSearch.leads.length})
                             </Button>
@@ -1112,91 +925,57 @@ export default function LeadFinder() {
                         </div>
                       </AlertDescription>
                     </Alert>
-                  </div>
-                )}
+                  </div>}
               </div>
-            </div>
-          ) : (
-            <div className="p-4 md:p-6 space-y-4">
+            </div> : <div className="p-4 md:p-6 space-y-4">
               {/* Results Header */}
               <div className="flex flex-col gap-3 pb-3 border-b">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-base font-semibold">
                     {filteredAndSortedResults.leads.length} {filteredAndSortedResults.leads.length === 1 ? 'Company' : 'Companies'}
                   </h2>
-                  {hasActiveFilters && results && filteredAndSortedResults.leads.length < results.leads.length && (
-                    <Badge variant="outline" className="text-xs bg-orange-500/10 text-orange-600 border-orange-500/20">
+                  {hasActiveFilters && results && filteredAndSortedResults.leads.length < results.leads.length && <Badge variant="outline" className="text-xs bg-orange-500/10 text-orange-600 border-orange-500/20">
                       {results.leads.length - filteredAndSortedResults.leads.length} filtered out
-                    </Badge>
-                  )}
-                  {results.stats && results.stats.filtered > 0 && (
-                    <Badge variant="outline" className="text-xs">
+                    </Badge>}
+                  {results.stats && results.stats.filtered > 0 && <Badge variant="outline" className="text-xs">
                       {results.stats.filtered} low quality (backend)
-                    </Badge>
-                  )}
-                  {results.stats && results.stats.averageScore && (
-                    <Badge variant="secondary" className="text-xs">
+                    </Badge>}
+                  {results.stats && results.stats.averageScore && <Badge variant="secondary" className="text-xs">
                       Avg Score: {results.stats.averageScore}/100
-                    </Badge>
-                  )}
-                  {results.wasEnriched && (
-                    <Badge variant="default" className="h-5 text-xs bg-gradient-primary">
+                    </Badge>}
+                  {results.wasEnriched && <Badge variant="default" className="h-5 text-xs bg-gradient-primary">
                       <Sparkles className="h-3 w-3 mr-1" />
                       Enriched
-                    </Badge>
-                  )}
+                    </Badge>}
                 </div>
                 
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  {filteredAndSortedResults.dryRun && filteredAndSortedResults.leads.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="select-all"
-                        checked={selectedCompanyIndices.size === filteredAndSortedResults.leads.length && filteredAndSortedResults.leads.length > 0}
-                        onCheckedChange={toggleSelectAll}
-                      />
+                  {filteredAndSortedResults.dryRun && filteredAndSortedResults.leads.length > 0 && <div className="flex items-center gap-2">
+                      <Checkbox id="select-all" checked={selectedCompanyIndices.size === filteredAndSortedResults.leads.length && filteredAndSortedResults.leads.length > 0} onCheckedChange={toggleSelectAll} />
                       <Label htmlFor="select-all" className="text-xs font-medium cursor-pointer">
                         Select All
                       </Label>
-                    </div>
-                  )}
+                    </div>}
                   
                   <div className="flex items-center gap-2 ml-auto">
                     {/* Batch Actions Dropdown */}
-                    {filteredAndSortedResults.leads.length > 0 && (
-                      <DropdownMenu>
+                    {filteredAndSortedResults.leads.length > 0 && <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 text-xs"
-                            disabled={isEnriching || isFindingContacts}
-                          >
+                          <Button variant="outline" size="sm" className="h-8 text-xs" disabled={isEnriching || isFindingContacts}>
                             <MoreVertical className="h-3 w-3 mr-1.5" />
                             Batch Actions
-                            {(isEnriching || isFindingContacts) && (
-                              <Loader2 className="h-3 w-3 ml-1.5 animate-spin" />
-                            )}
+                            {(isEnriching || isFindingContacts) && <Loader2 className="h-3 w-3 ml-1.5 animate-spin" />}
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56 z-50 bg-popover">
-                          <DropdownMenuItem
-                            onClick={handleExportSelected}
-                            disabled={selectedCompanyIndices.size === 0}
-                            className="cursor-pointer"
-                          >
+                          <DropdownMenuItem onClick={handleExportSelected} disabled={selectedCompanyIndices.size === 0} className="cursor-pointer">
                             <Download className="h-3.5 w-3.5 mr-2" />
                             Export Selected to CSV
-                            {selectedCompanyIndices.size > 0 && (
-                              <span className="ml-auto text-xs text-muted-foreground">
+                            {selectedCompanyIndices.size > 0 && <span className="ml-auto text-xs text-muted-foreground">
                                 ({selectedCompanyIndices.size})
-                              </span>
-                            )}
+                              </span>}
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={handleExportAll}
-                            className="cursor-pointer"
-                          >
+                          <DropdownMenuItem onClick={handleExportAll} className="cursor-pointer">
                             <Download className="h-3.5 w-3.5 mr-2" />
                             Export All to CSV
                             <span className="ml-auto text-xs text-muted-foreground">
@@ -1204,56 +983,32 @@ export default function LeadFinder() {
                             </span>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={handleEnrichSelected}
-                            disabled={selectedCompanyIndices.size === 0 || isEnriching}
-                            className="cursor-pointer"
-                          >
+                          <DropdownMenuItem onClick={handleEnrichSelected} disabled={selectedCompanyIndices.size === 0 || isEnriching} className="cursor-pointer">
                             <RefreshCw className="h-3.5 w-3.5 mr-2" />
                             Enrich Selected
-                            {selectedCompanyIndices.size > 0 && (
-                              <span className="ml-auto text-xs text-muted-foreground">
+                            {selectedCompanyIndices.size > 0 && <span className="ml-auto text-xs text-muted-foreground">
                                 ({selectedCompanyIndices.size})
-                              </span>
-                            )}
+                              </span>}
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={handleFindMoreContacts}
-                            disabled={selectedCompanyIndices.size === 0 || isFindingContacts}
-                            className="cursor-pointer"
-                          >
+                          <DropdownMenuItem onClick={handleFindMoreContacts} disabled={selectedCompanyIndices.size === 0 || isFindingContacts} className="cursor-pointer">
                             <UserPlus className="h-3.5 w-3.5 mr-2" />
                             Find More Contacts
-                            {selectedCompanyIndices.size > 0 && (
-                              <span className="ml-auto text-xs text-muted-foreground">
+                            {selectedCompanyIndices.size > 0 && <span className="ml-auto text-xs text-muted-foreground">
                                 ({selectedCompanyIndices.size})
-                              </span>
-                            )}
+                              </span>}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
+                      </DropdownMenu>}
 
-                    {filteredAndSortedResults.dryRun && filteredAndSortedResults.leads.length > 0 && (
-                      <Button
-                        size="sm"
-                        onClick={handleSaveSelectedCompanies}
-                        disabled={isLoading || isSaving || selectedCompanyIndices.size === 0}
-                        className="h-8 text-xs"
-                      >
-                        {isSaving ? (
-                          <>
+                    {filteredAndSortedResults.dryRun && filteredAndSortedResults.leads.length > 0 && <Button size="sm" onClick={handleSaveSelectedCompanies} disabled={isLoading || isSaving || selectedCompanyIndices.size === 0} className="h-8 text-xs">
+                        {isSaving ? <>
                             <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
                             Saving...
-                          </>
-                        ) : (
-                          <>
+                          </> : <>
                             <Database className="h-3 w-3 mr-1.5" />
                             Add {selectedCompanyIndices.size > 0 ? `${selectedCompanyIndices.size} ` : ''}to CRM
-                          </>
-                        )}
-                      </Button>
-                    )}
+                          </>}
+                      </Button>}
                     <div className="text-xs text-muted-foreground whitespace-nowrap">
                       {filteredAndSortedResults.dryRun ? "Preview" : `${filteredAndSortedResults.inserted} added`}
                     </div>
@@ -1263,73 +1018,44 @@ export default function LeadFinder() {
 
               {/* Results List */}
               <div className="space-y-3 md:space-y-4">
-                {filteredAndSortedResults.leads.map((company: any, idx: number) => (
-                  <div 
-                    key={idx} 
-                    className="group relative rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all p-3 md:p-4 cursor-pointer animate-in fade-in slide-in-from-bottom-2"
-                    style={{ animationDelay: `${idx * 50}ms` }}
-                    onClick={() => {
-                      setCurrentCompanyIndex(idx);
-                      setSelectedCompany(company);
-                      setDialogOpen(true);
-                    }}
-                  >
+                {filteredAndSortedResults.leads.map((company: any, idx: number) => <div key={idx} className="group relative rounded-lg border bg-card hover:shadow-md hover:border-primary/50 transition-all p-3 md:p-4 cursor-pointer animate-in fade-in slide-in-from-bottom-2" style={{
+              animationDelay: `${idx * 50}ms`
+            }} onClick={() => {
+              setCurrentCompanyIndex(idx);
+              setSelectedCompany(company);
+              setDialogOpen(true);
+            }}>
                     {/* Hover Quick Actions */}
                     <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="h-7 px-2 text-xs shadow-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCurrentCompanyIndex(idx);
-                          setSelectedCompany(company);
-                          setDialogOpen(true);
-                        }}
-                      >
+                      <Button variant="secondary" size="sm" className="h-7 px-2 text-xs shadow-sm" onClick={e => {
+                  e.stopPropagation();
+                  setCurrentCompanyIndex(idx);
+                  setSelectedCompany(company);
+                  setDialogOpen(true);
+                }}>
                         <Eye className="h-3 w-3 mr-1" />
                         View
                       </Button>
-                      {company.primaryContact?.email && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-7 px-2 text-xs shadow-sm"
-                          onClick={(e) => handleCopyEmail(company.primaryContact.email, e)}
-                        >
+                      {company.primaryContact?.email && <Button variant="secondary" size="sm" className="h-7 px-2 text-xs shadow-sm" onClick={e => handleCopyEmail(company.primaryContact.email, e)}>
                           <Copy className="h-3 w-3 mr-1" />
                           Email
-                        </Button>
-                      )}
-                      {filteredAndSortedResults.dryRun && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-7 px-2 text-xs shadow-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleCompanySelection(idx);
-                          }}
-                        >
+                        </Button>}
+                      {filteredAndSortedResults.dryRun && <Button variant="secondary" size="sm" className="h-7 px-2 text-xs shadow-sm" onClick={e => {
+                  e.stopPropagation();
+                  toggleCompanySelection(idx);
+                }}>
                           <Database className="h-3 w-3 mr-1" />
                           Add
-                        </Button>
-                      )}
+                        </Button>}
                     </div>
 
                     <div className="flex flex-col h-full gap-3">
                       {/* Header with checkbox and icon */}
                       <div className="flex gap-3 md:gap-4">
                         {/* Selection Checkbox */}
-                        {filteredAndSortedResults.dryRun && (
-                          <div className="flex items-start pt-1">
-                            <Checkbox
-                              checked={selectedCompanyIndices.has(idx)}
-                              onCheckedChange={() => toggleCompanySelection(idx)}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                        )}
+                        {filteredAndSortedResults.dryRun && <div className="flex items-start pt-1">
+                            <Checkbox checked={selectedCompanyIndices.has(idx)} onCheckedChange={() => toggleCompanySelection(idx)} onClick={e => e.stopPropagation()} />
+                          </div>}
                         {/* Company Icon */}
                         <div className="shrink-0">
                           <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm">
@@ -1345,38 +1071,22 @@ export default function LeadFinder() {
                                 <h3 className="text-sm font-semibold text-foreground truncate">
                                   {company.name}
                                 </h3>
-                                {company.qualityScore !== undefined && (
-                                  <QualityScoreBadge score={company.qualityScore} />
-                                )}
+                                {company.qualityScore !== undefined && <QualityScoreBadge score={company.qualityScore} />}
                               </div>
-                              {company.qualityScore !== undefined && (
-                                <QualityStars score={company.qualityScore} />
-                              )}
-                              {company.website && (
-                                <a
-                                  href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
+                              {company.qualityScore !== undefined && <QualityStars score={company.qualityScore} />}
+                              {company.website && <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono" onClick={e => e.stopPropagation()}>
                                   <Globe className="h-3 w-3" />
                                   {company.website}
                                   <ExternalLink className="h-2.5 w-2.5" />
-                                </a>
-                              )}
+                                </a>}
                             </div>
                             {/* Enrichment/Contact completion badges */}
-                            {company.wasEnriched && (
-                              <Badge variant="outline" className="shrink-0 h-5 text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                            {company.wasEnriched && <Badge variant="outline" className="shrink-0 h-5 text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
                                 ✓ Enriched
-                              </Badge>
-                            )}
-                            {company.contactCount > 0 && (
-                              <Badge variant="outline" className="shrink-0 h-5 text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
+                              </Badge>}
+                            {company.contactCount > 0 && <Badge variant="outline" className="shrink-0 h-5 text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
                                 {company.contactCount} contact{company.contactCount > 1 ? 's' : ''}
-                              </Badge>
-                            )}
+                              </Badge>}
                           </div>
                         </div>
                       </div>
@@ -1384,90 +1094,60 @@ export default function LeadFinder() {
                       {/* Company Info */}
                       <div className="flex-1 space-y-2">
                         {/* Description */}
-                        {company.description && (
-                          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                        {company.description && <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
                             {company.description}
-                          </p>
-                        )}
+                          </p>}
 
                         {/* Data Completeness Bar */}
-                        {company.dataCompleteness !== undefined && (
-                          <DataCompletenessBar percentage={company.dataCompleteness} />
-                        )}
+                        {company.dataCompleteness !== undefined && <DataCompletenessBar percentage={company.dataCompleteness} />}
 
                         {/* Enriched Data */}
-                        {(company.products || company.recentNews || company.fundingInfo) && (
-                          <div className="space-y-1 pt-1">
-                            {company.products && (
-                              <div className="text-xs">
+                        {(company.products || company.recentNews || company.fundingInfo) && <div className="space-y-1 pt-1">
+                            {company.products && <div className="text-xs">
                                 <span className="font-medium text-foreground">Products:</span>{" "}
                                 <span className="text-muted-foreground line-clamp-1">{company.products}</span>
-                              </div>
-                            )}
-                            {company.recentNews && (
-                              <div className="text-xs">
+                              </div>}
+                            {company.recentNews && <div className="text-xs">
                                 <span className="font-medium text-foreground">News:</span>{" "}
                                 <span className="text-muted-foreground line-clamp-1">{company.recentNews}</span>
-                              </div>
-                            )}
-                            {company.fundingInfo && (
-                              <div className="text-xs">
+                              </div>}
+                            {company.fundingInfo && <div className="text-xs">
                                 <span className="font-medium text-foreground">Funding:</span>{" "}
                                 <span className="text-muted-foreground line-clamp-1">{company.fundingInfo}</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                              </div>}
+                          </div>}
 
                         {/* Source Badges */}
-                        <SourceBadges
-                          wasEnriched={company.wasEnriched}
-                          hasVerifiedContacts={company.contacts?.some((c: any) => c.emailVerified)}
-                          hasPatternContacts={company.contacts?.some((c: any) => !c.emailVerified)}
-                        />
+                        <SourceBadges wasEnriched={company.wasEnriched} hasVerifiedContacts={company.contacts?.some((c: any) => c.emailVerified)} hasPatternContacts={company.contacts?.some((c: any) => !c.emailVerified)} />
 
                         {/* Expandable Contacts List */}
-                        {company.contacts && company.contacts.length > 0 && (
-                          <ContactsList
-                            contacts={company.contacts.map((c: any) => ({
-                              ...c,
-                              isPrimary: c === company.primaryContact
-                            }))}
-                          />
-                        )}
+                        {company.contacts && company.contacts.length > 0 && <ContactsList contacts={company.contacts.map((c: any) => ({
+                    ...c,
+                    isPrimary: c === company.primaryContact
+                  }))} />}
 
                         {/* Meta Badges */}
                         <div className="flex flex-wrap gap-1.5 pt-1">
-                          {company.industry && (
-                            <Badge variant="outline" className="h-5 text-xs font-mono">
+                          {company.industry && <Badge variant="outline" className="h-5 text-xs font-mono">
                               {company.industry}
-                            </Badge>
-                          )}
-                          {company.size && (
-                            <Badge variant="secondary" className="h-5 text-xs font-mono">
+                            </Badge>}
+                          {company.size && <Badge variant="secondary" className="h-5 text-xs font-mono">
                               {company.size}
-                            </Badge>
-                          )}
-                          {company.employeeCount && (
-                            <Badge variant="secondary" className="h-5 text-xs font-mono">
+                            </Badge>}
+                          {company.employeeCount && <Badge variant="secondary" className="h-5 text-xs font-mono">
                               {company.employeeCount} emp
-                            </Badge>
-                          )}
-                          {company.geography && (
-                            <Badge variant="outline" className="h-5 text-xs font-mono">
+                            </Badge>}
+                          {company.geography && <Badge variant="outline" className="h-5 text-xs font-mono">
                               📍 {company.geography}
-                            </Badge>
-                          )}
+                            </Badge>}
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  </div>)}
               </div>
 
               {/* Usage Stats Footer */}
-              {filteredAndSortedResults.usage && (
-                <div className="mt-6 pt-4 border-t">
+              {filteredAndSortedResults.usage && <div className="mt-6 pt-4 border-t">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground font-medium">Provider</div>
@@ -1482,40 +1162,22 @@ export default function LeadFinder() {
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground font-medium">Cost</div>
                       <div className="text-xs font-mono font-semibold">
-                        ${filteredAndSortedResults.usage.estimatedCost.toFixed(4)}
+                        ${(filteredAndSortedResults.usage.estimatedCost ?? 0).toFixed(4)}
                       </div>
                     </div>
-                    {filteredAndSortedResults.traceUrl && (
-                      <div className="space-y-1">
+                    {filteredAndSortedResults.traceUrl && <div className="space-y-1">
                         <div className="text-xs text-muted-foreground font-medium">Trace</div>
-                        <a
-                          href={filteredAndSortedResults.traceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono"
-                        >
+                        <a href={filteredAndSortedResults.traceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono">
                           View
                           <ExternalLink className="h-2.5 w-2.5" />
                         </a>
-                      </div>
-                    )}
+                      </div>}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                </div>}
+            </div>}
         </div>
       </div>
 
-      <CompanyDetailsDialog 
-        company={selectedCompany}
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        isSearching={isLoading}
-        allCompanies={filteredAndSortedResults?.leads || []}
-        currentIndex={currentCompanyIndex}
-        onNavigate={handleNavigateCompany}
-      />
-    </div>
-  );
+      <CompanyDetailsDialog company={selectedCompany} open={dialogOpen} onOpenChange={setDialogOpen} isSearching={isLoading} allCompanies={filteredAndSortedResults?.leads || []} currentIndex={currentCompanyIndex} onNavigate={handleNavigateCompany} />
+    </div>;
 }

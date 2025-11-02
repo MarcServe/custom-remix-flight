@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { MessageSquare, Loader2, Send, ArrowLeft, ArrowRight, Sparkles, Filter, Settings } from "lucide-react";
+import { MessageSquare, Loader2, Send, ArrowLeft, ArrowRight, Sparkles, Filter, Settings, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
@@ -65,6 +65,7 @@ interface Conversation {
 export default function Conversations() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   
   // Subscribe to realtime updates for email threads
   useEmailThreadsRealtime();
@@ -75,12 +76,28 @@ export default function Conversations() {
   const [filterAutoSent, setFilterAutoSent] = useState(false);
   const [selectedReview, setSelectedReview] = useState<PendingReview | null>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
 
   const { data: pendingReviews } = usePendingReviews();
 
-  const { data: conversations, isLoading } = useQuery({
+  // Polling fallback - refetch conversations every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      console.log('Auto-refreshing conversations...');
+      queryClient.invalidateQueries({ queryKey: ['active-conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['email-threads'] });
+      setLastSyncTime(new Date());
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [queryClient]);
+
+  const { data: conversations, isLoading, refetch: refetchConversations } = useQuery({
     queryKey: ['active-conversations'],
     queryFn: async () => {
+      console.log('Fetching active conversations...');
+      setLastSyncTime(new Date());
       const allConversations: Conversation[] = [];
 
       // Get all email threads
@@ -90,6 +107,8 @@ export default function Conversations() {
         .order('received_at', { ascending: false });
 
       if (threadsError) throw threadsError;
+      
+      console.log(`Loaded ${threadsData?.length || 0} email threads`);
 
       // 1. Group threads by company_sequence_id (sequence-based)
       const sequenceIds = [...new Set(
@@ -155,10 +174,12 @@ export default function Conversations() {
     },
   });
 
-  const { data: threads } = useQuery({
+  const { data: threads, refetch: refetchThreads } = useQuery({
     queryKey: ['email-threads', selectedSequence],
     enabled: !!selectedSequence,
+    refetchInterval: 15000, // Refetch every 15 seconds when conversation is selected
     queryFn: async () => {
+      console.log(`Fetching threads for conversation: ${selectedSequence}`);
       const selectedConv = conversations?.find(c => c.id === selectedSequence);
       if (!selectedConv) return [];
 
@@ -177,6 +198,7 @@ export default function Conversations() {
       const { data, error } = await query.order('received_at', { ascending: true });
 
       if (error) throw error;
+      console.log(`Loaded ${data?.length || 0} threads for conversation`);
       return data as EmailThread[];
     },
   });
@@ -284,6 +306,30 @@ export default function Conversations() {
     }
   };
 
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        refetchConversations(),
+        refetchThreads(),
+      ]);
+      setLastSyncTime(new Date());
+      toast({
+        title: "Refreshed",
+        description: "Conversations updated successfully",
+      });
+    } catch (error) {
+      console.error('Error refreshing:', error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh conversations",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const getSentimentBadge = (sentiment?: string) => {
     if (!sentiment) return null;
 
@@ -322,24 +368,28 @@ export default function Conversations() {
               </p>
             </div>
           </div>
-          <PendingReviewsBadge />
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">
+                Last synced: {format(lastSyncTime, 'HH:mm:ss')}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Auto-refresh: 30s
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <PendingReviewsBadge />
+          </div>
         </div>
       </div>
-
-      {/* Webhook Setup Alert */}
-      <Alert className="mb-6">
-        <Settings className="h-4 w-4" />
-        <AlertDescription>
-          <strong>Enable Reply Detection:</strong> To receive and auto-respond to emails, configure your inbound email webhook.{' '}
-          <Button
-            variant="link"
-            className="p-0 h-auto font-semibold underline"
-            onClick={() => navigate('/webhook-setup')}
-          >
-            Set up webhooks →
-          </Button>
-        </AlertDescription>
-      </Alert>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Pending Reviews Alert */}
@@ -429,13 +479,13 @@ export default function Conversations() {
                           : 'hover:bg-muted'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <div className="font-medium">{conv.title}</div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="font-medium truncate flex-1">{conv.title}</div>
                         {conv.type === 'standalone' && (
-                          <Badge variant="secondary" className="text-xs">Standalone</Badge>
+                          <Badge variant="secondary" className="text-xs shrink-0">Standalone</Badge>
                         )}
                       </div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="text-sm text-muted-foreground line-clamp-2 break-words">
                         {conv.subtitle}
                       </div>
                       {conv.goal && (
@@ -466,9 +516,9 @@ export default function Conversations() {
         {/* Conversation Thread */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <CardTitle className="truncate">
                   {selectedConversation
                     ? selectedConversation.type === 'sequence' 
                       ? `${selectedConversation.title} - ${selectedConversation.subtitle}`
@@ -476,7 +526,7 @@ export default function Conversations() {
                     : 'Select a conversation'}
                 </CardTitle>
                 {selectedConversation?.goal && (
-                  <CardDescription>Goal: {selectedConversation.goal}</CardDescription>
+                  <CardDescription className="truncate">Goal: {selectedConversation.goal}</CardDescription>
                 )}
               </div>
               {selectedSequence && (
@@ -484,6 +534,7 @@ export default function Conversations() {
                   variant="outline"
                   size="sm"
                   onClick={() => setFilterAutoSent(!filterAutoSent)}
+                  className="shrink-0"
                 >
                   <Filter className="h-4 w-4 mr-2" />
                   {filterAutoSent ? "Show All" : "Auto-Sent Only"}
@@ -514,39 +565,39 @@ export default function Conversations() {
                         className={`flex ${thread.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
                       >
                         <div
-                          className={`max-w-[80%] rounded-lg p-4 ${
+                          className={`max-w-[85%] sm:max-w-[80%] rounded-lg p-4 min-w-0 ${
                             thread.direction === 'outbound'
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-muted'
                           }`}
                         >
-                          <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {thread.direction === 'outbound' ? (
-                              <ArrowRight className="h-4 w-4" />
+                              <ArrowRight className="h-4 w-4 shrink-0" />
                             ) : (
-                              <ArrowLeft className="h-4 w-4" />
+                              <ArrowLeft className="h-4 w-4 shrink-0" />
                             )}
-                            <span className="text-xs font-medium">
+                            <span className="text-xs font-medium truncate break-all">
                               {thread.direction === 'outbound' ? 'You' : thread.from_email}
                             </span>
                             {thread.metadata?.auto_sent && (
-                              <Badge variant="secondary" className="text-xs">
+                              <Badge variant="secondary" className="text-xs shrink-0">
                                 <Sparkles className="h-3 w-3 mr-1" />
                                 Auto-Sent
                               </Badge>
                             )}
                             {thread.sentiment && getSentimentBadge(thread.sentiment)}
                           </div>
-                          <div className="text-sm font-semibold mb-2">{thread.subject}</div>
-                          <div className="text-sm whitespace-pre-wrap">{thread.body_text}</div>
+                          <div className="text-sm font-semibold mb-2 break-words">{thread.subject}</div>
+                          <div className="text-sm whitespace-pre-wrap break-words">{thread.body_text}</div>
                           <div className="text-xs opacity-70 mt-2">
                             {format(new Date(thread.received_at), 'MMM d, HH:mm')}
                           </div>
                           {thread.ai_analysis && (
                             <div className="mt-2 pt-2 border-t border-current/20 text-xs">
-                              <div>Intent: {thread.ai_analysis.intent}</div>
+                              <div className="break-words">Intent: {thread.ai_analysis.intent}</div>
                               {thread.ai_analysis.questionsAsked?.length > 0 && (
-                                <div>Questions: {thread.ai_analysis.questionsAsked.join(', ')}</div>
+                                <div className="break-words">Questions: {thread.ai_analysis.questionsAsked.join(', ')}</div>
                               )}
                             </div>
                           )}

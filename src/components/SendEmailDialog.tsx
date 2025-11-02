@@ -34,7 +34,7 @@ export function SendEmailDialog({
   const [bodyHtml, setBodyHtml] = useState("");
   const [bodyText, setBodyText] = useState("");
   const [context, setContext] = useState("");
-  const [sender, setSender] = useState<'gmail' | 'resend' | 'smtp'>('smtp');
+  const [sender, setSender] = useState<'gmail' | 'resend' | 'smtp' | 'sendgrid'>('resend');
   const [template, setTemplate] = useState<EmailTemplate>('blank');
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -47,7 +47,7 @@ export function SendEmailDialog({
         .from('crm_connections')
         .select('provider, status, from_email')
         .eq('status', 'active')
-        .in('provider', ['gmail', 'outlook', 'smtp']);
+        .in('provider', ['gmail', 'outlook', 'smtp', 'resend', 'sendgrid']);
       return data || [];
     },
   });
@@ -196,37 +196,41 @@ export function SendEmailDialog({
 
             <div className="space-y-2">
               <Label htmlFor="sender">Send From</Label>
-              <Select value={sender} onValueChange={(value) => setSender(value as 'gmail' | 'resend' | 'smtp')}>
+              <Select value={sender} onValueChange={(value) => setSender(value as 'gmail' | 'resend' | 'smtp' | 'sendgrid')}>
                 <SelectTrigger id="sender">
-                  <SelectValue />
+                  <SelectValue placeholder="Select sender..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {connections?.some(c => c.provider === 'smtp' && c.status === 'active') && (
-                    <SelectItem value="smtp">
+                  {connections?.some(c => c.provider === 'resend' && c.status === 'active') && (
+                    <SelectItem value="resend">
                       <div className="flex items-center gap-2">
-                        <span>✉️</span>
+                        <span>🚀</span>
                         <div>
-                          <div className="font-medium">Business Email</div>
+                          <div className="font-medium">Resend</div>
                           <div className="text-xs text-muted-foreground">
-                            {businessProfile?.company_name || 'Your Business'} &lt;{connections.find(c => c.provider === 'smtp')?.from_email || 'michael.o@bizboosters.co.uk'}&gt;
+                            {businessProfile?.company_name || 'Your Business'} &lt;{connections.find(c => c.provider === 'resend')?.from_email}&gt;
                           </div>
                         </div>
                       </div>
                     </SelectItem>
                   )}
-                  <SelectItem value="resend">
-                    <div className="flex items-center gap-2">
-                      <span>📧</span>
-                      <div>
-                        <div className="font-medium">Resend (Default)</div>
-                        <div className="text-xs text-muted-foreground">Reliable delivery service</div>
+                  {connections?.some(c => c.provider === 'sendgrid' && c.status === 'active') && (
+                    <SelectItem value="sendgrid">
+                      <div className="flex items-center gap-2">
+                        <span>📬</span>
+                        <div>
+                          <div className="font-medium">SendGrid</div>
+                          <div className="text-xs text-muted-foreground">
+                            {businessProfile?.company_name || 'Your Business'} &lt;{connections.find(c => c.provider === 'sendgrid')?.from_email}&gt;
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </SelectItem>
+                    </SelectItem>
+                  )}
                   {connections?.some(c => c.provider === 'gmail') && (
                     <SelectItem value="gmail">
                       <div className="flex items-center gap-2">
-                        <span>📬</span>
+                        <span>📧</span>
                         <div>
                           <div className="font-medium">Gmail</div>
                           <div className="text-xs text-muted-foreground">
@@ -236,11 +240,29 @@ export function SendEmailDialog({
                       </div>
                     </SelectItem>
                   )}
+                  {connections?.some(c => c.provider === 'smtp' && c.status === 'active') && (
+                    <SelectItem value="smtp">
+                      <div className="flex items-center gap-2">
+                        <span>⚙️</span>
+                        <div>
+                          <div className="font-medium">SMTP Direct</div>
+                          <div className="text-xs text-muted-foreground">
+                            {businessProfile?.company_name || 'Your Business'} &lt;{connections.find(c => c.provider === 'smtp')?.from_email}&gt;
+                          </div>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
-              {sender === 'smtp' && (
+              {sender === 'resend' && (
                 <p className="text-xs text-muted-foreground">
-                  ✓ Send from your verified business email • Professional sender identity
+                  ✓ Tracking enabled • Opens, clicks & replies monitored
+                </p>
+              )}
+              {sender === 'sendgrid' && (
+                <p className="text-xs text-muted-foreground">
+                  ✓ Enterprise delivery • Full engagement tracking
                 </p>
               )}
               {sender === 'gmail' && (
@@ -248,9 +270,9 @@ export function SendEmailDialog({
                   ✓ Email will appear in your Gmail Sent folder
                 </p>
               )}
-              {sender === 'resend' && (
+              {sender === 'smtp' && (
                 <p className="text-xs text-muted-foreground">
-                  ✓ Reliable delivery • Won't appear in your Gmail Sent folder
+                  ✓ Direct SMTP delivery • No tracking
                 </p>
               )}
             </div>

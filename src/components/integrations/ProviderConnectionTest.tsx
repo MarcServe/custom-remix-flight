@@ -32,13 +32,16 @@ export function ProviderConnectionTest({ provider, connectionId }: ProviderConne
       }
 
       // Call test edge function
+      // For API-key providers (resend, sendgrid), connectionId is optional
       const { data, error } = await supabase.functions.invoke('send-test-email', {
         body: {
           provider,
-          senderConnectionId: connectionId,
+          senderConnectionId: connectionId || undefined, // Don't send if empty
           testEmail: user.email,
           recipientName: user.user_metadata?.full_name || 'Test User',
           recipientEmail: user.email,
+          subject: 'Test Email',
+          body: 'This is a test email to verify your email provider configuration.',
         },
       });
 

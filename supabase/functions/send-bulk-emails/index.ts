@@ -101,10 +101,10 @@ serve(async (req) => {
     let sentCount = 0;
     let failedCount = 0;
 
-    // Get user profile for signature
+    // Get user profile for signature and business email
     const { data: userProfile } = await supabaseClient
       .from('profiles')
-      .select('full_name, job_title')
+      .select('full_name, job_title, email')
       .eq('id', user.id)
       .single();
 
@@ -134,6 +134,22 @@ serve(async (req) => {
 
     const emailProvider = optimalConnection.provider;
     console.log(`Using optimal email provider: ${emailProvider} (tracking: ${optimalConnection.tracking_enabled})`);
+
+    // Get API-key provider connection for verified from_email (if not already optimal)
+    let effectiveConnection = optimalConnection;
+    if (!['resend', 'sendgrid'].includes(optimalConnection.provider)) {
+      const { data: apiConnection } = await supabaseClient
+        .from('crm_connections')
+        .select('from_email')
+        .eq('user_id', user.id)
+        .eq('provider', emailProvider)
+        .eq('status', 'active')
+        .maybeSingle();
+      
+      if (apiConnection?.from_email) {
+        effectiveConnection = { ...optimalConnection, from_email: apiConnection.from_email };
+      }
+    }
 
     // Send emails with rate limiting
     for (const recipient of recipients) {
@@ -206,9 +222,14 @@ serve(async (req) => {
             await client.close();
             messageId = `direct-smtp-${Date.now()}`;
           } else {
-            // Resend relay
+            // Resend relay - use verified email from connection or fallback
             const resendApiKey = Deno.env.get('RESEND_API_KEY');
             if (!resendApiKey) throw new Error('Email service not configured');
+
+            const effectiveFromEmail = effectiveConnection.from_email || userProfile?.email;
+            if (!effectiveFromEmail) {
+              throw new Error('Business Email not configured. Please set your business email in Settings > Profile.');
+            }
 
             const resendResponse = await fetch('https://api.resend.com/emails', {
               method: 'POST',
@@ -217,7 +238,7 @@ serve(async (req) => {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                from: `${senderName} <${optimalConnection.from_email}>`,
+                from: `${senderName} <${effectiveFromEmail}>`,
                 to: [recipient.email],
                 subject: recipient.personalized_subject,
                 text: recipient.personalized_body_text,
@@ -238,7 +259,11 @@ serve(async (req) => {
           if (!sendgridApiKey) throw new Error('SendGrid not configured');
 
           const senderName = businessProfile?.company_name || 'Your Business';
-          const fromEmail = optimalConnection.from_email || 'noreply@yourdomain.com';
+          // Priority: effectiveConnection.from_email > connection.from_email > profiles.email > error
+          const fromEmail = effectiveConnection.from_email || userProfile?.email;
+          if (!fromEmail) {
+            throw new Error('Business Email not configured. Please set your business email in Settings > Profile and verify it in SendGrid.');
+          }
           const wrappedHtml = wrapEmailContent(
             recipient.personalized_body_html, 
             senderName, 

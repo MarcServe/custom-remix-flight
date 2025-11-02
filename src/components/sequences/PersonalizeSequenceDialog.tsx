@@ -18,6 +18,7 @@ interface PersonalizeSequenceDialogProps {
   companyName: string;
   contactId?: string;
   defaultSendImmediately?: boolean;
+  defaultSequenceId?: string;
 }
 
 export function PersonalizeSequenceDialog({
@@ -27,8 +28,9 @@ export function PersonalizeSequenceDialog({
   companyName,
   contactId,
   defaultSendImmediately = false,
+  defaultSequenceId,
 }: PersonalizeSequenceDialogProps) {
-  const [selectedSequenceId, setSelectedSequenceId] = useState<string>("");
+  const [selectedSequenceId, setSelectedSequenceId] = useState<string>(defaultSequenceId || "");
   const [tone, setTone] = useState<'professional' | 'casual' | 'technical'>('professional');
   const [sendImmediately, setSendImmediately] = useState(defaultSendImmediately);
   const [showPreview, setShowPreview] = useState(false);
@@ -45,12 +47,15 @@ export function PersonalizeSequenceDialog({
 
   const sequences = sequencesData?.data || [];
 
-  // Sync sendImmediately with the prop when dialog opens
+  // Sync with props when dialog opens
   useEffect(() => {
     if (open) {
       setSendImmediately(defaultSendImmediately);
+      if (defaultSequenceId) {
+        setSelectedSequenceId(defaultSequenceId);
+      }
     }
-  }, [open, defaultSendImmediately]);
+  }, [open, defaultSendImmediately, defaultSequenceId]);
 
   const handlePersonalize = async () => {
     if (!selectedSequenceId) return;
@@ -82,15 +87,6 @@ export function PersonalizeSequenceDialog({
         if (sendImmediately && companySequenceId) {
           setIsSending(true);
           try {
-            // Update status to active BEFORE sending
-            const { error: statusError } = await supabase
-              .from('company_sequences')
-              .update({ status: 'active' })
-              .eq('id', companySequenceId);
-
-            if (statusError) throw statusError;
-
-            // Now send the first email
             const { data: sendData, error: sendError } = await supabase.functions.invoke(
               'send-sequence-email',
               {
@@ -102,6 +98,14 @@ export function PersonalizeSequenceDialog({
             );
 
             if (sendError) throw sendError;
+
+            // Update status to active
+            const { error: statusError } = await supabase
+              .from('company_sequences')
+              .update({ status: 'active' })
+              .eq('id', companySequenceId);
+
+            if (statusError) throw statusError;
 
             const contactName = (result.data as any).contact?.name || 'contact';
             toast({
