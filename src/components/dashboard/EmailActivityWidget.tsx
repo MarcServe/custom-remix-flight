@@ -4,10 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Mail, Eye, MousePointerClick, Reply, TrendingUp, Clock } from 'lucide-react';
+import { Mail, Eye, MousePointerClick, Reply, TrendingUp, Clock, AlertTriangle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export function EmailActivityWidget() {
   const navigate = useNavigate();
@@ -67,10 +68,12 @@ export function EmailActivityWidget() {
   });
 
   const getStatusBadge = (activity: any) => {
+    const metadata = activity.metadata as any;
+    const trackingEnabled = metadata?.tracking_enabled;
+    
     if (activity.replied_at) {
       return <Badge variant="default" className="bg-green-500">Replied</Badge>;
     }
-    const metadata = activity.metadata as any;
     if (metadata?.clicked) {
       return <Badge variant="default" className="bg-purple-500">Clicked</Badge>;
     }
@@ -80,6 +83,26 @@ export function EmailActivityWidget() {
     if (activity.status === 'bounced') {
       return <Badge variant="destructive">Bounced</Badge>;
     }
+    
+    if (!trackingEnabled) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Badge variant="secondary" className="gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                Sent (No Tracking)
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">Email sent via {metadata?.provider || 'unknown provider'}</p>
+              <p className="text-xs text-muted-foreground">Opens and clicks cannot be tracked</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+    
     return <Badge variant="secondary">Sent</Badge>;
   };
 
@@ -169,6 +192,24 @@ export function EmailActivityWidget() {
                         <Clock className="h-3 w-3" />
                         {formatDistanceToNow(new Date(activity.sent_at), { addSuffix: true })}
                       </div>
+                      {activity.metadata?.provider && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <div className="flex items-center gap-1">
+                                <Mail className="h-3 w-3" />
+                                {activity.metadata.provider}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs font-semibold mb-1">Tracking Capabilities:</p>
+                              <p className="text-xs">Opens: {activity.metadata.can_track_opens ? '✓' : '✗'}</p>
+                              <p className="text-xs">Clicks: {activity.metadata.can_track_clicks ? '✓' : '✗'}</p>
+                              <p className="text-xs">Replies: {activity.metadata.can_track_replies ? '✓' : '✗'}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
                       {activity.opened_at && (
                         <div className="flex items-center gap-1 text-blue-500">
                           <Eye className="h-3 w-3" />

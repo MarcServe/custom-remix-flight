@@ -25,8 +25,10 @@ import {
   TrendingUp,
   Play,
   Pause,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { useUpdateSequenceStatus } from "@/hooks/use-company-sequences";
 import { useMarkCampaignAsViewed } from "@/hooks/use-campaign-views";
@@ -65,6 +67,7 @@ interface CompanySequenceDetailsDialogProps {
       clicked_at?: string;
       replied_at?: string;
       bounced_at?: string;
+      metadata?: any;
     }>;
     personalized_emails?: any;
   };
@@ -341,11 +344,34 @@ export function CompanySequenceDetailsDialog({
                     
                     {activity?.sent_at && (
                       <CardContent>
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <div className="flex items-center flex-wrap gap-4 text-xs text-muted-foreground">
                           <div className="flex items-center gap-1.5">
                             <Send className="h-3 w-3" />
                             Sent: {format(new Date(activity.sent_at), "MMM d, h:mm a")}
                           </div>
+                          {activity.metadata?.provider && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <div className="flex items-center gap-1.5">
+                                    <Mail className="h-3 w-3" />
+                                    via {activity.metadata.provider}
+                                    {!activity.metadata.tracking_enabled && (
+                                      <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                                    )}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs font-semibold mb-1">Provider: {activity.metadata.provider}</p>
+                                  <p className="text-xs">Method: {activity.metadata.sending_method || 'unknown'}</p>
+                                  <p className="text-xs font-semibold mt-2 mb-1">Tracking:</p>
+                                  <p className="text-xs">Opens: {activity.metadata.can_track_opens ? '✓' : '✗'}</p>
+                                  <p className="text-xs">Clicks: {activity.metadata.can_track_clicks ? '✓' : '✗'}</p>
+                                  <p className="text-xs">Replies: {activity.metadata.can_track_replies ? '✓' : '✗'}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                           {activity.opened_at && (
                             <div className="flex items-center gap-1.5">
                               <Eye className="h-3 w-3" />
@@ -357,6 +383,12 @@ export function CompanySequenceDetailsDialog({
                               <ReplyAll className="h-3 w-3" />
                               Replied: {format(new Date(activity.replied_at), "MMM d, h:mm a")}
                             </div>
+                          )}
+                          {!activity.metadata?.tracking_enabled && !activity.opened_at && !activity.replied_at && (
+                            <Badge variant="outline" className="text-xs text-yellow-600 border-yellow-400">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              No tracking data available
+                            </Badge>
                           )}
                         </div>
                       </CardContent>

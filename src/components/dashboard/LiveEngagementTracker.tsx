@@ -2,10 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Activity, TrendingUp, Users, Zap } from 'lucide-react';
+import { Activity, TrendingUp, Users, Zap, AlertTriangle } from 'lucide-react';
 import { useEmailActivitiesRealtime } from '@/hooks/use-realtime';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 
 export function LiveEngagementTracker() {
+  const navigate = useNavigate();
   // Enable realtime updates
   useEmailActivitiesRealtime();
 
@@ -47,6 +51,12 @@ export function LiveEngagementTracker() {
         .select('id')
         .eq('status', 'active');
 
+      // Check for activities without tracking
+      const untrackedCount = last24h.filter(a => {
+        const metadata = a.metadata as any;
+        return !metadata?.tracking_enabled;
+      }).length;
+
       return {
         sent24h,
         opened24h,
@@ -54,6 +64,7 @@ export function LiveEngagementTracker() {
         clicked24h,
         openedLastHour,
         activeSequences: activeSequences?.length || 0,
+        untrackedCount,
       };
     },
     refetchInterval: 5000, // Refresh every 5 seconds for live feel
@@ -125,6 +136,26 @@ export function LiveEngagementTracker() {
             </div>
           </div>
         </div>
+
+        {/* Tracking Warning */}
+        {liveStats.untrackedCount > 0 && (
+          <Alert className="mt-4" variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between">
+              <span className="text-xs">
+                {liveStats.untrackedCount} email(s) sent without tracking capabilities
+              </span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-7 text-xs"
+                onClick={() => navigate('/integrations/email-providers')}
+              >
+                Configure Providers
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
       </CardContent>
     </Card>
   );
