@@ -106,7 +106,11 @@ serve(async (req) => {
         userMessage = 'Invalid NANGO_SECRET_KEY';
         details = 'The NANGO_SECRET_KEY is incorrect or expired. Please check your Nango dashboard.';
       } else if (sessionResponse.status === 400) {
-        if (errorText.includes('allowed_integrations') || errorText.includes('integration')) {
+        // Check for resource_capped error (connection limit reached)
+        if (errorText.includes('resource_capped') || errorText.includes('maximum number of allowed connections')) {
+          userMessage = 'Nango connection limit reached';
+          details = 'Your Nango account has reached its maximum number of connections. Please upgrade your Nango plan or disconnect unused connections in your Nango dashboard at https://app.nango.dev';
+        } else if (errorText.includes('allowed_integrations') || errorText.includes('integration')) {
           userMessage = `The ${integrationId} integration is not configured in Nango`;
           details = `Please set up the ${integrationId} integration in your Nango dashboard with the required OAuth credentials and scopes.`;
         }
