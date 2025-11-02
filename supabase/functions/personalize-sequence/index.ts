@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
       }
 
       personalizedEmails.push({
-        stepNumber: i + 1,
+        stepNumber: i,
         subject: personalized.subject,
         body: personalized.body,
         personalizedHooks: personalized.personalizedHooks || [],
