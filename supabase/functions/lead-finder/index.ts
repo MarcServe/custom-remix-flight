@@ -127,7 +127,7 @@ const deduplicateLeads = (leads: any[]) => {
   });
 };
 
-// Helper: Enrich batch with Perplexity
+// Helper: Enrich batch with Perplexity (original synchronous version)
 async function enrichBatch(leads: any[], supabaseUrl: string, supabaseAnonKey: string, traceId: string) {
   const needsBasic = leads.filter(l => !l.website || !l.description || l.description.length < 30);
   const needsDeep = leads.filter(l => l.qualityScore >= 50 && !needsBasic.includes(l));
@@ -207,6 +207,161 @@ async function enrichBatch(leads: any[], supabaseUrl: string, supabaseAnonKey: s
       console.error("Deep enrichment error:", lead.name);
     }
   }
+}
+
+// PHASE 2: Progressive enrichment with streaming updates
+async function enrichBatchProgressively(
+  leads: any[],
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+  traceId: string,
+  batchNumber: number,
+  sendEvent: (data: any) => Promise<void>
+) {
+  const needsBasic = leads.filter(l => !l.website || !l.description || l.description.length < 30);
+  const needsDeep = leads.filter(l => l.qualityScore >= 50 && !needsBasic.includes(l));
+
+  // Enrich leads that need basic enrichment
+  for (let i = 0; i < needsBasic.length; i++) {
+    const lead = needsBasic[i];
+    
+    try {
+      lead.enrichmentStatus = 'enriching';
+      await sendEvent({
+        type: 'enrichment-status',
+        leadName: lead.name,
+        leadIndex: i,
+        totalLeads: needsBasic.length,
+        batchNumber,
+        status: 'enriching',
+        message: `Enriching ${lead.name} (${i + 1}/${needsBasic.length})...`
+      });
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/ai-provider`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${supabaseAnonKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'perplexity',
+          model: 'sonar-small',
+          messages: [
+            { role: 'system', content: 'Return only valid JSON, no markdown.' },
+            { role: 'user', content: `Quick facts about ${lead.name}${lead.website ? ` (${lead.website})` : ''}: Return JSON with: website, description, employeeCount, generalEmail` },
+          ],
+          temperature: 0.2,
+          traceId,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        try {
+          const cleaned = result.content.trim().replace(/```json\n?/g, "").replace(/```\n?/g, "");
+          const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const enrichedData = JSON.parse(jsonMatch[0]);
+            lead.website = enrichedData.website || lead.website;
+            lead.description = enrichedData.description || lead.description;
+            lead.employeeCount = enrichedData.employeeCount || lead.employeeCount;
+            lead.generalEmail = enrichedData.generalEmail || lead.generalEmail;
+            lead.enrichmentTier = 'basic';
+            lead.wasEnriched = true;
+          }
+        } catch {}
+      }
+
+      // Recalculate scores after enrichment
+      lead.qualityScore = calculateFinalQualityScore(lead);
+      lead.dataCompleteness = calculateDataCompleteness(lead);
+      lead.enrichmentStatus = 'completed';
+
+      // Stream the enriched lead update
+      await sendEvent({
+        type: 'lead-update',
+        lead: lead,
+        updateType: 'enrichment',
+        batchNumber
+      });
+    } catch (error) {
+      console.error(`Basic enrichment error for ${lead.name}:`, error);
+      lead.enrichmentStatus = 'completed';
+    }
+  }
+
+  // Deep enrichment for high-quality leads
+  const deepEnrichmentLeads = needsDeep.slice(0, 3); // Limit to 3 per batch
+  for (let i = 0; i < deepEnrichmentLeads.length; i++) {
+    const lead = deepEnrichmentLeads[i];
+    
+    try {
+      lead.enrichmentStatus = 'enriching';
+      await sendEvent({
+        type: 'enrichment-status',
+        leadName: lead.name,
+        leadIndex: i,
+        totalLeads: deepEnrichmentLeads.length,
+        batchNumber,
+        status: 'deep-enriching',
+        message: `Deep enriching ${lead.name} (${i + 1}/${deepEnrichmentLeads.length})...`
+      });
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/ai-provider`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${supabaseAnonKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'perplexity',
+          model: 'sonar',
+          messages: [
+            { role: 'system', content: 'Return only valid JSON, no markdown.' },
+            { role: 'user', content: `Detailed research on ${lead.name}: Return JSON with: description, products, recentNews, fundingInfo, employeeCount, companyPhone, generalEmail, socialProfiles, keyExecutives, technologies` },
+          ],
+          temperature: 0.2,
+          traceId,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        try {
+          const cleaned = result.content.trim().replace(/```json\n?/g, "").replace(/```\n?/g, "");
+          const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const enrichedData = JSON.parse(jsonMatch[0]);
+            Object.assign(lead, {
+              description: enrichedData.description || lead.description,
+              products: enrichedData.products || lead.products,
+              recentNews: enrichedData.recentNews || lead.recentNews,
+              fundingInfo: enrichedData.fundingInfo || lead.fundingInfo,
+              employeeCount: enrichedData.employeeCount || lead.employeeCount,
+              companyPhone: enrichedData.companyPhone || lead.companyPhone,
+              generalEmail: enrichedData.generalEmail || lead.generalEmail,
+              socialProfiles: enrichedData.socialProfiles || lead.socialProfiles,
+              keyExecutives: enrichedData.keyExecutives || lead.keyExecutives,
+              enrichmentTier: 'deep',
+              wasEnriched: true,
+            });
+          }
+        } catch {}
+      }
+
+      // Recalculate scores after deep enrichment
+      lead.qualityScore = calculateFinalQualityScore(lead);
+      lead.dataCompleteness = calculateDataCompleteness(lead);
+      lead.enrichmentStatus = 'completed';
+
+      // Stream the deep-enriched lead update
+      await sendEvent({
+        type: 'lead-update',
+        lead: lead,
+        updateType: 'deep-enrichment',
+        batchNumber
+      });
+    } catch (error) {
+      console.error(`Deep enrichment error for ${lead.name}:`, error);
+      lead.enrichmentStatus = 'completed';
+    }
+  }
+
+  console.log(`Enrichment complete for batch ${batchNumber}`);
 }
 
 // Helper: Find contacts for batch
@@ -400,6 +555,7 @@ ${JSON.stringify(batch, null, 2)}`;
       let totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 };
       let extractionProvider = provider || 'lovable';
       let extractionModel = model || 'unknown';
+      const backgroundTasks: Promise<void>[] = []; // Track background enrichment tasks
 
       for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
         try {
@@ -458,7 +614,7 @@ ${JSON.stringify(batch, null, 2)}`;
           const qualifiedLeads = batchLeads.filter(l => l.qualityScore >= 25);
           allLeads.push(...qualifiedLeads);
 
-          // STREAM BATCH
+          // PHASE 1: STREAM BATCH IMMEDIATELY
           if (qualifiedLeads.length > 0) {
             await sendEvent({
               type: 'batch',
@@ -467,9 +623,38 @@ ${JSON.stringify(batch, null, 2)}`;
               totalBatches: batches.length
             });
           }
+
+          // PHASE 2: Start enrichment in background (non-blocking)
+          if (enrichWithPerplexity && qualifiedLeads.length > 0) {
+            const enrichmentTask = enrichBatchProgressively(
+              qualifiedLeads,
+              supabaseUrl,
+              supabaseAnonKey,
+              trace.id,
+              batchIndex + 1,
+              sendEvent
+            ).catch(err => {
+              console.error(`Enrichment error for batch ${batchIndex + 1}:`, err);
+            });
+            backgroundTasks.push(enrichmentTask);
+          }
         } catch (error) {
           console.error(`Batch ${batchIndex + 1} error:`, error);
         }
+      }
+
+      // Notify that extraction is complete
+      await sendEvent({
+        type: 'extraction-complete',
+        message: 'All companies extracted. Enrichment continues in background...',
+        progress: 80
+      });
+
+      // PHASE 2: Wait for all background enrichment tasks to complete
+      if (backgroundTasks.length > 0) {
+        console.log(`Waiting for ${backgroundTasks.length} enrichment tasks to complete...`);
+        await Promise.allSettled(backgroundTasks);
+        console.log('All enrichment tasks completed');
       }
 
       // Final deduplication

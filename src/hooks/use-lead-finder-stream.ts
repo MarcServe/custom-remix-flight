@@ -279,6 +279,40 @@ export const useLeadFinderStream = () => {
                     currentStatus: batchStatus,
                   };
                 });
+              } else if (event.type === 'lead-update') {
+                // PHASE 2: Update specific lead with enriched data
+                setState(prev => {
+                  const updatedLeads = prev.leads.map(lead => {
+                    // Match by name and website
+                    if (lead.name === event.lead.name && 
+                        (lead.website === event.lead.website || (!lead.website && !event.lead.website))) {
+                      return { ...lead, ...event.lead };
+                    }
+                    return lead;
+                  });
+                  
+                  // Save to localStorage
+                  leadFinderStorage.updateActiveSearchProgress(searchId, {
+                    leads: updatedLeads,
+                  });
+                  
+                  return {
+                    ...prev,
+                    leads: updatedLeads,
+                  };
+                });
+              } else if (event.type === 'enrichment-status') {
+                // PHASE 2: Update status with enrichment progress
+                setState(prev => ({
+                  ...prev,
+                  currentStatus: event.message,
+                }));
+              } else if (event.type === 'extraction-complete') {
+                setState(prev => ({
+                  ...prev,
+                  currentStatus: event.message,
+                  progress: event.progress || 80,
+                }));
               } else if (event.type === 'complete') {
                 const totalLeads = state.leads.length + (event.leads?.length || 0);
                 const allLeads = [...state.leads, ...(event.leads || [])];

@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy, StopCircle, X, AlertCircle } from "lucide-react";
+import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy, StopCircle, X, AlertCircle, Clock } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { exportCompaniesToCSV } from "@/lib/utils/export";
@@ -1323,6 +1323,18 @@ export default function LeadFinder() {
                               <Badge variant="secondary" className="shrink-0 h-5 text-xs">
                                 <Sparkles className="h-2.5 w-2.5 mr-1" />
                                 Enriched
+                              </Badge>
+                            )}
+                            {company.enrichmentStatus === 'enriching' && (
+                              <Badge variant="outline" className="shrink-0 h-5 text-xs gap-1 animate-pulse">
+                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                Enriching...
+                              </Badge>
+                            )}
+                            {company.enrichmentStatus === 'pending' && (
+                              <Badge variant="outline" className="shrink-0 h-5 text-xs">
+                                <Clock className="h-2.5 w-2.5 mr-1" />
+                                Pending
                               </Badge>
                             )}
                           </div>
