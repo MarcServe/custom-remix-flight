@@ -11,6 +11,39 @@ export interface Contact {
   companyName: string;
 }
 
+export interface Lead {
+  name: string;
+  website?: string;
+  description?: string;
+  industry?: string;
+  size?: string;
+  geography?: string;
+  linkedinUrl?: string;
+  wasEnriched?: boolean;
+  products?: string;
+  recentNews?: string;
+  fundingInfo?: string;
+  employeeCount?: number;
+  companyPhone?: string;
+  generalEmail?: string;
+  socialProfiles?: {
+    twitter?: string;
+    facebook?: string;
+    instagram?: string;
+    youtube?: string;
+  };
+  keyExecutives?: Array<{
+    name: string;
+    title: string;
+  }>;
+  contacts?: Contact[];
+  primaryContact?: Contact;
+  qualityScore?: number;
+  dataCompleteness?: number;
+  enrichmentTier?: 'basic' | 'deep';
+  contactCount?: number;
+}
+
 export interface LeadFinderRequest {
   size: string;
   geography: string;
@@ -22,40 +55,7 @@ export interface LeadFinderRequest {
 }
 
 export interface LeadFinderResponse {
-  leads: Array<{
-    name: string;
-    website?: string;
-    description?: string;
-    industry?: string;
-    size?: string;
-    geography?: string;
-    linkedinUrl?: string;
-    wasEnriched?: boolean;
-    products?: string;
-    recentNews?: string;
-    fundingInfo?: string;
-    employeeCount?: number;
-    companyPhone?: string;
-    generalEmail?: string;
-    socialProfiles?: {
-      twitter?: string;
-      facebook?: string;
-      instagram?: string;
-      youtube?: string;
-    };
-    keyExecutives?: Array<{
-      name: string;
-      title: string;
-    }>;
-    contacts?: Contact[];
-    primaryContact?: Contact;
-    qualityScore?: number;
-    dataCompleteness?: number;
-    enrichmentTier?: 'basic' | 'deep';
-    contactCount?: number;
-    enrichmentStatus?: 'pending' | 'skipped' | 'enriching' | 'completed';
-    contactSearchStatus?: 'pending' | 'skipped' | 'searching' | 'completed' | 'no-contacts';
-  }>;
+  leads: Lead[];
   inserted: number;
   dryRun: boolean;
   provider: string;

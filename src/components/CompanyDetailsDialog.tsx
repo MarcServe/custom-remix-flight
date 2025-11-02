@@ -388,8 +388,9 @@ export function CompanyDetailsDialog({
               </div>
             </div>
 
-            {/* Enriched Data Sections */}
-            {company.wasEnriched && (
+            {/* Enriched Data Sections - Show if ANY enriched data exists */}
+            {(company.wasEnriched || company.products || company.recentNews || company.fundingInfo || 
+              company.keyExecutives?.length > 0 || (company.socialProfiles && Object.keys(company.socialProfiles).length > 0)) && (
               <>
                 <Separator />
                 

@@ -1319,22 +1319,15 @@ export default function LeadFinder() {
                                 </a>
                               )}
                             </div>
+                            {/* Enrichment/Contact completion badges */}
                             {company.wasEnriched && (
-                              <Badge variant="secondary" className="shrink-0 h-5 text-xs">
-                                <Sparkles className="h-2.5 w-2.5 mr-1" />
-                                Enriched
+                              <Badge variant="outline" className="shrink-0 h-5 text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                                ✓ Enriched
                               </Badge>
                             )}
-                            {company.enrichmentStatus === 'enriching' && (
-                              <Badge variant="outline" className="shrink-0 h-5 text-xs gap-1 animate-pulse">
-                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                Enriching...
-                              </Badge>
-                            )}
-                            {company.enrichmentStatus === 'pending' && (
-                              <Badge variant="outline" className="shrink-0 h-5 text-xs">
-                                <Clock className="h-2.5 w-2.5 mr-1" />
-                                Pending
+                            {company.contactCount > 0 && (
+                              <Badge variant="outline" className="shrink-0 h-5 text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
+                                {company.contactCount} contact{company.contactCount > 1 ? 's' : ''}
                               </Badge>
                             )}
                           </div>

@@ -26,8 +26,7 @@ interface Lead {
   dataCompleteness?: number;
   enrichmentTier?: 'basic' | 'deep';
   contactCount?: number;
-  enrichmentStatus?: 'pending' | 'skipped' | 'enriching' | 'completed';
-  contactSearchStatus?: 'pending' | 'skipped' | 'searching' | 'completed' | 'no-contacts';
+  _justUpdated?: boolean; // Internal flag for UI animations
 }
 
 interface Stats {
@@ -280,13 +279,22 @@ export const useLeadFinderStream = () => {
                   };
                 });
               } else if (event.type === 'lead-update') {
-                // PHASE 2: Update specific lead with enriched data
+                // PHASE 2 & 3: Update specific lead with enriched/contact data - DEEP MERGE
                 setState(prev => {
                   const updatedLeads = prev.leads.map(lead => {
                     // Match by name and website
                     if (lead.name === event.lead.name && 
                         (lead.website === event.lead.website || (!lead.website && !event.lead.website))) {
-                      return { ...lead, ...event.lead };
+                      // Deep merge: preserve existing data, add new enriched data
+                      return {
+                        ...lead,
+                        ...event.lead,
+                        // Ensure nested objects are merged, not replaced
+                        socialProfiles: { ...lead.socialProfiles, ...event.lead.socialProfiles },
+                        contacts: event.lead.contacts || lead.contacts,
+                        // Update flag to trigger UI animations
+                        _justUpdated: true,
+                      };
                     }
                     return lead;
                   });
@@ -301,8 +309,22 @@ export const useLeadFinderStream = () => {
                     leads: updatedLeads,
                   };
                 });
+                
+                // Clear update flag after animation
+                setTimeout(() => {
+                  setState(prev => ({
+                    ...prev,
+                    leads: prev.leads.map(l => ({ ...l, _justUpdated: false }))
+                  }));
+                }, 2000);
               } else if (event.type === 'enrichment-status') {
                 // PHASE 2: Update status with enrichment progress
+                setState(prev => ({
+                  ...prev,
+                  currentStatus: event.message,
+                }));
+              } else if (event.type === 'contact-status') {
+                // PHASE 3: Update status with contact finding progress
                 setState(prev => ({
                   ...prev,
                   currentStatus: event.message,

@@ -364,14 +364,34 @@ async function enrichBatchProgressively(
   console.log(`Enrichment complete for batch ${batchNumber}`);
 }
 
-// Helper: Find contacts for batch
-async function findContactsForBatch(leads: any[], getProspectKey: string, supabaseUrl: string, supabaseAnonKey: string, traceId: string) {
+// PHASE 3: Progressive contact finding with streaming updates
+async function findContactsProgressively(
+  leads: any[],
+  getProspectKey: string,
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+  traceId: string,
+  batchNumber: number,
+  sendEvent: (data: any) => Promise<void>
+) {
   const targetRoles = ['CEO', 'CTO', 'CMO', 'Founder', 'Co-Founder'];
 
-  for (const lead of leads) {
+  for (let leadIndex = 0; leadIndex < leads.length; leadIndex++) {
+    const lead = leads[leadIndex];
     const contacts: any[] = [];
     
     try {
+      lead.contactSearchStatus = 'searching';
+      await sendEvent({
+        type: 'contact-status',
+        leadName: lead.name,
+        leadIndex,
+        totalLeads: leads.length,
+        batchNumber,
+        status: 'searching',
+        message: `Finding contacts for ${lead.name} (${leadIndex + 1}/${leads.length})...`
+      });
+
       // Try GetProspect LinkedIn
       if (lead.linkedinUrl && contacts.length < 2) {
         try {
@@ -450,7 +470,21 @@ async function findContactsForBatch(leads: any[], getProspectKey: string, supaba
     lead.contacts = contacts;
     lead.primaryContact = contacts.find(c => c.emailVerified) || contacts[0] || null;
     lead.contactCount = contacts.length;
+    lead.contactSearchStatus = contacts.length > 0 ? 'completed' : 'no-contacts';
+
+    // Recalculate quality score with contacts
+    lead.qualityScore = calculateFinalQualityScore(lead);
+
+    // Stream the contact update
+    await sendEvent({
+      type: 'lead-update',
+      lead: lead,
+      updateType: 'contacts',
+      batchNumber
+    });
   }
+
+  console.log(`Contact finding complete for batch ${batchNumber}`);
 }
 
 Deno.serve(async (req) => {
@@ -603,12 +637,10 @@ ${JSON.stringify(batch, null, 2)}`;
             totalUsage.estimatedCost += aiResult.usage.estimatedCost || 0;
           }
 
-          // PHASE 1: Calculate basic scores immediately (without enrichment)
+          // PHASE 1: Calculate basic scores immediately (NO enrichment status)
           batchLeads.forEach(lead => {
             lead.qualityScore = calculateFinalQualityScore(lead);
             lead.dataCompleteness = calculateDataCompleteness(lead);
-            lead.enrichmentStatus = enrichWithPerplexity ? 'pending' : 'skipped';
-            lead.contactSearchStatus = GETPROSPECT_API_KEY ? 'pending' : 'skipped';
           });
 
           const qualifiedLeads = batchLeads.filter(l => l.qualityScore >= 25);
@@ -623,21 +655,6 @@ ${JSON.stringify(batch, null, 2)}`;
               totalBatches: batches.length
             });
           }
-
-          // PHASE 2: Start enrichment in background (non-blocking)
-          if (enrichWithPerplexity && qualifiedLeads.length > 0) {
-            const enrichmentTask = enrichBatchProgressively(
-              qualifiedLeads,
-              supabaseUrl,
-              supabaseAnonKey,
-              trace.id,
-              batchIndex + 1,
-              sendEvent
-            ).catch(err => {
-              console.error(`Enrichment error for batch ${batchIndex + 1}:`, err);
-            });
-            backgroundTasks.push(enrichmentTask);
-          }
         } catch (error) {
           console.error(`Batch ${batchIndex + 1} error:`, error);
         }
@@ -646,20 +663,68 @@ ${JSON.stringify(batch, null, 2)}`;
       // Notify that extraction is complete
       await sendEvent({
         type: 'extraction-complete',
-        message: 'All companies extracted. Enrichment continues in background...',
+        message: 'All companies extracted. Starting background enrichment...',
         progress: 80
       });
 
-      // PHASE 2: Wait for all background enrichment tasks to complete
-      if (backgroundTasks.length > 0) {
-        console.log(`Waiting for ${backgroundTasks.length} enrichment tasks to complete...`);
-        await Promise.allSettled(backgroundTasks);
-        console.log('All enrichment tasks completed');
-      }
-
-      // Final deduplication
+      // Final deduplication BEFORE background tasks
       const leads = deduplicateLeads(allLeads);
       console.log(`Final: ${leads.length} unique leads`);
+
+      // PHASE 2 & 3: Start background enrichment and contact finding
+      const backgroundPromise = (async () => {
+        try {
+          // Step 1: Enrichment (only if enabled)
+          if (enrichWithPerplexity && leads.length > 0) {
+            const enrichmentLeads = leads.filter(l => l.qualityScore >= 25);
+            if (enrichmentLeads.length > 0) {
+              await sendEvent({
+                type: 'enrichment-status',
+                message: `Starting enrichment for ${enrichmentLeads.length} companies...`,
+                progress: 85
+              });
+
+              await enrichBatchProgressively(
+                enrichmentLeads,
+                supabaseUrl,
+                supabaseAnonKey,
+                trace.id,
+                0,
+                sendEvent
+              );
+            }
+          }
+
+          // Step 2: Contact finding (only if GetProspect key exists)
+          if (GETPROSPECT_API_KEY && leads.length > 0) {
+            const contactLeads = leads.filter(l => l.linkedinUrl || l.website);
+            if (contactLeads.length > 0) {
+              await sendEvent({
+                type: 'contact-status',
+                message: `Finding contacts for ${contactLeads.length} companies...`,
+                progress: 92
+              });
+
+              await findContactsProgressively(
+                contactLeads,
+                GETPROSPECT_API_KEY,
+                supabaseUrl,
+                supabaseAnonKey,
+                trace.id,
+                0,
+                sendEvent
+              );
+            }
+          }
+
+          console.log('All background tasks completed');
+        } catch (error) {
+          console.error('Background tasks error:', error);
+        }
+      })();
+
+      // Let background tasks run without blocking the response
+      backgroundPromise.catch(console.error);
 
       // Stats
       const stats = {
