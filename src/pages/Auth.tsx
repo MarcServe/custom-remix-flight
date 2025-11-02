@@ -28,7 +28,11 @@ export default function Auth() {
   // Redirect if already logged in
   if (user) {
     navigate('/');
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   const validateField = (name: string, value: string) => {
