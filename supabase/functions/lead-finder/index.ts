@@ -246,8 +246,8 @@ async function enrichBatchProgressively(
           provider: 'perplexity',
           model: 'sonar-small',
           messages: [
-            { role: 'system', content: 'Return only valid JSON, no markdown.' },
-            { role: 'user', content: `Quick facts about ${lead.name}${lead.website ? ` (${lead.website})` : ''}: Return JSON with: website, description, employeeCount, generalEmail` },
+            { role: 'system', content: 'Return only valid JSON with company information, no markdown or explanations.' },
+            { role: 'user', content: `Quick research on ${lead.name}${lead.website ? ` (${lead.website})` : ''}. Return JSON with: website, description (100+ chars), employeeCount, foundingYear, revenue, generalEmail, companyPhone` },
           ],
           temperature: 0.2,
           traceId,
@@ -264,7 +264,10 @@ async function enrichBatchProgressively(
             lead.website = enrichedData.website || lead.website;
             lead.description = enrichedData.description || lead.description;
             lead.employeeCount = enrichedData.employeeCount || lead.employeeCount;
+            lead.foundingYear = enrichedData.foundingYear || lead.foundingYear;
+            lead.revenue = enrichedData.revenue || lead.revenue;
             lead.generalEmail = enrichedData.generalEmail || lead.generalEmail;
+            lead.companyPhone = enrichedData.companyPhone || lead.companyPhone;
             lead.enrichmentTier = 'basic';
             lead.wasEnriched = true;
           }
@@ -323,8 +326,24 @@ async function enrichBatchProgressively(
           provider: 'perplexity',
           model: 'sonar',
           messages: [
-            { role: 'system', content: 'Return only valid JSON, no markdown.' },
-            { role: 'user', content: `Detailed research on ${lead.name}: Return JSON with: description, products, recentNews, fundingInfo, employeeCount, companyPhone, generalEmail, socialProfiles, keyExecutives, technologies` },
+            { role: 'system', content: 'You are a business intelligence researcher. Return only valid JSON with comprehensive company data, no markdown or explanations.' },
+            { role: 'user', content: `Deep research on ${lead.name}${lead.website ? ` (${lead.website})` : ''}:
+
+Extract ALL available information and return as JSON with these fields:
+- description: Comprehensive company overview (200+ characters)
+- products: Detailed list of main products and services
+- recentNews: Latest news, product launches, funding announcements (2024-2025)
+- fundingInfo: Total funding raised, recent rounds, investors, valuation
+- employeeCount: Current number of employees
+- foundingYear: Year company was established
+- revenue: Annual revenue or revenue range
+- companyPhone: Main contact phone number
+- generalEmail: General inquiry email address
+- socialProfiles: Object with linkedin, twitter, facebook, instagram, youtube URLs
+- keyExecutives: Array of executives with {name, title} for C-suite and VPs
+- technologies: Array of key technologies, platforms, or tools the company uses or builds
+
+Be thorough and accurate. Extract from recent sources.` },
           ],
           temperature: 0.2,
           traceId,
@@ -344,10 +363,13 @@ async function enrichBatchProgressively(
               recentNews: enrichedData.recentNews || lead.recentNews,
               fundingInfo: enrichedData.fundingInfo || lead.fundingInfo,
               employeeCount: enrichedData.employeeCount || lead.employeeCount,
+              foundingYear: enrichedData.foundingYear || lead.foundingYear,
+              revenue: enrichedData.revenue || lead.revenue,
               companyPhone: enrichedData.companyPhone || lead.companyPhone,
               generalEmail: enrichedData.generalEmail || lead.generalEmail,
               socialProfiles: enrichedData.socialProfiles || lead.socialProfiles,
               keyExecutives: enrichedData.keyExecutives || lead.keyExecutives,
+              technologies: enrichedData.technologies || lead.technologies,
               enrichmentTier: 'deep',
               wasEnriched: true,
             });
@@ -684,11 +706,44 @@ Deno.serve(async (req) => {
         ? `\n\nADDITIONAL REQUIREMENTS: ${customSearchText}\nPrioritize companies that match these specific requirements.`
         : '';
 
-      const createPrompt = (batch: any[]) => `Extract company info from these results. ${industryGuidance}${customSearchGuidance}
+      const createPrompt = (batch: any[]) => `Extract comprehensive company information from these search results. ${industryGuidance}${customSearchGuidance}
 
-CRITICAL: Extract ALL companies, even with incomplete data. Deduplicate by name. Required: name, website, description, industry ("${industryContext}"), size ("${size}"), geography ("${geography}"), linkedinUrl, foundingYear, revenue. Optional: companyPhone, generalEmail, keyExecutives, fundingStage, technologies, employeeCount.
+CRITICAL INSTRUCTIONS:
+1. Extract ALL companies found, even if data is incomplete
+2. Deduplicate by company name
+3. Extract as much information as possible from the provided content
 
-Return ONLY a JSON array, no markdown:
+REQUIRED FIELDS (must attempt to extract):
+- name: Company name
+- website: Official website URL
+- description: Detailed company description (minimum 50 characters if available)
+- industry: "${industryContext}"
+- size: "${size}"
+- geography: "${geography}"
+- linkedinUrl: LinkedIn company profile URL
+
+HIGHLY VALUABLE FIELDS (extract if available in content):
+- foundingYear: Year company was founded
+- revenue: Annual revenue or revenue range
+- employeeCount: Number of employees
+- fundingStage: Funding stage (e.g., Seed, Series A, B, C, IPO, etc.)
+- fundingInfo: Funding details, total raised, recent rounds
+- products: Main products or services offered
+- recentNews: Recent company news, launches, or announcements
+- technologies: Tech stack or technologies used (as array)
+- companyPhone: Main company phone number
+- generalEmail: General contact email
+- keyExecutives: Array of key executives with name and title
+- socialProfiles: Object with linkedin, twitter, facebook, instagram, youtube URLs
+
+DATA QUALITY TIPS:
+- For descriptions, aim for 100+ characters when content allows
+- Extract LinkedIn URLs from linkedin.com/company/ pages
+- Parse funding information from crunchbase or news mentions
+- Identify executives from "leadership", "team", "about" sections
+- Extract technologies from job postings or company descriptions
+
+Return ONLY a valid JSON array with no markdown formatting:
 ${JSON.stringify(batch, null, 2)}`;
 
       let allLeads: any[] = [];
