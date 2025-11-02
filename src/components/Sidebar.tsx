@@ -72,7 +72,6 @@ const navigation: NavigationItem[] = [
     href: "#settings", 
     icon: Settings,
     children: [
-      { name: "Webhook Setup", href: "/webhook-setup", icon: Zap },
       { name: "Automation Rules", href: "/automation-rules", icon: Zap },
       { name: "A/B Testing", href: "/ab-testing", icon: Activity },
     ]

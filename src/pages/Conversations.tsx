@@ -326,21 +326,6 @@ export default function Conversations() {
         </div>
       </div>
 
-      {/* Webhook Setup Alert */}
-      <Alert className="mb-6">
-        <Settings className="h-4 w-4" />
-        <AlertDescription>
-          <strong>Enable Reply Detection:</strong> To receive and auto-respond to emails, configure your inbound email webhook.{' '}
-          <Button
-            variant="link"
-            className="p-0 h-auto font-semibold underline"
-            onClick={() => navigate('/webhook-setup')}
-          >
-            Set up webhooks →
-          </Button>
-        </AlertDescription>
-      </Alert>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Pending Reviews Alert */}
         {pendingReviews && pendingReviews.length > 0 && (
