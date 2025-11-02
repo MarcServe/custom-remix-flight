@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings } from "lucide-react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { usePendingCounts } from "@/hooks/use-pending-counts";
 import { useEventsRealtime, useDealsRealtimeForNotifications, useCampaignsRealtimeForNotifications } from "@/hooks/use-realtime";
+import { supabase } from "@/integrations/supabase/client";
 
 type NavigationItem = {
   name: string;
@@ -71,15 +72,65 @@ const getPendingCount = (href: string, pendingCounts: any) => {
 
 export const Sidebar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { data: pendingCounts } = usePendingCounts();
+  const [activeSearch, setActiveSearch] = useState<any>(null);
   
   // Enable real-time updates for notifications
   useEventsRealtime();
   useDealsRealtimeForNotifications();
   useCampaignsRealtimeForNotifications();
+
+  // Check for active lead searches
+  useEffect(() => {
+    const checkActiveSearch = async () => {
+      if (!user) return;
+
+      const { data: searches } = await supabase
+        .from('lead_finder_searches')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'running')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (searches && searches.length > 0) {
+        setActiveSearch(searches[0]);
+      } else {
+        setActiveSearch(null);
+      }
+    };
+
+    checkActiveSearch();
+
+    // Setup realtime subscription for active searches
+    const channel = supabase
+      .channel('active_searches')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lead_finder_searches',
+          filter: `user_id=eq.${user?.id}`,
+        },
+        (payload) => {
+          if (payload.new && (payload.new as any).status === 'running') {
+            setActiveSearch(payload.new);
+          } else if (payload.eventType === 'DELETE' || (payload.new as any)?.status !== 'running') {
+            setActiveSearch(null);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -156,6 +207,51 @@ export const Sidebar = () => {
           )}
         </Button>
       </div>
+      
+      {/* Global Search Indicator */}
+      {activeSearch && (
+        <div 
+          onClick={() => navigate('/lead-finder')}
+          className={cn(
+            "mx-3 mt-4 p-3 rounded-lg bg-primary/10 border border-primary/20 cursor-pointer hover:bg-primary/20 transition-colors",
+            isCollapsed && "p-2"
+          )}
+        >
+          {isCollapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex justify-center">
+                  <Search className="h-5 w-5 text-primary animate-pulse" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>Lead search in progress ({activeSearch.progress}%)</p>
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Search className="h-4 w-4 text-primary animate-pulse" />
+                <span className="text-sm font-medium text-primary">Lead Search Active</span>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{activeSearch.current_status}</span>
+                  <span>{activeSearch.progress}%</span>
+                </div>
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${activeSearch.progress}%` }}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">Click to view details</p>
+            </div>
+          )}
+        </div>
+      )}
+      
       <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
         {navigation.map((item) => {
           // Check if current route is in this group's children

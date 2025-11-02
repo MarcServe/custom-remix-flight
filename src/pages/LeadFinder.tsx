@@ -1067,6 +1067,53 @@ export default function LeadFinder() {
                     </div>
                   </div>
                 )}
+                
+                {/* Resume Active Search */}
+                {streamingSearch.hasActiveSearch && !isLoading && (
+                  <div className="pt-4 border-t">
+                    <Alert className="bg-primary/5 border-primary/20">
+                      <AlertCircle className="h-4 w-4 text-primary" />
+                      <AlertDescription className="text-xs text-foreground">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <p className="font-semibold mb-1">Active Search in Progress</p>
+                            <p className="text-muted-foreground mb-2">
+                              {streamingSearch.currentStatus || 'Background search is running...'}
+                            </p>
+                            {streamingSearch.progress > 0 && (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span>Progress</span>
+                                  <span className="font-mono">{streamingSearch.progress}%</span>
+                                </div>
+                                <Progress value={streamingSearch.progress} className="h-1.5" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                if (streamingSearch.leads.length > 0) {
+                                  toast({
+                                    title: 'Viewing Current Results',
+                                    description: `${streamingSearch.leads.length} leads found so far`,
+                                  });
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }
+                              }}
+                              className="h-7 text-xs"
+                            >
+                              <Eye className="h-3 w-3 mr-1" />
+                              View ({streamingSearch.leads.length})
+                            </Button>
+                          </div>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
