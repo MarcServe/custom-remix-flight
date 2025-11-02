@@ -65,10 +65,10 @@ Deno.serve(async (req) => {
       throw new Error('Sender connection required for this provider');
     }
 
-    // Get user profile for signature
+    // Get user profile for signature and business email
     const { data: userProfile } = await supabase
       .from('profiles')
-      .select('full_name, job_title')
+      .select('full_name, job_title, email')
       .eq('id', user.id)
       .single();
 
@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
               subject: testSubject,
             }],
             from: {
-              email: connection?.from_email || user.email || 'noreply@yourdomain.com',
+              email: connection?.from_email || userProfile?.email || user.email || 'noreply@yourdomain.com',
               name: userProfile?.full_name || 'CRM',
             },
             content: [
@@ -211,7 +211,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
               subject: '🎨 Test Email - Your Email Template Preview',
             }],
             from: {
-              email: connection?.from_email || 'noreply@yourdomain.com',
+              email: connection?.from_email || userProfile?.email || 'noreply@yourdomain.com',
               name: companyName || 'CRM',
             },
             content: [
@@ -308,7 +308,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
             subject: `[TEST] ${personalizedSubject2}`,
           }],
           from: {
-            email: connection?.from_email || user.email || 'noreply@yourdomain.com',
+            email: connection?.from_email || userProfile?.email || user.email || 'noreply@yourdomain.com',
             name: userProfile?.full_name || 'Team',
           },
           content: [
@@ -352,7 +352,11 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: connection?.from_email || `${userProfile?.full_name || 'Team'} <onboarding@resend.dev>`,
+          from: connection?.from_email 
+            ? `${userProfile?.full_name || 'Team'} <${connection.from_email}>` 
+            : userProfile?.email 
+              ? `${userProfile?.full_name || 'Team'} <${userProfile.email}>` 
+              : `${userProfile?.full_name || 'Team'} <onboarding@resend.dev>`,
           to: [testEmail],
           subject: `[TEST] ${personalizedSubject2}`,
           html: bodyHtml,

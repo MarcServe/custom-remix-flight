@@ -77,6 +77,13 @@ serve(async (req) => {
     let senderName = 'Your Company';
 
     if (user) {
+      // Get user profile for business email
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('id', user.id)
+        .maybeSingle();
+
       const { data: businessProfile } = await supabase
         .from('business_profiles')
         .select('email_provider, company_name')
@@ -95,9 +102,8 @@ serve(async (req) => {
         .eq('status', 'active')
         .maybeSingle();
 
-      if (connection?.from_email) {
-        fromEmail = connection.from_email;
-      }
+      // Priority: connection.from_email > profiles.email > default
+      fromEmail = connection?.from_email || userProfile?.email || 'noreply@yourdomain.com';
     }
 
     console.log(`Sending via ${emailProvider} from ${fromEmail}`);

@@ -50,10 +50,10 @@ serve(async (req) => {
     const emailRequest: EmailRequest = await req.json();
     let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, testConnection = false } = emailRequest;
     
-    // Fetch user profile for signature
+    // Fetch user profile for signature and business email
     const { data: userProfile } = await supabaseClient
       .from('profiles')
-      .select('full_name, job_title')
+      .select('full_name, job_title, email')
       .eq('id', user.id)
       .single();
 
@@ -166,8 +166,14 @@ serve(async (req) => {
         .eq('user_id', user.id)
         .maybeSingle();
 
+      // Priority: connection.from_email > profiles.email > error
+      const fromEmail = connection.from_email || userProfile?.email;
+      if (!fromEmail) {
+        throw new Error('Business Email not configured. Please set your business email in Settings > Profile.');
+      }
+
       const senderName = businessProfile?.company_name || 'Your Business';
-      const wrappedHtml = wrapEmailContent(emailBodyHtml, senderName, connection.from_email);
+      const wrappedHtml = wrapEmailContent(emailBodyHtml, senderName, fromEmail);
 
       console.log(`Sending via Resend with verified domain: ${senderName} <${connection.from_email}>`);
 
@@ -183,12 +189,12 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: `${senderName} <${connection.from_email}>`,
+          from: `${senderName} <${fromEmail}>`,
           to: [toEmail],
           subject,
           text: emailBodyText,
           html: wrappedHtml,
-          reply_to: connection.from_email, // Enable replies to this address
+          reply_to: fromEmail, // Enable replies to this address
           headers: {
             'X-Entity-Ref-ID': threadId, // Custom header for tracking
           },
@@ -227,7 +233,11 @@ serve(async (req) => {
         .eq('user_id', user.id)
         .maybeSingle();
 
-      const fromEmail = connection?.from_email || 'noreply@yourdomain.com';
+      // Priority: connection.from_email > profiles.email > error
+      const fromEmail = connection?.from_email || userProfile?.email;
+      if (!fromEmail) {
+        throw new Error('Business Email not configured. Please set your business email in Settings > Profile and verify it in SendGrid.');
+      }
       const senderName = businessProfile?.company_name || 'Your Business';
       const wrappedHtml = wrapEmailContent(emailBodyHtml, senderName, fromEmail);
 
@@ -389,7 +399,7 @@ serve(async (req) => {
     // ALSO create entry in email_threads for conversation view
     // This is KEY for reply tracking and unified conversation view
     if (activityData) {
-      // Get the user's from_email
+      // Get the user's from_email with priority order
       const { data: connection } = await supabaseClient
         .from('crm_connections')
         .select('from_email')
@@ -398,7 +408,8 @@ serve(async (req) => {
         .eq('status', 'active')
         .maybeSingle();
 
-      const fromEmail = connection?.from_email || user.email || 'noreply@crm.com';
+      // Priority: connection.from_email > profiles.email > user.email
+      const fromEmail = connection?.from_email || userProfile?.email || user.email || 'noreply@crm.com';
 
       const { error: threadError } = await supabaseClient
         .from('email_threads')
