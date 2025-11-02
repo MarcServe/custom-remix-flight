@@ -635,51 +635,64 @@ export const useLeadFinderStream = () => {
                   progress: event.progress || 80,
                 }));
               } else if (event.type === 'complete') {
-                const totalLeads = state.leads.length + (event.leads?.length || 0);
-                const allLeads = [...state.leads, ...(event.leads || [])];
-                
-                setState(prev => ({
-                  ...prev,
-                  leads: allLeads,
-                  isLoading: false,
-                  currentStatus: 'Complete',
-                  progress: 100,
-                  stats: event.stats,
-                  usage: event.usage ? {
-                    promptTokens: (event.usage as any).promptTokens || 0,
-                    completionTokens: (event.usage as any).completionTokens || 0,
-                    totalTokens: (event.usage as any).totalTokens || 0,
-                    estimatedCost: (event.usage as any).estimatedCost || 0,
-                  } : null,
-                  traceUrl: event.traceUrl,
-                  hasActiveSearch: false,
-                }));
+                setState(prev => {
+                  // Use prev.leads to avoid stale state
+                  const allLeads = [...prev.leads, ...(event.leads || [])];
+                  console.log('Complete event - preserving', prev.leads.length, 'leads, adding', (event.leads?.length || 0), 'new leads');
+                  
+                  return {
+                    ...prev,
+                    leads: allLeads,
+                    isLoading: false,
+                    currentStatus: 'Complete',
+                    progress: 100,
+                    stats: event.stats,
+                    usage: event.usage ? {
+                      promptTokens: (event.usage as any).promptTokens || 0,
+                      completionTokens: (event.usage as any).completionTokens || 0,
+                      totalTokens: (event.usage as any).totalTokens || 0,
+                      estimatedCost: (event.usage as any).estimatedCost || 0,
+                    } : null,
+                    traceUrl: event.traceUrl,
+                    hasActiveSearch: false,
+                  };
+                });
 
                 // Mark search as complete and move to completed storage
-                leadFinderStorage.updateActiveSearchProgress(searchId, {
-                  leads: allLeads,
-                  stats: event.stats,
-                  usage: event.usage,
-                  traceUrl: event.traceUrl,
-                  progress: 100,
-                  currentStatus: 'Complete',
-                  isComplete: true,
+                // Use setState callback to get the final leads count
+                setState(prev => {
+                  const finalLeads = prev.leads;
+                  console.log('Saving', finalLeads.length, 'leads to localStorage on complete');
+                  
+                  leadFinderStorage.updateActiveSearchProgress(searchId, {
+                    leads: finalLeads,
+                    stats: event.stats,
+                    usage: event.usage,
+                    traceUrl: event.traceUrl,
+                    progress: 100,
+                    currentStatus: 'Complete',
+                    isComplete: true,
+                  });
+
+                  leadFinderStorage.markSearchComplete(searchId);
+
+                  // Invalidate queries if companies were inserted
+                  if (!params.dryRun && finalLeads.length > 0) {
+                    queryClient.invalidateQueries({ queryKey: ['companies'] });
+                    queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] });
+                  }
+                  
+                  return prev;
                 });
 
-                leadFinderStorage.markSearchComplete(searchId);
-
-                // Invalidate queries if companies were inserted
-                if (!params.dryRun && totalLeads > 0) {
-                  queryClient.invalidateQueries({ queryKey: ['companies'] });
-                  queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] });
-                }
-
-                // Show toast notification with action
-                toast({
-                  title: '✨ Lead Search Complete',
-                  description: `Found ${event.stats.returned} companies. Results saved and ready to view.`,
-                  duration: 8000,
-                });
+                // Show toast notification with action after a brief delay to ensure state is updated
+                setTimeout(() => {
+                  toast({
+                    title: '✨ Lead Search Complete',
+                    description: `Found ${event.stats.returned} companies. Results saved and ready to view.`,
+                    duration: 8000,
+                  });
+                }, 100);
 
                 // Clear current search ID
                 currentSearchIdRef.current = null;
