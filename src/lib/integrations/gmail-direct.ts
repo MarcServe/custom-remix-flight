@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { apiClient } from '@/lib/api/client';
 
 export interface GmailDirectConnection {
   id: string;
@@ -22,9 +22,7 @@ export const gmailDirectClient = {
     try {
       console.log('Initiating Gmail Direct OAuth...');
       
-      const { data, error } = await supabase.functions.invoke('gmail-oauth-init', {
-        body: {},
-      });
+      const { data, error } = await apiClient.callFunction('gmail-oauth-init', {});
 
       if (error) {
         console.error('Error initiating OAuth:', error);
@@ -50,7 +48,7 @@ export const gmailDirectClient = {
    */
   async getConnections(): Promise<GmailDirectConnection[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await apiClient.supabase
         .from('crm_connections')
         .select('*')
         .eq('provider', 'gmail_direct')
@@ -73,7 +71,7 @@ export const gmailDirectClient = {
    */
   async disconnect(connectionId: string): Promise<{ error: Error | null }> {
     try {
-      const { error } = await supabase
+      const { error } = await apiClient.supabase
         .from('crm_connections')
         .update({ status: 'disconnected' })
         .eq('id', connectionId)
