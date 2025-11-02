@@ -64,6 +64,7 @@ interface SearchParams {
   size: string;
   geography: string;
   industry: string;
+  customSearchText?: string;
   dryRun?: boolean;
   provider?: 'lovable' | 'openai' | 'perplexity';
   model?: string;

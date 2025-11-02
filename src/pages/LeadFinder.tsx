@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -35,6 +36,7 @@ export default function LeadFinder() {
   const [industryCategory, setIndustryCategory] = useState("");
   const [industrySubcategory, setIndustrySubcategory] = useState("");
   const [subcategorySearch, setSubcategorySearch] = useState("");
+  const [customSearchText, setCustomSearchText] = useState("");
   const [dryRun, setDryRun] = useState(true);
   const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(true);
   const [selectedCompany, setSelectedCompany] = useState<any>(null);
@@ -109,6 +111,7 @@ export default function LeadFinder() {
       size,
       geography,
       industry: industryString,
+      customSearchText,
       dryRun: shouldDryRun,
       provider: providerConfig.provider,
       model: providerConfig.model,
@@ -653,6 +656,20 @@ export default function LeadFinder() {
                         </PopoverContent>
                       </Popover>
                     </div>}
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="custom-search" className="text-xs font-medium">Custom Search (Optional)</Label>
+                    <Textarea
+                      id="custom-search"
+                      placeholder="e.g., Find me hospitals in Cardiff with 1-10 employees, specialised in taking care of old and disabled"
+                      value={customSearchText}
+                      onChange={e => setCustomSearchText(e.target.value)}
+                      className="text-xs min-h-[80px] resize-none"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Describe your search in natural language to refine results
+                    </p>
+                  </div>
                 </div>
               </div>
 

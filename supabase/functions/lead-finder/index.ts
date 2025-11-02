@@ -526,8 +526,8 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId } = await req.json();
-  console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId });
+  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText } = await req.json();
+  console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText });
 
   // Initialize Supabase with authenticated user
   const authHeader = req.headers.get('Authorization')!;
@@ -589,7 +589,7 @@ Deno.serve(async (req) => {
           .from('lead_finder_searches')
           .insert({
             user_id: user.id,
-            search_params: { size, geography, industry, provider, model, enrichWithPerplexity },
+            search_params: { size, geography, industry, provider, model, enrichWithPerplexity, customSearchText },
             status: 'running',
             progress: 5,
             current_status: 'Initializing search...'
@@ -606,7 +606,7 @@ Deno.serve(async (req) => {
       // Send search ID to frontend
       await sendEvent({ type: 'search-created', searchId: currentSearchId });
 
-      const trace = createTrace('lead-finder', undefined, { size, geography, industry, searchId: currentSearchId });
+      const trace = createTrace('lead-finder', undefined, { size, geography, industry, customSearchText, searchId: currentSearchId });
       const EXA_API_KEY = Deno.env.get("EXA_API_KEY");
       if (!EXA_API_KEY) throw new Error("Missing EXA_API_KEY");
 
@@ -629,11 +629,13 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Build Exa queries with custom search text if provided
+      const customContext = customSearchText ? ` ${customSearchText}` : '';
       const exaQueries = [
-        `${industryContext} companies in ${geography} with approximately ${size} employees`,
-        `site:linkedin.com/company ${industryContext} ${geography} ${size}`,
-        `${industryContext} company directory ${geography} industry list`,
-        `${industryContext} company news ${geography} 2024 2025`
+        `${industryContext} companies in ${geography} with approximately ${size} employees${customContext}`,
+        `site:linkedin.com/company ${industryContext} ${geography} ${size}${customContext}`,
+        `${industryContext} company directory ${geography} industry list${customContext}`,
+        `${industryContext} company news ${geography} 2024 2025${customContext}`
       ];
 
       const exaPromises = exaQueries.map(query =>
@@ -678,7 +680,11 @@ Deno.serve(async (req) => {
         ? `Focus on companies in the ${industryContext} sector within ${mainCategory}.`
         : `Focus on companies in ${industryContext}.`;
 
-      const createPrompt = (batch: any[]) => `Extract company info from these results. ${industryGuidance}
+      const customSearchGuidance = customSearchText 
+        ? `\n\nADDITIONAL REQUIREMENTS: ${customSearchText}\nPrioritize companies that match these specific requirements.`
+        : '';
+
+      const createPrompt = (batch: any[]) => `Extract company info from these results. ${industryGuidance}${customSearchGuidance}
 
 CRITICAL: Extract ALL companies, even with incomplete data. Deduplicate by name. Required: name, website, description, industry ("${industryContext}"), size ("${size}"), geography ("${geography}"), linkedinUrl, foundingYear, revenue. Optional: companyPhone, generalEmail, keyExecutives, fundingStage, technologies, employeeCount.
 
