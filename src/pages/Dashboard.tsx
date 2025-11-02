@@ -239,7 +239,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="text-4xl md:text-5xl lg:text-6xl font-bold mb-3 md:mb-4 group-hover:scale-105 transition-transform">
-                  ${revenue.toFixed(0)}k
+                  £{revenue.toFixed(0)}k
                 </p>
                 <p className="text-white/70 text-xs md:text-sm">
                   {deals?.count || 0} active deals in pipeline
