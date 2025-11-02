@@ -452,6 +452,10 @@ export default function CompanySequences() {
                               try {
                                 // First activate the sequence
                                 await handleStatusChange(sequence.id, 'active');
+                                
+                                // Wait for database update to propagate
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                                
                                 // Then send the first email
                                 await sendEmailMutation.mutateAsync({
                                   companySequenceId: sequence.id,
