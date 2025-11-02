@@ -20,6 +20,7 @@ import { usePendingCounts } from "@/hooks/use-pending-counts";
 import { useEventsRealtime, useDealsRealtimeForNotifications, useCampaignsRealtimeForNotifications } from "@/hooks/use-realtime";
 import { supabase } from "@/integrations/supabase/client";
 import { usePendingReviewsCount } from "@/hooks/use-pending-reviews";
+import { ActivityNotificationCenter } from "@/components/notifications/ActivityNotificationCenter";
 
 type NavigationItem = {
   name: string;
@@ -447,6 +448,13 @@ export const Sidebar = () => {
           return linkContent;
         })}
       </nav>
+      
+      {/* Activity Notifications */}
+      <div className="border-t p-3">
+        <div className="flex items-center justify-center">
+          <ActivityNotificationCenter />
+        </div>
+      </div>
       
       {user && (
         <div className="border-t p-3">

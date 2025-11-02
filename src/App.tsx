@@ -7,6 +7,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Sidebar } from "./components/Sidebar";
 import { useAllRealtime } from "./hooks/use-realtime";
+import { useAllEmailNotifications } from "./hooks/use-email-notifications";
 import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import Deals from "./pages/Deals";
@@ -34,9 +35,10 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-// Component to handle realtime subscriptions
+// Component to handle realtime subscriptions and notifications
 const RealtimeProvider = ({ children }: { children: React.ReactNode }) => {
   useAllRealtime();
+  useAllEmailNotifications();
   return <>{children}</>;
 };
 
