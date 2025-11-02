@@ -382,6 +382,7 @@ export type Database = {
           email_brand_color: string | null
           email_footer_text: string | null
           email_logo_url: string | null
+          email_provider: string | null
           email_signature: string | null
           email_template_style: string | null
           id: string
@@ -407,6 +408,7 @@ export type Database = {
           email_brand_color?: string | null
           email_footer_text?: string | null
           email_logo_url?: string | null
+          email_provider?: string | null
           email_signature?: string | null
           email_template_style?: string | null
           id?: string
@@ -432,6 +434,7 @@ export type Database = {
           email_brand_color?: string | null
           email_footer_text?: string | null
           email_logo_url?: string | null
+          email_provider?: string | null
           email_signature?: string | null
           email_template_style?: string | null
           id?: string

@@ -20,6 +20,7 @@ export default function BusinessProfile() {
     target_audience: "",
     value_proposition: "",
     tone_preference: "professional",
+    email_provider: "resend" as "resend" | "sendgrid",
   });
 
   useEffect(() => {
@@ -49,6 +50,7 @@ export default function BusinessProfile() {
           target_audience: data.target_audience || "",
           value_proposition: data.value_proposition || "",
           tone_preference: data.tone_preference || "professional",
+          email_provider: (data.email_provider === 'sendgrid' ? 'sendgrid' : 'resend') as "resend" | "sendgrid",
         });
       }
     } catch (error) {
@@ -198,6 +200,25 @@ export default function BusinessProfile() {
                 <SelectItem value="technical">Technical</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="email_provider">Email Provider</Label>
+            <Select
+              value={profile.email_provider}
+              onValueChange={(value: "resend" | "sendgrid") => setProfile({ ...profile, email_provider: value })}
+            >
+              <SelectTrigger id="email_provider">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="resend">Resend</SelectItem>
+                <SelectItem value="sendgrid">SendGrid</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Choose which provider to use for sending emails. Make sure you've added the API key for your selected provider.
+            </p>
           </div>
 
           <div className="flex justify-end pt-4">

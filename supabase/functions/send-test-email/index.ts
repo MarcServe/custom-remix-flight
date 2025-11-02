@@ -4,7 +4,8 @@ import { renderEmailTemplate } from '../_shared/professional-template.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY');
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -64,10 +65,13 @@ Deno.serve(async (req) => {
 
     const { data: businessProfile } = await supabase
       .from('business_profiles')
-      .select('company_name')
+      .select('company_name, email_provider')
       .eq('user_id', user.id)
       .single();
 
+    // Determine which email provider to use
+    const emailProvider = businessProfile?.email_provider || 'resend';
+    
     // For template preview test
     if (templateStyle) {
       const sampleBody = `Hi there,
@@ -92,30 +96,71 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
         signature,
       });
 
-      const resendResponse = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: `${companyName || 'CRM'} <onboarding@resend.dev>`,
-          to: [recipientEmail],
-          subject: '🎨 Test Email - Your Email Template Preview',
-          html,
-        }),
-      });
+      let messageId;
+      
+      if (emailProvider === 'sendgrid' && SENDGRID_API_KEY) {
+        const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SENDGRID_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            personalizations: [{
+              to: [{ email: recipientEmail }],
+              subject: '🎨 Test Email - Your Email Template Preview',
+            }],
+            from: {
+              email: connection.from_email || 'noreply@yourdomain.com',
+              name: companyName || 'CRM',
+            },
+            content: [
+              {
+                type: 'text/html',
+                value: html,
+              },
+            ],
+          }),
+        });
 
-      if (!resendResponse.ok) {
-        const errorText = await resendResponse.text();
-        throw new Error(`Failed to send test email: ${errorText}`);
+        if (!sendgridResponse.ok) {
+          const errorText = await sendgridResponse.text();
+          throw new Error(`Failed to send test email via SendGrid: ${errorText}`);
+        }
+
+        messageId = sendgridResponse.headers.get('X-Message-Id') || 'sendgrid-sent';
+        console.log('Template test email sent via SendGrid:', messageId);
+      } else {
+        if (!RESEND_API_KEY) {
+          throw new Error('Email provider not configured');
+        }
+        
+        const resendResponse = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: `${companyName || 'CRM'} <onboarding@resend.dev>`,
+            to: [recipientEmail],
+            subject: '🎨 Test Email - Your Email Template Preview',
+            html,
+          }),
+        });
+
+        if (!resendResponse.ok) {
+          const errorText = await resendResponse.text();
+          throw new Error(`Failed to send test email via Resend: ${errorText}`);
+        }
+
+        const data = await resendResponse.json();
+        messageId = data.id;
+        console.log('Template test email sent via Resend:', messageId);
       }
 
-      const data = await resendResponse.json();
-      console.log('Template test email sent:', data.id);
-
       return new Response(
-        JSON.stringify({ success: true, messageId: data.id }),
+        JSON.stringify({ success: true, messageId, provider: emailProvider }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
@@ -150,33 +195,79 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
       companyName: businessProfile?.company_name,
     });
 
-    // Send via Resend
-    const resendResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: connection.from_email || `${userProfile?.full_name || 'Team'} <onboarding@resend.dev>`,
-        to: [testEmail],
-        subject: `[TEST] ${personalizedSubject2}`,
-        html: bodyHtml,
-        text: personalizedBody2 + signatureText,
-      }),
-    });
+    // Send via configured provider
+    let messageId;
+    
+    if (emailProvider === 'sendgrid' && SENDGRID_API_KEY) {
+      const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SENDGRID_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          personalizations: [{
+            to: [{ email: testEmail }],
+            subject: `[TEST] ${personalizedSubject2}`,
+          }],
+          from: {
+            email: connection.from_email || 'noreply@yourdomain.com',
+            name: userProfile?.full_name || 'Team',
+          },
+          content: [
+            {
+              type: 'text/plain',
+              value: personalizedBody2 + signatureText,
+            },
+            {
+              type: 'text/html',
+              value: bodyHtml,
+            },
+          ],
+        }),
+      });
 
-    if (!resendResponse.ok) {
-      const errorText = await resendResponse.text();
-      console.error('Resend API error:', errorText);
-      throw new Error('Failed to send test email');
+      if (!sendgridResponse.ok) {
+        const errorText = await sendgridResponse.text();
+        console.error('SendGrid API error:', errorText);
+        throw new Error('Failed to send test email via SendGrid');
+      }
+
+      messageId = sendgridResponse.headers.get('X-Message-Id') || 'sendgrid-sent';
+      console.log('Test email sent successfully via SendGrid:', messageId);
+    } else {
+      if (!RESEND_API_KEY) {
+        throw new Error('Email provider not configured');
+      }
+      
+      const resendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: connection.from_email || `${userProfile?.full_name || 'Team'} <onboarding@resend.dev>`,
+          to: [testEmail],
+          subject: `[TEST] ${personalizedSubject2}`,
+          html: bodyHtml,
+          text: personalizedBody2 + signatureText,
+        }),
+      });
+
+      if (!resendResponse.ok) {
+        const errorText = await resendResponse.text();
+        console.error('Resend API error:', errorText);
+        throw new Error('Failed to send test email via Resend');
+      }
+
+      const data = await resendResponse.json();
+      messageId = data.id;
+      console.log('Test email sent successfully via Resend:', messageId);
     }
 
-    const data = await resendResponse.json();
-    console.log('Test email sent successfully:', data);
-
     return new Response(
-      JSON.stringify({ success: true, messageId: data.id }),
+      JSON.stringify({ success: true, messageId, provider: emailProvider }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }

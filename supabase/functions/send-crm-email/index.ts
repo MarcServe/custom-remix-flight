@@ -16,7 +16,7 @@ interface EmailRequest {
   bodyText?: string; // Plain text version
   companyId?: string;
   contactId?: string;
-  sender?: 'gmail' | 'resend' | 'smtp';
+  sender?: 'gmail' | 'resend' | 'smtp' | 'sendgrid';
   testConnection?: boolean; // Test SMTP connection without sending
 }
 
@@ -48,7 +48,21 @@ serve(async (req) => {
     }
 
     const emailRequest: EmailRequest = await req.json();
-    const { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, sender = 'resend', testConnection = false } = emailRequest;
+    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, sender = 'resend', testConnection = false } = emailRequest;
+    
+    // If no sender specified, check user's preferred provider from business profile
+    if (!sender || sender === 'resend') {
+      const { data: businessProfile } = await supabaseClient
+        .from('business_profiles')
+        .select('email_provider')
+        .eq('user_id', user.id)
+        .single();
+      
+      // Use SendGrid if set as preferred, otherwise default to Resend
+      if (businessProfile?.email_provider === 'sendgrid') {
+        sender = 'sendgrid';
+      }
+    }
 
     // Generate thread_id for email threading (used across all sending methods)
     const threadId = `crm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -200,6 +214,80 @@ serve(async (req) => {
       messageId = resendData.id || null;
       provider = 'smtp';
       console.log('Email sent successfully via Resend:', resendData);
+    } else if (sender === 'sendgrid') {
+      // Send via SendGrid
+      const sendgridApiKey = Deno.env.get('SENDGRID_API_KEY');
+      if (!sendgridApiKey) {
+        throw new Error('SendGrid not configured. Please add SENDGRID_API_KEY.');
+      }
+
+      // Get verified sender email
+      const { data: connection } = await supabaseClient
+        .from('crm_connections')
+        .select('from_email')
+        .eq('user_id', user.id)
+        .eq('provider', 'smtp')
+        .eq('status', 'active')
+        .maybeSingle();
+
+      const { data: businessProfile } = await supabaseClient
+        .from('business_profiles')
+        .select('company_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const fromEmail = connection?.from_email || 'noreply@yourdomain.com';
+      const senderName = businessProfile?.company_name || 'Your Business';
+      const wrappedHtml = wrapEmailContent(emailBodyHtml, senderName, fromEmail);
+
+      console.log(`Sending via SendGrid from: ${senderName} <${fromEmail}>`);
+
+      const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sendgridApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          personalizations: [{
+            to: [{ email: toEmail, name: toName }],
+            subject: subject,
+          }],
+          from: {
+            email: fromEmail,
+            name: senderName,
+          },
+          reply_to: {
+            email: fromEmail,
+            name: senderName,
+          },
+          content: [
+            {
+              type: 'text/plain',
+              value: emailBodyText,
+            },
+            {
+              type: 'text/html',
+              value: wrappedHtml,
+            },
+          ],
+          custom_args: {
+            thread_id: threadId,
+            crm_tracking: 'true',
+          },
+        }),
+      });
+
+      if (!sendgridResponse.ok) {
+        const errorData = await sendgridResponse.text();
+        console.error('SendGrid API error:', errorData);
+        throw new Error(`Failed to send via SendGrid: ${errorData}`);
+      }
+
+      // SendGrid returns 202 Accepted with X-Message-Id header
+      messageId = sendgridResponse.headers.get('X-Message-Id') || null;
+      provider = 'sendgrid';
+      console.log('Email sent successfully via SendGrid:', messageId);
     } else {
       // Send via Resend (default)
       const resendApiKey = Deno.env.get('RESEND_API_KEY');
