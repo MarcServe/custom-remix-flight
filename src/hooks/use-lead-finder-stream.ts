@@ -92,11 +92,11 @@ export const useLeadFinderStream = () => {
     hasActiveSearch: false,
   });
 
-  // Simplified initial load - prioritize showing results
+  // Simplified initial load - only run once on mount
   useEffect(() => {
     const loadResults = async () => {
       try {
-        // First, try to load completed results from localStorage immediately
+        // Load completed results from localStorage
         const stored = leadFinderStorage.load();
         if (stored && stored.leads.length > 0) {
           console.log('Loading stored results:', stored.leads.length, 'leads');
@@ -108,12 +108,12 @@ export const useLeadFinderStream = () => {
             traceUrl: stored.traceUrl,
             hasActiveSearch: false,
             progress: 100,
-            currentStatus: 'Previous results',
+            currentStatus: 'Previous results loaded',
             isLoading: false,
           }));
         }
 
-        // Then check for active searches in background
+        // Check for active searches
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
@@ -121,14 +121,14 @@ export const useLeadFinderStream = () => {
           .from('lead_finder_searches')
           .select('*')
           .eq('user_id', user.id)
-          .eq('status', 'running')
+          .in('status', ['running', 'complete'])
           .order('created_at', { ascending: false })
           .limit(1);
 
         if (searches && searches.length > 0) {
           const activeSearch = searches[0];
           
-          // Load leads for active search
+          // Load leads for this search from database
           const { data: leads } = await supabase
             .from('lead_finder_leads')
             .select('*')
@@ -136,31 +136,46 @@ export const useLeadFinderStream = () => {
             .order('created_at', { ascending: true });
 
           const leadData = leads?.map(l => l.company_data as unknown as Lead) || [];
+          console.log('Found recent search:', activeSearch.status, 'with', leadData.length, 'leads in DB');
 
-          console.log('Active search found:', leadData.length, 'leads in DB');
-
-          setState(prev => ({
-            ...prev,
-            // Only use DB leads if we don't already have leads from localStorage
-            leads: prev.leads.length > 0 ? prev.leads : leadData,
-            stats: (activeSearch.stats as unknown as Stats) || prev.stats,
-            usage: activeSearch.usage ? {
-              promptTokens: (activeSearch.usage as any).promptTokens || 0,
-              completionTokens: (activeSearch.usage as any).completionTokens || 0,
-              totalTokens: (activeSearch.usage as any).totalTokens || 0,
-              estimatedCost: (activeSearch.usage as any).estimatedCost || 0,
-            } : prev.usage,
-            traceUrl: activeSearch.trace_url || prev.traceUrl,
-            progress: activeSearch.progress,
-            currentStatus: activeSearch.current_status || 'Active search',
-            searchId: activeSearch.id,
-            hasActiveSearch: true,
-            isLoading: activeSearch.status === 'running',
-          }));
+          // If we found leads in DB, use them (unless we already have stored results)
+          setState(prev => {
+            const useDBLeads = leadData.length > 0 && prev.leads.length === 0;
+            return {
+              ...prev,
+              leads: useDBLeads ? leadData : prev.leads,
+              stats: (activeSearch.stats as unknown as Stats) || prev.stats,
+              usage: activeSearch.usage ? {
+                promptTokens: (activeSearch.usage as any).promptTokens || 0,
+                completionTokens: (activeSearch.usage as any).completionTokens || 0,
+                totalTokens: (activeSearch.usage as any).totalTokens || 0,
+                estimatedCost: (activeSearch.usage as any).estimatedCost || 0,
+              } : prev.usage,
+              traceUrl: activeSearch.trace_url || prev.traceUrl,
+              progress: activeSearch.progress,
+              currentStatus: activeSearch.current_status || (activeSearch.status === 'complete' ? 'Search complete' : 'Active search'),
+              searchId: activeSearch.id,
+              hasActiveSearch: activeSearch.status === 'running',
+              isLoading: activeSearch.status === 'running',
+            };
+          });
 
           currentSearchIdRef.current = activeSearch.id;
-          setupRealtimeSubscription(activeSearch.id);
-          setupPolling(activeSearch.id);
+          
+          // Only set up realtime/polling if search is still running
+          if (activeSearch.status === 'running') {
+            setupRealtimeSubscription(activeSearch.id);
+            setupPolling(activeSearch.id);
+          } else if (activeSearch.status === 'complete' && leadData.length > 0) {
+            // Save completed search results to localStorage
+            leadFinderStorage.save({
+              leads: leadData,
+              stats: (activeSearch.stats as unknown as Stats) || null,
+              usage: activeSearch.usage as unknown as Usage || null,
+              traceUrl: activeSearch.trace_url || null,
+              searchParams: searchParamsRef.current!,
+            });
+          }
         }
       } catch (error) {
         console.error('Error loading results:', error);
@@ -177,7 +192,7 @@ export const useLeadFinderStream = () => {
         clearInterval(pollingIntervalRef.current);
       }
     };
-  }, []);
+  }, []); // Empty dependency array - only run once
 
   // Setup realtime subscription for search updates
   const setupRealtimeSubscription = (searchId: string) => {
@@ -200,32 +215,49 @@ export const useLeadFinderStream = () => {
           console.log('Search update:', payload);
           const search = payload.new as any;
           
-          setState(prev => ({
-            ...prev,
-            progress: search.progress || prev.progress,
-            currentStatus: search.current_status || prev.currentStatus,
-          stats: (search.stats as unknown as Stats) || prev.stats,
-          usage: search.usage ? {
-            promptTokens: (search.usage as any).promptTokens || 0,
-            completionTokens: (search.usage as any).completionTokens || 0,
-            totalTokens: (search.usage as any).totalTokens || 0,
-            estimatedCost: (search.usage as any).estimatedCost || 0,
-          } : prev.usage,
-            traceUrl: search.trace_url || prev.traceUrl,
-            isLoading: search.status === 'running',
-            hasActiveSearch: search.status !== 'complete',
-          }));
-
-          // If search is complete, save results and cleanup
-          if (search.status === 'complete') {
-            // Don't reload - keep existing leads in state
-            setState(prev => ({
+          setState(prev => {
+            console.log('Realtime update - current leads:', prev.leads.length, 'status:', search.status);
+            return {
               ...prev,
-              isLoading: false,
-              hasActiveSearch: false,
-              currentStatus: 'Search complete',
-              progress: 100,
-            }));
+              progress: search.progress || prev.progress,
+              currentStatus: search.current_status || prev.currentStatus,
+              stats: (search.stats as unknown as Stats) || prev.stats,
+              usage: search.usage ? {
+                promptTokens: (search.usage as any).promptTokens || 0,
+                completionTokens: (search.usage as any).completionTokens || 0,
+                totalTokens: (search.usage as any).totalTokens || 0,
+                estimatedCost: (search.usage as any).estimatedCost || 0,
+              } : prev.usage,
+              traceUrl: search.trace_url || prev.traceUrl,
+              isLoading: search.status === 'running',
+              hasActiveSearch: search.status !== 'complete',
+            };
+          });
+
+          // If search is complete, save results immediately and cleanup
+          if (search.status === 'complete') {
+            setState(prev => {
+              // Save leads to localStorage immediately
+              if (prev.leads.length > 0) {
+                console.log('Search complete, saving', prev.leads.length, 'leads to localStorage');
+                leadFinderStorage.save({
+                  leads: prev.leads,
+                  stats: prev.stats,
+                  usage: prev.usage,
+                  traceUrl: prev.traceUrl,
+                  searchParams: searchParamsRef.current!,
+                });
+                leadFinderStorage.markSearchComplete(searchId);
+              }
+              
+              return {
+                ...prev,
+                isLoading: false,
+                hasActiveSearch: false,
+                currentStatus: 'Search complete',
+                progress: 100,
+              };
+            });
             
             if (realtimeChannelRef.current) {
               supabase.removeChannel(realtimeChannelRef.current);
@@ -248,10 +280,13 @@ export const useLeadFinderStream = () => {
           console.log('New lead:', payload);
           const newLead = (payload.new as any).company_data as unknown as Lead;
           
-          setState(prev => ({
-            ...prev,
-            leads: [...prev.leads, newLead],
-          }));
+          setState(prev => {
+            console.log('Adding lead, current count:', prev.leads.length);
+            return {
+              ...prev,
+              leads: [...prev.leads, newLead],
+            };
+          });
         }
       )
       .on(
@@ -266,12 +301,15 @@ export const useLeadFinderStream = () => {
           console.log('Lead updated:', payload);
           const updatedLead = (payload.new as any).company_data as unknown as Lead;
           
-          setState(prev => ({
-            ...prev,
-            leads: prev.leads.map(lead =>
-              lead.name === updatedLead.name ? { ...lead, ...updatedLead, _justUpdated: true } : lead
-            ),
-          }));
+          setState(prev => {
+            console.log('Updating lead, current count:', prev.leads.length);
+            return {
+              ...prev,
+              leads: prev.leads.map(lead =>
+                lead.name === updatedLead.name ? { ...lead, ...updatedLead, _justUpdated: true } : lead
+              ),
+            };
+          });
 
           // Clear update flag after animation
           setTimeout(() => {
@@ -304,6 +342,7 @@ export const useLeadFinderStream = () => {
         if (!search) return;
 
         // Update search state but never clear leads
+        console.log('Polling update - current leads:', search.status, 'progress:', search.progress);
         setState(prev => ({
           ...prev,
           progress: search.progress || prev.progress,
@@ -338,17 +377,20 @@ export const useLeadFinderStream = () => {
                 leads: leadData,
               };
             }
+            console.log(`Polling - keeping existing ${prev.leads.length} leads`);
             return prev;
           });
         }
 
         // Stop polling and save results when complete
         if (search.status === 'complete' && pollingIntervalRef.current) {
+          console.log('Search complete in polling, stopping and saving');
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
 
-          // Save final results to localStorage
+          // Save final results to localStorage using current state
           setState(prev => {
+            console.log('Saving', prev.leads.length, 'leads to localStorage on completion');
             if (prev.leads.length > 0) {
               leadFinderStorage.save({
                 leads: prev.leads,
@@ -359,7 +401,7 @@ export const useLeadFinderStream = () => {
               });
               leadFinderStorage.markSearchComplete(searchId);
             }
-            return prev;
+            return prev; // Don't modify state, just return as-is
           });
         }
       } catch (error) {
