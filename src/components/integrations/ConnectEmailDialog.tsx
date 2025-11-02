@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
 import { nangoClient } from "@/lib/integrations/nango";
@@ -154,90 +155,92 @@ export function ConnectEmailDialog({
         </DialogHeader>
 
         {provider === 'smtp' ? (
-          <div className="space-y-4">
-            <Alert className="border-primary/50 bg-primary/5">
-              <Info className="h-4 w-4 text-primary" />
-              <AlertDescription className="text-sm">
-                Connect your email server to send messages directly. No verification needed!
-              </AlertDescription>
-            </Alert>
+          <ScrollArea className="max-h-[60vh] pr-4">
+            <div className="space-y-4">
+              <Alert className="border-primary/50 bg-primary/5">
+                <Info className="h-4 w-4 text-primary" />
+                <AlertDescription className="text-sm">
+                  Connect your email server to send messages directly. No verification needed!
+                </AlertDescription>
+              </Alert>
 
-            <div className="space-y-2">
-              <Label htmlFor="smtp-host">Email Server Address</Label>
-              <Input
-                id="smtp-host"
-                placeholder="mail.yourdomain.com"
-                value={smtpConfig.host}
-                onChange={(e) =>
-                  setSMTPConfig({ ...smtpConfig, host: e.target.value })
-                }
-              />
-              <p className="text-xs text-muted-foreground">Usually starts with "smtp" or "mail"</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="smtp-port">Port Number</Label>
-              <Input
-                id="smtp-port"
-                type="number"
-                placeholder="587"
-                value={smtpConfig.port}
-                onChange={(e) =>
-                  setSMTPConfig({ ...smtpConfig, port: parseInt(e.target.value) })
-                }
-              />
-              <p className="text-xs text-muted-foreground">Common ports: 587 or 465</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="smtp-username">Your Email Address</Label>
-              <Input
-                id="smtp-username"
-                placeholder="you@yourdomain.com"
-                value={smtpConfig.username}
-                onChange={(e) =>
-                  setSMTPConfig({ ...smtpConfig, username: e.target.value })
-                }
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="smtp-password">Email Password</Label>
-              <Input
-                id="smtp-password"
-                type="password"
-                placeholder="••••••••"
-                value={smtpConfig.password}
-                onChange={(e) =>
-                  setSMTPConfig({ ...smtpConfig, password: e.target.value })
-                }
-              />
-              <p className="text-xs text-muted-foreground">Your email account password</p>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-              <div>
-                <Label htmlFor="smtp-secure" className="cursor-pointer">Secure Connection</Label>
-                <p className="text-xs text-muted-foreground">Recommended for security</p>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-host">Email Server Address</Label>
+                <Input
+                  id="smtp-host"
+                  placeholder="mail.yourdomain.com"
+                  value={smtpConfig.host}
+                  onChange={(e) =>
+                    setSMTPConfig({ ...smtpConfig, host: e.target.value })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">Usually starts with "smtp" or "mail"</p>
               </div>
-              <Switch
-                id="smtp-secure"
-                checked={smtpConfig.secure}
-                onCheckedChange={(checked) =>
-                  setSMTPConfig({ ...smtpConfig, secure: checked })
-                }
-              />
-            </div>
 
-            <Button
-              onClick={handleSMTPConnect}
-              disabled={loading}
-              className="w-full"
-            >
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Connect Email
-            </Button>
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-port">Port Number</Label>
+                <Input
+                  id="smtp-port"
+                  type="number"
+                  placeholder="587"
+                  value={smtpConfig.port}
+                  onChange={(e) =>
+                    setSMTPConfig({ ...smtpConfig, port: parseInt(e.target.value) })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">Common ports: 587 or 465</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="smtp-username">Your Email Address</Label>
+                <Input
+                  id="smtp-username"
+                  placeholder="you@yourdomain.com"
+                  value={smtpConfig.username}
+                  onChange={(e) =>
+                    setSMTPConfig({ ...smtpConfig, username: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="smtp-password">Email Password</Label>
+                <Input
+                  id="smtp-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={smtpConfig.password}
+                  onChange={(e) =>
+                    setSMTPConfig({ ...smtpConfig, password: e.target.value })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">Your email account password</p>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div>
+                  <Label htmlFor="smtp-secure" className="cursor-pointer">Secure Connection</Label>
+                  <p className="text-xs text-muted-foreground">Recommended for security</p>
+                </div>
+                <Switch
+                  id="smtp-secure"
+                  checked={smtpConfig.secure}
+                  onCheckedChange={(checked) =>
+                    setSMTPConfig({ ...smtpConfig, secure: checked })
+                  }
+                />
+              </div>
+
+              <Button
+                onClick={handleSMTPConnect}
+                disabled={loading}
+                className="w-full"
+              >
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Connect Email
+              </Button>
+            </div>
+          </ScrollArea>
         ) : (
           <div className="space-y-4">
             {showSetupInstructions ? (
