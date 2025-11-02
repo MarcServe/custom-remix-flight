@@ -92,15 +92,32 @@ export const useLeadFinderStream = () => {
     hasActiveSearch: false,
   });
 
-  // Load from database and setup realtime subscriptions
+  // Simplified initial load - prioritize showing results
   useEffect(() => {
-    const loadActiveSearchFromDB = async () => {
+    const loadResults = async () => {
       try {
+        // First, try to load completed results from localStorage immediately
+        const stored = leadFinderStorage.load();
+        if (stored && stored.leads.length > 0) {
+          console.log('Loading stored results:', stored.leads.length, 'leads');
+          setState(prev => ({
+            ...prev,
+            leads: stored.leads,
+            stats: stored.stats,
+            usage: stored.usage,
+            traceUrl: stored.traceUrl,
+            hasActiveSearch: false,
+            progress: 100,
+            currentStatus: 'Previous results',
+            isLoading: false,
+          }));
+        }
+
+        // Then check for active searches in background
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Check database for active searches
-        const { data: searches, error } = await supabase
+        const { data: searches } = await supabase
           .from('lead_finder_searches')
           .select('*')
           .eq('user_id', user.id)
@@ -108,12 +125,10 @@ export const useLeadFinderStream = () => {
           .order('created_at', { ascending: false })
           .limit(1);
 
-        if (error) throw error;
-
         if (searches && searches.length > 0) {
           const activeSearch = searches[0];
           
-          // Load leads for this search
+          // Load leads for active search
           const { data: leads } = await supabase
             .from('lead_finder_leads')
             .select('*')
@@ -122,84 +137,37 @@ export const useLeadFinderStream = () => {
 
           const leadData = leads?.map(l => l.company_data as unknown as Lead) || [];
 
+          console.log('Active search found:', leadData.length, 'leads');
+
           setState(prev => ({
             ...prev,
             leads: leadData,
-            stats: (activeSearch.stats as unknown as Stats) || null,
+            stats: (activeSearch.stats as unknown as Stats) || prev.stats,
             usage: activeSearch.usage ? {
               promptTokens: (activeSearch.usage as any).promptTokens || 0,
               completionTokens: (activeSearch.usage as any).completionTokens || 0,
               totalTokens: (activeSearch.usage as any).totalTokens || 0,
               estimatedCost: (activeSearch.usage as any).estimatedCost || 0,
-            } : null,
-            traceUrl: activeSearch.trace_url,
+            } : prev.usage,
+            traceUrl: activeSearch.trace_url || prev.traceUrl,
             progress: activeSearch.progress,
-            currentStatus: activeSearch.current_status || '',
+            currentStatus: activeSearch.current_status || 'Active search',
             searchId: activeSearch.id,
             hasActiveSearch: true,
             isLoading: activeSearch.status === 'running',
           }));
 
           currentSearchIdRef.current = activeSearch.id;
-
-          // Setup realtime subscription for this search
           setupRealtimeSubscription(activeSearch.id);
-
-          // Setup polling as fallback
           setupPolling(activeSearch.id);
-
-          toast({
-            title: 'Search Resumed',
-            description: `Continuing search with ${leadData.length} leads found so far.`,
-            duration: 5000,
-          });
-
-          return;
-        }
-
-        // Fallback to localStorage if no DB search
-        const activeSearch = leadFinderStorage.loadActiveSearch();
-        if (activeSearch && !activeSearch.isComplete) {
-          setState(prev => ({
-            ...prev,
-            leads: activeSearch.leads,
-            stats: activeSearch.stats,
-            usage: activeSearch.usage,
-            traceUrl: activeSearch.traceUrl,
-            progress: activeSearch.progress,
-            currentStatus: activeSearch.currentStatus,
-            searchId: activeSearch.searchId,
-            hasActiveSearch: true,
-            isLoading: false,
-          }));
-          currentSearchIdRef.current = activeSearch.searchId;
-          searchParamsRef.current = activeSearch.searchParams;
-          return;
-        }
-
-        // If no active search, load completed results from localStorage
-        const stored = leadFinderStorage.load();
-        if (stored && stored.leads.length > 0) {
-          setState(prev => ({
-            ...prev,
-            leads: stored.leads,
-            stats: stored.stats,
-            usage: stored.usage,
-            traceUrl: stored.traceUrl,
-            hasActiveSearch: false,
-            hasStoredResults: false,
-            progress: 100,
-            currentStatus: 'Restored from previous search',
-          }));
         }
       } catch (error) {
-        console.error('Error loading search from DB:', error);
+        console.error('Error loading results:', error);
       }
     };
 
-    loadActiveSearchFromDB();
+    loadResults();
 
-    // Cleanup on unmount
     return () => {
       if (realtimeChannelRef.current) {
         supabase.removeChannel(realtimeChannelRef.current);
@@ -787,7 +755,9 @@ export const useLeadFinderStream = () => {
 
   const restoreStoredResults = () => {
     const stored = leadFinderStorage.load();
-    if (stored && stored.leads.length > 0) {
+    console.log('Attempting to restore stored results:', stored);
+    if (stored && stored.leads && stored.leads.length > 0) {
+      console.log('Restoring', stored.leads.length, 'leads');
       setState(prev => ({
         ...prev,
         leads: stored.leads,
@@ -795,13 +765,18 @@ export const useLeadFinderStream = () => {
         usage: stored.usage,
         traceUrl: stored.traceUrl,
         isLoading: false,
-        currentStatus: 'Restored',
+        currentStatus: 'Previous results restored',
         progress: 100,
         searchId: null,
         hasActiveSearch: false,
       }));
+      toast({
+        title: 'Results Restored',
+        description: `Loaded ${stored.leads.length} leads from previous search`,
+      });
       return true;
     }
+    console.log('No stored results found to restore');
     return false;
   };
 

@@ -858,9 +858,32 @@ export default function LeadFinder() {
                   </p>
                 </div>
                 
-                {/* Restore Stored Results - Only show if results aren't already displayed */}
+                {/* Restore Stored Results */}
                 {streamingSearch.hasStoredResults && streamingSearch.leads.length === 0 && <div className="pt-4 border-t">
-                    
+                    <Alert className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
+                      <Database className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <AlertDescription className="text-xs">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold mb-1 text-blue-900 dark:text-blue-100">Previous Results Available</p>
+                            <p className="text-blue-700 dark:text-blue-300">You have saved results from a previous search.</p>
+                          </div>
+                          <Button size="sm" onClick={() => {
+                            const restored = streamingSearch.restoreStoredResults();
+                            if (!restored) {
+                              toast({
+                                title: 'No Results',
+                                description: 'No previous results found',
+                                variant: 'destructive'
+                              });
+                            }
+                          }} className="h-7 text-xs whitespace-nowrap">
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Load Results
+                          </Button>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
                   </div>}
                 
                 {/* Resume Active Search */}
