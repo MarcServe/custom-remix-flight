@@ -143,6 +143,15 @@ serve(async (req) => {
               value: emailStep.body.replace(/\n/g, '<br>'),
             },
           ],
+          tracking_settings: {
+            open_tracking: {
+              enable: true,
+            },
+            click_tracking: {
+              enable: true,
+              enable_text: true,
+            },
+          },
           custom_args: {
             company_sequence_id: companySequenceId,
             step_number: stepNumber.toString(),
@@ -203,6 +212,11 @@ serve(async (req) => {
           to: contact.email,
           from: fromEmail,
           provider: emailProvider,
+          sending_method: emailProvider === 'sendgrid' ? 'api' : 'api',
+          tracking_enabled: true,
+          can_track_opens: true,
+          can_track_clicks: true,
+          can_track_replies: emailProvider === 'sendgrid',
         },
       });
 
