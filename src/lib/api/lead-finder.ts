@@ -53,6 +53,8 @@ export interface LeadFinderResponse {
     dataCompleteness?: number;
     enrichmentTier?: 'basic' | 'deep';
     contactCount?: number;
+    enrichmentStatus?: 'pending' | 'skipped' | 'enriching' | 'completed';
+    contactSearchStatus?: 'pending' | 'skipped' | 'searching' | 'completed' | 'no-contacts';
   }>;
   inserted: number;
   dryRun: boolean;

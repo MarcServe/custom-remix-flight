@@ -447,20 +447,12 @@ ${JSON.stringify(batch, null, 2)}`;
             totalUsage.estimatedCost += aiResult.usage.estimatedCost || 0;
           }
 
-          // Enrich
-          if (enrichWithPerplexity && batchLeads.length > 0) {
-            await enrichBatch(batchLeads, supabaseUrl, supabaseAnonKey, trace.id);
-          }
-
-          // Find contacts
-          if (GETPROSPECT_API_KEY && batchLeads.length > 0) {
-            await findContactsForBatch(batchLeads, GETPROSPECT_API_KEY, supabaseUrl, supabaseAnonKey, trace.id);
-          }
-
-          // Score and filter
+          // PHASE 1: Calculate basic scores immediately (without enrichment)
           batchLeads.forEach(lead => {
             lead.qualityScore = calculateFinalQualityScore(lead);
             lead.dataCompleteness = calculateDataCompleteness(lead);
+            lead.enrichmentStatus = enrichWithPerplexity ? 'pending' : 'skipped';
+            lead.contactSearchStatus = GETPROSPECT_API_KEY ? 'pending' : 'skipped';
           });
 
           const qualifiedLeads = batchLeads.filter(l => l.qualityScore >= 25);

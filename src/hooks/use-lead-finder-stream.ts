@@ -26,6 +26,8 @@ interface Lead {
   dataCompleteness?: number;
   enrichmentTier?: 'basic' | 'deep';
   contactCount?: number;
+  enrichmentStatus?: 'pending' | 'skipped' | 'enriching' | 'completed';
+  contactSearchStatus?: 'pending' | 'skipped' | 'searching' | 'completed' | 'no-contacts';
 }
 
 interface Stats {
