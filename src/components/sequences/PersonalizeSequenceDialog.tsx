@@ -8,7 +8,8 @@ import { useSequences } from "@/hooks/use-sequences";
 import { usePersonalizeSequence } from "@/hooks/use-company-sequences";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, Mail } from "lucide-react";
+import { Loader2, Sparkles, Mail, Eye } from "lucide-react";
+import { SequencePreviewDialog } from "./SequencePreviewDialog";
 
 interface PersonalizeSequenceDialogProps {
   open: boolean;
@@ -30,7 +31,13 @@ export function PersonalizeSequenceDialog({
   const [selectedSequenceId, setSelectedSequenceId] = useState<string>("");
   const [tone, setTone] = useState<'professional' | 'casual' | 'technical'>('professional');
   const [sendImmediately, setSendImmediately] = useState(defaultSendImmediately);
+  const [showPreview, setShowPreview] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<{
+    companySequenceId: string;
+    personalizedEmails: any[];
+  } | null>(null);
 
   const { data: sequencesData, isLoading: isLoadingSequences } = useSequences();
   const personalizeSequence = usePersonalizeSequence();
@@ -56,23 +63,44 @@ export function PersonalizeSequenceDialog({
         tone,
       });
 
-      // If user wants to send immediately, trigger the send function
-      if (sendImmediately && result?.data) {
+      if (result?.data) {
         const companySequenceId = (result.data as any).companySequenceId;
-        if (companySequenceId) {
+        const personalizedEmails = (result.data as any).personalizedEmails || [];
+        
+        // If preview is enabled, show preview dialog
+        if (showPreview && companySequenceId) {
+          setPreviewData({
+            companySequenceId,
+            personalizedEmails,
+          });
+          setPreviewDialogOpen(true);
+          onOpenChange(false);
+          return;
+        }
+
+        // If user wants to send immediately without preview, send the first email
+        if (sendImmediately && companySequenceId) {
           setIsSending(true);
           try {
             const { data: sendData, error: sendError } = await supabase.functions.invoke(
-              'send-sequence-emails',
+              'send-sequence-email',
               {
                 body: {
                   companySequenceId,
-                  startFromStep: 0,
+                  stepNumber: 0,
                 },
               }
             );
 
             if (sendError) throw sendError;
+
+            // Update status to active
+            const { error: statusError } = await supabase
+              .from('company_sequences')
+              .update({ status: 'active' })
+              .eq('id', companySequenceId);
+
+            if (statusError) throw statusError;
 
             const contactName = (result.data as any).contact?.name || 'contact';
             toast({
@@ -96,6 +124,7 @@ export function PersonalizeSequenceDialog({
       setSelectedSequenceId("");
       setTone('professional');
       setSendImmediately(false);
+      setShowPreview(false);
     } catch (error) {
       console.error('Error personalizing sequence:', error);
     }
@@ -147,6 +176,23 @@ export function PersonalizeSequenceDialog({
 
           <div className="flex items-center space-x-2 pt-2">
             <Checkbox
+              id="showPreview"
+              checked={showPreview}
+              onCheckedChange={(checked) => setShowPreview(checked as boolean)}
+            />
+            <Label
+              htmlFor="showPreview"
+              className="text-sm font-normal cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4" />
+                <span>Preview and edit before sending</span>
+              </div>
+            </Label>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
               id="sendImmediately"
               checked={sendImmediately}
               onCheckedChange={(checked) => setSendImmediately(checked as boolean)}
@@ -157,7 +203,7 @@ export function PersonalizeSequenceDialog({
             >
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
-                <span>Start sending emails immediately (via Gmail OAuth)</span>
+                <span>Send first email immediately</span>
               </div>
             </Label>
           </div>
@@ -174,10 +220,29 @@ export function PersonalizeSequenceDialog({
             {(personalizeSequence.isPending || isSending) && (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             )}
-            {isSending ? 'Sending...' : sendImmediately ? 'Personalize & Send' : 'Personalize & Create'}
+            {isSending ? 'Sending...' : 
+             showPreview ? 'Preview Sequence' :
+             sendImmediately ? 'Personalize & Send' : 'Personalize & Create'}
           </Button>
         </div>
       </DialogContent>
+
+      {/* Preview Dialog */}
+      {previewData && (
+        <SequencePreviewDialog
+          open={previewDialogOpen}
+          onOpenChange={(open) => {
+            setPreviewDialogOpen(open);
+            if (!open) {
+              setPreviewData(null);
+            }
+          }}
+          companyName={companyName}
+          companySequenceId={previewData.companySequenceId}
+          personalizedEmails={previewData.personalizedEmails}
+          sendImmediately={sendImmediately}
+        />
+      )}
     </Dialog>
   );
 }
