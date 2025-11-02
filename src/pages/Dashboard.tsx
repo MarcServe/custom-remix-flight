@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { EventCard } from "@/components/EventCard";
 import { AutomationMetrics } from "@/components/sequences/AutomationMetrics";
 import { AutoResponseAnalytics } from "@/components/sequences/AutoResponseAnalytics";
+import { EmailActivityWidget } from "@/components/dashboard/EmailActivityWidget";
+import { LiveEngagementTracker } from "@/components/dashboard/LiveEngagementTracker";
 import { useNavigate } from "react-router-dom";
 import { useEvents } from "@/hooks/use-events";
 import { format, isToday, isTomorrow, isFuture } from "date-fns";
@@ -364,6 +366,16 @@ export default function Dashboard() {
               </div>
             </div>
           </Card>
+
+          {/* Live Engagement Tracker */}
+          <div className="lg:col-span-2">
+            <LiveEngagementTracker />
+          </div>
+
+          {/* Email Activity Widget */}
+          <div className="lg:col-span-2">
+            <EmailActivityWidget />
+          </div>
 
           {/* Automation Metrics - Spans full width */}
           <div className="lg:col-span-4">
