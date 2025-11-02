@@ -45,6 +45,10 @@ interface Company {
   fundingInfo?: string;
   funding_stage?: string; // Database format
   funding_total?: string; // Database format
+  fundingStage?: string; // Lead finder format
+  revenue?: string; // Lead finder format
+  foundingYear?: number; // Lead finder format
+  founding_year?: number; // Database format
   employeeCount?: number;
   employee_count?: number; // Database format
   companyPhone?: string;
@@ -58,6 +62,8 @@ interface Company {
     fundingInfo?: string;
     recentNews?: string;
     technologies?: string[];
+    revenue?: string;
+    foundingYear?: number;
   };
   socialProfiles?: {
     linkedin?: string;
@@ -83,6 +89,11 @@ interface Company {
   }>;
   contacts?: Contact[];
   primaryContact?: Contact;
+  enrichmentTier?: string; // Lead finder format
+  qualityScore?: number; // Lead finder format
+  dataCompleteness?: number; // Lead finder format
+  enrichmentStatus?: string; // Lead finder format
+  contactStatus?: string; // Lead finder format
 }
 
 interface CompanyDetailsDialogProps {
@@ -146,6 +157,7 @@ export function CompanyDetailsDialog({
     linkedinUrl: company.linkedinUrl || company.linkedin_url,
     recentNews: company.recentNews || company.recent_news || (company.enrichment_data as any)?.recentNews,
     fundingInfo: company.fundingInfo || 
+                 company.fundingStage ||
                  (company.funding_stage && company.funding_total ? `${company.funding_stage} - ${company.funding_total}` : null) ||
                  (company.enrichment_data as any)?.fundingInfo,
     products: company.products || (company.enrichment_data as any)?.products,
@@ -155,6 +167,8 @@ export function CompanyDetailsDialog({
     generalEmail: company.generalEmail || company.general_email,
     socialProfiles: company.socialProfiles || company.social_profiles,
     keyExecutives: company.keyExecutives || company.key_executives,
+    revenue: company.revenue || (company.enrichment_data as any)?.revenue,
+    foundingYear: company.foundingYear || company.founding_year || (company.enrichment_data as any)?.foundingYear,
   };
 
   const hasContacts = normalizedCompany.contacts && normalizedCompany.contacts.length > 0;
@@ -403,11 +417,32 @@ export function CompanyDetailsDialog({
                     <span className="text-muted-foreground">{company.geography}</span>
                   </div>
                 )}
+                {company.size && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Company Size:</span>
+                    <span className="text-muted-foreground">{company.size}</span>
+                  </div>
+                )}
                 {normalizedCompany.employeeCount && (
                   <div className="flex items-center gap-2 text-sm">
                     <Users className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">Employees:</span>
-                    <span className="text-muted-foreground">{normalizedCompany.employeeCount}</span>
+                    <span className="text-muted-foreground">{normalizedCompany.employeeCount.toLocaleString()}</span>
+                  </div>
+                )}
+                {normalizedCompany.foundingYear && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Founded:</span>
+                    <span className="text-muted-foreground">{normalizedCompany.foundingYear}</span>
+                  </div>
+                )}
+                {normalizedCompany.revenue && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Revenue:</span>
+                    <span className="text-muted-foreground">{normalizedCompany.revenue}</span>
                   </div>
                 )}
                 {normalizedCompany.companyPhone && (
