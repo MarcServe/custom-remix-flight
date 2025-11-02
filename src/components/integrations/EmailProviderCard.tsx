@@ -245,7 +245,7 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
           {isConnected && (
             <Button 
               variant="outline" 
-              onClick={() => connection && onDisconnect(connection.connection_id)}
+              onClick={() => connection && onDisconnect(connection.id)}
               className="w-full"
             >
               Disconnect
