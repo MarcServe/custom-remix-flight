@@ -102,7 +102,15 @@ export default function EmailProviders() {
     queryKey: ['nango-connections'],
     queryFn: async () => {
       const { data } = await nangoClient.getConnections();
-      return data || [];
+      
+      // Check if Resend/SendGrid API keys are configured
+      // Note: We check if the secrets exist by trying to see if connections have these providers
+      const { data: allConnections } = await supabase
+        .from('crm_connections')
+        .select('*')
+        .in('provider', ['resend', 'sendgrid', 'gmail', 'outlook', 'smtp']);
+      
+      return allConnections || data || [];
     },
   });
 
@@ -139,9 +147,25 @@ export default function EmailProviders() {
     },
   });
 
-  const handleConnect = (provider: 'gmail' | 'outlook' | 'smtp') => {
-    setSelectedProvider(provider);
-    setConnectDialogOpen(true);
+  const handleConnect = (providerId: string) => {
+    // Resend and SendGrid use API keys, not OAuth
+    if (providerId === 'resend' || providerId === 'sendgrid') {
+      toast.info(`${providerId === 'resend' ? 'Resend' : 'SendGrid'} API Key Configuration`, {
+        description: 'Please configure the API key in your Supabase secrets to enable this provider.',
+        duration: 5000,
+        action: {
+          label: 'View Docs',
+          onClick: () => window.open('https://docs.lovable.dev/features/email', '_blank'),
+        },
+      });
+      return;
+    }
+
+    // Only Gmail, Outlook, and SMTP use the OAuth/setup dialog
+    if (providerId === 'gmail' || providerId === 'outlook' || providerId === 'smtp') {
+      setSelectedProvider(providerId as 'gmail' | 'outlook' | 'smtp');
+      setConnectDialogOpen(true);
+    }
   };
 
   const handleDisconnect = (connectionId: string) => {
@@ -190,21 +214,23 @@ export default function EmailProviders() {
       )}
 
       {/* Info banner for no connections */}
-      {!connections || connections.length === 0 && (
-        <Alert className="border-info bg-info/10">
-          <Info className="h-4 w-4 text-info" />
-          <AlertDescription>
+      {(!connections || connections.length === 0) && (
+        <Alert className="border-blue-500/20 bg-blue-500/10">
+          <Info className="h-4 w-4 text-blue-500" />
+          <AlertDescription className="text-blue-600 dark:text-blue-400">
             <strong>Get Started:</strong> Connect an email provider to start sending campaigns. 
-            We recommend Resend or Gmail for the best tracking and deliverability.
+            We recommend Gmail (quick OAuth) or configure Resend/SendGrid API keys for production use.
           </AlertDescription>
         </Alert>
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Sending Providers</CardTitle>
+          <CardTitle className="text-xl">Email Sending Providers</CardTitle>
           <CardDescription>
-            Choose how you send emails. Providers with tracking enabled will automatically monitor opens, clicks, and replies.
+            <strong>OAuth Providers (Gmail, Outlook):</strong> Click connect for quick setup<br/>
+            <strong>API Providers (Resend, SendGrid):</strong> Require API key configuration in Supabase secrets<br/>
+            <strong>SMTP Direct:</strong> Configure your own SMTP server
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -218,7 +244,7 @@ export default function EmailProviders() {
                   key={provider.id}
                   provider={provider}
                   connection={connection}
-                  onConnect={() => handleConnect(provider.id as any)}
+                  onConnect={() => handleConnect(provider.id)}
                   onDisconnect={handleDisconnect}
                 />
               );
