@@ -180,6 +180,11 @@ export const useUpdateSequenceSettings = () => {
           action: string;
           wait_hours: number;
         }>;
+        step_rules?: Record<string, {
+          enabled: boolean;
+          type: 'wait_for_open' | 'wait_for_click' | 'time_based' | 'none';
+          wait_hours: number;
+        }>;
       };
     }) => companySequencesApi.updateSequenceSettings(params.id, params.autoRespondEnabled, params.automationRules),
     onSuccess: () => {

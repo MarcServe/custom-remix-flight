@@ -262,6 +262,7 @@ export function CompanySequenceDetailsDialog({
                   { type: 'clicked_not_replied', action: 'send_next', wait_hours: 96 },
                 ],
               }}
+              steps={sequence.email_sequences.steps}
             />
 
             <Separator />

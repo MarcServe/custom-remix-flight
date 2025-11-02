@@ -132,6 +132,11 @@ export const companySequencesApi = {
         action: string;
         wait_hours: number;
       }>;
+      step_rules?: Record<string, {
+        enabled: boolean;
+        type: 'wait_for_open' | 'wait_for_click' | 'time_based' | 'none';
+        wait_hours: number;
+      }>;
     }
   ) {
     const { data, error } = await apiClient.supabase
