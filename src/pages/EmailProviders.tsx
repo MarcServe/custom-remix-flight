@@ -12,12 +12,13 @@ import { Mail, AlertTriangle, Info, Webhook, ArrowRight, CheckCircle2, Copy } fr
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { EMAIL_PROVIDER_CONFIG } from "@/config/email-providers";
 
 const emailProviders = [
   {
     id: 'gmail' as const,
     name: 'Gmail OAuth',
-    description: 'Quick setup, reliable',
+    description: EMAIL_PROVIDER_CONFIG.default_gmail === 'direct' ? 'Direct OAuth, no limits' : 'Quick setup, reliable',
     icon: '📧',
     capabilities: {
       tracking: true,
@@ -101,7 +102,7 @@ export default function EmailProviders() {
   const queryClient = useQueryClient();
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [verifiedEmailDialogOpen, setVerifiedEmailDialogOpen] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'outlook' | 'smtp'>('gmail');
+  const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'gmail_direct' | 'outlook' | 'smtp'>('gmail');
   const [selectedApiProvider, setSelectedApiProvider] = useState<'resend' | 'sendgrid'>('resend');
 
   const { data: oauthConnections, isLoading: isLoadingOAuth } = useQuery({
@@ -184,7 +185,14 @@ export default function EmailProviders() {
 
     // Gmail, Outlook, and SMTP use the OAuth/setup dialog
     if (providerId === 'gmail' || providerId === 'outlook' || providerId === 'smtp') {
-      setSelectedProvider(providerId as 'gmail' | 'outlook' | 'smtp');
+      // Check if Gmail should use Direct OAuth based on config
+      let actualProvider: 'gmail' | 'gmail_direct' | 'outlook' | 'smtp' = providerId as any;
+      
+      if (providerId === 'gmail' && EMAIL_PROVIDER_CONFIG.default_gmail === 'direct') {
+        actualProvider = 'gmail_direct';
+      }
+      
+      setSelectedProvider(actualProvider);
       setConnectDialogOpen(true);
     }
   };
@@ -278,9 +286,18 @@ export default function EmailProviders() {
         <CardContent>
           <div className="grid gap-4 lg:grid-cols-2">
             {emailProviders.map((provider) => {
-              const connection = connections?.find(
-                (c) => c.provider === provider.id && c.status !== 'disconnected'
-              );
+              // Handle Gmail Direct connections - check both 'gmail' and 'gmail_direct' providers
+              let connection;
+              if (provider.id === 'gmail') {
+                connection = connections?.find(
+                  (c) => (c.provider === 'gmail' || c.provider === 'gmail_direct') && c.status !== 'disconnected'
+                );
+              } else {
+                connection = connections?.find(
+                  (c) => c.provider === provider.id && c.status !== 'disconnected'
+                );
+              }
+              
               return (
                 <EmailProviderCard
                   key={provider.id}
