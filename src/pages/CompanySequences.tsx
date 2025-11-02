@@ -35,8 +35,10 @@ import {
   MoreVertical,
   Trash2,
   Settings,
-  ExternalLink
+  ExternalLink,
+  AlertTriangle
 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useNavigate } from 'react-router-dom';
 import { useUpdateSequenceStatus, useSendSequenceEmail } from '@/hooks/use-company-sequences';
 import { CompanySequenceDetailsDialog } from '@/components/sequences/CompanySequenceDetailsDialog';
@@ -68,6 +70,7 @@ interface CompanySequence {
     sent_at?: string;
     opened_at?: string;
     replied_at?: string;
+    metadata?: any;
   }>;
 }
 
@@ -133,7 +136,7 @@ export default function CompanySequences() {
           *,
           companies(name, industry, geography),
           email_sequences(name, steps, auto_respond),
-          email_activities(id, step_number, status, sent_at, opened_at, replied_at)
+          email_activities(id, step_number, status, sent_at, opened_at, replied_at, metadata)
         `)
         .order('created_at', { ascending: false });
 
@@ -214,7 +217,18 @@ export default function CompanySequences() {
     const replied = activities.filter(a => a.replied_at).length;
     const openRate = sent > 0 ? Math.round((opened / sent) * 100) : 0;
     const replyRate = sent > 0 ? Math.round((replied / sent) * 100) : 0;
-    return { sent, opened, replied, openRate, replyRate };
+    const untrackedCount = activities.filter(a => a.sent_at && !a.metadata?.tracking_enabled).length;
+    const primaryProvider = activities
+      .filter(a => a.metadata?.provider)
+      .reduce((acc: Record<string, number>, a) => {
+        const provider = a.metadata.provider;
+        acc[provider] = (acc[provider] || 0) + 1;
+        return acc;
+      }, {});
+    const topProvider = Object.keys(primaryProvider).length > 0 
+      ? Object.entries(primaryProvider).sort((a, b) => b[1] - a[1])[0][0]
+      : null;
+    return { sent, opened, replied, openRate, replyRate, untrackedCount, topProvider };
   };
 
   if (isLoading) {
@@ -402,6 +416,29 @@ export default function CompanySequences() {
                             {sequence.companies.geography && (
                               <Badge variant="outline">{sequence.companies.geography}</Badge>
                             )}
+                            {engagement.topProvider && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="secondary" className="gap-1">
+                                      <Mail className="h-3 w-3" />
+                                      {engagement.topProvider}
+                                      {engagement.untrackedCount > 0 && (
+                                        <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                                      )}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-xs font-semibold mb-1">Primary Provider: {engagement.topProvider}</p>
+                                    {engagement.untrackedCount > 0 && (
+                                      <p className="text-xs text-yellow-500">
+                                        {engagement.untrackedCount} email(s) sent without tracking
+                                      </p>
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -541,6 +578,9 @@ export default function CompanySequences() {
                           <span className="text-xs font-medium">Sent</span>
                         </div>
                         <p className="text-2xl font-bold">{engagement.sent}</p>
+                        {engagement.topProvider && (
+                          <p className="text-xs text-muted-foreground">via {engagement.topProvider}</p>
+                        )}
                       </div>
                       
                       <div className="space-y-1">
@@ -567,6 +607,22 @@ export default function CompanySequences() {
                           <span className="text-xs font-medium">Status</span>
                         </div>
                         <p className="text-sm font-medium capitalize">{sequence.status}</p>
+                        {engagement.untrackedCount > 0 && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <div className="flex items-center gap-1 text-xs text-yellow-600">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Limited tracking
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">{engagement.untrackedCount} email(s) sent without tracking</p>
+                                <p className="text-xs text-muted-foreground">Configure email providers for better tracking</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
                       </div>
                     </div>
                   </CardContent>
