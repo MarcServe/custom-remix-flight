@@ -191,7 +191,16 @@ Deno.serve(async (req) => {
             throw new Error('Resend API key not configured');
           }
 
-          const fromEmail = connection?.from_email || 'onboarding@resend.dev';
+          // Get Resend connection for verified from_email
+          const { data: resendConnection } = await supabase
+            .from('crm_connections')
+            .select('from_email')
+            .eq('user_id', user.id)
+            .eq('provider', 'resend')
+            .eq('status', 'active')
+            .maybeSingle();
+
+          const fromEmail = resendConnection?.from_email || connection?.from_email || 'onboarding@resend.dev';
           const senderName = businessProfile?.company_name || 'CRM';
 
           const resendResponse = await fetch('https://api.resend.com/emails', {

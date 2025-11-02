@@ -93,13 +93,14 @@ serve(async (req) => {
       emailProvider = businessProfile?.email_provider || 'resend';
       senderName = businessProfile?.company_name || 'Your Company';
 
-      // Get SMTP connection for from_email
+      // Get provider connection for verified from_email
       const { data: connection } = await supabase
         .from('crm_connections')
         .select('from_email')
         .eq('user_id', user.id)
-        .eq('provider', 'smtp')
+        .in('provider', [emailProvider, 'smtp']) // Check both the configured provider and SMTP
         .eq('status', 'active')
+        .order('provider', { ascending: emailProvider === 'smtp' }) // Prioritize exact match
         .maybeSingle();
 
       // Priority: connection.from_email > profiles.email > default

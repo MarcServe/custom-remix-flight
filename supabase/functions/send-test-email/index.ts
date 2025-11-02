@@ -81,6 +81,15 @@ Deno.serve(async (req) => {
     // Determine which email provider to use
     const emailProvider = provider?.toLowerCase() || businessProfile?.email_provider || 'resend';
     console.log('Using email provider:', emailProvider);
+
+    // Get API-key provider connection for verified from_email
+    const { data: apiKeyConnection } = await supabase
+      .from('crm_connections')
+      .select('from_email, capabilities, metadata')
+      .eq('user_id', user.id)
+      .eq('provider', emailProvider)
+      .eq('status', 'active')
+      .maybeSingle();
     
     // Simple test email case (just provider test, no template/campaign)
     if (!templateStyle && !body) {
@@ -102,7 +111,7 @@ Deno.serve(async (req) => {
               subject: testSubject,
             }],
             from: {
-              email: connection?.from_email || userProfile?.email || user.email || 'noreply@yourdomain.com',
+              email: apiKeyConnection?.from_email || connection?.from_email || userProfile?.email || user.email || 'noreply@yourdomain.com',
               name: userProfile?.full_name || 'CRM',
             },
             content: [
@@ -142,7 +151,13 @@ Deno.serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: `CRM <onboarding@resend.dev>`,
+            from: apiKeyConnection?.from_email 
+              ? `CRM <${apiKeyConnection.from_email}>` 
+              : connection?.from_email 
+                ? `CRM <${connection.from_email}>` 
+                : userProfile?.email 
+                  ? `CRM <${userProfile.email}>` 
+                  : `CRM <onboarding@resend.dev>`,
             to: [testEmail],
             subject: testSubject,
             text: testBody,
@@ -211,7 +226,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
               subject: '🎨 Test Email - Your Email Template Preview',
             }],
             from: {
-              email: connection?.from_email || userProfile?.email || 'noreply@yourdomain.com',
+              email: apiKeyConnection?.from_email || connection?.from_email || userProfile?.email || 'noreply@yourdomain.com',
               name: companyName || 'CRM',
             },
             content: [
@@ -242,7 +257,13 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: `${companyName || 'CRM'} <onboarding@resend.dev>`,
+            from: apiKeyConnection?.from_email 
+              ? `${companyName || 'CRM'} <${apiKeyConnection.from_email}>` 
+              : connection?.from_email 
+                ? `${companyName || 'CRM'} <${connection.from_email}>` 
+                : userProfile?.email 
+                  ? `${companyName || 'CRM'} <${userProfile.email}>` 
+                  : `${companyName || 'CRM'} <onboarding@resend.dev>`,
             to: [recipientEmail],
             subject: '🎨 Test Email - Your Email Template Preview',
             html,
@@ -308,7 +329,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
             subject: `[TEST] ${personalizedSubject2}`,
           }],
           from: {
-            email: connection?.from_email || userProfile?.email || user.email || 'noreply@yourdomain.com',
+            email: apiKeyConnection?.from_email || connection?.from_email || userProfile?.email || user.email || 'noreply@yourdomain.com',
             name: userProfile?.full_name || 'Team',
           },
           content: [
@@ -352,11 +373,13 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: connection?.from_email 
-            ? `${userProfile?.full_name || 'Team'} <${connection.from_email}>` 
-            : userProfile?.email 
-              ? `${userProfile?.full_name || 'Team'} <${userProfile.email}>` 
-              : `${userProfile?.full_name || 'Team'} <onboarding@resend.dev>`,
+          from: apiKeyConnection?.from_email 
+            ? `${userProfile?.full_name || 'Team'} <${apiKeyConnection.from_email}>` 
+            : connection?.from_email 
+              ? `${userProfile?.full_name || 'Team'} <${connection.from_email}>` 
+              : userProfile?.email 
+                ? `${userProfile?.full_name || 'Team'} <${userProfile.email}>` 
+                : `${userProfile?.full_name || 'Team'} <onboarding@resend.dev>`,
           to: [testEmail],
           subject: `[TEST] ${personalizedSubject2}`,
           html: bodyHtml,

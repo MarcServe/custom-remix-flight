@@ -135,6 +135,22 @@ serve(async (req) => {
     const emailProvider = optimalConnection.provider;
     console.log(`Using optimal email provider: ${emailProvider} (tracking: ${optimalConnection.tracking_enabled})`);
 
+    // Get API-key provider connection for verified from_email (if not already optimal)
+    let effectiveConnection = optimalConnection;
+    if (!['resend', 'sendgrid'].includes(optimalConnection.provider)) {
+      const { data: apiConnection } = await supabaseClient
+        .from('crm_connections')
+        .select('from_email')
+        .eq('user_id', user.id)
+        .eq('provider', emailProvider)
+        .eq('status', 'active')
+        .maybeSingle();
+      
+      if (apiConnection?.from_email) {
+        effectiveConnection = { ...optimalConnection, from_email: apiConnection.from_email };
+      }
+    }
+
     // Send emails with rate limiting
     for (const recipient of recipients) {
       try {
@@ -206,11 +222,11 @@ serve(async (req) => {
             await client.close();
             messageId = `direct-smtp-${Date.now()}`;
           } else {
-            // Resend relay - use profiles.email as fallback
+            // Resend relay - use verified email from connection or fallback
             const resendApiKey = Deno.env.get('RESEND_API_KEY');
             if (!resendApiKey) throw new Error('Email service not configured');
 
-            const effectiveFromEmail = optimalConnection.from_email || userProfile?.email;
+            const effectiveFromEmail = effectiveConnection.from_email || userProfile?.email;
             if (!effectiveFromEmail) {
               throw new Error('Business Email not configured. Please set your business email in Settings > Profile.');
             }
@@ -243,8 +259,8 @@ serve(async (req) => {
           if (!sendgridApiKey) throw new Error('SendGrid not configured');
 
           const senderName = businessProfile?.company_name || 'Your Business';
-          // Priority: connection.from_email > profiles.email > error
-          const fromEmail = optimalConnection.from_email || userProfile?.email;
+          // Priority: effectiveConnection.from_email > connection.from_email > profiles.email > error
+          const fromEmail = effectiveConnection.from_email || userProfile?.email;
           if (!fromEmail) {
             throw new Error('Business Email not configured. Please set your business email in Settings > Profile and verify it in SendGrid.');
           }

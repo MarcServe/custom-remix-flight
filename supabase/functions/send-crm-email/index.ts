@@ -296,7 +296,19 @@ serve(async (req) => {
         throw new Error('Resend not configured. Please contact support.');
       }
 
-      console.log('Sending via Resend');
+      // Get Resend connection for verified from_email
+      const { data: resendConnection } = await supabaseClient
+        .from('crm_connections')
+        .select('from_email')
+        .eq('user_id', user.id)
+        .eq('provider', 'resend')
+        .eq('status', 'active')
+        .maybeSingle();
+
+      const fromEmail = resendConnection?.from_email || userProfile?.email || 'onboarding@resend.dev';
+      const senderName = businessProfile?.company_name || 'CRM';
+
+      console.log(`Sending via Resend from: ${senderName} <${fromEmail}>`);
 
       const resendResponse = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -305,12 +317,12 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
       body: JSON.stringify({
-        from: 'CRM <onboarding@resend.dev>',
+        from: `${senderName} <${fromEmail}>`,
         to: [toEmail],
         subject,
         text: emailBodyText,
-        html: wrapEmailContent(emailBodyHtml, 'CRM', 'onboarding@resend.dev'),
-        reply_to: 'onboarding@resend.dev', // Enable replies
+        html: wrapEmailContent(emailBodyHtml, senderName, fromEmail),
+        reply_to: fromEmail, // Enable replies
         headers: {
           'X-Entity-Ref-ID': threadId, // Custom header for tracking
         },
