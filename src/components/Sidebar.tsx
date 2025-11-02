@@ -59,7 +59,15 @@ const navigation: NavigationItem[] = [
       { name: "Shared Inbox", href: "/shared-inbox", icon: Mail },
     ]
   },
-  { name: "Email Settings", href: "/integrations", icon: Plug2 },
+  { 
+    name: "Email Settings", 
+    href: "#email-settings", 
+    icon: Plug2,
+    children: [
+      { name: "Quick Setup", href: "/integrations", icon: Plug2 },
+      { name: "Email Providers", href: "/integrations/email-providers", icon: Send },
+    ]
+  },
   { 
     name: "Settings", 
     href: "#settings", 

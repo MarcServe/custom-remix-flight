@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,12 +8,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { EmailConnectionCard } from "@/components/integrations/EmailConnectionCard";
 import { ConnectEmailDialog } from "@/components/integrations/ConnectEmailDialog";
 import { EmailDeliverabilityDialog } from "@/components/integrations/EmailDeliverabilityDialog";
 import { nangoClient } from "@/lib/integrations/nango";
 import { toast } from "sonner";
-import { Mail, Shield, HelpCircle, Loader2 } from "lucide-react";
+import { Mail, Shield, HelpCircle, Loader2, ArrowRight, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 const emailProviders = [
@@ -37,6 +39,7 @@ const emailProviders = [
 ];
 
 export default function Integrations() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'outlook' | 'smtp'>('gmail');
@@ -178,6 +181,28 @@ export default function Integrations() {
           </Tooltip>
         </div>
       </div>
+
+      {/* New Email Providers Management Banner */}
+      <Alert className="border-info bg-info/10">
+        <Info className="h-4 w-4 text-info" />
+        <AlertDescription className="flex items-center justify-between">
+          <div>
+            <strong className="text-info">New!</strong> 
+            <span className="text-info ml-2">
+              Manage all your email providers in one place with clear tracking status and capabilities.
+            </span>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => navigate('/integrations/email-providers')}
+            className="ml-4 border-info text-info hover:bg-info/10"
+          >
+            View Email Providers
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Button>
+        </AlertDescription>
+      </Alert>
 
       <Card>
         <CardHeader>

@@ -24,6 +24,7 @@ import AutoResponseHub from "./pages/AutoResponseHub";
 import Conversations from "./pages/Conversations";
 import Events from "./pages/Events";
 import Integrations from "./pages/Integrations";
+import EmailProviders from "./pages/EmailProviders";
 import EmailDeliverability from "./pages/EmailDeliverability";
 import EmailWebhookSetup from "./pages/EmailWebhookSetup";
 import AutomationRules from "./pages/AutomationRules";
@@ -76,6 +77,7 @@ const App = () => (
                           <Route path="/conversations" element={<Conversations />} />
                           <Route path="/events" element={<Events />} />
                           <Route path="/integrations" element={<Integrations />} />
+                          <Route path="/integrations/email-providers" element={<EmailProviders />} />
                           <Route path="/email-deliverability" element={<EmailDeliverability />} />
                           <Route path="/webhook-setup" element={<EmailWebhookSetup />} />
                           <Route path="/automation-rules" element={<AutomationRules />} />
