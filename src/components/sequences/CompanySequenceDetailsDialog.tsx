@@ -30,9 +30,11 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
-import { useUpdateSequenceStatus } from "@/hooks/use-company-sequences";
+import { useUpdateSequenceStatus, useSendSequenceEmail } from "@/hooks/use-company-sequences";
 import { useMarkCampaignAsViewed } from "@/hooks/use-campaign-views";
 import { SequenceSettingsCard } from "./SequenceSettingsCard";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CompanySequenceDetailsDialogProps {
   open: boolean;
@@ -79,6 +81,7 @@ export function CompanySequenceDetailsDialog({
   sequence,
 }: CompanySequenceDetailsDialogProps) {
   const updateStatusMutation = useUpdateSequenceStatus();
+  const sendEmailMutation = useSendSequenceEmail();
   const markCampaignAsViewed = useMarkCampaignAsViewed();
 
   // Mark campaign as viewed when dialog opens
@@ -90,6 +93,22 @@ export function CompanySequenceDetailsDialog({
 
   const handleStatusChange = async (status: 'active' | 'paused') => {
     await updateStatusMutation.mutateAsync({ id: sequence.id, status });
+  };
+
+  const handleActivateAndSend = async () => {
+    try {
+      // First activate the sequence
+      await updateStatusMutation.mutateAsync({ id: sequence.id, status: 'active' });
+      // Then send the first email
+      await sendEmailMutation.mutateAsync({
+        companySequenceId: sequence.id,
+        stepNumber: 0
+      });
+      toast.success('Sequence activated and first email sent!');
+    } catch (error) {
+      console.error('Failed to activate sequence:', error);
+      toast.error('Failed to activate sequence. Please try again.');
+    }
   };
 
   const totalSteps = sequence.email_sequences.steps?.length || 0;
@@ -137,6 +156,18 @@ export function CompanySequenceDetailsDialog({
               <Badge variant="outline" className={getStatusColor(sequence.status)}>
                 {sequence.status}
               </Badge>
+              {sequence.status === 'draft' && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={handleActivateAndSend}
+                  disabled={updateStatusMutation.isPending || sendEmailMutation.isPending}
+                  className="bg-gradient-primary"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  {sendEmailMutation.isPending ? 'Sending...' : 'Activate & Send First Email'}
+                </Button>
+              )}
               {sequence.status === 'active' && (
                 <Button
                   size="sm"
