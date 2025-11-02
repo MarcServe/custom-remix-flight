@@ -41,6 +41,10 @@ export default function Sequences() {
   const [personalizeCompanyName, setPersonalizeCompanyName] = useState<string>("");
   const { toast } = useToast();
 
+  const scrollToAssistant = () => {
+    document.getElementById('ai-assistant')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const { defaultProvider, defaultModels } = useProviderStore();
   const [providerConfig, setProviderConfig] = useState({
     provider: defaultProvider,
@@ -144,18 +148,28 @@ export default function Sequences() {
         <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
         <div className="relative px-6 py-12">
           <div className="max-w-7xl mx-auto">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
-                <Mail className="h-6 w-6 text-purple-500" />
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
+                  <Mail className="h-6 w-6 text-purple-500" />
+                </div>
+                <div>
+                  <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent">
+                    Email Sequences
+                  </h1>
+                  <p className="text-muted-foreground mt-1">
+                    AI-powered automated campaigns tailored to your target segments
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent">
-                  Email Sequences
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                  AI-powered automated campaigns tailored to your target segments
-                </p>
-              </div>
+              <Button 
+                onClick={scrollToAssistant}
+                size="lg"
+                className="gap-2 shadow-lg"
+              >
+                <Sparkles className="h-5 w-5" />
+                AI Sequence Assistant
+              </Button>
             </div>
           </div>
         </div>
@@ -659,44 +673,41 @@ export default function Sequences() {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
                   {sequences.map((sequence: any) => (
                     <Card 
                       key={sequence.id} 
-                      className="group transition-all hover:shadow-xl hover:scale-[1.02] border-2 hover:border-primary/50 bg-gradient-to-br from-card to-card/50 overflow-hidden cursor-pointer"
+                      className="group transition-all hover:shadow-lg hover:scale-[1.02] border hover:border-primary/50 bg-gradient-to-br from-card to-card/50 overflow-hidden cursor-pointer"
                       onClick={() => {
                         setSelectedSequence(sequence);
                         setDetailsDialogOpen(true);
                       }}
                     >
-                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-primary" />
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start gap-4">
-                          <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-lg shrink-0 group-hover:scale-110 transition-transform">
-                            <Mail className="h-6 w-6 text-white" />
+                      <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-primary" />
+                      <CardHeader className="pb-2 space-y-0">
+                        <div className="flex items-start gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center shadow-md shrink-0 group-hover:scale-110 transition-transform">
+                            <Mail className="h-4 w-4 text-white" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <CardTitle className="text-base truncate mb-1 flex items-center gap-2">
-                              {sequence.name}
-                              <Eye className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <CardTitle className="text-sm truncate mb-1 flex items-center gap-1">
+                              <span className="truncate">{sequence.name}</span>
+                              <Eye className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                             </CardTitle>
                             {sequence.segment_filters && (
-                              <div className="flex flex-wrap gap-1.5">
-                                <Badge variant="secondary" className="text-xs">
+                              <div className="flex flex-wrap gap-1">
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                                   {sequence.segment_filters.industry}
-                                </Badge>
-                                <Badge variant="outline" className="text-xs">
-                                  {sequence.segment_filters.geography}
                                 </Badge>
                               </div>
                             )}
                           </div>
                         </div>
                       </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-sm font-medium">
-                            <Layers className="h-4 w-4 text-primary" />
+                      <CardContent className="pt-2 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1 font-medium">
+                            <Layers className="h-3 w-3 text-primary" />
                             {sequence.steps?.length || 0} steps
                           </div>
                           <Button
@@ -707,15 +718,15 @@ export default function Sequences() {
                               handleDelete(sequence.id);
                             }}
                             disabled={deleteMutation.isPending}
-                            className="h-8 hover:bg-destructive/10 hover:text-destructive"
+                            className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
                         {sequence.steps?.[0] && (
-                          <div className="text-xs border-t pt-3 space-y-1">
+                          <div className="text-[10px] border-t pt-2 space-y-0.5">
                             <div className="text-muted-foreground font-medium">First email:</div>
-                            <div className="text-foreground truncate font-medium">
+                            <div className="text-foreground truncate font-medium leading-tight">
                               {(() => {
                                 const step = sequence.steps[0];
                                 const parsedStep = typeof step === 'string' ? JSON.parse(step) : step;
@@ -732,7 +743,7 @@ export default function Sequences() {
             </div>
 
             {/* AI Sequence Builder - Full Width at Bottom */}
-            <div className="space-y-4">
+            <div id="ai-assistant" className="space-y-4 scroll-mt-8">
               <div className="flex items-center gap-3">
                 <div className="h-1 flex-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent rounded-full" />
                 <h2 className="text-2xl font-bold flex items-center gap-2">
