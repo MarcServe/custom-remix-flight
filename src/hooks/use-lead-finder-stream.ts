@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { leadFinderStorage } from '@/lib/utils/lead-finder-storage';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Lead {
   name: string;
@@ -75,6 +76,8 @@ export const useLeadFinderStream = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const searchParamsRef = useRef<SearchParams | null>(null);
   const currentSearchIdRef = useRef<string | null>(null);
+  const realtimeChannelRef = useRef<any>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [state, setState] = useState<StreamState>({
     leads: [],
@@ -89,45 +92,267 @@ export const useLeadFinderStream = () => {
     hasActiveSearch: false,
   });
 
-  // Load persisted results on mount (check both active and completed)
+  // Load from database and setup realtime subscriptions
   useEffect(() => {
-    // First check for active search
-    const activeSearch = leadFinderStorage.loadActiveSearch();
-    if (activeSearch && !activeSearch.isComplete) {
-      setState(prev => ({
-        ...prev,
-        leads: activeSearch.leads,
-        stats: activeSearch.stats,
-        usage: activeSearch.usage,
-        traceUrl: activeSearch.traceUrl,
-        progress: activeSearch.progress,
-        currentStatus: activeSearch.currentStatus,
-        searchId: activeSearch.searchId,
-        hasActiveSearch: true,
-        isLoading: false, // Not actively loading, but can be resumed
-      }));
-      currentSearchIdRef.current = activeSearch.searchId;
-      searchParamsRef.current = activeSearch.searchParams;
-      return;
-    }
+    const loadActiveSearchFromDB = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-    // If no active search, load completed results
-    const stored = leadFinderStorage.load();
-    if (stored && stored.leads.length > 0) {
-      setState(prev => ({
-        ...prev,
-        leads: stored.leads,
-        stats: stored.stats,
-        usage: stored.usage,
-        traceUrl: stored.traceUrl,
-        hasActiveSearch: false,
-      }));
-    }
+        // Check database for active searches
+        const { data: searches, error } = await supabase
+          .from('lead_finder_searches')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'running')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (error) throw error;
+
+        if (searches && searches.length > 0) {
+          const activeSearch = searches[0];
+          
+          // Load leads for this search
+          const { data: leads } = await supabase
+            .from('lead_finder_leads')
+            .select('*')
+            .eq('search_id', activeSearch.id)
+            .order('created_at', { ascending: true });
+
+          const leadData = leads?.map(l => l.company_data as unknown as Lead) || [];
+
+          setState(prev => ({
+            ...prev,
+            leads: leadData,
+            stats: (activeSearch.stats as unknown as Stats) || null,
+            usage: (activeSearch.usage as unknown as Usage) || null,
+            traceUrl: activeSearch.trace_url,
+            progress: activeSearch.progress,
+            currentStatus: activeSearch.current_status || '',
+            searchId: activeSearch.id,
+            hasActiveSearch: true,
+            isLoading: activeSearch.status === 'running',
+          }));
+
+          currentSearchIdRef.current = activeSearch.id;
+
+          // Setup realtime subscription for this search
+          setupRealtimeSubscription(activeSearch.id);
+
+          // Setup polling as fallback
+          setupPolling(activeSearch.id);
+
+          toast({
+            title: 'Search Resumed',
+            description: `Continuing search with ${leadData.length} leads found so far.`,
+            duration: 5000,
+          });
+
+          return;
+        }
+
+        // Fallback to localStorage if no DB search
+        const activeSearch = leadFinderStorage.loadActiveSearch();
+        if (activeSearch && !activeSearch.isComplete) {
+          setState(prev => ({
+            ...prev,
+            leads: activeSearch.leads,
+            stats: activeSearch.stats,
+            usage: activeSearch.usage,
+            traceUrl: activeSearch.traceUrl,
+            progress: activeSearch.progress,
+            currentStatus: activeSearch.currentStatus,
+            searchId: activeSearch.searchId,
+            hasActiveSearch: true,
+            isLoading: false,
+          }));
+          currentSearchIdRef.current = activeSearch.searchId;
+          searchParamsRef.current = activeSearch.searchParams;
+          return;
+        }
+
+        // If no active search, load completed results from localStorage
+        const stored = leadFinderStorage.load();
+        if (stored && stored.leads.length > 0) {
+          setState(prev => ({
+            ...prev,
+            leads: stored.leads,
+            stats: stored.stats,
+            usage: stored.usage,
+            traceUrl: stored.traceUrl,
+            hasActiveSearch: false,
+          }));
+        }
+      } catch (error) {
+        console.error('Error loading search from DB:', error);
+      }
+    };
+
+    loadActiveSearchFromDB();
+
+    // Cleanup on unmount
+    return () => {
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+      }
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
   }, []);
 
+  // Setup realtime subscription for search updates
+  const setupRealtimeSubscription = (searchId: string) => {
+    // Remove existing channel if any
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+    }
+
+    const channel = supabase
+      .channel(`lead_finder_search_${searchId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lead_finder_searches',
+          filter: `id=eq.${searchId}`,
+        },
+        (payload) => {
+          console.log('Search update:', payload);
+          const search = payload.new as any;
+          
+          setState(prev => ({
+            ...prev,
+            progress: search.progress || prev.progress,
+            currentStatus: search.current_status || prev.currentStatus,
+          stats: (search.stats as unknown as Stats) || prev.stats,
+          usage: (search.usage as unknown as Usage) || prev.usage,
+            traceUrl: search.trace_url || prev.traceUrl,
+            isLoading: search.status === 'running',
+            hasActiveSearch: search.status !== 'complete',
+          }));
+
+          // If search is complete, cleanup
+          if (search.status === 'complete') {
+            if (realtimeChannelRef.current) {
+              supabase.removeChannel(realtimeChannelRef.current);
+            }
+            if (pollingIntervalRef.current) {
+              clearInterval(pollingIntervalRef.current);
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'lead_finder_leads',
+          filter: `search_id=eq.${searchId}`,
+        },
+        (payload) => {
+          console.log('New lead:', payload);
+          const newLead = (payload.new as any).company_data as unknown as Lead;
+          
+          setState(prev => ({
+            ...prev,
+            leads: [...prev.leads, newLead],
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'lead_finder_leads',
+          filter: `search_id=eq.${searchId}`,
+        },
+        (payload) => {
+          console.log('Lead updated:', payload);
+          const updatedLead = (payload.new as any).company_data as unknown as Lead;
+          
+          setState(prev => ({
+            ...prev,
+            leads: prev.leads.map(lead =>
+              lead.name === updatedLead.name ? { ...lead, ...updatedLead, _justUpdated: true } : lead
+            ),
+          }));
+
+          // Clear update flag after animation
+          setTimeout(() => {
+            setState(prev => ({
+              ...prev,
+              leads: prev.leads.map(l => ({ ...l, _justUpdated: false }))
+            }));
+          }, 2000);
+        }
+      )
+      .subscribe();
+
+    realtimeChannelRef.current = channel;
+  };
+
+  // Setup polling as fallback if realtime fails
+  const setupPolling = (searchId: string) => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const { data: search } = await supabase
+          .from('lead_finder_searches')
+          .select('*')
+          .eq('id', searchId)
+          .single();
+
+        if (!search) return;
+
+        // Update search state
+        setState(prev => ({
+          ...prev,
+          progress: search.progress || prev.progress,
+          currentStatus: search.current_status || prev.currentStatus,
+            stats: (search.stats as unknown as Stats) || prev.stats,
+            usage: (search.usage as unknown as Usage) || prev.usage,
+          traceUrl: search.trace_url || prev.traceUrl,
+          isLoading: search.status === 'running',
+          hasActiveSearch: search.status !== 'complete',
+        }));
+
+        // Load leads
+        const { data: leads } = await supabase
+          .from('lead_finder_leads')
+          .select('*')
+          .eq('search_id', searchId)
+          .order('created_at', { ascending: true });
+
+        if (leads) {
+          const leadData = leads.map(l => l.company_data as unknown as Lead);
+          setState(prev => ({
+            ...prev,
+            leads: leadData,
+          }));
+        }
+
+        // Stop polling if search is complete
+        if (search.status === 'complete' && pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    }, 5000); // Poll every 5 seconds
+  };
+
   const findLeads = async (params: SearchParams) => {
-    // Generate unique search ID
-    const searchId = crypto.randomUUID();
+    // Use existing searchId if resuming, otherwise generate new
+    const searchId = currentSearchIdRef.current || crypto.randomUUID();
     currentSearchIdRef.current = searchId;
     
     // Store search params for later
@@ -196,7 +421,10 @@ export const useLeadFinderStream = () => {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(params),
+        body: JSON.stringify({
+          ...params,
+          searchId: currentSearchIdRef.current, // Pass searchId for resume capability
+        }),
         signal: abortControllerRef.current.signal,
       });
 
@@ -247,7 +475,18 @@ export const useLeadFinderStream = () => {
             try {
               const event = JSON.parse(dataStr);
 
-              if (event.type === 'status') {
+              if (event.type === 'search-created') {
+                // Backend has created the search record, setup realtime
+                currentSearchIdRef.current = event.searchId;
+                setState(prev => ({
+                  ...prev,
+                  searchId: event.searchId,
+                }));
+                
+                // Setup realtime subscription
+                setupRealtimeSubscription(event.searchId);
+                setupPolling(event.searchId);
+              } else if (event.type === 'status') {
                 const newProgress = event.progress || state.progress;
                 setState(prev => ({
                   ...prev,
@@ -458,15 +697,56 @@ export const useLeadFinderStream = () => {
     }
   };
 
-  const cancelSearch = () => {
+  const cancelSearch = async () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
+
+    // Update search status in database
+    if (currentSearchIdRef.current) {
+      try {
+        await supabase
+          .from('lead_finder_searches')
+          .update({ status: 'paused' })
+          .eq('id', currentSearchIdRef.current);
+      } catch (error) {
+        console.error('Error updating search status:', error);
+      }
+    }
+
+    // Cleanup subscriptions
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+    }
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
   };
 
-  const clearStoredResults = () => {
+  const clearStoredResults = async () => {
     leadFinderStorage.clear();
     leadFinderStorage.clearActiveSearch();
+    
+    // Cleanup database searches
+    if (currentSearchIdRef.current) {
+      try {
+        await supabase
+          .from('lead_finder_searches')
+          .delete()
+          .eq('id', currentSearchIdRef.current);
+      } catch (error) {
+        console.error('Error deleting search:', error);
+      }
+    }
+
+    // Cleanup subscriptions
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+    }
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
     currentSearchIdRef.current = null;
     setState({
       leads: [],
