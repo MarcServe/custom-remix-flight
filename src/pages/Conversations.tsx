@@ -55,6 +55,22 @@ export default function Conversations() {
   const { data: sequences, isLoading } = useQuery({
     queryKey: ['active-conversations'],
     queryFn: async () => {
+      // Get all company_sequences that have email threads (both sequences and direct CRM emails)
+      const { data: threadsData, error: threadsError } = await supabase
+        .from('email_threads')
+        .select('company_sequence_id')
+        .order('received_at', { ascending: false });
+
+      if (threadsError) throw threadsError;
+
+      // Get unique company_sequence_ids
+      const sequenceIds = [...new Set(threadsData?.map(t => t.company_sequence_id) || [])];
+
+      if (sequenceIds.length === 0) {
+        return [];
+      }
+
+      // Fetch sequences with their companies and email_sequences data
       const { data, error } = await supabase
         .from('company_sequences')
         .select(`
@@ -62,7 +78,7 @@ export default function Conversations() {
           companies(name),
           email_sequences(name, goal, auto_respond)
         `)
-        .in('next_action', ['wait_for_response', 'personalized_response'])
+        .in('id', sequenceIds)
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
@@ -231,7 +247,7 @@ export default function Conversations() {
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle>Conversations</CardTitle>
-            <CardDescription>Active email threads requiring attention</CardDescription>
+            <CardDescription>All email threads and replies</CardDescription>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[600px]">

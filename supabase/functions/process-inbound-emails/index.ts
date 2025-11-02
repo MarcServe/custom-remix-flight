@@ -28,33 +28,58 @@ serve(async (req) => {
 
     console.log('Processing inbound email:', { from, to, subject, messageId });
 
-    // Find the company sequence by matching sender email or thread ID
-    const { data: sequences, error: seqError } = await supabaseClient
-      .from('company_sequences')
-      .select(`
-        *,
-        email_sequences(goal, ai_instructions, created_by),
-        companies(name, industry, description)
-      `)
-      .eq('status', 'active')
-      .not('next_action', 'eq', 'completed');
-
-    if (seqError) throw seqError;
-
-    // Match sequence by checking if 'from' email matches any contact in the sequences
+    // Find the company sequence by matching sender email, thread ID, or In-Reply-To header
+    // Step 1: Try matching via In-Reply-To or thread_id (most reliable)
     let matchedSequence = null;
-    for (const seq of sequences || []) {
-      // Check email_activities for this sequence to find matching contact
-      const { data: activity } = await supabaseClient
-        .from('email_activities')
-        .select('contact_id, contacts(email)')
-        .eq('company_sequence_id', seq.id)
-        .limit(1)
-        .single();
+    let matchedActivity = null;
 
-      if (activity && (activity.contacts as any)?.email === from) {
-        matchedSequence = seq;
-        break;
+    if (inReplyTo || threadId) {
+      console.log('Attempting to match by In-Reply-To or thread_id:', { inReplyTo, threadId });
+      
+      const { data: activities } = await supabaseClient
+        .from('email_activities')
+        .select('*, company_sequences(*)')
+        .or(`external_message_id.eq.${inReplyTo},thread_id.eq.${threadId}`)
+        .limit(1);
+
+      if (activities && activities.length > 0) {
+        console.log('Matched email via In-Reply-To/thread_id');
+        matchedActivity = activities[0];
+        matchedSequence = matchedActivity.company_sequences;
+      }
+    }
+
+    // Step 2: Fallback - Match by sender email
+    if (!matchedSequence) {
+      console.log('Fallback: matching by sender email from:', from);
+      
+      const { data: sequences, error: seqError } = await supabaseClient
+        .from('company_sequences')
+        .select(`
+          *,
+          email_sequences(goal, ai_instructions, created_by),
+          companies(name, industry, description),
+          email_activities(id, external_message_id, thread_id, metadata)
+        `)
+        .eq('status', 'active')
+        .not('next_action', 'eq', 'completed');
+
+      if (seqError) throw seqError;
+
+      // Match by checking email_activities metadata for matching to_email
+      for (const seq of sequences || []) {
+        const activities = seq.email_activities || [];
+        const matching = activities.find((act: any) => 
+          act.metadata?.to_email === from || 
+          act.metadata?.recipient_email === from
+        );
+        
+        if (matching) {
+          matchedSequence = seq;
+          matchedActivity = matching;
+          console.log('Matched via email address in activities');
+          break;
+        }
       }
     }
 
@@ -141,12 +166,15 @@ Return a JSON object with: sentiment, keyPoints (array), questionsAsked (array),
     }
 
     // Store the inbound email in email_threads
+    // Use matched thread_id if available for proper threading
+    const useThreadId = matchedActivity?.thread_id || threadId;
+    
     const { data: thread, error: threadError } = await supabaseClient
       .from('email_threads')
       .insert({
         company_sequence_id: matchedSequence.id,
         message_id: messageId,
-        thread_id: threadId,
+        thread_id: useThreadId,
         direction: 'inbound',
         subject,
         body_html: bodyHtml,
@@ -160,6 +188,18 @@ Return a JSON object with: sentiment, keyPoints (array), questionsAsked (array),
       .single();
 
     if (threadError) throw threadError;
+
+    // Update email_activities with replied_at timestamp if we matched an activity
+    if (matchedActivity) {
+      console.log('Updating email activity with reply timestamp');
+      await supabaseClient
+        .from('email_activities')
+        .update({ 
+          replied_at: new Date().toISOString(),
+          status: 'replied'
+        })
+        .eq('id', matchedActivity.id);
+    }
 
     // Update conversation history
     const conversationHistory = matchedSequence.conversation_history || [];

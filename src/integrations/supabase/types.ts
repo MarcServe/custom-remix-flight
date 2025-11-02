@@ -1020,6 +1020,7 @@ export type Database = {
           created_at: string
           external_message_id: string | null
           id: string
+          in_reply_to: string | null
           metadata: Json | null
           opened_at: string | null
           replied_at: string | null
@@ -1027,6 +1028,7 @@ export type Database = {
           status: string
           step_number: number
           subject: string | null
+          thread_id: string | null
         }
         Insert: {
           body?: string | null
@@ -1036,6 +1038,7 @@ export type Database = {
           created_at?: string
           external_message_id?: string | null
           id?: string
+          in_reply_to?: string | null
           metadata?: Json | null
           opened_at?: string | null
           replied_at?: string | null
@@ -1043,6 +1046,7 @@ export type Database = {
           status?: string
           step_number: number
           subject?: string | null
+          thread_id?: string | null
         }
         Update: {
           body?: string | null
@@ -1052,6 +1056,7 @@ export type Database = {
           created_at?: string
           external_message_id?: string | null
           id?: string
+          in_reply_to?: string | null
           metadata?: Json | null
           opened_at?: string | null
           replied_at?: string | null
@@ -1059,6 +1064,7 @@ export type Database = {
           status?: string
           step_number?: number
           subject?: string | null
+          thread_id?: string | null
         }
         Relationships: [
           {

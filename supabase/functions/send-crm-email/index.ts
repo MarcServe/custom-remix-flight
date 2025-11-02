@@ -50,6 +50,9 @@ serve(async (req) => {
     const emailRequest: EmailRequest = await req.json();
     const { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, sender = 'resend', testConnection = false } = emailRequest;
 
+    // Generate thread_id for email threading (used across all sending methods)
+    const threadId = `crm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
     // Fetch user profile for signature
     const { data: userProfile } = await supabaseClient
       .from('profiles')
@@ -180,6 +183,10 @@ serve(async (req) => {
           subject,
           text: emailBodyText,
           html: wrappedHtml,
+          reply_to: connection.from_email, // Enable replies to this address
+          headers: {
+            'X-Entity-Ref-ID': threadId, // Custom header for tracking
+          },
         }),
       });
 
@@ -214,6 +221,10 @@ serve(async (req) => {
         subject,
         text: emailBodyText,
         html: wrapEmailContent(emailBodyHtml, 'CRM', 'onboarding@resend.dev'),
+        reply_to: 'onboarding@resend.dev', // Enable replies
+        headers: {
+          'X-Entity-Ref-ID': threadId, // Custom header for tracking
+        },
       }),
       });
 
@@ -228,8 +239,8 @@ serve(async (req) => {
       console.log('Email sent via Resend:', resendData);
     }
 
-    // Log email activity
-    const { error: activityError } = await supabaseClient
+    // Log to email_activities for tracking
+    const { data: activityData, error: activityError } = await supabaseClient
       .from('email_activities')
       .insert({
         contact_id: contactId || null,
@@ -240,15 +251,61 @@ serve(async (req) => {
         body: emailBodyText,
         sent_at: new Date().toISOString(),
         external_message_id: messageId,
+        thread_id: threadId,
         metadata: {
           provider,
           sent_via: 'crm_direct',
           has_html: !!emailBodyHtml,
+          to_email: toEmail,
+          to_name: toName,
         },
-      });
+      })
+      .select()
+      .single();
 
     if (activityError) {
       console.error('Failed to log email activity:', activityError);
+    }
+
+    // ALSO create entry in email_threads for conversation view
+    // This is KEY for reply tracking and unified conversation view
+    if (companyId && activityData) {
+      // Get the user's from_email
+      const { data: connection } = await supabaseClient
+        .from('crm_connections')
+        .select('from_email')
+        .eq('user_id', user.id)
+        .eq('provider', provider)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      const fromEmail = connection?.from_email || user.email || 'noreply@crm.com';
+
+      const { error: threadError } = await supabaseClient
+        .from('email_threads')
+        .insert({
+          company_sequence_id: companyId,
+          from_email: fromEmail,
+          to_email: toEmail,
+          subject,
+          body_text: emailBodyText,
+          body_html: emailBodyHtml,
+          direction: 'outbound',
+          thread_id: threadId,
+          message_id: messageId,
+          received_at: new Date().toISOString(),
+          metadata: {
+            provider,
+            sent_via: 'crm_direct',
+            to_name: toName,
+          },
+        });
+
+      if (threadError) {
+        console.error('Failed to create email thread:', threadError);
+      } else {
+        console.log('Email thread created for conversation tracking');
+      }
     }
 
     return new Response(

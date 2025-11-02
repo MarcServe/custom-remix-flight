@@ -115,12 +115,20 @@ serve(async (req) => {
 
       case 'email.replied':
         updates.replied_at = new Date().toISOString();
+        updates.status = 'replied';
         updates.metadata.reply_received = true;
         
-        // Pause the sequence when we get a reply
+        // If we have reply content in the webhook, we could process it here
+        // For now, we rely on the process-inbound-emails webhook to handle the full reply
+        console.log('Reply event received for email:', emailId);
+        
+        // Update the sequence to indicate a reply was received
         await supabase
           .from('company_sequences')
-          .update({ status: 'paused' })
+          .update({ 
+            next_action: 'personalized_response',
+            updated_at: new Date().toISOString()
+          })
           .eq('id', activity.company_sequence_id);
         break;
 
