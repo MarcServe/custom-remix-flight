@@ -19,6 +19,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { usePendingCounts } from "@/hooks/use-pending-counts";
 import { useEventsRealtime, useDealsRealtimeForNotifications, useCampaignsRealtimeForNotifications } from "@/hooks/use-realtime";
 import { supabase } from "@/integrations/supabase/client";
+import { usePendingReviewsCount } from "@/hooks/use-pending-reviews";
 
 type NavigationItem = {
   name: string;
@@ -61,12 +62,13 @@ const navigation: NavigationItem[] = [
 ];
 
 // Helper function to get pending count for a menu item
-const getPendingCount = (href: string, pendingCounts: any) => {
+const getPendingCount = (href: string, pendingCounts: any, pendingReviewsCount?: number) => {
   if (!pendingCounts) return 0;
   if (href === '/deals') return pendingCounts.deals;
   if (href === '/sequences') return pendingCounts.sequences;
   if (href === '/company-sequences') return pendingCounts.campaigns;
   if (href === '/events') return pendingCounts.events;
+  if (href === '/conversations' && pendingReviewsCount) return pendingReviewsCount;
   return 0;
 };
 
@@ -77,6 +79,7 @@ export const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { data: pendingCounts } = usePendingCounts();
+  const { data: pendingReviewsCount } = usePendingReviewsCount();
   const [activeSearch, setActiveSearch] = useState<any>(null);
   
   // Enable real-time updates for notifications
@@ -388,7 +391,7 @@ export const Sidebar = () => {
           }
           
           // Render regular navigation item
-          const pendingCount = getPendingCount(item.href, pendingCounts);
+          const pendingCount = getPendingCount(item.href, pendingCounts, pendingReviewsCount);
           
           const linkContent = (
             <Link

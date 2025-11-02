@@ -12,6 +12,9 @@ import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { PendingReviewsBadge } from "@/components/sequences/PendingReviewsBadge";
+import { AutoResponseReviewModal } from "@/components/sequences/AutoResponseReviewModal";
+import { usePendingReviews, PendingReview } from "@/hooks/use-pending-reviews";
 
 interface EmailThread {
   id: string;
@@ -62,6 +65,10 @@ export default function Conversations() {
   const [generatedResponse, setGeneratedResponse] = useState<{ subject: string; body: string } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [filterAutoSent, setFilterAutoSent] = useState(false);
+  const [selectedReview, setSelectedReview] = useState<PendingReview | null>(null);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+
+  const { data: pendingReviews } = usePendingReviews();
 
   const { data: conversations, isLoading } = useQuery({
     queryKey: ['active-conversations'],
@@ -295,20 +302,85 @@ export default function Conversations() {
   return (
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
-            <MessageSquare className="h-6 w-6 text-white" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
+              <MessageSquare className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold">Active Conversations</h1>
+              <p className="text-sm text-muted-foreground">
+                View and respond to email conversations with AI assistance
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold">Active Conversations</h1>
-            <p className="text-sm text-muted-foreground">
-              View and respond to email conversations with AI assistance
-            </p>
-          </div>
+          <PendingReviewsBadge />
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Pending Reviews Alert */}
+        {pendingReviews && pendingReviews.length > 0 && (
+          <div className="lg:col-span-3">
+            <Card className="border-2 border-primary/30 bg-primary/5">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    <CardTitle className="text-lg">
+                      {pendingReviews.length} {pendingReviews.length === 1 ? 'Response' : 'Responses'} Awaiting Review
+                    </CardTitle>
+                  </div>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => {
+                      if (pendingReviews[0]) {
+                        setSelectedReview(pendingReviews[0]);
+                        setReviewModalOpen(true);
+                      }
+                    }}
+                  >
+                    Review Now
+                  </Button>
+                </div>
+                <CardDescription>
+                  AI has generated responses that require your approval before sending
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {pendingReviews.slice(0, 3).map((review) => (
+                    <div
+                      key={review.id}
+                      className="p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => {
+                        setSelectedReview(review);
+                        setReviewModalOpen(true);
+                      }}
+                    >
+                      <p className="font-medium text-sm truncate">
+                        {review.metadata?.company_name || 'Company'}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {review.metadata?.subject || 'No subject'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {format(new Date(review.generated_at), 'MMM d, HH:mm')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                {pendingReviews.length > 3 && (
+                  <p className="text-xs text-muted-foreground mt-3">
+                    + {pendingReviews.length - 3} more pending
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Conversations List */}
         <Card className="lg:col-span-1">
           <CardHeader>
@@ -550,6 +622,13 @@ export default function Conversations() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Review Modal */}
+      <AutoResponseReviewModal
+        open={reviewModalOpen}
+        onOpenChange={setReviewModalOpen}
+        review={selectedReview}
+      />
     </div>
   );
 }

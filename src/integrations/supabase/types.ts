@@ -183,7 +183,11 @@ export type Database = {
           opened_at: string | null
           prompt_tokens: number | null
           replied_at: string | null
+          requires_review: boolean | null
           response_time_ms: number | null
+          review_status: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           sent_at: string | null
           sentiment_score: number | null
           success_score: number | null
@@ -203,7 +207,11 @@ export type Database = {
           opened_at?: string | null
           prompt_tokens?: number | null
           replied_at?: string | null
+          requires_review?: boolean | null
           response_time_ms?: number | null
+          review_status?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           sent_at?: string | null
           sentiment_score?: number | null
           success_score?: number | null
@@ -223,7 +231,11 @@ export type Database = {
           opened_at?: string | null
           prompt_tokens?: number | null
           replied_at?: string | null
+          requires_review?: boolean | null
           response_time_ms?: number | null
+          review_status?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           sent_at?: string | null
           sentiment_score?: number | null
           success_score?: number | null
