@@ -3,7 +3,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 serve(async (req: Request) => {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-  const appUrl = SUPABASE_URL.replace('.supabase.co', '.lovableproject.com').replace('/functions/v1', '');
+  
+  // Dynamically detect the app URL from request headers or environment
+  const origin = req.headers.get('origin') || 
+                 req.headers.get('referer')?.split('/').slice(0, 3).join('/') || 
+                 Deno.env.get('APP_URL');
+  
+  const appUrl = origin || SUPABASE_URL.replace('.supabase.co', '.lovableproject.com').replace('/functions/v1', '');
 
   try {
     const url = new URL(req.url);
@@ -89,7 +95,7 @@ serve(async (req: Request) => {
 
     const { error: dbError } = await supabase
       .from('crm_connections')
-      .insert({
+      .upsert({
         user_id,
         provider: 'gmail_direct',
         connection_id: `gmail_direct_${Date.now()}`,
@@ -109,6 +115,8 @@ serve(async (req: Request) => {
           supports_attachments: true,
           api_based: true,
         },
+      }, {
+        onConflict: 'user_id,provider'
       });
 
     if (dbError) {
