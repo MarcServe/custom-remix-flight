@@ -18,6 +18,7 @@ interface EmailRequest {
   contactId?: string;
   sender?: 'gmail' | 'gmail_direct' | 'resend' | 'smtp' | 'sendgrid';
   testConnection?: boolean; // Test SMTP connection without sending
+  enableAutoResponder?: boolean; // Enable AI auto-responder for replies
 }
 
 serve(async (req) => {
@@ -48,7 +49,7 @@ serve(async (req) => {
     }
 
     const emailRequest: EmailRequest = await req.json();
-    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, testConnection = false } = emailRequest;
+    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, testConnection = false, enableAutoResponder = false } = emailRequest;
     
     // Fetch user profile for signature and business email
     const { data: userProfile } = await supabaseClient
@@ -419,6 +420,7 @@ serve(async (req) => {
           to_name: toName,
           company_id: companyId || null,
           auto_linked: !!linkedSequenceId,
+          enable_auto_responder: enableAutoResponder,
         },
       })
       .select()

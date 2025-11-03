@@ -445,7 +445,7 @@ Return a JSON object with: sentiment, keyPoints (array), questionsAsked (array),
       
       // Check if auto-response is enabled for this sequence
       const autoSend = matchedSequence.auto_respond_enabled === true;
-      console.log(`Auto-response enabled: ${autoSend}`);
+      console.log(`Auto-response enabled (sequence): ${autoSend}`);
       
       // Call generate-ai-response function with autoSend flag
       const { error: generateError } = await supabaseClient.functions.invoke('generate-ai-response', {
@@ -460,6 +460,31 @@ Return a JSON object with: sentiment, keyPoints (array), questionsAsked (array),
         console.error('Error triggering AI response:', generateError);
       } else {
         console.log(`AI response generation triggered (autoSend: ${autoSend})`);
+      }
+    }
+    
+    // Also check for standalone email auto-responder (not sequence-based)
+    // This handles emails sent from People page with auto-responder toggle enabled
+    if (matchedActivity && !matchedSequence.auto_respond_enabled) {
+      const enableAutoResponder = matchedActivity.metadata?.enable_auto_responder === true;
+      console.log(`Standalone email auto-responder enabled: ${enableAutoResponder}`);
+      
+      if (enableAutoResponder && (sentiment === 'interested' || sentiment === 'requesting_info' || sentiment === 'positive')) {
+        console.log('Triggering standalone AI auto-response');
+        
+        const { error: generateError } = await supabaseClient.functions.invoke('generate-ai-response', {
+          body: { 
+            companySequenceId: matchedSequence.id,
+            inboundThreadId: thread.id,
+            autoSend: true // Auto-send if enabled from People page
+          },
+        });
+
+        if (generateError) {
+          console.error('Error triggering standalone AI response:', generateError);
+        } else {
+          console.log('Standalone AI auto-response triggered');
+        }
       }
     }
 

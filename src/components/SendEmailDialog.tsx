@@ -6,10 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Send, Sparkles, Code, Eye } from "lucide-react";
+import { Loader2, Send, Sparkles, Code, Eye, Bot } from "lucide-react";
 import { RichTextEditor } from "./email/RichTextEditor";
 import { EmailTemplateSelector, EMAIL_TEMPLATES, type EmailTemplate } from "./email/EmailTemplateSelector";
 
@@ -36,6 +37,7 @@ export function SendEmailDialog({
   const [context, setContext] = useState("");
   const [sender, setSender] = useState<'gmail' | 'resend' | 'smtp' | 'sendgrid'>('resend');
   const [template, setTemplate] = useState<EmailTemplate>('blank');
+  const [enableAutoResponder, setEnableAutoResponder] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
@@ -144,6 +146,7 @@ export function SendEmailDialog({
           companyId,
           contactId,
           sender,
+          enableAutoResponder,
         },
       });
 
@@ -159,6 +162,7 @@ export function SendEmailDialog({
       setBodyHtml("");
       setBodyText("");
       setTemplate('blank');
+      setEnableAutoResponder(false);
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error sending email:", error);
@@ -275,6 +279,26 @@ export function SendEmailDialog({
                   ✓ Direct SMTP delivery • No tracking
                 </p>
               )}
+            </div>
+
+            <div className="flex items-center justify-between space-x-2 p-4 rounded-lg border bg-muted/50">
+              <div className="flex items-center gap-3">
+                <Bot className="h-5 w-5 text-primary" />
+                <div className="flex flex-col">
+                  <Label htmlFor="auto-responder" className="cursor-pointer font-medium">
+                    Enable AI Auto-Responder
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically generate and send AI-powered replies to incoming responses
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="auto-responder"
+                checked={enableAutoResponder}
+                onCheckedChange={setEnableAutoResponder}
+                disabled={isSending || isGenerating}
+              />
             </div>
 
             <div className="space-y-2">
