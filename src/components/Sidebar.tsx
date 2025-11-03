@@ -21,7 +21,6 @@ import { useEventsRealtime, useDealsRealtimeForNotifications, useCampaignsRealti
 import { supabase } from "@/integrations/supabase/client";
 import { usePendingReviewsCount } from "@/hooks/use-pending-reviews";
 import { ActivityNotificationCenter } from "@/components/notifications/ActivityNotificationCenter";
-import leadGenieLogo from '@/assets/lead-genie-logo.png';
 
 type NavigationItem = {
   name: string;
@@ -255,15 +254,9 @@ export const Sidebar = () => {
       )}>
         <div className="flex h-16 items-center border-b px-3 justify-between">
         {!isCollapsed && (
-          <div className="flex items-center gap-2">
-            <img src={leadGenieLogo} alt="LeadGenie CRM" className="h-10 w-10 object-contain" />
-            <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              LeadGenie
-            </h1>
-          </div>
-        )}
-        {isCollapsed && (
-          <img src={leadGenieLogo} alt="LeadGenie CRM" className="h-8 w-8 object-contain" />
+          <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+            LeadGenie
+          </h1>
         )}
         <Button
           variant="ghost"
