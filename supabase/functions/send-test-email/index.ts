@@ -132,6 +132,17 @@ Deno.serve(async (req) => {
       
       let messageId;
       
+      // === DEBUG LOGGING ===
+      console.log('=== EMAIL PROVIDER CHECK ===');
+      console.log('emailProvider:', emailProvider);
+      console.log('connection exists:', !!connection);
+      console.log('connection provider:', connection?.provider);
+      console.log('connection status:', connection?.status);
+      console.log('connection.from_email:', connection?.from_email);
+      console.log('senderConnectionId:', senderConnectionId);
+      console.log('About to check gmail_direct condition');
+      console.log('=== END DEBUG ===');
+      
       if (emailProvider === 'gmail_direct' || emailProvider === 'gmail') {
         // Send via Gmail Direct API
         if (!connection) {
