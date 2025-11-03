@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Calendar, Filter } from 'lucide-react';
+import { Plus, Calendar, Filter, Clock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { EventDialog } from '@/components/EventDialog';
 import { useEvents, useDeleteEvent } from '@/hooks/use-events';
 import { useMarkMultipleEventsAsViewed } from '@/hooks/use-event-views';
 import { format, isToday, isYesterday, startOfDay } from 'date-fns';
+import { Link } from 'react-router-dom';
 
 export default function Events() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -135,10 +136,18 @@ export default function Events() {
                 <Filter className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Filters</span>
               </div>
-              <Button onClick={() => setDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                New Event
-              </Button>
+              <div className="flex items-center gap-2">
+                <Link to="/calendar">
+                  <Button variant="outline" size="sm">
+                    <Clock className="h-4 w-4 mr-2" />
+                    Calendar View
+                  </Button>
+                </Link>
+                <Button onClick={() => setDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Event
+                </Button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

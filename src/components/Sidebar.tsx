@@ -35,8 +35,6 @@ const navigation: NavigationItem[] = [
   { name: "Deals", href: "/deals", icon: DollarSign },
   { name: "People", href: "/people", icon: Users },
   { name: "Events", href: "/events", icon: Calendar },
-  { name: "Calendar", href: "/calendar", icon: Calendar },
-  { name: "Files", href: "/files", icon: FolderOpen },
   { name: "Invoices", href: "/invoices", icon: FileText },
   { name: "Lead Finder", href: "/lead-finder", icon: Sparkles },
   { name: "Pipeline", href: "/pipeline", icon: TrendingUp },
@@ -67,6 +65,7 @@ const navigation: NavigationItem[] = [
     children: [
       { name: "Teams", href: "/teams", icon: Users },
       { name: "Shared Inbox", href: "/shared-inbox", icon: Mail },
+      { name: "Files", href: "/files", icon: FolderOpen },
     ]
   },
   { 
