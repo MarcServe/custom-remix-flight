@@ -530,6 +530,7 @@ export type Database = {
           status: string | null
           tech_stack: string[] | null
           updated_at: string | null
+          user_id: string
           website: string | null
         }
         Insert: {
@@ -563,6 +564,7 @@ export type Database = {
           status?: string | null
           tech_stack?: string[] | null
           updated_at?: string | null
+          user_id: string
           website?: string | null
         }
         Update: {
@@ -596,6 +598,7 @@ export type Database = {
           status?: string | null
           tech_stack?: string[] | null
           updated_at?: string | null
+          user_id?: string
           website?: string | null
         }
         Relationships: []

@@ -176,6 +176,12 @@ export default function LeadFinder() {
           const websiteValue = company.website && company.website.trim() 
             ? company.website 
             : `no-website-${crypto.randomUUID()}`;
+          
+          // Get current user
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) {
+            throw new Error('User not authenticated');
+          }
             
           const {
             data: createdCompany,
@@ -186,6 +192,7 @@ export default function LeadFinder() {
             description: company.description,
             industry: company.industry,
             size: company.size,
+            user_id: user.id,
             geography: company.geography,
             linkedin_url: company.linkedinUrl,
             company_phone: company.companyPhone,

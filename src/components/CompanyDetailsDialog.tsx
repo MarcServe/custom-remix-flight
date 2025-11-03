@@ -14,6 +14,7 @@ import { useDeleteCompany } from "@/hooks/use-companies";
 import { useCompanyEvents, useDeleteEvent } from "@/hooks/use-events";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { companiesApi } from "@/lib/api/companies";
+import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
@@ -305,12 +306,19 @@ export function CompanyDetailsDialog({
         ? company.website 
         : `no-website-${crypto.randomUUID()}`;
       
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
       const { data: createdCompany, error: companyError } = await companiesApi.createCompany({
         name: company.name,
         website: websiteValue,
         description: company.description,
         industry: company.industry,
         size: company.size,
+        user_id: user.id,
         geography: company.geography,
         linkedin_url: company.linkedinUrl,
         company_phone: company.companyPhone,
