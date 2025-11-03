@@ -336,8 +336,12 @@ export default function UnifiedCampaigns() {
                       key={activity.id}
                       className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer"
                       onClick={() => {
-                        // If it's a sequence activity, navigate to sequences
-                        if (activity.type === 'sequence' || activity.type === 'auto_response') {
+                        // If activity has a reply, go to conversations to view the thread
+                        if (activity.details?.replied || activity.status === 'replied') {
+                          navigate('/conversations');
+                        }
+                        // Otherwise, if it's a sequence activity, navigate to sequences
+                        else if (activity.type === 'sequence' || activity.type === 'auto_response') {
                           navigate('/sequences');
                         } else {
                           navigate('/campaigns');
