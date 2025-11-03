@@ -20,6 +20,9 @@ interface EmailRequest {
   testConnection?: boolean; // Test SMTP connection without sending
   enableAutoResponder?: boolean; // Enable AI auto-responder for replies
   templateStyle?: string; // Email template style (professional, modern, minimal, etc.)
+  invoiceHtml?: string; // Invoice/Quotation HTML to attach
+  invoiceNumber?: string; // Invoice/Quotation number
+  attachInvoice?: boolean; // Whether to attach the invoice
 }
 
 serve(async (req) => {
@@ -50,7 +53,7 @@ serve(async (req) => {
     }
 
     const emailRequest: EmailRequest = await req.json();
-    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional' } = emailRequest;
+    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false } = emailRequest;
     
     // Fetch user profile for signature and business email
     const { data: userProfile } = await supabaseClient
@@ -82,11 +85,18 @@ serve(async (req) => {
     let emailBodyHtml = bodyHtml || (body ? `<p>${body.replace(/\n/g, '</p><p>')}</p>` : '');
     let emailBodyText = bodyText || body || '';
 
+    // If invoice is attached, append it to the email body
+    if (attachInvoice && invoiceHtml) {
+      emailBodyHtml += `<hr style="margin: 40px 0; border: none; border-top: 2px solid #e5e7eb;" />`;
+      emailBodyHtml += `<h2 style="margin-bottom: 20px;">Attached ${invoiceNumber ? invoiceNumber : 'Document'}</h2>`;
+      emailBodyHtml += invoiceHtml;
+    }
+
     // Append signature if not already present
     if (!emailBodyText.includes('Best regards,')) {
       emailBodyText += signatureText;
     }
-    if (!emailBodyHtml.includes('Best regards,')) {
+    if (!emailBodyHtml.includes('Best regards,') && !attachInvoice) {
       emailBodyHtml += signatureHtml;
     }
 

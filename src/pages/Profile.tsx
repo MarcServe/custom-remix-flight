@@ -222,12 +222,12 @@ export default function Profile() {
       </div>
 
       <Tabs defaultValue="account" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="business">Business Profile</TabsTrigger>
-          <TabsTrigger value="ai">AI Settings</TabsTrigger>
-          <TabsTrigger value="branding">Email Branding</TabsTrigger>
-          <TabsTrigger value="integrations">Integrations</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
+          <TabsTrigger value="account" className="text-xs sm:text-sm">Account</TabsTrigger>
+          <TabsTrigger value="business" className="text-xs sm:text-sm">Business Profile</TabsTrigger>
+          <TabsTrigger value="ai" className="text-xs sm:text-sm">AI Settings</TabsTrigger>
+          <TabsTrigger value="branding" className="text-xs sm:text-sm">Email Branding</TabsTrigger>
+          <TabsTrigger value="integrations" className="text-xs sm:text-sm">Integrations</TabsTrigger>
         </TabsList>
 
         <TabsContent value="account" className="space-y-4">

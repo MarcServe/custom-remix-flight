@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sparkles, Loader2, Send } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +32,7 @@ export default function SendInvoiceEmailDialog({
   const [customEmail, setCustomEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [context, setContext] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Fetch companies
@@ -181,13 +183,17 @@ export default function SendInvoiceEmailDialog({
         </html>
       `;
 
+      // Combine body with context if provided
+      const finalBody = context ? `${body}\n\n---\nAdditional Notes:\n${context}` : body;
+
       const { data, error } = await supabase.functions.invoke("send-crm-email", {
         body: {
           to: recipientEmail,
           subject,
-          body,
+          body: finalBody,
           invoiceHtml,
           invoiceNumber: invoice.invoice_number,
+          attachInvoice: true,
         },
       });
 
@@ -233,7 +239,7 @@ export default function SendInvoiceEmailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Send {invoice?.invoice_type === 'invoice' ? 'Invoice' : 'Quotation'} via Email</DialogTitle>
           <DialogDescription>
@@ -241,7 +247,8 @@ export default function SendInvoiceEmailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4 py-4">
+        <ScrollArea className="flex-1 max-h-[55vh] px-1">
+          <div className="space-y-4 pr-4">
           {/* Recipient Selection */}
           <div className="grid gap-2">
             <Label>Recipient Type</Label>
@@ -335,14 +342,25 @@ export default function SendInvoiceEmailDialog({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="Email body..."
-              rows={10}
+              rows={8}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Additional Context/Notes (Optional)</Label>
+            <Textarea
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              placeholder="Add any additional context or special instructions..."
+              rows={3}
             />
           </div>
 
           <p className="text-xs text-muted-foreground">
             The {invoice?.invoice_type === 'invoice' ? 'invoice' : 'quotation'} will be attached as an HTML document
           </p>
-        </div>
+          </div>
+        </ScrollArea>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
