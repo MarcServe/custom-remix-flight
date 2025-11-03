@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SMTPModeToggle } from "./SMTPModeToggle";
 import { ProviderConnectionTest } from "./ProviderConnectionTest";
-import { CheckCircle2, XCircle, ChevronDown, AlertTriangle, Loader2, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { CheckCircle2, XCircle, ChevronDown, AlertTriangle, Loader2, CheckCircle, Clock, AlertCircle, Mail } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -119,8 +119,12 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {provider.isGoogleIcon || provider.isOutlookIcon ? (
+            {provider.isGoogleIcon ? (
               <img src={provider.icon} alt={provider.name} className="w-8 h-8" />
+            ) : provider.isOutlookIcon ? (
+              <div className="w-8 h-8 flex items-center justify-center rounded-md bg-blue-600">
+                <Mail className="w-5 h-5 text-white" />
+              </div>
             ) : (
               <div className="text-2xl">{provider.icon}</div>
             )}
