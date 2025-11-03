@@ -48,14 +48,22 @@ export default function SharedInbox() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isConfigureDialogOpen, setIsConfigureDialogOpen] = useState(false);
+  const [selectedInbox, setSelectedInbox] = useState<SharedInbox | null>(null);
   const { toast } = useToast();
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    description: string;
+    email_address: string;
+    auto_assign: boolean;
+    assignment_strategy: string;
+  }>({
     name: '',
     description: '',
     email_address: '',
     auto_assign: false,
-    assignment_strategy: 'round_robin' as const,
+    assignment_strategy: 'round_robin',
   });
 
   useEffect(() => {
@@ -159,6 +167,52 @@ export default function SharedInbox() {
         variant: "destructive",
       });
     }
+  };
+
+  const handleUpdateInbox = async () => {
+    if (!selectedInbox) return;
+
+    try {
+      const { error } = await supabase
+        .from('shared_inboxes')
+        .update({
+          name: formData.name,
+          description: formData.description,
+          email_address: formData.email_address,
+          auto_assign: formData.auto_assign,
+          assignment_strategy: formData.assignment_strategy,
+        })
+        .eq('id', selectedInbox.id);
+
+      if (error) throw error;
+
+      toast({ title: "Inbox updated successfully" });
+      setIsConfigureDialogOpen(false);
+      setSelectedInbox(null);
+      resetForm();
+      if (selectedTeam) {
+        await loadInboxes(selectedTeam.id);
+      }
+    } catch (error: any) {
+      console.error('Error updating inbox:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update inbox",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleConfigureInbox = (inbox: SharedInbox) => {
+    setSelectedInbox(inbox);
+    setFormData({
+      name: inbox.name,
+      description: inbox.description || '',
+      email_address: inbox.email_address || '',
+      auto_assign: inbox.auto_assign,
+      assignment_strategy: inbox.assignment_strategy,
+    });
+    setIsConfigureDialogOpen(true);
   };
 
   const resetForm = () => {
@@ -310,7 +364,7 @@ export default function SharedInbox() {
                           <CardDescription>{inbox.description}</CardDescription>
                         </div>
                       </div>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => handleConfigureInbox(inbox)}>
                         <Settings className="h-4 w-4 mr-2" />
                         Configure
                       </Button>
@@ -470,6 +524,102 @@ export default function SharedInbox() {
             </Button>
             <Button onClick={handleCreateInbox} disabled={!formData.name}>
               Create Inbox
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Configure Inbox Dialog */}
+      <Dialog open={isConfigureDialogOpen} onOpenChange={(open) => {
+        setIsConfigureDialogOpen(open);
+        if (!open) {
+          setSelectedInbox(null);
+          resetForm();
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Configure Shared Inbox</DialogTitle>
+            <DialogDescription>
+              Update settings for {selectedInbox?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Inbox Name</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g., Sales Inbox"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Describe this inbox's purpose"
+                rows={2}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address (optional)</Label>
+              <Input
+                id="email"
+                type="email"
+                value={formData.email_address}
+                onChange={(e) => setFormData({ ...formData, email_address: e.target.value })}
+                placeholder="inbox@yourdomain.com"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="strategy">Assignment Strategy</Label>
+              <Select
+                value={formData.assignment_strategy}
+                onValueChange={(value: any) => setFormData({ ...formData, assignment_strategy: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="round_robin">Round Robin</SelectItem>
+                  <SelectItem value="least_active">Least Active</SelectItem>
+                  <SelectItem value="skill_based">Skill Based</SelectItem>
+                  <SelectItem value="manual">Manual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Auto-Assign</Label>
+                <p className="text-sm text-muted-foreground">
+                  Automatically assign new items to team members
+                </p>
+              </div>
+              <Switch
+                checked={formData.auto_assign}
+                onCheckedChange={(checked) => setFormData({ ...formData, auto_assign: checked })}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { 
+              setIsConfigureDialogOpen(false); 
+              setSelectedInbox(null);
+              resetForm(); 
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateInbox} disabled={!formData.name}>
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
