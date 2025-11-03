@@ -172,19 +172,49 @@ export default function Auth() {
       <Card className="w-full max-w-md relative z-10 animate-fade-in shadow-2xl backdrop-blur-md bg-card/98 border-2" style={{ animationDelay: '0.3s' }}>
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center animate-fade-in" style={{ animationDelay: '0.3s' }}>
-            <img src={leadGenieLogo} alt="LeadGenie CRM" className="h-24 w-auto" />
+            <img src={leadGenieLogo} alt="LeadGenie CRM" className="h-20 w-auto drop-shadow-sm" />
           </div>
-          <CardTitle className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-fade-in" style={{ animationDelay: '0.4s' }}>
-            LeadGenie CRM
-          </CardTitle>
-          <CardDescription className="text-base animate-fade-in space-y-3" style={{ animationDelay: '0.5s' }}>
-            <p className="font-medium">Modern sales platform powered by AI. Find leads, enrich data, and close deals faster.</p>
-            <div className="space-y-2 text-sm">
-              <p><span className="font-semibold text-primary">AI Lead Finder:</span> Search and discover companies matching your ideal customer profile with AI-powered enrichment.</p>
-              <p><span className="font-semibold text-primary">Smart Contact Management:</span> Track relationships, manage contacts, and never miss a follow-up with intelligent reminders.</p>
-              <p><span className="font-semibold text-primary">Pipeline Analytics:</span> Visualize your sales funnel, forecast revenue, and optimize your conversion rates.</p>
+
+          <div className="space-y-2 animate-fade-in" style={{ animationDelay: '0.4s' }}>
+            <CardTitle className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+              LeadGenie CRM
+            </CardTitle>
+            <CardDescription className="text-base text-muted-foreground">
+              AI-Powered Lead Generation &amp; Enrichment
+            </CardDescription>
+          </div>
+
+          <div className="rounded-2xl border border-primary/20 bg-muted/40 p-5 text-left shadow-sm animate-fade-in" style={{ animationDelay: '0.5s' }}>
+            <p className="text-sm text-muted-foreground mb-4">
+              Modern sales platform powered by AI. Discover best-fit accounts, enrich contacts automatically, and close deals faster with guided workflows.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground tracking-wide uppercase">
+                  AI Lead Finder
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Search and discover companies that match your ideal customer profile with intelligent enrichment filling in the gaps.
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground tracking-wide uppercase">
+                  Smart Contact Management
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Track every relationship, automate follow-ups, and keep contact records clean with AI assistance.
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground tracking-wide uppercase">
+                  Pipeline Analytics
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Visualize your sales funnel, forecast revenue, and focus on the deals that move the needle.
+                </p>
+              </div>
             </div>
-          </CardDescription>
+          </div>
         </CardHeader>
         <CardContent className="animate-fade-in" style={{ animationDelay: '0.6s' }}>
           <Tabs defaultValue={mode} className="w-full">

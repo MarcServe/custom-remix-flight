@@ -1,486 +1,245 @@
-# LeadGenie - AI-Powered CRM & Lead Generation Platform
-
 <div align="center">
-  <img src="src/assets/lead-genie-logo.png" alt="LeadGenie Logo" width="200"/>
-  
-  <p align="center">
-    A modern, full-stack CRM application with intelligent lead generation, automated outreach, and comprehensive sales pipeline management.
-  </p>
 
-  <p align="center">
-    <a href="#features">Features</a> •
-    <a href="#tech-stack">Tech Stack</a> •
-    <a href="#architecture">Architecture</a> •
-    <a href="#getting-started">Getting Started</a> •
-    <a href="#deployment">Deployment</a>
-  </p>
+# LeadGeni CRM
+
+AI-assisted lead generation, outreach, and sales operations built with React, Supabase, and edge functions.
+
+![LeadGeni screenshot](public/placeholder.svg)
+
 </div>
 
----
+## Table of Contents
 
-## 🎯 Project Overview
+- [Overview](#overview)
+- [Feature Highlights](#feature-highlights)
+- [System Architecture](#system-architecture)
+- [Tech Stack](#tech-stack)
+- [Development Workflow](#development-workflow)
+- [Local Environment Setup](#local-environment-setup)
+- [Running the App Locally](#running-the-app-locally)
+- [Supabase Database & Edge Functions](#supabase-database--edge-functions)
+- [Environment Variables](#environment-variables)
+- [Email & Integrations](#email--integrations)
+- [Branching & Deployment](#branching--deployment)
+- [Testing & Quality](#testing--quality)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
 
-LeadGenie is an enterprise-grade Customer Relationship Management (CRM) platform designed to streamline lead generation, automate sales workflows, and enhance customer engagement. Built with modern web technologies, it combines powerful AI capabilities with an intuitive user interface to help businesses scale their sales operations efficiently.
+## Overview
 
-### Key Highlights
+LeadGeni is a modern CRM focused on AI-powered prospecting, automated outreach sequences, and collaborative sales workflows. The product pairs a Vite/React single-page app with Supabase for authentication, database, real-time updates, and edge functions. Third-party integrations handle email connectivity (Nango + Gmail/Outlook, SMTP, Resend) and AI enrichment (Lovable AI, OpenAI, Perplexity, Exa, GetProspect).
 
-- **AI-Powered Intelligence**: Leverages Google Gemini and OpenAI GPT models for intelligent email generation, automated responses, and lead qualification
-- **Real-Time Collaboration**: Multi-user support with role-based access control and team collaboration features
-- **Comprehensive Email Integration**: Native support for Gmail, SendGrid, Resend, and SMTP with deliverability tracking
-- **Advanced Pipeline Management**: Visual Kanban board, deal tracking, and automated workflow management
-- **Invoice & Quotation System**: Built-in billing with AI-generated email templates
-- **Lead Intelligence**: Automated lead finder with multi-source data aggregation and quality scoring
+This repository contains everything required to run the LeadGeni frontend, Supabase schema, migrations, and edge functions. It is currently deployed to Vercel (frontend) and Supabase (backend) with Lovable managing AI-assisted commits.
 
----
+## Feature Highlights
 
-## ✨ Features
+- **AI Lead Finder** – Filter by geography, company size, and industry, then enrich companies using AI providers and third-party data sources.
+- **Email Outreach & Sequences** – Compose sequences, send one-off emails, track deliveries, opens, clicks, bounces, and replies via Resend webhooks.
+- **Inbox & Threads** – (In progress) Receive replies via Supabase edge function `process-inbound-emails`; map incoming mail to sequences and threads.
+- **Integrations Hub** – Connect Gmail/Outlook accounts through Nango OAuth, configure SMTP, verify sender addresses, and monitor connection status.
+- **CRM Pipelines** – Manage companies, deals, people, and sequences with Kanban boards, dialogs, and dashboards built on shadcn/ui.
+- **Collaboration** – Teams, shared inboxes, invitations, and role-based access (see migration `20251101023000_create_collaboration_tables.sql`).
+- **Real-time UX** – React Query + Supabase real-time keep pipelines and notifications in sync.
 
-### 🔍 Lead Generation & Management
-- **Intelligent Lead Finder**: Multi-source lead discovery using GetProspect API and Perplexity AI
-- **Real-Time Streaming**: Live lead discovery with streaming search results
-- **Data Quality Scoring**: Automated quality assessment with completeness metrics
-- **Contact Enrichment**: Automatic data enhancement and validation
-- **Company Profiles**: Comprehensive company management with detailed contact tracking
-
-### 📧 Email Automation
-- **AI Email Generation**: Context-aware email composition using advanced language models
-- **Multi-Provider Support**: Gmail OAuth, SendGrid, Resend, and SMTP integration
-- **Email Sequences**: Automated drip campaigns with customizable steps
-- **Deliverability Tracking**: Real-time open rates, click tracking, and engagement metrics
-- **Auto-Responder**: Intelligent AI-powered email response automation
-- **Template System**: Reusable email templates with variable substitution
-
-### 💼 Sales Pipeline
-- **Visual Kanban Board**: Drag-and-drop deal management
-- **Custom Deal Stages**: Configurable pipeline with automated stage progression
-- **Deal Analytics**: Revenue forecasting and conversion tracking
-- **Activity Logging**: Comprehensive audit trail for all deal interactions
-- **Task Management**: Integrated to-do lists and reminders
-
-### 📊 Business Intelligence
-- **Real-Time Dashboard**: Live metrics and KPI tracking
-- **Campaign Analytics**: Engagement timeline and performance metrics
-- **Team Performance**: User activity monitoring and reporting
-- **Email Engagement Tracker**: Live tracking of email interactions
-- **Revenue Forecasting**: Predictive analytics for sales pipeline
-
-### 🧾 Invoicing & Quotations
-- **Invoice Generation**: Create and manage professional invoices
-- **Quotation System**: Proposal generation with approval workflows
-- **Email Integration**: Direct invoice delivery with AI-generated cover emails
-- **Status Tracking**: Real-time payment and approval status monitoring
-
-### 👥 Team Collaboration
-- **Role-Based Access Control**: Admin, Manager, and Member roles
-- **Team Workspaces**: Multi-team support with isolated data
-- **Internal Notes**: Private team communication on deals and contacts
-- **Activity Notifications**: Real-time updates on team activities
-- **Team Invitations**: Email-based invitation system
-
-### 🔐 Security & Compliance
-- **Row-Level Security (RLS)**: Database-level access control
-- **JWT Authentication**: Secure session management
-- **Data Encryption**: End-to-end encryption for sensitive data
-- **Audit Logging**: Comprehensive activity tracking
-- **Email Verification**: Domain validation and SPF/DKIM checking
-
----
-
-## 🛠 Tech Stack
-
-### Frontend
-```
-React 18.3.1          - UI library with hooks and functional components
-TypeScript 5.x        - Type-safe development
-Vite 5.x              - Next-generation frontend tooling
-TailwindCSS 3.x       - Utility-first CSS framework
-Shadcn/ui             - High-quality component library
-TanStack Query 5.x    - Powerful data synchronization
-React Router 6.x      - Client-side routing
-Zustand               - Lightweight state management
-Tiptap                - Rich text editor for email composition
-DnD Kit               - Drag-and-drop functionality
-Recharts              - Data visualization
-```
-
-### Backend
-```
-Supabase              - Backend-as-a-Service platform
-PostgreSQL            - Relational database with full-text search
-Edge Functions        - Serverless Deno runtime
-Row-Level Security    - Database-level access control
-Realtime              - WebSocket-based live updates
-Storage               - File storage with CDN
-```
-
-### AI & External Services
-```
-Lovable AI Gateway    - Unified AI model access
-Google Gemini 2.5     - Advanced language model
-OpenAI GPT-5          - Latest GPT model integration
-GetProspect API       - Contact data enrichment
-Perplexity AI         - Intelligent web search
-Exa API               - Advanced search capabilities
-```
-
-### Email Services
-```
-SendGrid              - Enterprise email delivery
-Resend                - Modern email API
-Gmail OAuth           - Native Gmail integration
-SMTP                  - Direct mail server support
-Nango                 - OAuth integration framework
-```
-
-### DevOps & Tools
-```
-Git                   - Version control
-ESLint                - Code linting
-TypeScript            - Static type checking
-Bun                   - Fast JavaScript runtime
-```
-
----
-
-## 🏗 Architecture
-
-### System Architecture
+## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Client Layer                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
-│  │  React   │  │  Zustand │  │  React   │             │
-│  │   App    │  │  Store   │  │  Query   │             │
-│  └──────────┘  └──────────┘  └──────────┘             │
-└─────────────────────────────────────────────────────────┘
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                   API Gateway Layer                      │
-│              Supabase Client SDK                         │
-└─────────────────────────────────────────────────────────┘
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                  Backend Services                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
-│  │PostgreSQL│  │  Edge    │  │ Realtime │             │
-│  │ Database │  │Functions │  │WebSocket │             │
-│  └──────────┘  └──────────┘  └──────────┘             │
-└─────────────────────────────────────────────────────────┘
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│              External Services Layer                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
-│  │   AI     │  │  Email   │  │   Lead   │             │
-│  │ Models   │  │Providers │  │  APIs    │             │
-│  └──────────┘  └──────────┘  └──────────┘             │
-└─────────────────────────────────────────────────────────┘
+Vite/React (LeadGeni SPA)
+│
+├── Supabase Auth & Database (Postgres + RLS)
+│   ├── Tables: companies, deals, email_activities, crm_connections, teams, shared_inboxes, …
+│   ├── SQL migrations under `supabase/migrations`
+│   └── Realtime subscriptions for notifications & pipelines
+│
+├── Supabase Edge Functions (`supabase/functions`)
+│   ├── lead-finder          : orchestrates Exa + AI providers + enrichment
+│   ├── ai-provider          : abstraction over Lovable AI / OpenAI / Perplexity
+│   ├── send-sequence-email  : transactional email send via Nango/Resend
+│   ├── email-webhook        : processes Resend events (opens, clicks, replies)
+│   ├── process-inbound-emails (pending download): stores inbound replies
+│   ├── nango-oauth-init & nango-webhook          : manage email OAuth flow
+│   ├── send-team-invitation                      : email invitations
+│   └── additional helper functions (verify-email, test-smtp, etc.)
+│
+└── Third-party Services
+    ├── Nango (OAuth for Gmail/Outlook)
+    ├── Resend (email delivery + webhooks)
+    ├── Exa, GetProspect (lead enrichment APIs)
+    ├── Lovable AI / OpenAI / Perplexity (AI generation)
+    └── Vercel (hosting) + Supabase (backend hosting)
 ```
 
-### Database Schema
+## Tech Stack
 
-The application uses PostgreSQL with the following core tables:
-- **profiles**: User account information
-- **teams**: Organization workspaces
-- **companies**: Company/account records
-- **contacts**: Individual contact records
-- **deals**: Sales opportunities
-- **invoices**: Billing and quotations
-- **email_activities**: Email tracking and engagement
-- **email_sequences**: Automated campaign management
-- **crm_connections**: Third-party integrations
+- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, React Router, TanStack Query, Zustand
+- **Backend**: Supabase Postgres, Supabase Auth, Supabase Edge Functions (Deno)
+- **AI & Data**: Lovable AI, OpenAI, Perplexity, Exa, GetProspect
+- **Email**: Nango OAuth (Gmail/Outlook), SMTP, Resend webhooks
+- **Tooling**: ESLint, TypeScript, Supabase CLI, Vercel, GitHub Actions
 
-### Edge Functions
+## Development Workflow
 
-Serverless functions handling business logic:
-- `lead-finder`: Multi-source lead discovery
-- `generate-email-with-ai`: AI-powered email composition
-- `send-crm-email`: Multi-provider email delivery
-- `generate-sequence`: AI sequence creation
-- `personalize-sequence`: Context-aware sequence customization
-- `process-inbound-emails`: Email webhook processing
-- `email-webhook`: Engagement tracking
+- **Lovable-generated commits** land on `main` (default branch for the Lovable agent).
+- **Human review & deployment** happens on `roundup`. Merge or cherry-pick from `main` → `roundup` before deploying to Vercel.
+- Feature branches (e.g., `UIresponsiveness`) branch off `roundup`, then merge back through pull requests.
+- GitHub Actions (`.github/workflows/main.yml`) runs CI on pushes and PRs.
 
----
-
-## 🚀 Getting Started
+## Local Environment Setup
 
 ### Prerequisites
 
-```bash
-Node.js >= 18.x
-Bun >= 1.x (or npm/yarn)
-Git
-Supabase CLI (optional, for local development)
-```
+- Node.js ≥ 18 (recommend using [nvm](https://github.com/nvm-sh/nvm))
+- npm (bundled with Node) or pnpm/yarn
+- [Supabase CLI](https://supabase.com/docs/reference/cli/installation) for local database/functions
+- (Optional) [Vercel CLI](https://vercel.com/docs/cli) for preview deployments
 
-### Installation
+### Install dependencies
 
-1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/leadgenie.git
-cd leadgenie
-```
-
-2. **Install dependencies**
-```bash
-bun install
-# or
+git clone https://github.com/MarcServe/custom-remix-flight.git
+cd custom-remix-flight
 npm install
 ```
 
-3. **Environment Setup**
+### Environment files
 
-Create a `.env` file in the project root:
-```env
-# Supabase Configuration
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
-
-# Optional: For local development
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-```
-
-4. **Start Development Server**
-```bash
-bun dev
-# or
-npm run dev
-```
-
-The application will be available at `http://localhost:5173`
-
-### Supabase Setup
-
-1. **Create a Supabase Project**
-   - Go to [supabase.com](https://supabase.com)
-   - Create a new project
-   - Note your project URL and anon key
-
-2. **Run Database Migrations**
-```bash
-# Install Supabase CLI
-npm install -g supabase
-
-# Link your project
-supabase link --project-ref your-project-ref
-
-# Push migrations
-supabase db push
-```
-
-3. **Configure Secrets**
-
-In your Supabase dashboard, add the following secrets:
-- `LOVABLE_API_KEY`: AI model access
-- `SENDGRID_API_KEY`: Email delivery
-- `RESEND_API_KEY`: Alternative email provider
-- `GETPROSPECT_API_KEY`: Lead enrichment
-- `PERPLEXITY_API_KEY`: AI search
-- `EXA_API_KEY`: Advanced search
-
-4. **Deploy Edge Functions**
-```bash
-supabase functions deploy
-```
-
----
-
-## 📝 Usage
-
-### Creating Your First Lead
-
-1. Navigate to **Lead Finder** in the sidebar
-2. Enter search criteria (industry, location, etc.)
-3. Click **Start Search** to begin AI-powered discovery
-4. Review results and save promising leads
-5. View detailed company information in the Companies page
-
-### Setting Up Email Campaigns
-
-1. Go to **Settings** → **Email Providers**
-2. Connect your email account (Gmail, SendGrid, or Resend)
-3. Navigate to **Sequences** and create a new sequence
-4. Use AI to generate personalized email steps
-5. Assign companies to the sequence
-6. Monitor engagement in real-time
-
-### Managing Your Pipeline
-
-1. Access **Pipeline** to view the Kanban board
-2. Create deals and drag them through stages
-3. Add notes and track activities
-4. Use **Deals** page for detailed analytics
-5. Generate invoices directly from closed deals
-
----
-
-## 🔧 Configuration
-
-### Email Provider Setup
-
-#### Gmail OAuth
-1. Configure Google Cloud Console OAuth credentials
-2. Add authorized redirect URIs
-3. Enable Gmail API
-4. Connect in Settings → Email Providers
-
-#### SendGrid
-1. Create SendGrid account
-2. Verify sender domain
-3. Generate API key
-4. Configure webhook endpoint for tracking
-
-#### Resend
-1. Sign up at resend.com
-2. Add and verify domain
-3. Generate API key
-4. Connect in application settings
-
-### AI Model Configuration
-
-The application uses Lovable AI Gateway for unified access:
-- **google/gemini-2.5-flash**: Default for most operations (fast, cost-effective)
-- **google/gemini-2.5-pro**: Complex reasoning and analysis
-- **openai/gpt-5**: Alternative high-performance model
-
----
-
-## 🧪 Testing
-
-### Running Tests
-```bash
-# Run all tests
-bun test
-
-# Run with coverage
-bun test --coverage
-
-# Run specific test file
-bun test src/components/SendEmailDialog.test.tsx
-```
-
-### E2E Testing
-```bash
-# Install Playwright
-bun add -D @playwright/test
-
-# Run E2E tests
-bun playwright test
-```
-
----
-
-## 📦 Building for Production
+Create `.env` in the project root (used by Vite) and `.env.local` or environment secrets for Supabase CLI:
 
 ```bash
-# Create production build
-bun run build
-
-# Preview production build
-bun run preview
+cp .env.example .env         # create this file manually if not present
 ```
 
-### Build Output
-```
-dist/
-├── index.html
-├── assets/
-│   ├── index-[hash].js
-│   ├── index-[hash].css
-│   └── [images and fonts]
-└── ...
-```
+Populate values as described in [Environment Variables](#environment-variables).
 
----
+## Running the App Locally
 
-## 🚀 Deployment
+1. **Start Supabase locally** (spins up Postgres + GoTrue + storage + edge runtime):
 
-### Vercel Deployment
+   ```bash
+   supabase start
+   ```
+
+   Apply migrations (optional; `supabase start` handles initial schema):
+
+   ```bash
+   supabase db reset  # drops and re-runs migrations in supabase/migrations
+   ```
+
+2. **Run the Vite dev server**:
+
+   ```bash
+   npm run dev
+   ```
+
+   The app is available at `http://localhost:5173`.
+
+3. **Invoke edge functions locally** using Supabase CLI:
+
+   ```bash
+   supabase functions serve lead-finder
+   supabase functions serve send-sequence-email
+   # ... run in separate terminals as needed
+   ```
+
+## Supabase Database & Edge Functions
+
+- SQL schema lives in `supabase/migrations`. Recent additions include:
+  - `20251101023000_create_collaboration_tables.sql` – teams, shared inboxes, invitations.
+  - Earlier migrations defining CRM tables (`companies`, `deals`, `email_activities`, `crm_connections`, etc.).
+- Edge functions are in `supabase/functions/<name>/index.ts`. Key ones:
+  - `lead-finder` – orchestrates Exa + AI providers + enrichment and optional inserts.
+  - `ai-provider` – routes AI requests to Lovable/OpenAI/Perplexity.
+  - `email-webhook` – handles delivery/open/reply/bounce events from Resend.
+  - `nango-oauth-init` / `nango-webhook` – manage OAuth session tokens and connection storage.
+  - `send-sequence-email` / `send-sequence-emails` / `send-crm-email` – outbound email actions.
+  - `send-team-invitation` – generates invite tokens and sends via Resend.
+  - `verify-email` & `send-verification-email` – sender verification flow.
+  - `process-inbound-emails` – ingest replies (ensure handler populates `from_email`).
+
+### Deploying Edge Functions
 
 ```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Deploy
-vercel --prod
+supabase functions deploy lead-finder
+supabase functions deploy email-webhook
+# or deploy all with:
+supabase functions deploy --project-ref <project-ref>
 ```
 
-### Netlify Deployment
+Remember to set secrets (below) in Supabase before deploying.
 
-```bash
-# Build command
-bun run build
+## Environment Variables
 
-# Publish directory
-dist
-```
+The project reads variables from multiple places (Vite, Supabase functions, Vercel). Below are the canonical names and expected sources:
 
-### Docker Deployment
+| Scope | Key | Description |
+|-------|-----|-------------|
+| Frontend (Vite) | `VITE_SUPABASE_URL` | Supabase project URL |
+| Frontend (Vite) | `VITE_SUPABASE_ANON_KEY` | Supabase anon/key for browser |
+| Frontend (optional) | `VITE_APP_ENV`, `VITE_APP_URL` | UI toggles / base URL |
+| Frontend (optional) | `VITE_SENTRY_DSN` | Sentry DSN; when set, error/performance monitoring is enabled |
+| Frontend (optional) | `VITE_SENTRY_TRACES_SAMPLE_RATE` | Float (0–1) for transaction sampling |
+| Frontend (optional) | `VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE` | Float (0–1) for session replay sampling |
+| Frontend (optional) | `VITE_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE` | Sampling for replay on error |
+| Supabase Functions | `SUPABASE_URL` | Same as above |
+| Supabase Functions | `SUPABASE_ANON_KEY` | Public anon key |
+| Supabase Functions | `SUPABASE_SERVICE_ROLE_KEY` | Service role (server-side write access) |
+| Supabase Functions | `NANGO_SECRET_KEY` | Secret from Nango dashboard |
+| Supabase Functions | `RESEND_API_KEY` | Resend transactional email key |
+| Supabase Functions | `APP_URL` / `APP_BASE_URL` | Base URL for email links |
+| Supabase Functions | `EXA_API_KEY` | Exa search API key |
+| Supabase Functions | `GETPROSPECT_API_KEY` | Contact enrichment key |
+| Supabase Functions | `LOVABLE_API_KEY` | Lovable AI key |
+| Supabase Functions | `OPENAI_API_KEY` | (Optional) OpenAI key when using OpenAI provider |
+| Supabase Functions | `PERPLEXITY_API_KEY` | (Optional) Perplexity key |
+| Supabase Functions | `AI_PROVIDER` | Default provider (`lovable`, `openai`, `perplexity`) |
+| Supabase Functions | `NANGO_WEBHOOK_SECRET` | (optional) verify Nango webhooks |
+| Supabase Functions | `RESEND_WEBHOOK_SECRET` | (optional) verify Resend webhooks |
+| Build (optional) | `SENTRY_AUTH_TOKEN` | Needed for Sentry source map upload (set in CI/Vercel) |
+| Build (optional) | `SENTRY_ORG`, `SENTRY_PROJECT` | Sentry identifiers used by the Vite plugin |
 
-```dockerfile
-# Dockerfile included in project
-docker build -t leadgenie .
-docker run -p 3000:3000 leadgenie
-```
+Configure matching secrets in Vercel (Frontend) and Supabase (edge functions). When `VITE_SENTRY_DSN` is provided, the app automatically initializes Sentry (`src/sentry/client.ts`). To validate the integration, render the test button and click it; the exception should appear in Sentry within seconds.
+
+## Email & Integrations
+
+- **Nango OAuth** – `nango-oauth-init` creates Connect sessions; `nango-webhook` stores connections mapped to Supabase users. Ensure integration IDs (`google-mail`, `microsoft-outlook`) exist in Nango and redirect URIs include `https://api.nango.dev/oauth/callback`.
+- **Resend** – `send-sequence-email(s)` deliver via Resend’s API. Webhooks (`email-webhook`) capture events and update `email_activities`. Make sure webhook endpoints in Resend point to `https://<project>.supabase.co/functions/v1/email-webhook`.
+- **Inbound Replies** – Configure Resend inbound processing to hit `process-inbound-emails`. Error “null value in column `from_email`” means the handler must populate required fields before inserting.
+- **Lead Enrichment** – `lead-finder` uses Exa for initial results, Perplexity for enrichment, and GetProspect for contacts (all optional depending on API keys).
+
+## Branching & Deployment
+
+- **Branches**
+  - `main` – Lovable automation output. Do **not** deploy directly.
+  - `roundup` – Manually curated branch for staging/production deployments.
+  - Feature branches (e.g., `UIresponsiveness`) – branch from `roundup`, merge back via PR.
+
+- **GitHub Actions** – `.github/workflows/main.yml` runs lint/build on `roundup` and PRs.
+
+- **Vercel**
+  - Production branch: `roundup`.
+  - Preview deployments: any other branch pushed to GitHub.
+  - If you need to deploy Lovable commits instantly, merge `main` → `roundup` or temporarily point Production to `main`.
+  - Vercel free tier limits to 100 deployments/day; heavy Lovable runs may hit this cap.
+
+## Testing & Quality
+
+- **Linting** – `npm run lint` (ESLint 9 + TypeScript).
+- **Type Checking** – TypeScript configured via `tsconfig.json` and `tsconfig.app.json`.
+- **Manual QA** – Verify lead finder flows, email send/receive, OAuth connections, team collaboration module, and Supabase policies.
+- **Future Enhancements** – Add automated tests (Vitest/Playwright), extend CI to cover Supabase migrations (`supabase db lint`), integrate preview comments.
+
+## Troubleshooting
+
+- **Leads disappear after search** – Ensure `useUIStore` caches `LeadFinderResponse`; fix lives in `src/pages/LeadFinder.tsx`.
+- **Nango OAuth fails** – Verify Supabase function secrets (`NANGO_SECRET_KEY`) and integration IDs. Check `supabase/functions/nango-oauth-init/index.ts` logs.
+- **Inbound emails not visible** – Review Resend webhook logs; “null value in column `from_email`” means `process-inbound-emails` must capture sender addresses before inserting.
+- **Vercel doesn’t show latest commits** – Confirm merges from `main` → `roundup`. Vercel only builds the branch configured as Production.
+- **Deployment rate limit** – Vercel free tier caps API deployments at 100/day. Wait for reset or upgrade to avoid `api-deployments-free-per-day` errors.
+
+## License
+
+Proprietary – LeadGeni CRM is an internal project. Do not distribute without permission from the RevGeni/Biz Boosters team.
 
 ---
 
-## 🔐 Security Considerations
-
-- **Row-Level Security**: All database tables have RLS policies
-- **Authentication**: JWT-based with secure refresh tokens
-- **API Keys**: Stored as encrypted Supabase secrets
-- **CORS**: Configured for production domains only
-- **Rate Limiting**: Implemented on Edge Functions
-- **Email Verification**: Required for sensitive operations
-
----
-
-## 🤝 Contributing
-
-This project was developed as a technical demonstration. While it is not currently accepting contributions, feel free to fork and adapt for your own use.
-
-### Code Style
-
-- **ESLint**: Enforced via pre-commit hooks
-- **TypeScript**: Strict mode enabled
-- **Prettier**: Automated formatting
-- **Conventional Commits**: Commit message standards
-
----
-
-## 📄 License
-
-This project is provided as-is for demonstration purposes.
-
----
-
-## 👨‍💻 Developer
-
-**Your Name**
-- Portfolio: [your-portfolio.com](https://your-portfolio.com)
-- LinkedIn: [linkedin.com/in/yourprofile](https://linkedin.com/in/yourprofile)
-- GitHub: [@yourusername](https://github.com/yourusername)
-
----
-
-## 🙏 Acknowledgments
-
-- **Supabase**: For the powerful backend platform
-- **Lovable**: For AI infrastructure and development tools
-- **Shadcn/ui**: For the beautiful component library
-- **TanStack**: For excellent data management tools
-
----
-
-## 📞 Support
-
-For questions or issues related to this technical demonstration, please open an issue in the repository or contact me directly.
-
----
-
-<div align="center">
-  <p>Built with ❤️ using React, TypeScript, and Supabase</p>
-  <p>© 2025 LeadGenie - AI-Powered CRM Platform</p>
-</div>
+Need help or have questions? Reach out to the engineering team via Slack or open an issue in GitHub.
