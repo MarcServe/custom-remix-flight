@@ -74,17 +74,17 @@ export default function Profile() {
       // Load personal profile
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("full_name, job_title, email, phone, website, avatar_url")
+        .select("full_name, job_title, email, avatar_url")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
 
       if (profileData) {
         setProfile({
           full_name: profileData.full_name || "",
           job_title: profileData.job_title || "",
           email: profileData.email || user.email || "",
-          phone: profileData.phone || "",
-          website: profileData.website || "",
+          phone: "",
+          website: "",
           avatar_url: profileData.avatar_url || "",
         });
       }
@@ -147,8 +147,6 @@ export default function Profile() {
           full_name: profile.full_name,
           job_title: profile.job_title,
           email: profile.email,
-          phone: profile.phone,
-          website: profile.website,
         })
         .eq("id", user.id);
 
