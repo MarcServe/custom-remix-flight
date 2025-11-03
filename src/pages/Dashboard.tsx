@@ -352,7 +352,7 @@ export default function Dashboard() {
                 </Button>
               </div>
               <div className="space-y-3">
-                {upcomingEvents.length > 0 ? upcomingEvents.map(event => <div key={event.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card/50 hover:bg-card transition-colors">
+                {upcomingEvents.length > 0 ? upcomingEvents.map(event => <div key={event.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card/50 hover:bg-card transition-colors cursor-pointer" onClick={() => navigate('/events')}>
                       <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                         <CalendarIcon className="h-5 w-5 text-primary" />
                       </div>

@@ -334,7 +334,15 @@ export default function UnifiedCampaigns() {
                   {activities.map((activity) => (
                     <div
                       key={activity.id}
-                      className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                      className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => {
+                        // If it's a sequence activity, navigate to sequences
+                        if (activity.type === 'sequence' || activity.type === 'auto_response') {
+                          navigate('/sequences');
+                        } else {
+                          navigate('/campaigns');
+                        }
+                      }}
                     >
                       <div className="flex items-center gap-4 flex-1 min-w-0 w-full sm:w-auto">
                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${

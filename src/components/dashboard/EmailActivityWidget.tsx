@@ -241,7 +241,8 @@ export function EmailActivityWidget() {
                   return (
                     <div
                       key={activity.id}
-                      className="p-3 rounded-lg border-2 border-green-500/20 bg-gradient-to-r from-green-500/5 to-emerald-500/5 hover:border-green-500/40 transition-all"
+                      className="p-3 rounded-lg border-2 border-green-500/20 bg-gradient-to-r from-green-500/5 to-emerald-500/5 hover:border-green-500/40 transition-all cursor-pointer"
+                      onClick={() => navigate('/all-campaigns')}
                     >
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex-1 min-w-0">
@@ -297,7 +298,8 @@ export function EmailActivityWidget() {
                   return (
                     <div
                       key={activity.id}
-                      className="p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                      className="p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => navigate('/all-campaigns')}
                     >
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex-1 min-w-0">
