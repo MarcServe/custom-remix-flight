@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, Send, Sparkles, Code, Eye, Bot } from "lucide-react";
 import { RichTextEditor } from "./email/RichTextEditor";
 import { EmailTemplateSelector, EMAIL_TEMPLATES, type EmailTemplate } from "./email/EmailTemplateSelector";
+import { TemplateStyleSelector, type EmailTemplateStyle } from "./email/TemplateStyleSelector";
 
 interface SendEmailDialogProps {
   open: boolean;
@@ -37,6 +38,7 @@ export function SendEmailDialog({
   const [context, setContext] = useState("");
   const [sender, setSender] = useState<'gmail' | 'resend' | 'smtp' | 'sendgrid'>('resend');
   const [template, setTemplate] = useState<EmailTemplate>('blank');
+  const [templateStyle, setTemplateStyle] = useState<EmailTemplateStyle>('professional');
   const [enableAutoResponder, setEnableAutoResponder] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -62,12 +64,19 @@ export function SendEmailDialog({
       
       const { data } = await supabase
         .from('business_profiles')
-        .select('company_name')
+        .select('company_name, email_template_style')
         .eq('user_id', user.id)
         .maybeSingle();
       return data;
     },
   });
+
+  // Set default template style from business profile
+  useEffect(() => {
+    if (businessProfile?.email_template_style) {
+      setTemplateStyle(businessProfile.email_template_style as EmailTemplateStyle);
+    }
+  }, [businessProfile]);
 
   // Apply template when changed
   useEffect(() => {
@@ -147,6 +156,7 @@ export function SendEmailDialog({
           contactId,
           sender,
           enableAutoResponder,
+          templateStyle,
         },
       });
 
@@ -163,6 +173,7 @@ export function SendEmailDialog({
       setBodyText("");
       setTemplate('blank');
       setEnableAutoResponder(false);
+      setTemplateStyle(businessProfile?.email_template_style as EmailTemplateStyle || 'professional');
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error sending email:", error);
@@ -318,6 +329,13 @@ export function SendEmailDialog({
               value={template}
               onChange={setTemplate}
               disabled={isSending || isGenerating}
+            />
+
+            <TemplateStyleSelector
+              value={templateStyle}
+              onChange={setTemplateStyle}
+              disabled={isSending || isGenerating}
+              showPreview={false}
             />
 
             <div className="flex justify-between items-center">

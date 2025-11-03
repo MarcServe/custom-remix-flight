@@ -15,6 +15,9 @@ import { nangoClient } from "@/lib/integrations/nango";
 import { Loader2, Building2, Save, User, Mail, Palette } from "lucide-react";
 import { EmailTemplatePreview } from "@/components/email/EmailTemplatePreview";
 import { SendTestEmailButton } from "@/components/email/SendTestEmailButton";
+import { AvatarUpload } from "@/components/ui/avatar-upload";
+import { LogoUpload } from "@/components/ui/logo-upload";
+import { TemplateStyleSelector, type EmailTemplateStyle } from "@/components/email/TemplateStyleSelector";
 
 export default function Profile() {
   const { toast } = useToast();
@@ -25,6 +28,7 @@ export default function Profile() {
     full_name: "",
     job_title: "",
     email: "",
+    avatar_url: "",
   });
   const [businessProfile, setBusinessProfile] = useState({
     company_name: "",
@@ -68,7 +72,7 @@ export default function Profile() {
       // Load personal profile
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("full_name, job_title, email")
+        .select("full_name, job_title, email, avatar_url")
         .eq("id", user.id)
         .single();
 
@@ -77,6 +81,7 @@ export default function Profile() {
           full_name: profileData.full_name || "",
           job_title: profileData.job_title || "",
           email: profileData.email || user.email || "",
+          avatar_url: profileData.avatar_url || "",
         });
       }
 
@@ -234,6 +239,14 @@ export default function Profile() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              <div className="flex justify-center py-4">
+                <AvatarUpload
+                  currentAvatarUrl={profile.avatar_url}
+                  userInitials={profile.full_name?.split(' ').map(n => n[0]).join('') || 'U'}
+                  onUploadSuccess={(url) => setProfile({ ...profile, avatar_url: url })}
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="email">Business Email *</Label>
                 <Input
@@ -688,22 +701,11 @@ export default function Profile() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="email_template_style">Template Style</Label>
-                <Select
-                  value={businessProfile.email_template_style}
-                  onValueChange={(value) => setBusinessProfile({ ...businessProfile, email_template_style: value })}
-                >
-                  <SelectTrigger id="email_template_style">
-                    <SelectValue placeholder="Select template style" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="professional">Professional - Classic & Polished</SelectItem>
-                    <SelectItem value="minimal">Minimal - Clean & Simple</SelectItem>
-                    <SelectItem value="modern">Modern - Bold & Stylish</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <TemplateStyleSelector
+                value={businessProfile.email_template_style as EmailTemplateStyle}
+                onChange={(value) => setBusinessProfile({ ...businessProfile, email_template_style: value })}
+                showPreview={true}
+              />
 
               <div className="space-y-2">
                 <Label htmlFor="email_brand_color">Brand Color</Label>
@@ -727,18 +729,10 @@ export default function Profile() {
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email_logo_url">Logo URL</Label>
-                <Input
-                  id="email_logo_url"
-                  value={businessProfile.email_logo_url}
-                  onChange={(e) => setBusinessProfile({ ...businessProfile, email_logo_url: e.target.value })}
-                  placeholder="https://example.com/logo.png"
-                />
-                <p className="text-xs text-muted-foreground">
-                  URL to your company logo (recommended: 200x60px)
-                </p>
-              </div>
+              <LogoUpload
+                currentLogoUrl={businessProfile.email_logo_url}
+                onUploadSuccess={(url) => setBusinessProfile({ ...businessProfile, email_logo_url: url })}
+              />
 
               <div className="space-y-2">
                 <Label htmlFor="email_footer_text">Footer Text</Label>
