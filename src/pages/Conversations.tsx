@@ -476,13 +476,13 @@ export default function Conversations() {
                     <div
                       key={conv.id}
                       onClick={() => setSelectedSequence(conv.id)}
-                      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                      className={`p-3 rounded-lg border cursor-pointer transition-colors overflow-hidden ${
                         selectedSequence === conv.id
                           ? 'bg-primary/10 border-primary'
                           : 'hover:bg-muted'
                       }`}
                     >
-                      <div className="flex flex-col gap-2 w-full">
+                      <div className="flex flex-col gap-2 w-full min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <div className="font-medium whitespace-normal line-clamp-2 flex-1">{conv.title}</div>
                           {conv.type === 'standalone' && (
