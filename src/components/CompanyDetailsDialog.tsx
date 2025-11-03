@@ -268,6 +268,12 @@ export function CompanyDetailsDialog({
       // Check if company already exists by website or name
       const { supabase: supabaseClient } = await import("@/integrations/supabase/client");
       
+      // Refresh session to ensure user is properly authenticated (especially for new accounts)
+      const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+      if (sessionError || !session) {
+        throw new Error('Session expired. Please sign in again.');
+      }
+      
       let existingCompany = null;
       
       // If website exists, check by website
@@ -376,12 +382,25 @@ export function CompanyDetailsDialog({
       onOpenChange(false);
     } catch (error: any) {
       console.error('Error saving company:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+      });
       
       let errorMessage = 'Failed to save company to CRM';
       
-      // Handle duplicate key error
+      // Handle specific error cases
       if (error?.code === '23505') {
         errorMessage = 'This company already exists in your CRM';
+      } else if (error?.message === 'User not authenticated') {
+        errorMessage = 'Please sign in again to continue';
+      } else if (error?.code === '42501' || error?.message?.includes('permission denied') || error?.message?.includes('RLS')) {
+        errorMessage = 'Permission denied. Please refresh the page and try again.';
+      } else if (error?.message) {
+        // Show the actual error message if available
+        errorMessage = error.message;
       }
       
       toast({
