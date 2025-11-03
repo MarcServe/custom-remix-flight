@@ -188,11 +188,23 @@ export default function SendInvoiceEmailDialog({
       // Combine body with context if provided
       const finalBody = context ? `${body}\n\n---\nAdditional Notes:\n${context}` : body;
 
+      // Get recipient name for the email
+      let recipientName = "Valued Customer";
+      if (recipientType === "company" && selectedCompany) {
+        const company = companies?.find(c => c.id === selectedCompany);
+        recipientName = company?.name || recipientName;
+      } else if (recipientType === "contact" && selectedContact) {
+        const contact = contacts?.find(c => c.id === selectedContact);
+        recipientName = contact?.name || recipientName;
+      }
+
       const { data, error } = await supabase.functions.invoke("send-crm-email", {
         body: {
-          to: recipientEmail,
+          toEmail: recipientEmail,
+          toName: recipientName,
           subject,
-          body: finalBody,
+          bodyText: finalBody,
+          bodyHtml: `<p>${finalBody.replace(/\n/g, '</p><p>')}</p>`,
           invoiceHtml,
           invoiceNumber: invoice.invoice_number,
           attachInvoice: true,
