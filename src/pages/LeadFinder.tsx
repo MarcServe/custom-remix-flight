@@ -142,12 +142,28 @@ export default function LeadFinder() {
       let errorCount = 0;
       for (const company of selectedCompanies) {
         try {
-          // Check if company already exists by website
-          const { data: existingCompany } = await supabase
-            .from('companies')
-            .select('id')
-            .eq('website', company.website)
-            .maybeSingle();
+          // Check if company already exists by website or name
+          let existingCompany = null;
+          
+          // If website exists, check by website
+          if (company.website && company.website.trim()) {
+            const { data } = await supabase
+              .from('companies')
+              .select('id')
+              .eq('website', company.website)
+              .maybeSingle();
+            existingCompany = data;
+          }
+          
+          // If no website or no match found, check by name
+          if (!existingCompany) {
+            const { data } = await supabase
+              .from('companies')
+              .select('id')
+              .ilike('name', company.name)
+              .maybeSingle();
+            existingCompany = data;
+          }
 
           if (existingCompany) {
             // Company already exists, skip

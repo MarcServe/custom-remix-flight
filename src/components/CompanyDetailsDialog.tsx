@@ -264,13 +264,30 @@ export function CompanyDetailsDialog({
 
     setIsSaving(true);
     try {
-      // Check if company already exists by website
+      // Check if company already exists by website or name
       const { supabase: supabaseClient } = await import("@/integrations/supabase/client");
-      const { data: existingCompany } = await supabaseClient
-        .from('companies')
-        .select('id, name')
-        .eq('website', company.website)
-        .maybeSingle();
+      
+      let existingCompany = null;
+      
+      // If website exists, check by website
+      if (company.website && company.website.trim()) {
+        const { data } = await supabaseClient
+          .from('companies')
+          .select('id, name')
+          .eq('website', company.website)
+          .maybeSingle();
+        existingCompany = data;
+      }
+      
+      // If no website or no match found, check by name
+      if (!existingCompany) {
+        const { data } = await supabaseClient
+          .from('companies')
+          .select('id, name')
+          .ilike('name', company.name)
+          .maybeSingle();
+        existingCompany = data;
+      }
 
       if (existingCompany) {
         toast({
