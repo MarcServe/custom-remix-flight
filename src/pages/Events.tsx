@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Calendar, Filter, Clock } from 'lucide-react';
+import { Plus, Calendar, Filter, List, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -15,8 +15,8 @@ import { EventCard } from '@/components/EventCard';
 import { EventDialog } from '@/components/EventDialog';
 import { useEvents, useDeleteEvent } from '@/hooks/use-events';
 import { useMarkMultipleEventsAsViewed } from '@/hooks/use-event-views';
-import { format, isToday, isYesterday, startOfDay } from 'date-fns';
-import { Link } from 'react-router-dom';
+import { format, isToday, isYesterday, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 
 export default function Events() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -31,6 +31,8 @@ export default function Events() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [companyFilter, setCompanyFilter] = useState<string>('all');
   const [dealFilter, setDealFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [currentMonth, setCurrentMonth] = useState(new Date());
   
   // Build filters object
   const filters = {
@@ -110,6 +112,119 @@ export default function Events() {
     }
   };
 
+  // Calendar view helpers
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+  const calendarStart = startOfWeek(monthStart);
+  const calendarEnd = endOfWeek(monthEnd);
+  const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+
+  const getEventsForDay = (day: Date) => {
+    return events.filter(event => 
+      isSameDay(new Date(event.created_at), day)
+    );
+  };
+
+  const renderCalendarView = () => (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold">{format(currentMonth, 'MMMM yyyy')}</h2>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentMonth(new Date())}
+            >
+              Today
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Calendar Grid */}
+        <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
+          {/* Day headers */}
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+            <div key={day} className="bg-muted p-3 text-center text-sm font-semibold">
+              {day}
+            </div>
+          ))}
+
+          {/* Calendar days */}
+          {calendarDays.map((day, idx) => {
+            const dayEvents = getEventsForDay(day);
+            const isCurrentMonth = isSameMonth(day, currentMonth);
+            const isToday = isSameDay(day, new Date());
+
+            return (
+              <div
+                key={idx}
+                className={`bg-card min-h-[120px] p-2 ${
+                  !isCurrentMonth ? 'opacity-40' : ''
+                } ${isToday ? 'ring-2 ring-primary' : ''}`}
+              >
+                <div className={`text-sm font-medium mb-2 ${
+                  isToday ? 'text-primary' : ''
+                }`}>
+                  {format(day, 'd')}
+                </div>
+                <div className="space-y-1">
+                  {dayEvents.slice(0, 3).map(event => {
+                    const typeIcons: Record<string, string> = {
+                      note: '📝',
+                      call: '📞',
+                      email: '📧',
+                      meeting: '👥',
+                      task: '✅',
+                      reminder: '📅',
+                    };
+                    return (
+                      <button
+                        key={event.id}
+                        onClick={() => {
+                          setSelectedEvent({
+                            id: event.id,
+                            type: event.type,
+                            content: event.content,
+                            due_at: event.due_at,
+                          });
+                          setDialogOpen(true);
+                        }}
+                        className="w-full text-left text-xs p-1 rounded bg-primary/10 hover:bg-primary/20 transition-colors truncate"
+                      >
+                        <span className="mr-1">{typeIcons[event.type]}</span>
+                        {event.content.title || 'Untitled'}
+                      </button>
+                    );
+                  })}
+                  {dayEvents.length > 3 && (
+                    <div className="text-xs text-muted-foreground pl-1">
+                      +{dayEvents.length - 3} more
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -137,12 +252,22 @@ export default function Events() {
                 <span className="text-sm font-medium">Filters</span>
               </div>
               <div className="flex items-center gap-2">
-                <Link to="/calendar">
-                  <Button variant="outline" size="sm">
-                    <Clock className="h-4 w-4 mr-2" />
-                    Calendar View
-                  </Button>
-                </Link>
+                <Button 
+                  variant={viewMode === 'list' ? 'default' : 'outline'} 
+                  size="sm"
+                  onClick={() => setViewMode('list')}
+                >
+                  <List className="h-4 w-4 mr-2" />
+                  List
+                </Button>
+                <Button 
+                  variant={viewMode === 'calendar' ? 'default' : 'outline'} 
+                  size="sm"
+                  onClick={() => setViewMode('calendar')}
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Calendar
+                </Button>
                 <Button onClick={() => setDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Event
@@ -198,7 +323,7 @@ export default function Events() {
         </CardContent>
       </Card>
 
-      {/* Timeline */}
+      {/* Content Area - List or Calendar View */}
       {isLoading ? (
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
@@ -219,6 +344,8 @@ export default function Events() {
             </Button>
           </CardContent>
         </Card>
+      ) : viewMode === 'calendar' ? (
+        renderCalendarView()
       ) : (
         <div className="space-y-6">
           {Object.entries(groupedEvents).map(([date, dateEvents]) => (
