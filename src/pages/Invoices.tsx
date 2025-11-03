@@ -15,6 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import InvoiceDetailsDialog from "@/components/InvoiceDetailsDialog";
+import SendInvoiceEmailDialog from "@/components/SendInvoiceEmailDialog";
 
 export default function Invoices() {
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
@@ -26,6 +28,8 @@ export default function Invoices() {
     customPricing: "",
   });
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [sendEmailDialogOpen, setSendEmailDialogOpen] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -349,7 +353,14 @@ export default function Invoices() {
               </TableHeader>
               <TableBody>
                 {invoices.map((invoice) => (
-                  <TableRow key={invoice.id}>
+                  <TableRow 
+                    key={invoice.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => {
+                      setSelectedInvoice(invoice);
+                      setDetailsDialogOpen(true);
+                    }}
+                  >
                     <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
                     <TableCell>{invoice.companies?.name || "N/A"}</TableCell>
                     <TableCell>
@@ -358,7 +369,7 @@ export default function Invoices() {
                     <TableCell>${Number(invoice.total_amount).toFixed(2)}</TableCell>
                     <TableCell>{getStatusBadge(invoice.status)}</TableCell>
                     <TableCell>{format(new Date(invoice.issue_date), "MMM d, yyyy")}</TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -374,6 +385,29 @@ export default function Invoices() {
           )}
         </CardContent>
       </Card>
+
+      {/* Invoice Details Dialog */}
+      {selectedInvoice && (
+        <InvoiceDetailsDialog
+          invoice={selectedInvoice}
+          open={detailsDialogOpen}
+          onOpenChange={setDetailsDialogOpen}
+          onSendEmail={() => {
+            setDetailsDialogOpen(false);
+            setSendEmailDialogOpen(true);
+          }}
+          onDownload={() => downloadInvoicePDF(selectedInvoice)}
+        />
+      )}
+
+      {/* Send Invoice Email Dialog */}
+      {selectedInvoice && (
+        <SendInvoiceEmailDialog
+          invoice={selectedInvoice}
+          open={sendEmailDialogOpen}
+          onOpenChange={setSendEmailDialogOpen}
+        />
+      )}
     </div>
   );
 }

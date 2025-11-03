@@ -1,7 +1,1 @@
-{
-  "nodeModulesDir": "auto",
-  "compilerOptions": {
-    "checkJs": false,
-    "noErrorTruncation": true
-  }
-}
+{}

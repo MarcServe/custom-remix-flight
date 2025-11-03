@@ -1,89 +1,59 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.78.0';
-import { corsHeaders } from '../_shared/cors.ts';
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
-if (!LOVABLE_API_KEY) {
-  console.error('LOVABLE_API_KEY environment variable is not set');
-}
-
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { recipientName, recipientEmail, companyId, contactId, context } = await req.json();
+    const { context, type } = await req.json();
     
-    console.log('Generating email with AI:', { recipientName, companyId, contactId });
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    // Get user's business profile
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Authorization required');
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    
-    if (userError || !user) {
-      throw new Error('Invalid authorization');
-    }
-
-    const { data: businessProfile } = await supabase
-      .from('business_profiles')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
-
-    if (!businessProfile) {
-      throw new Error('Please complete your business profile first to use AI email generation');
-    }
-
-    // Get user profile for signature
-    const { data: userProfile } = await supabase
-      .from('profiles')
-      .select('full_name, job_title')
-      .eq('id', user.id)
-      .single();
-
-    // Get company and contact details
-    let companyData = null;
-    let contactData = null;
-
-    if (companyId) {
-      const { data: company } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('id', companyId)
-        .single();
-      companyData = company;
-    }
-
-    if (contactId) {
-      const { data: contact } = await supabase
-        .from('contacts')
-        .select('*')
-        .eq('id', contactId)
-        .single();
-      contactData = contact;
-    }
-
-    // Build AI prompt
-    const prompt = buildEmailPrompt(businessProfile, userProfile, companyData, contactData, recipientName, context);
-
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
-      throw new Error('AI email generation not configured. Please enable Lovable AI in project settings.');
+      throw new Error('LOVABLE_API_KEY not configured');
     }
 
-    console.log('Calling AI to generate email...');
+    // Create prompt based on invoice/quotation type
+    const systemPrompt = type === 'invoice' 
+      ? `You are a professional business communication assistant. Generate a polite and professional email to accompany an invoice. The email should be concise, friendly, and include all relevant details.`
+      : `You are a professional business communication assistant. Generate a polite and professional email to accompany a quotation. The email should be persuasive, highlight value, and encourage a response.`;
 
-    // Call Lovable AI
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const userPrompt = type === 'invoice'
+      ? `Generate a professional email to send with invoice ${context.invoiceNumber} to ${context.companyName}.
+Amount: $${context.amount}
+Due Date: ${context.dueDate}
+Items: ${context.lineItems}
+
+The email should:
+- Thank them for their business
+- Clearly state the invoice details
+- Include payment instructions
+- Provide contact information for questions
+- Be warm and professional
+
+Return the response as JSON with 'subject' and 'body' fields.`
+      : `Generate a professional quotation email for quote ${context.invoiceNumber} to ${context.companyName}.
+Amount: $${context.amount}
+Valid Until: ${context.dueDate}
+Services: ${context.lineItems}
+
+The email should:
+- Introduce the quotation
+- Highlight the value proposition
+- Create urgency (valid until date)
+- Encourage them to accept or discuss
+- Include a clear call to action
+- Be persuasive yet professional
+
+Return the response as JSON with 'subject' and 'body' fields.`;
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
@@ -92,141 +62,47 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
         messages: [
-          { 
-            role: 'system', 
-            content: 'You are an expert B2B sales email writer. Create personalized, value-driven emails that convert prospects into clients. Always be professional, concise, and focus on the prospect\'s needs.' 
-          },
-          { role: 'user', content: prompt }
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
         ],
-        response_format: { type: 'json_object' },
+        response_format: { type: "json_object" },
       }),
     });
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error('AI API error:', errorText);
-      throw new Error('Failed to generate email with AI');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI Gateway error:', response.status, errorText);
+      throw new Error(`AI Gateway error: ${response.status}`);
     }
 
-    const aiData = await aiResponse.json();
-    const content = aiData.choices[0].message.content;
+    const data = await response.json();
+    const content = data.choices[0].message.content;
     
-    let emailContent;
+    let result;
     try {
-      emailContent = JSON.parse(content);
+      result = JSON.parse(content);
     } catch (e) {
-      console.error('Failed to parse AI response:', content);
-      throw new Error('AI returned invalid response');
+      // If parsing fails, create a structured response from the text
+      result = {
+        subject: `${type === 'invoice' ? 'Invoice' : 'Quotation'} ${context.invoiceNumber} - ${context.companyName}`,
+        body: content
+      };
     }
 
-    console.log('Email generated successfully');
-
-    return new Response(
-      JSON.stringify({
-        subject: emailContent.subject,
-        body: emailContent.body,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 
   } catch (error) {
     console.error('Error generating email:', error);
     return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : 'Unknown error',
+      JSON.stringify({ 
+        error: error instanceof Error ? error.message : 'Failed to generate email' 
       }),
-      {
+      { 
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
   }
 });
-
-function buildEmailPrompt(
-  businessProfile: any,
-  userProfile: any,
-  company: any,
-  contact: any,
-  recipientName: string,
-  context?: string
-): string {
-  const senderInfo = `
-SENDER (YOU):
-- Name: ${userProfile?.full_name || 'Sales Representative'}
-- Job Title: ${userProfile?.job_title || 'Sales'}
-- Company: ${businessProfile.company_name}
-`;
-
-  const businessContext = `
-YOUR BUSINESS:
-- Company: ${businessProfile.company_name}
-- Industry: ${businessProfile.industry}
-- Services/Products: ${businessProfile.services_description}
-${businessProfile.target_audience ? `- Target Audience: ${businessProfile.target_audience}` : ''}
-${businessProfile.value_proposition ? `- Value Proposition: ${businessProfile.value_proposition}` : ''}
-`;
-
-  const prospectContext = company ? `
-PROSPECT COMPANY:
-- Name: ${company.name}
-- Industry: ${company.industry || 'Unknown'}
-- Size: ${company.size || 'Unknown'}
-- Location: ${company.geography || 'Unknown'}
-${company.description ? `- Description: ${company.description}` : ''}
-${company.recent_news ? `- Recent News: ${company.recent_news}` : ''}
-${company.tech_stack?.length ? `- Tech Stack: ${company.tech_stack.join(', ')}` : ''}
-${company.ceo_name ? `- CEO: ${company.ceo_name}` : ''}
-${company.funding_stage ? `- Funding: ${company.funding_stage}` : ''}
-` : '';
-
-  const contactContext = contact ? `
-RECIPIENT:
-- Name: ${recipientName}
-- Title: ${contact.title || 'Contact'}
-${contact.department ? `- Department: ${contact.department}` : ''}
-` : `
-RECIPIENT:
-- Name: ${recipientName}
-`;
-
-  const additionalContext = context ? `
-ADDITIONAL CONTEXT FROM SENDER:
-${context}
-` : '';
-
-  return `${senderInfo}
-${businessContext}
-${prospectContext}
-${contactContext}
-${additionalContext}
-
-TASK:
-Write a personalized cold outreach email from YOU (${userProfile?.full_name || 'Sales Representative'}) at ${businessProfile.company_name} to the recipient. 
-
-REQUIREMENTS:
-1. Subject line should be personalized and compelling (max 60 characters)
-2. Email body should:
-   - Start with a personalized greeting using their name
-   - Reference something specific about their company (if available) to show you've done research
-   - Clearly explain how YOUR services/products can help THEIR business
-   - Include a clear, low-friction call-to-action
-   - Be concise (100-150 words maximum)
-   - Use ${businessProfile.tone_preference || 'professional'} tone
-   - End with this EXACT signature format:
-     
-     Best regards,
-     ${userProfile?.full_name || 'Sales Representative'}
-     ${userProfile?.job_title || 'Sales'}
-     ${businessProfile.company_name}
-3. Focus on THEIR needs and how YOU can help solve their problems
-4. Make it conversational and human, not salesy
-
-Return ONLY a JSON object with this structure (no markdown):
-{
-  "subject": "personalized subject line",
-  "body": "complete email body with proper formatting including the signature"
-}`;
-}
