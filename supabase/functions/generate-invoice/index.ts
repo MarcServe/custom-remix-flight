@@ -215,8 +215,37 @@ Return the data in the following JSON format:
       throw new Error('Failed to save invoice');
     }
 
+    // Save invoice as a file in crm_files
+    const fileName = `${invoiceNumber}_${companyData?.name || 'Company'}.json`;
+    const fileContent = JSON.stringify(invoice, null, 2);
+    
+    const { error: fileError } = await supabaseClient
+      .from('crm_files')
+      .insert({
+        user_id: user.id,
+        file_name: fileName,
+        file_type: 'application/json',
+        file_size: new TextEncoder().encode(fileContent).length,
+        storage_path: `invoices/${invoice.id}/${fileName}`,
+        entity_type: 'invoice',
+        entity_id: invoice.id,
+        description: `AI-generated ${type} for ${companyData?.name || 'company'}`,
+        metadata: {
+          invoice_number: invoiceNumber,
+          invoice_type: type,
+          total_amount: invoice.total_amount,
+          company_id: companyId,
+          deal_id: dealId,
+        },
+      });
+
+    if (fileError) {
+      console.error('Failed to save file record:', fileError);
+      // Don't throw - invoice was created successfully
+    }
+
     return new Response(
-      JSON.stringify({ success: true, invoice }),
+      JSON.stringify({ success: true, invoice, fileSaved: !fileError }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {

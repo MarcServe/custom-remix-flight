@@ -56,4 +56,17 @@ export const dealsApi = {
 
     return { data, error };
   },
+
+  /**
+   * Create a new deal
+   */
+  async createDeal(deal: Partial<Deal>) {
+    const { data, error } = await apiClient.supabase
+      .from('deals')
+      .insert(deal)
+      .select()
+      .maybeSingle();
+
+    return { data, error };
+  },
 };

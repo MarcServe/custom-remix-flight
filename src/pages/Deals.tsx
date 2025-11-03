@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DollarSign, Calendar, LayoutGrid, Kanban, Plus, Tag as TagIcon } from "lucide-react";
+import { DollarSign, Calendar, LayoutGrid, Kanban, Plus, Tag as TagIcon, Sparkles } from "lucide-react";
 import { DealActivityIndicator } from "@/components/DealActivityIndicator";
 import { DealDetailsDialog } from "@/components/DealDetailsDialog";
 import { CreateDealDialog } from "@/components/CreateDealDialog";
+import { AIWorkerDialog } from "@/components/deals/AIWorkerDialog";
 import { format } from "date-fns";
 import { useDeals, useUpdateDealStage } from "@/hooks/use-deals";
 import { KanbanBoard, KanbanItem } from "@/components/kanban/KanbanBoard";
@@ -17,6 +18,7 @@ export default function Deals() {
   const [selectedDeal, setSelectedDeal] = useState<any>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [aiWorkerOpen, setAiWorkerOpen] = useState(false);
   const { data: deals, isLoading, refetch } = useDeals();
   const updateDealStage = useUpdateDealStage();
   const markMultipleDealsAsViewed = useMarkMultipleDealsAsViewed();
@@ -88,6 +90,15 @@ export default function Deals() {
           <p className="text-muted-foreground">Track your sales pipeline</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            onClick={() => setAiWorkerOpen(true)}
+            variant="outline"
+            size="sm"
+            className="bg-gradient-to-r from-primary/10 to-primary/5 hover:from-primary/20 hover:to-primary/10"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            AI Worker
+          </Button>
           <Button
             onClick={() => setCreateDialogOpen(true)}
             size="sm"
@@ -210,6 +221,11 @@ export default function Deals() {
       <CreateDealDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
+      />
+
+      <AIWorkerDialog
+        open={aiWorkerOpen}
+        onOpenChange={setAiWorkerOpen}
       />
     </div>
   );
