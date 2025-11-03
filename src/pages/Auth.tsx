@@ -172,7 +172,7 @@ export default function Auth() {
       <Card className="w-full max-w-md relative z-10 animate-fade-in shadow-2xl backdrop-blur-md bg-card/98 border-2" style={{ animationDelay: '0.3s' }}>
         <CardHeader className="text-center space-y-3">
           <CardTitle className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-fade-in" style={{ animationDelay: '0.4s' }}>
-            LeadGeni CRM
+            LeadGenie CRM
           </CardTitle>
           <CardDescription className="text-base animate-fade-in" style={{ animationDelay: '0.5s' }}>
             AI-Powered Lead Generation & Enrichment
