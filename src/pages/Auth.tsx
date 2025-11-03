@@ -9,8 +9,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import { z } from 'zod';
 import genieImage from '@/assets/genie.png';
+import leadGenieLogo from '@/assets/lead-genie-logo.png';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { Building2, Users, TrendingUp, Sparkles, ArrowRight } from 'lucide-react';
 
 const emailSchema = z.string().email('Invalid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
@@ -148,45 +150,264 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen w-screen flex items-center justify-center relative overflow-hidden p-4">
-      {/* Full-page genie image with gradient overlays */}
-      <div className="absolute inset-0 pointer-events-none">
-        <img 
-          src={genieImage} 
-          alt="AI Genie Assistant" 
-          className="w-full h-full object-cover object-center opacity-20 animate-fade-in"
-          style={{ 
-            animationDelay: '0.2s',
-            filter: 'blur(0.5px)'
-          }}
-        />
-        {/* Gradient overlays for better contrast */}
-        <div className="absolute inset-0 bg-gradient-to-br from-background/80 via-background/60 to-background/80" />
-        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-background/70" />
+    <div className="min-h-screen w-screen flex flex-col lg:flex-row relative overflow-hidden">
+      {/* Left Side - Hero/Landing Section */}
+      <div className="flex-1 relative flex items-center justify-center p-8 lg:p-16 bg-gradient-to-br from-background via-background to-muted/20">
+        {/* Background elements */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+        </div>
+
+        <div className="relative z-10 max-w-2xl w-full space-y-8 animate-fade-in">
+          {/* Badge */}
+          <div className="flex justify-center lg:justify-start">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 animate-fade-in" style={{ animationDelay: '0.1s' }}>
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium text-primary">AI-Powered Sales Intelligence</span>
+            </div>
+          </div>
+
+          {/* Main Heading */}
+          <div className="space-y-4 text-center lg:text-left">
+            <h1 className="text-5xl lg:text-7xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-fade-in leading-tight" style={{ animationDelay: '0.2s' }}>
+              AI CRM System
+            </h1>
+            <p className="text-xl lg:text-2xl text-muted-foreground animate-fade-in" style={{ animationDelay: '0.3s' }}>
+              Modern sales platform powered by AI. Find leads, enrich data, and close deals faster.
+            </p>
+          </div>
+
+          {/* CTA Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start animate-fade-in" style={{ animationDelay: '0.4s' }}>
+            <Button 
+              size="lg" 
+              className="text-lg px-8 py-6 shadow-lg hover:shadow-xl transition-all"
+              onClick={() => {
+                const signUpTab = document.querySelector('[value="signup"]') as HTMLElement;
+                signUpTab?.click();
+                document.getElementById('auth-card')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              Get Started <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+            <Button 
+              size="lg" 
+              variant="outline" 
+              className="text-lg px-8 py-6"
+              onClick={() => {
+                document.getElementById('auth-card')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              Sign In
+            </Button>
+          </div>
+
+          {/* Feature Cards */}
+          <div className="grid md:grid-cols-3 gap-6 pt-8 animate-fade-in" style={{ animationDelay: '0.5s' }}>
+            <Card className="p-6 bg-card/80 backdrop-blur border-2 hover:border-primary/50 transition-all hover:shadow-lg">
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                <Building2 className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">AI Lead Finder</h3>
+              <p className="text-sm text-muted-foreground">
+                Search and discover companies matching your ideal customer profile with AI-powered enrichment.
+              </p>
+            </Card>
+
+            <Card className="p-6 bg-card/80 backdrop-blur border-2 hover:border-primary/50 transition-all hover:shadow-lg">
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                <Users className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">Smart Contact Management</h3>
+              <p className="text-sm text-muted-foreground">
+                Track relationships, manage contacts, and never miss a follow-up with intelligent reminders.
+              </p>
+            </Card>
+
+            <Card className="p-6 bg-card/80 backdrop-blur border-2 hover:border-primary/50 transition-all hover:shadow-lg">
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                <TrendingUp className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">Pipeline Analytics</h3>
+              <p className="text-sm text-muted-foreground">
+                Visualize your sales funnel, forecast revenue, and optimize your conversion rates.
+              </p>
+            </Card>
+          </div>
+        </div>
       </div>
 
-      {/* Floating elements for additional flair */}
-      <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl animate-pulse" />
-      <div className="absolute bottom-20 right-10 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-      
-      <Card className="w-full max-w-md relative z-10 animate-fade-in shadow-2xl backdrop-blur-md bg-card/98 border-2" style={{ animationDelay: '0.3s' }}>
-        <CardHeader className="text-center space-y-3">
-          <CardTitle className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-fade-in" style={{ animationDelay: '0.4s' }}>
-            LeadGenie CRM
-          </CardTitle>
-          <CardDescription className="text-base animate-fade-in" style={{ animationDelay: '0.5s' }}>
-            AI-Powered Lead Generation & Enrichment
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="animate-fade-in" style={{ animationDelay: '0.6s' }}>
-          <Tabs defaultValue={mode} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
-            </TabsList>
+      {/* Right Side - Auth Forms */}
+      <div className="flex-1 flex items-center justify-center p-4 lg:p-8 bg-gradient-to-br from-muted/20 to-background relative">
+        {/* Genie mascot background */}
+        <div className="absolute inset-0 pointer-events-none">
+          <img 
+            src={genieImage} 
+            alt="AI Genie Assistant" 
+            className="w-full h-full object-cover object-center opacity-10 animate-fade-in"
+            style={{ 
+              animationDelay: '0.2s',
+              filter: 'blur(0.5px)'
+            }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-br from-background/80 via-background/60 to-background/80" />
+        </div>
 
-            <TabsContent value="signin">
-              {!showReset ? (
+        <Card id="auth-card" className="w-full max-w-md relative z-10 animate-fade-in shadow-2xl backdrop-blur-md bg-card/98 border-2" style={{ animationDelay: '0.3s' }}>
+          <CardHeader className="text-center space-y-3">
+            <div className="flex justify-center mb-2">
+              <img 
+                src={leadGenieLogo} 
+                alt="LeadGenie Logo" 
+                className="h-24 w-auto animate-fade-in"
+                style={{ animationDelay: '0.4s' }}
+              />
+            </div>
+            <CardTitle className="text-2xl md:text-3xl font-bold animate-fade-in" style={{ animationDelay: '0.5s' }}>
+              Welcome Back
+            </CardTitle>
+            <CardDescription className="text-base animate-fade-in" style={{ animationDelay: '0.6s' }}>
+              Sign in to your account or create a new one
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="animate-fade-in" style={{ animationDelay: '0.7s' }}>
+            <Tabs defaultValue={mode} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="signin">Sign In</TabsTrigger>
+                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="signin">
+                {!showReset ? (
+                  <div className="space-y-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleGoogleSignIn}
+                      disabled={loading}
+                    >
+                      <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+                        <path
+                          fill="currentColor"
+                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        />
+                        <path
+                          fill="currentColor"
+                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        />
+                        <path
+                          fill="currentColor"
+                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                        />
+                        <path
+                          fill="currentColor"
+                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        />
+                      </svg>
+                      {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Continue with Google
+                    </Button>
+
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleSignIn} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="signin-email">Email</Label>
+                        <Input
+                          id="signin-email"
+                          name="email"
+                          type="email"
+                          placeholder="you@example.com"
+                          required
+                          onChange={(e) => validateField('email', e.target.value)}
+                        />
+                        {errors.email && (
+                          <p className="text-sm text-destructive">{errors.email}</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="signin-password">Password</Label>
+                        <Input
+                          id="signin-password"
+                          name="password"
+                          type="password"
+                          placeholder="••••••••"
+                          required
+                          onChange={(e) => validateField('password', e.target.value)}
+                        />
+                        {errors.password && (
+                          <p className="text-sm text-destructive">{errors.password}</p>
+                        )}
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setShowReset(true)}
+                          className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          Forgot Password?
+                        </button>
+                      </div>
+                      <Button type="submit" className="w-full" disabled={loading}>
+                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Sign In
+                      </Button>
+                    </form>
+                  </div>
+                ) : (
+                  <form onSubmit={handleResetPassword} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="reset-email">Email</Label>
+                      <Input
+                        id="reset-email"
+                        name="email"
+                        type="email"
+                        placeholder="you@example.com"
+                        required
+                        onChange={(e) => validateField('email', e.target.value)}
+                      />
+                      {errors.email && (
+                        <p className="text-sm text-destructive">{errors.email}</p>
+                      )}
+                    </div>
+                    <Button type="submit" className="w-full" disabled={loading}>
+                      {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Send Reset Link
+                    </Button>
+                    <div className="text-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowReset(false)}
+                        className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        Back to Sign In
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </TabsContent>
+
+              <TabsContent value="signup">
+                {invitationToken && (
+                  <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                    <p className="text-sm text-primary font-medium">
+                      🎉 You've been invited to join a team!
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Complete sign up to accept the invitation.
+                    </p>
+                  </div>
+                )}
+
                 <div className="space-y-4">
                   <Button
                     type="button"
@@ -226,11 +447,25 @@ export default function Auth() {
                     </div>
                   </div>
 
-                  <form onSubmit={handleSignIn} className="space-y-4">
+                  <form onSubmit={handleSignUp} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="signin-email">Email</Label>
+                      <Label htmlFor="signup-name">Full Name</Label>
                       <Input
-                        id="signin-email"
+                        id="signup-name"
+                        name="fullName"
+                        type="text"
+                        placeholder="John Doe"
+                        required
+                        onChange={(e) => validateField('fullName', e.target.value)}
+                      />
+                      {errors.fullName && (
+                        <p className="text-sm text-destructive">{errors.fullName}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-email">Email</Label>
+                      <Input
+                        id="signup-email"
                         name="email"
                         type="email"
                         placeholder="you@example.com"
@@ -242,9 +477,9 @@ export default function Auth() {
                       )}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="signin-password">Password</Label>
+                      <Label htmlFor="signup-password">Password</Label>
                       <Input
-                        id="signin-password"
+                        id="signup-password"
                         name="password"
                         type="password"
                         placeholder="••••••••"
@@ -255,159 +490,17 @@ export default function Auth() {
                         <p className="text-sm text-destructive">{errors.password}</p>
                       )}
                     </div>
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => setShowReset(true)}
-                        className="text-sm text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        Forgot Password?
-                      </button>
-                    </div>
                     <Button type="submit" className="w-full" disabled={loading}>
                       {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Sign In
+                      Sign Up
                     </Button>
                   </form>
                 </div>
-              ) : (
-                <form onSubmit={handleResetPassword} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="reset-email">Email</Label>
-                    <Input
-                      id="reset-email"
-                      name="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      required
-                      onChange={(e) => validateField('email', e.target.value)}
-                    />
-                    {errors.email && (
-                      <p className="text-sm text-destructive">{errors.email}</p>
-                    )}
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Send Reset Link
-                  </Button>
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={() => setShowReset(false)}
-                      className="text-sm text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      Back to Sign In
-                    </button>
-                  </div>
-                </form>
-              )}
-            </TabsContent>
-
-            <TabsContent value="signup">
-              {invitationToken && (
-                <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
-                  <p className="text-sm text-primary font-medium">
-                    🎉 You've been invited to join a team!
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Complete sign up to accept the invitation.
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleGoogleSignIn}
-                  disabled={loading}
-                >
-                  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                    />
-                  </svg>
-                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Continue with Google
-                </Button>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
-                  </div>
-                </div>
-
-                <form onSubmit={handleSignUp} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-name">Full Name</Label>
-                    <Input
-                      id="signup-name"
-                      name="fullName"
-                      type="text"
-                      placeholder="John Doe"
-                      required
-                      onChange={(e) => validateField('fullName', e.target.value)}
-                    />
-                    {errors.fullName && (
-                      <p className="text-sm text-destructive">{errors.fullName}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      name="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      required
-                      onChange={(e) => validateField('email', e.target.value)}
-                    />
-                    {errors.email && (
-                      <p className="text-sm text-destructive">{errors.email}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <Input
-                      id="signup-password"
-                      name="password"
-                      type="password"
-                      placeholder="••••••••"
-                      required
-                      onChange={(e) => validateField('password', e.target.value)}
-                    />
-                    {errors.password && (
-                      <p className="text-sm text-destructive">{errors.password}</p>
-                    )}
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Sign Up
-                  </Button>
-                </form>
-              </div>
-            </TabsContent>
-
-          </Tabs>
-        </CardContent>
-      </Card>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
