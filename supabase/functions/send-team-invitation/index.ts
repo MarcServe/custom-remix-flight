@@ -40,6 +40,12 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     );
 
+    // Create service role client for permission checks (bypasses RLS)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
     // Authenticate using the JWT token
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser(jwt);
     
@@ -57,8 +63,8 @@ serve(async (req: Request) => {
     
     console.log('Sending team invitation:', { teamId, email, role, teamName });
 
-    // Check if user is admin/owner of the team
-    const { data: membership, error: membershipError } = await supabaseClient
+    // Check if user is admin/owner of the team (using admin client to bypass RLS)
+    const { data: membership, error: membershipError } = await supabaseAdmin
       .from('team_members')
       .select('role')
       .eq('team_id', teamId)
@@ -73,8 +79,8 @@ serve(async (req: Request) => {
       );
     }
 
-    // Get inviter profile
-    const { data: inviterProfile } = await supabaseClient
+    // Get inviter profile (using admin client)
+    const { data: inviterProfile } = await supabaseAdmin
       .from('profiles')
       .select('full_name, email')
       .eq('id', user.id)
@@ -85,8 +91,8 @@ serve(async (req: Request) => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
 
-    // Create invitation in database
-    const { data: invitation, error: inviteError } = await supabaseClient
+    // Create invitation in database (using admin client)
+    const { data: invitation, error: inviteError } = await supabaseAdmin
       .from('team_invitations')
       .insert({
         team_id: teamId,
