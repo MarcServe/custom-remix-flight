@@ -142,27 +142,29 @@ Return the response as JSON with 'subject' and 'body' fields.`;
       const { recipientName, companyName, context } = requestBody;
       console.log('Processing personal email for:', recipientName);
       
-      systemPrompt = `You are a professional business communication assistant. Generate persuasive and warm sales/outreach emails that feel personal and authentic. Keep emails concise, engaging, and action-oriented. ALWAYS use the actual sender information provided - NEVER use placeholders.`;
+      systemPrompt = `You are an expert sales email writer. Write complete, ready-to-send emails with REAL CONTENT - never include instructions, brackets, or placeholders in the output. The email should be a finished product that can be sent immediately.`;
 
-      userPrompt = `Generate a professional business outreach email with these details:
+      userPrompt = `Write a complete, professional outreach email.
 
-SENDER SIGNATURE (USE EXACTLY AS SHOWN):
+TO: ${recipientName}${companyName ? ` at ${companyName}` : ''}
+
+FROM: ${senderName}${senderTitle ? `, ${senderTitle}` : ''}${senderCompany ? ` at ${senderCompany}` : ''}
+
+${context ? `CONTEXT/NOTES:\n${context}\n` : ''}
+
+WRITING GUIDELINES:
+- Start with a personalized greeting using their name
+- Write 3-4 short paragraphs with actual content (not instructions or placeholders)
+- If you need to mention something specific about them, write something plausible and professional (e.g., "I noticed your team has been expanding" or "I saw your company is active in the ${companyName ? companyName.split(' ')[0] : 'industry'} space")
+- Focus on ${senderCompany || 'our'} value proposition and how it can help them
+- Include a specific, low-pressure call to action (e.g., "Would you be open to a brief 15-minute call next week?")
+- End with this EXACT signature:
+
 ${emailSignature}
 
-RECIPIENT INFORMATION:
-- Recipient Name: ${recipientName}
-${companyName ? `- Recipient Company: ${companyName}` : ''}
+CRITICAL: Write a COMPLETE email with real sentences - NO brackets, NO placeholder instructions, NO [mention X], NO (e.g., ....). Write as if you're actually sending this email right now.
 
-${context ? `ADDITIONAL CONTEXT:\n${context}` : ''}
-
-CRITICAL INSTRUCTIONS:
-- Make the email personal and authentic
-- Keep it concise and respectful of their time
-- Include a clear call-to-action
-- Use a professional yet approachable tone
-- Use the EXACT signature provided above - do not modify it
-
-Return the response as JSON with 'subject' and 'body' fields.`;
+Return as JSON: {"subject": "...", "body": "..."}`;
     }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
