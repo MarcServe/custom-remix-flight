@@ -405,6 +405,7 @@ export type Database = {
           updated_at: string
           user_id: string
           value_proposition: string | null
+          website: string | null
         }
         Insert: {
           ai_max_tokens?: number | null
@@ -431,6 +432,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           value_proposition?: string | null
+          website?: string | null
         }
         Update: {
           ai_max_tokens?: number | null
@@ -457,6 +459,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           value_proposition?: string | null
+          website?: string | null
         }
         Relationships: []
       }
@@ -1985,6 +1988,7 @@ export type Database = {
           full_name: string | null
           id: string
           job_title: string | null
+          phone: string | null
           updated_at: string | null
           website: string | null
         }
@@ -1995,6 +1999,7 @@ export type Database = {
           full_name?: string | null
           id: string
           job_title?: string | null
+          phone?: string | null
           updated_at?: string | null
           website?: string | null
         }
@@ -2005,6 +2010,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           job_title?: string | null
+          phone?: string | null
           updated_at?: string | null
           website?: string | null
         }
