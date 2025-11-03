@@ -84,11 +84,19 @@ serve(async (req) => {
       
       // Create prompt based on invoice/quotation type
       systemPrompt = type === 'invoice' 
-        ? `You are a professional business communication assistant. Generate a polite and professional email to accompany an invoice. The email should be concise, friendly, and include all relevant details.`
-        : `You are a professional business communication assistant. Generate a polite and professional email to accompany a quotation. The email should be persuasive, highlight value, and encourage a response.`;
+        ? `You are a professional business communication assistant. Generate a polite and professional email to accompany an invoice. The email should be concise, friendly, and include all relevant details. ALWAYS use the actual sender information provided - NEVER use placeholders.`
+        : `You are a professional business communication assistant. Generate a polite and professional email to accompany a quotation. The email should be persuasive, highlight value, and encourage a response. ALWAYS use the actual sender information provided - NEVER use placeholders.`;
 
       userPrompt = type === 'invoice'
         ? `Generate a professional email to send with invoice ${context.invoiceNumber} to ${context.companyName}.
+
+SENDER INFORMATION (USE THESE EXACT VALUES):
+- Sender Name: ${senderName}
+- Sender Title: ${senderTitle}
+- Sender Company: ${senderCompany}
+- Sender Email: ${senderEmail}
+
+INVOICE DETAILS:
 Amount: $${context.amount}
 Due Date: ${context.dueDate}
 Items: ${context.lineItems}
@@ -100,8 +108,28 @@ The email should:
 - Provide contact information for questions
 - Be warm and professional
 
+CRITICAL INSTRUCTIONS:
+- Use the ACTUAL sender name "${senderName}" in the signature
+- Use the ACTUAL company name "${senderCompany}" in the email
+- Use the ACTUAL job title "${senderTitle}" in the signature
+- DO NOT use placeholders like [Your Name] or [Your Company]
+
+SIGNATURE FORMAT:
+Best regards,
+${senderName}
+${senderTitle}
+${senderCompany}
+
 Return the response as JSON with 'subject' and 'body' fields.`
         : `Generate a professional quotation email for quote ${context.invoiceNumber} to ${context.companyName}.
+
+SENDER INFORMATION (USE THESE EXACT VALUES):
+- Sender Name: ${senderName}
+- Sender Title: ${senderTitle}
+- Sender Company: ${senderCompany}
+- Sender Email: ${senderEmail}
+
+QUOTATION DETAILS:
 Amount: $${context.amount}
 Valid Until: ${context.dueDate}
 Services: ${context.lineItems}
@@ -113,6 +141,18 @@ The email should:
 - Encourage them to accept or discuss
 - Include a clear call to action
 - Be persuasive yet professional
+
+CRITICAL INSTRUCTIONS:
+- Use the ACTUAL sender name "${senderName}" in the signature
+- Use the ACTUAL company name "${senderCompany}" in the email
+- Use the ACTUAL job title "${senderTitle}" in the signature
+- DO NOT use placeholders like [Your Name] or [Your Company]
+
+SIGNATURE FORMAT:
+Best regards,
+${senderName}
+${senderTitle}
+${senderCompany}
 
 Return the response as JSON with 'subject' and 'body' fields.`;
     } else {
