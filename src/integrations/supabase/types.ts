@@ -870,6 +870,7 @@ export type Database = {
           tags: string[] | null
           title: string
           updated_at: string | null
+          user_id: string
         }
         Insert: {
           amount?: number | null
@@ -884,6 +885,7 @@ export type Database = {
           tags?: string[] | null
           title: string
           updated_at?: string | null
+          user_id: string
         }
         Update: {
           amount?: number | null
@@ -898,6 +900,7 @@ export type Database = {
           tags?: string[] | null
           title?: string
           updated_at?: string | null
+          user_id?: string
         }
         Relationships: [
           {
@@ -1672,6 +1675,7 @@ export type Database = {
           title: string | null
           twitter_url: string | null
           updated_at: string
+          user_id: string
         }
         Insert: {
           bio?: string | null
@@ -1688,6 +1692,7 @@ export type Database = {
           title?: string | null
           twitter_url?: string | null
           updated_at?: string
+          user_id: string
         }
         Update: {
           bio?: string | null
@@ -1704,6 +1709,7 @@ export type Database = {
           title?: string | null
           twitter_url?: string | null
           updated_at?: string
+          user_id?: string
         }
         Relationships: [
           {

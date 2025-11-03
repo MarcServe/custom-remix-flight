@@ -99,11 +99,18 @@ export function CreateDealDialog({ open, onOpenChange }: CreateDealDialogProps) 
     setTags(tags.filter(tag => tag !== tagToRemove));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!title.trim()) {
       toast.error("Deal title is required");
+      return;
+    }
+
+    // Get current user ID
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Not authenticated");
       return;
     }
 
@@ -117,6 +124,7 @@ export function CreateDealDialog({ open, onOpenChange }: CreateDealDialogProps) 
       follow_up_date: followUpDate || null,
       notes: notes.trim() || null,
       tags: tags.length > 0 ? tags : null,
+      user_id: user.id,
     });
   };
 
