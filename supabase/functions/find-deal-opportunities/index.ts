@@ -75,7 +75,7 @@ Business Profile:
 
 Companies to Analyze:
 ${companies.map((c, i) => `
-${i + 1}. ${c.name}
+${i + 1}. ${c.name} [ID: ${c.id}]
    - Industry: ${c.industry || 'Unknown'}
    - Description: ${c.description || 'No description'}
    - Size: ${c.size || 'Unknown'}
@@ -88,7 +88,7 @@ ${i + 1}. ${c.name}
 For each company, identify the TOP sales opportunity that aligns with our business profile. Return a maximum of ${maxOpportunities} opportunities.
 
 For each opportunity, provide:
-1. Company name and ID
+1. Company name and ID (MUST use the exact UUID shown in brackets [ID: xxx])
 2. Opportunity title (specific, actionable)
 3. Opportunity description (why this is a good fit, 2-3 sentences)
 4. Estimated value range (low, medium, high)
@@ -97,11 +97,13 @@ For each opportunity, provide:
 7. Email body (professional, personalized, under 200 words, with clear CTA)
 8. Key talking points (3-5 bullet points)
 
+CRITICAL: The companyId MUST be the exact UUID shown in brackets [ID: xxx] for each company above.
+
 Return ONLY valid JSON in this exact format:
 {
   "opportunities": [
     {
-      "companyId": "uuid",
+      "companyId": "exact-uuid-from-brackets",
       "companyName": "Company Name",
       "title": "Opportunity title",
       "description": "Why this is a good fit",
@@ -133,7 +135,7 @@ Return ONLY valid JSON in this exact format:
         messages: [
           {
             role: 'system',
-            content: 'You are a strategic B2B sales AI assistant. Generate structured, actionable sales opportunities in valid JSON format only. Be specific and data-driven.',
+            content: 'You are a strategic B2B sales AI assistant. Generate structured, actionable sales opportunities in valid JSON format only. Be specific and data-driven. You MUST use the exact company UUIDs provided in the prompt.',
           },
           {
             role: 'user',

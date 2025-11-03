@@ -177,8 +177,13 @@ export default function Auth() {
           <CardTitle className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-fade-in" style={{ animationDelay: '0.4s' }}>
             LeadGenie CRM
           </CardTitle>
-          <CardDescription className="text-base animate-fade-in" style={{ animationDelay: '0.5s' }}>
-            AI-Powered Lead Generation & Enrichment
+          <CardDescription className="text-base animate-fade-in space-y-3" style={{ animationDelay: '0.5s' }}>
+            <p className="font-medium">Modern sales platform powered by AI. Find leads, enrich data, and close deals faster.</p>
+            <div className="space-y-2 text-sm">
+              <p><span className="font-semibold text-primary">AI Lead Finder:</span> Search and discover companies matching your ideal customer profile with AI-powered enrichment.</p>
+              <p><span className="font-semibold text-primary">Smart Contact Management:</span> Track relationships, manage contacts, and never miss a follow-up with intelligent reminders.</p>
+              <p><span className="font-semibold text-primary">Pipeline Analytics:</span> Visualize your sales funnel, forecast revenue, and optimize your conversion rates.</p>
+            </div>
           </CardDescription>
         </CardHeader>
         <CardContent className="animate-fade-in" style={{ animationDelay: '0.6s' }}>

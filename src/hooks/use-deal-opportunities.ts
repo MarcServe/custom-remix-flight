@@ -82,6 +82,13 @@ export function useCreateDealFromOpportunity() {
 
   return useMutation({
     mutationFn: async (opportunity: Opportunity) => {
+      // Get current user
+      const { data: { user } } = await apiClient.supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('You must be logged in to create deals');
+      }
+
       // Map estimated value to amount
       const amountMap = {
         low: 5000,
@@ -91,7 +98,8 @@ export function useCreateDealFromOpportunity() {
 
       const { data, error } = await apiClient.supabase
         .from('deals')
-        .insert({
+        .insert([{
+          user_id: user.id,
           title: opportunity.title,
           company_id: opportunity.companyId,
           stage: 'NEW',
@@ -99,7 +107,7 @@ export function useCreateDealFromOpportunity() {
           priority: opportunity.urgency,
           notes: opportunity.description,
           tags: ['AI Generated', 'New Opportunity'],
-        })
+        }])
         .select()
         .single();
 
