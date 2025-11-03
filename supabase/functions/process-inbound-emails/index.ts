@@ -124,6 +124,30 @@ serve(async (req) => {
     }
 
     console.log(`Webhook source: ${webhookSource}`);
+    
+    // VALIDATION: Prevent self-emails from triggering auto-responses
+    // Check if the sender is the same as any of our system emails
+    const { data: userEmails } = await supabaseClient
+      .from('profiles')
+      .select('email');
+    
+    const systemEmails = userEmails?.map(p => p.email?.toLowerCase()) || [];
+    const fromEmailLower = from.toLowerCase();
+    
+    if (systemEmails.includes(fromEmailLower)) {
+      console.log(`⚠️ SKIPPING: Self-sent email detected from ${from}. Not processing as inbound.`);
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          message: 'Self-sent email ignored',
+          reason: 'Sender is a system user'
+        }),
+        { 
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
 
     // Helper function to calculate subject similarity (Levenshtein-based)
     const calculateSubjectSimilarity = (subject1: string, subject2: string): number => {

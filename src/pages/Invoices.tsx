@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function Invoices() {
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
@@ -182,14 +183,15 @@ export default function Invoices() {
               Generate with AI
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[525px]">
+          <DialogContent className="sm:max-w-[525px] max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>AI Invoice Generator</DialogTitle>
               <DialogDescription>
                 Let AI create a professional invoice or quotation based on your data
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
+            <ScrollArea className="flex-1 px-1">
+              <div className="grid gap-4 py-4 pr-3">
               <div className="grid gap-2">
                 <Label htmlFor="type">Type</Label>
                 <Select
@@ -271,8 +273,9 @@ export default function Invoices() {
                   Leave empty to let AI determine pricing from context
                 </p>
               </div>
-            </div>
-            <DialogFooter>
+              </div>
+            </ScrollArea>
+            <DialogFooter className="mt-4">
               <Button
                 onClick={() => generateInvoice.mutate(aiFormData)}
                 disabled={generateInvoice.isPending}

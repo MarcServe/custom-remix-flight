@@ -262,6 +262,7 @@ export default function Conversations() {
       const conversation = conversations.find(c => c.id === sequenceId);
       if (conversation) {
         setSelectedSequence(sequenceId);
+        setConversationType('sequences');
         // Clear the URL parameter after selecting
         setSearchParams({}, { replace: true });
         toast({
@@ -269,9 +270,12 @@ export default function Conversations() {
           description: `Viewing conversation with ${conversation.title}`,
         });
       } else {
+        // Conversation not found - clear the URL and show more helpful error
+        setSearchParams({}, { replace: true });
+        console.warn(`Conversation ${sequenceId} not found. This may be a deleted sequence or a premature notification.`);
         toast({
-          title: "Conversation not found",
-          description: "The requested conversation could not be found",
+          title: "Conversation unavailable",
+          description: "This conversation may have been removed or isn't ready yet. Check the Sequences tab for active conversations.",
           variant: "destructive",
         });
       }
