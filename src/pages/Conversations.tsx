@@ -20,6 +20,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEmailThreadsRealtime } from "@/hooks/use-realtime";
 import { contactsApi } from "@/lib/api/contacts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useSendEmail } from "@/hooks/use-email-sending";
+import { QuickReplyTemplates } from "@/components/QuickReplyTemplates";
 
 interface EmailThread {
   id: string;
@@ -102,13 +104,17 @@ export default function Conversations() {
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null);
   const [selectedPersonalThread, setSelectedPersonalThread] = useState<string | null>(null);
   const [conversationType, setConversationType] = useState<"sequences" | "personal">("sequences");
+  const [composeMode, setComposeMode] = useState<"ai" | "manual">("ai");
   const [generatedResponse, setGeneratedResponse] = useState<{ subject: string; body: string } | null>(null);
+  const [manualReply, setManualReply] = useState<{ subject: string; body: string }>({ subject: "", body: "" });
   const [isGenerating, setIsGenerating] = useState(false);
   const [filterAutoSent, setFilterAutoSent] = useState(false);
   const [selectedReview, setSelectedReview] = useState<PendingReview | null>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
+
+  const sendEmailMutation = useSendEmail();
 
   const { data: pendingReviews } = usePendingReviews();
 
@@ -415,6 +421,9 @@ export default function Conversations() {
 
       // Clear the generated response after sending
       setGeneratedResponse(null);
+      
+      // Refresh threads
+      refetchThreads();
 
     } catch (error: any) {
       console.error('Error sending response:', error);
@@ -426,6 +435,70 @@ export default function Conversations() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleSendManualReply = async () => {
+    if (!manualReply.subject || !manualReply.body) {
+      toast({
+        title: "Missing fields",
+        description: "Please enter both subject and body",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Determine recipient email based on conversation type
+    let recipientEmail: string | undefined;
+
+    if (conversationType === 'sequences') {
+      const lastInbound = threads?.slice().reverse().find(t => t.direction === 'inbound');
+      recipientEmail = lastInbound?.from_email;
+    } else {
+      // For personal emails, get the recipient from the selected thread
+      const personalConv = personalConversations?.find(c => c.id === selectedPersonalThread);
+      if (personalConv) {
+        // Get the email that's NOT the current user's
+        const lastThread = threads?.[threads.length - 1];
+        recipientEmail = lastThread?.direction === 'inbound' 
+          ? lastThread.from_email 
+          : personalConv.to_email || personalConv.from_email;
+      }
+    }
+
+    if (!recipientEmail) {
+      toast({
+        title: "Error",
+        description: "Cannot determine recipient email",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await sendEmailMutation.mutateAsync({
+        to: recipientEmail,
+        subject: manualReply.subject,
+        body: manualReply.body,
+        companySequenceId: selectedSequence || undefined,
+      });
+
+      // Clear manual reply
+      setManualReply({ subject: "", body: "" });
+      
+      // Refresh threads
+      refetchThreads();
+
+      toast({
+        title: "Email sent",
+        description: "Your reply has been sent successfully",
+      });
+    } catch (error: any) {
+      console.error('Error sending manual reply:', error);
+    }
+  };
+
+  const handleQuickTemplate = (subject: string, body: string) => {
+    setManualReply({ subject, body });
   };
 
   const handleManualRefresh = async () => {
@@ -709,7 +782,7 @@ export default function Conversations() {
             </div>
           </CardHeader>
           <CardContent>
-            {!selectedSequence ? (
+            {!selectedSequence && !selectedPersonalThread ? (
               <div className="text-center py-12">
                 <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-sm text-muted-foreground">
@@ -775,86 +848,158 @@ export default function Conversations() {
 
                 <Separator />
 
-                {/* AI Response Section */}
+                {/* Reply Section */}
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold">AI-Generated Response</h3>
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex-1">
+                      <h3 className="font-semibold">Reply</h3>
                       {selectedSeqData?.auto_respond_enabled && (
                         <p className="text-xs text-muted-foreground mt-1">
                           Auto-Response is enabled - AI will send responses automatically
                         </p>
                       )}
+                      {conversationType === 'personal' && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Personal emails support manual replies only
+                        </p>
+                      )}
                     </div>
-                    {!selectedSeqData?.auto_respond_enabled && (
-                      <Button
-                        onClick={handleGenerateResponse}
-                        disabled={isGenerating}
-                        size="sm"
-                      >
-                        {isGenerating ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            Generate Response
-                          </>
-                        )}
-                      </Button>
+                    {!selectedSeqData?.auto_respond_enabled && conversationType === 'sequences' && (
+                      <Tabs value={composeMode} onValueChange={(v) => setComposeMode(v as "ai" | "manual")}>
+                        <TabsList>
+                          <TabsTrigger value="ai">
+                            <Sparkles className="h-4 w-4 mr-1" />
+                            AI Compose
+                          </TabsTrigger>
+                          <TabsTrigger value="manual">
+                            Manual
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
                     )}
                   </div>
 
-                  {!selectedSeqData?.auto_respond_enabled && generatedResponse && (
-                    <div className="space-y-3">
-                      <div>
-                        <Label>Subject</Label>
-                        <Input
-                          value={generatedResponse.subject}
-                          onChange={(e) =>
-                            setGeneratedResponse({ ...generatedResponse, subject: e.target.value })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <Label>Body</Label>
-                        <Textarea
-                          value={generatedResponse.body}
-                          onChange={(e) =>
-                            setGeneratedResponse({ ...generatedResponse, body: e.target.value })
-                          }
-                          className="min-h-[200px]"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          className="flex-1"
-                          onClick={handleSendResponse}
-                          disabled={isGenerating}
-                        >
-                          {isGenerating ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Sending...
-                            </>
-                          ) : (
-                            <>
-                              <Send className="h-4 w-4 mr-2" />
-                              Send Response
-                            </>
+                  {!selectedSeqData?.auto_respond_enabled && (
+                    <>
+                      {conversationType === 'sequences' && composeMode === "ai" ? (
+                        <div className="space-y-4">
+                          {!generatedResponse && (
+                            <Button
+                              onClick={handleGenerateResponse}
+                              disabled={isGenerating}
+                              className="w-full"
+                            >
+                              {isGenerating ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Generating...
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="h-4 w-4 mr-2" />
+                                  Generate AI Response
+                                </>
+                              )}
+                            </Button>
                           )}
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          onClick={handleGenerateResponse}
-                          disabled={isGenerating}
-                        >
-                          Regenerate
-                        </Button>
-                      </div>
-                    </div>
+
+                          {generatedResponse && (
+                            <div className="space-y-3">
+                              <div>
+                                <Label>Subject</Label>
+                                <Input
+                                  value={generatedResponse.subject}
+                                  onChange={(e) =>
+                                    setGeneratedResponse({ ...generatedResponse, subject: e.target.value })
+                                  }
+                                />
+                              </div>
+                              <div>
+                                <Label>Body</Label>
+                                <Textarea
+                                  value={generatedResponse.body}
+                                  onChange={(e) =>
+                                    setGeneratedResponse({ ...generatedResponse, body: e.target.value })
+                                  }
+                                  className="min-h-[200px]"
+                                />
+                              </div>
+                              <div className="flex gap-2">
+                                <Button 
+                                  className="flex-1"
+                                  onClick={handleSendResponse}
+                                  disabled={isGenerating}
+                                >
+                                  {isGenerating ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      Sending...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Send className="h-4 w-4 mr-2" />
+                                      Send Response
+                                    </>
+                                  )}
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  onClick={handleGenerateResponse}
+                                  disabled={isGenerating}
+                                >
+                                  Regenerate
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <QuickReplyTemplates onSelect={handleQuickTemplate} />
+                          
+                          <div className="space-y-3">
+                            <div>
+                              <Label>Subject</Label>
+                              <Input
+                                value={manualReply.subject}
+                                onChange={(e) =>
+                                  setManualReply({ ...manualReply, subject: e.target.value })
+                                }
+                                placeholder="Email subject"
+                              />
+                            </div>
+                            <div>
+                              <Label>Body</Label>
+                              <Textarea
+                                value={manualReply.body}
+                                onChange={(e) =>
+                                  setManualReply({ ...manualReply, body: e.target.value })
+                                }
+                                className="min-h-[200px]"
+                                placeholder="Type your message..."
+                              />
+                            </div>
+                            <Button 
+                              className="w-full"
+                              onClick={handleSendManualReply}
+                              disabled={sendEmailMutation.isPending || !manualReply.subject || !manualReply.body}
+                            >
+                              {sendEmailMutation.isPending ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Sending...
+                                </>
+                              ) : (
+                                <>
+                                  <Send className="h-4 w-4 mr-2" />
+                                  Send Reply
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
