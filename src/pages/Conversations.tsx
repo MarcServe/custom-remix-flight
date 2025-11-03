@@ -19,6 +19,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEmailThreadsRealtime } from "@/hooks/use-realtime";
 import { contactsApi } from "@/lib/api/contacts";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface EmailThread {
   id: string;
@@ -99,6 +100,8 @@ export default function Conversations() {
   }, []);
   
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null);
+  const [selectedPersonalThread, setSelectedPersonalThread] = useState<string | null>(null);
+  const [conversationType, setConversationType] = useState<"sequences" | "personal">("sequences");
   const [generatedResponse, setGeneratedResponse] = useState<{ subject: string; body: string } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [filterAutoSent, setFilterAutoSent] = useState(false);
@@ -122,6 +125,47 @@ export default function Conversations() {
 
     return () => clearInterval(interval);
   }, [queryClient, selectedSequence]);
+
+  // Fetch personal conversations (non-sequence emails)
+  const { data: personalConversations, refetch: refetchPersonalConversations } = useQuery({
+    queryKey: ['personal-conversations'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('email_threads')
+        .select('*')
+        .is('company_sequence_id', null)
+        .order('received_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Group by thread_id or recipient email
+      const grouped = data.reduce((acc: any[], thread) => {
+        const existingConv = acc.find(c => 
+          c.thread_id === thread.thread_id || 
+          (c.to_email === thread.to_email && c.from_email === thread.from_email)
+        );
+
+        if (existingConv) {
+          existingConv.threads.push(thread);
+        } else {
+          acc.push({
+            id: thread.thread_id || thread.id,
+            thread_id: thread.thread_id,
+            title: thread.to_email,
+            subject: thread.subject,
+            to_email: thread.to_email,
+            from_email: thread.from_email,
+            lastActivity: thread.received_at,
+            threads: [thread],
+            type: 'personal'
+          });
+        }
+        return acc;
+      }, []);
+
+      return grouped;
+    },
+  });
 
   const { data: conversations, isLoading, refetch: refetchConversations } = useQuery({
     queryKey: ['active-conversations'],
@@ -229,31 +273,55 @@ export default function Conversations() {
   }, [searchParams, conversations, setSearchParams, toast]);
 
   const { data: threads, refetch: refetchThreads } = useQuery({
-    queryKey: ['email-threads', selectedSequence],
-    enabled: !!selectedSequence,
+    queryKey: ['email-threads', selectedSequence, selectedPersonalThread, conversationType],
+    enabled: (conversationType === 'sequences' && !!selectedSequence) || 
+             (conversationType === 'personal' && !!selectedPersonalThread),
     refetchInterval: 15000, // Refetch every 15 seconds when conversation is selected
     queryFn: async () => {
-      console.log(`Fetching threads for conversation: ${selectedSequence}`);
-      const selectedConv = conversations?.find(c => c.id === selectedSequence);
-      if (!selectedConv) return [];
+      if (conversationType === 'sequences') {
+        console.log(`Fetching threads for sequence: ${selectedSequence}`);
+        const selectedConv = conversations?.find(c => c.id === selectedSequence);
+        if (!selectedConv) return [];
 
-      let query = supabase.from('email_threads').select('*');
+        let query = supabase.from('email_threads').select('*');
 
-      if (selectedConv.type === 'sequence') {
-        query = query.eq('company_sequence_id', selectedSequence!);
+        if (selectedConv.type === 'sequence') {
+          query = query.eq('company_sequence_id', selectedSequence!);
+        } else {
+          // Standalone: filter by recipient email and null company_sequence_id
+          const recipientEmail = selectedConv.recipientEmail!;
+          query = query
+            .is('company_sequence_id', null)
+            .or(`from_email.eq.${recipientEmail},to_email.eq.${recipientEmail}`);
+        }
+
+        const { data, error } = await query.order('received_at', { ascending: true });
+
+        if (error) throw error;
+        console.log(`Loaded ${data?.length || 0} threads for sequence conversation`);
+        return data as EmailThread[];
       } else {
-        // Standalone: filter by recipient email and null company_sequence_id
-        const recipientEmail = selectedConv.recipientEmail!;
-        query = query
-          .is('company_sequence_id', null)
-          .or(`from_email.eq.${recipientEmail},to_email.eq.${recipientEmail}`);
+        // Personal emails
+        console.log(`Fetching threads for personal thread: ${selectedPersonalThread}`);
+        const personalConv = personalConversations?.find(c => c.id === selectedPersonalThread);
+        if (!personalConv) return [];
+
+        let query = supabase.from('email_threads').select('*');
+
+        if (personalConv.thread_id) {
+          query = query.eq('thread_id', personalConv.thread_id);
+        } else {
+          query = query
+            .is('company_sequence_id', null)
+            .or(`and(to_email.eq.${personalConv.to_email},from_email.eq.${personalConv.from_email}),and(to_email.eq.${personalConv.from_email},from_email.eq.${personalConv.to_email})`);
+        }
+
+        const { data, error } = await query.order('received_at', { ascending: true });
+
+        if (error) throw error;
+        console.log(`Loaded ${data?.length || 0} threads for personal conversation`);
+        return data as EmailThread[];
       }
-
-      const { data, error } = await query.order('received_at', { ascending: true });
-
-      if (error) throw error;
-      console.log(`Loaded ${data?.length || 0} threads for conversation`);
-      return data as EmailThread[];
     },
   });
 
@@ -365,6 +433,7 @@ export default function Conversations() {
     try {
       await Promise.all([
         refetchConversations(),
+        refetchPersonalConversations(),
         refetchThreads(),
       ]);
       setLastSyncTime(new Date());
@@ -511,64 +580,104 @@ export default function Conversations() {
           </div>
         )}
 
-        {/* Conversations List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Conversations</CardTitle>
-            <CardDescription>All email threads and replies</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[400px]">
-              {!conversations || conversations.length === 0 ? (
-                <div className="text-center py-12">
-                  <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-sm text-muted-foreground">No active conversations</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {conversations.map((conv) => (
-                    <div
-                      key={conv.id}
-                      onClick={() => setSelectedSequence(conv.id)}
-                      className={`p-3 rounded-lg border cursor-pointer transition-colors overflow-hidden ${
-                        selectedSequence === conv.id
-                          ? 'bg-primary/10 border-primary'
-                          : 'hover:bg-muted'
-                      }`}
-                    >
-                      <div className="flex flex-col gap-2 w-full min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="font-medium whitespace-normal line-clamp-2 flex-1">{conv.title}</div>
-                          {conv.type === 'standalone' && (
-                            <Badge variant="secondary" className="text-xs shrink-0">Standalone</Badge>
-                          )}
+        {/* Conversations List with Tabs */}
+        <Tabs value={conversationType} onValueChange={(v) => setConversationType(v as "sequences" | "personal")} className="w-full">
+          <TabsList className="mb-4 w-full sm:w-auto">
+            <TabsTrigger value="sequences" className="flex-1 sm:flex-initial">
+              <span className="mr-2">Sequences</span>
+              <Badge variant="secondary" className="ml-1">{conversations?.length || 0}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="personal" className="flex-1 sm:flex-initial">
+              <span className="mr-2">Personal</span>
+              <Badge variant="secondary" className="ml-1">{personalConversations?.length || 0}</Badge>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value={conversationType}>
+            <Card>
+              <CardHeader>
+                <CardTitle>{conversationType === 'sequences' ? 'Sequence Conversations' : 'Personal Emails'}</CardTitle>
+                <CardDescription>
+                  {conversationType === 'sequences' 
+                    ? 'Email threads from active sequences' 
+                    : 'Standalone emails sent from People menu'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[400px]">
+                  {(() => {
+                    const activeList = conversationType === 'sequences' ? conversations : personalConversations;
+                    const selectedId = conversationType === 'sequences' ? selectedSequence : selectedPersonalThread;
+                    const setSelectedId = conversationType === 'sequences' ? setSelectedSequence : setSelectedPersonalThread;
+
+                    if (!activeList || activeList.length === 0) {
+                      return (
+                        <div className="text-center py-12">
+                          <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                          <p className="text-sm text-muted-foreground">
+                            {conversationType === 'sequences' 
+                              ? 'No active sequence conversations' 
+                              : 'No personal emails yet'}
+                          </p>
                         </div>
-                        {conv.subtitle && (
-                          <p className="text-sm text-muted-foreground whitespace-normal line-clamp-2">{conv.subtitle}</p>
-                        )}
-                        {conv.goal && (
-                          <p className="text-xs text-muted-foreground whitespace-normal line-clamp-2">Goal: {conv.goal}</p>
-                        )}
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-2">
+                        {activeList.map((conv: any) => (
+                          <div
+                            key={conv.id}
+                            onClick={() => setSelectedId(conv.id)}
+                            className={`p-3 rounded-lg border cursor-pointer transition-colors overflow-hidden ${
+                              selectedId === conv.id
+                                ? 'bg-primary/10 border-primary'
+                                : 'hover:bg-muted'
+                            }`}
+                          >
+                            <div className="flex flex-col gap-2 w-full min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="font-medium whitespace-normal line-clamp-2 flex-1">{conv.title}</div>
+                                {(conv.type === 'standalone' || conv.type === 'personal') && (
+                                  <Badge variant="secondary" className="text-xs shrink-0">
+                                    {conv.type === 'personal' ? 'Personal' : 'Standalone'}
+                                  </Badge>
+                                )}
+                              </div>
+                              {conv.subtitle && (
+                                <p className="text-sm text-muted-foreground whitespace-normal line-clamp-2">{conv.subtitle}</p>
+                              )}
+                              {conv.goal && (
+                                <p className="text-xs text-muted-foreground whitespace-normal line-clamp-2">Goal: {conv.goal}</p>
+                              )}
+                              {conv.subject && (
+                                <p className="text-xs text-muted-foreground whitespace-normal line-clamp-2">
+                                  Subject: {conv.subject}
+                                </p>
+                              )}
+                            </div>
+                            {conv.type === 'sequence' && conv.sequenceData && (
+                              <div className="flex gap-2 mt-2">
+                                <Badge variant="outline">
+                                  {conv.sequenceData.next_action.replace(/_/g, ' ')}
+                                </Badge>
+                                {conv.sequenceData.auto_respond_enabled && (
+                                  <Badge variant="default" className="bg-gradient-primary text-white">
+                                    Auto-Response
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                      {conv.type === 'sequence' && conv.sequenceData && (
-                        <div className="flex gap-2 mt-2">
-                          <Badge variant="outline">
-                            {conv.sequenceData.next_action.replace(/_/g, ' ')}
-                          </Badge>
-                          {conv.sequenceData.auto_respond_enabled && (
-                            <Badge variant="default" className="bg-gradient-primary text-white">
-                              Auto-Response
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
+                    );
+                  })()}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* Conversation Thread */}
         <Card>
