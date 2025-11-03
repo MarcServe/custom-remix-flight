@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import { z } from 'zod';
-import genieImage from '@/assets/genie.png';
+import leadGenieLogo from '@/assets/lead-genie-logo.png';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -149,12 +149,12 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen w-screen flex items-center justify-center relative overflow-hidden p-4">
-      {/* Full-page genie image with gradient overlays */}
+      {/* Full-page logo with gradient overlays */}
       <div className="absolute inset-0 pointer-events-none">
         <img 
-          src={genieImage} 
-          alt="AI Genie Assistant" 
-          className="w-full h-full object-cover object-center opacity-20 animate-fade-in"
+          src={leadGenieLogo} 
+          alt="LeadGenie CRM" 
+          className="w-full h-full object-cover object-center opacity-15 animate-fade-in"
           style={{ 
             animationDelay: '0.2s',
             filter: 'blur(0.5px)'
