@@ -78,7 +78,7 @@ serve(async (req) => {
     const emailSignature = `Best regards,
 ${senderName}
 ${senderTitle}
-${senderCompany}${senderPhone ? '\n' + senderPhone : ''}${senderWebsite ? '\n' + senderWebsite : ''}`;
+${senderCompany}${senderEmail ? '\n' + senderEmail : ''}${senderPhone ? '\n' + senderPhone : ''}${senderWebsite ? '\n' + senderWebsite : ''}`;
 
     console.log('Using sender info:', { senderName, senderTitle, senderCompany, senderEmail, senderPhone, senderWebsite, emailSignature });
 
