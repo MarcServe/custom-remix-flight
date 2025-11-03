@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import { z } from 'zod';
+import leadGenieBackground from '@/assets/lead-genie-logo.png';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -151,7 +152,7 @@ export default function Auth() {
       {/* Full-page logo with gradient overlays */}
       <div className="absolute inset-0 pointer-events-none">
         <img 
-          src={leadGenieLogo} 
+          src={leadGenieBackground} 
           alt="LeadGenie CRM" 
           className="w-full h-full object-cover object-center opacity-15 animate-fade-in"
           style={{ 
