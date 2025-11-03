@@ -394,10 +394,10 @@ export default function Conversations() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="flex flex-col gap-6">
         {/* Pending Reviews Alert */}
         {pendingReviews && pendingReviews.length > 0 && (
-          <div className="lg:col-span-3">
+          <div>
             <Card className="border-2 border-primary/30 bg-primary/5">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -458,13 +458,13 @@ export default function Conversations() {
         )}
 
         {/* Conversations List */}
-        <Card className="lg:col-span-1">
+        <Card>
           <CardHeader>
             <CardTitle>Conversations</CardTitle>
             <CardDescription>All email threads and replies</CardDescription>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[600px]">
+            <ScrollArea className="h-[400px]">
               {!conversations || conversations.length === 0 ? (
                 <div className="text-center py-12">
                   <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -517,7 +517,7 @@ export default function Conversations() {
         </Card>
 
         {/* Conversation Thread */}
-        <Card className="lg:col-span-2">
+        <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="min-w-0 flex-1">
