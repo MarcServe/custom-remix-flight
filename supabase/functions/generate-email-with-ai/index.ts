@@ -74,7 +74,13 @@ serve(async (req) => {
     const senderPhone = profile?.phone || businessProfile?.phone || '';
     const senderWebsite = profile?.website || businessProfile?.website || '';
 
-    console.log('Using sender info:', { senderName, senderTitle, senderCompany, senderEmail, senderPhone, senderWebsite });
+    // Build email signature exactly as shown in profile preview
+    const emailSignature = `Best regards,
+${senderName}
+${senderTitle}
+${senderCompany}${senderPhone ? '\n' + senderPhone : ''}${senderWebsite ? '\n' + senderWebsite : ''}`;
+
+    console.log('Using sender info:', { senderName, senderTitle, senderCompany, senderEmail, senderPhone, senderWebsite, emailSignature });
 
     let systemPrompt: string;
     let userPrompt: string;
@@ -92,13 +98,8 @@ serve(async (req) => {
       userPrompt = type === 'invoice'
         ? `Generate a professional email to send with invoice ${context.invoiceNumber} to ${context.companyName}.
 
-SENDER INFORMATION (USE THESE EXACT VALUES):
-- Sender Name: ${senderName}
-- Sender Title: ${senderTitle}
-- Sender Company: ${senderCompany}
-- Sender Email: ${senderEmail}
-${senderPhone ? `- Sender Phone: ${senderPhone}` : ''}
-${senderWebsite ? `- Sender Website: ${senderWebsite}` : ''}
+SENDER SIGNATURE (USE EXACTLY AS SHOWN):
+${emailSignature}
 
 INVOICE DETAILS:
 Amount: $${context.amount}
@@ -112,30 +113,13 @@ The email should:
 - Provide contact information for questions
 - Be warm and professional
 
-CRITICAL INSTRUCTIONS:
-- Use the ACTUAL sender name "${senderName}" in the signature
-- Use the ACTUAL company name "${senderCompany}" in the email
-- Use the ACTUAL job title "${senderTitle}" in the signature
-- DO NOT use placeholders like [Your Name] or [Your Company]
-
-SIGNATURE FORMAT:
-Best regards,
-${senderName}
-${senderTitle}
-${senderCompany}
-${senderPhone ? senderPhone : ''}
-${senderWebsite ? senderWebsite : ''}
+CRITICAL: Use the EXACT signature provided above. Do not modify it or add placeholders.
 
 Return the response as JSON with 'subject' and 'body' fields.`
         : `Generate a professional quotation email for quote ${context.invoiceNumber} to ${context.companyName}.
 
-SENDER INFORMATION (USE THESE EXACT VALUES):
-- Sender Name: ${senderName}
-- Sender Title: ${senderTitle}
-- Sender Company: ${senderCompany}
-- Sender Email: ${senderEmail}
-${senderPhone ? `- Sender Phone: ${senderPhone}` : ''}
-${senderWebsite ? `- Sender Website: ${senderWebsite}` : ''}
+SENDER SIGNATURE (USE EXACTLY AS SHOWN):
+${emailSignature}
 
 QUOTATION DETAILS:
 Amount: $${context.amount}
@@ -150,19 +134,7 @@ The email should:
 - Include a clear call to action
 - Be persuasive yet professional
 
-CRITICAL INSTRUCTIONS:
-- Use the ACTUAL sender name "${senderName}" in the signature
-- Use the ACTUAL company name "${senderCompany}" in the email
-- Use the ACTUAL job title "${senderTitle}" in the signature
-- DO NOT use placeholders like [Your Name] or [Your Company]
-
-SIGNATURE FORMAT:
-Best regards,
-${senderName}
-${senderTitle}
-${senderCompany}
-${senderPhone ? senderPhone : ''}
-${senderWebsite ? senderWebsite : ''}
+CRITICAL: Use the EXACT signature provided above. Do not modify it or add placeholders.
 
 Return the response as JSON with 'subject' and 'body' fields.`;
     } else {
@@ -174,13 +146,8 @@ Return the response as JSON with 'subject' and 'body' fields.`;
 
       userPrompt = `Generate a professional business outreach email with these details:
 
-SENDER INFORMATION (USE THESE EXACT VALUES):
-- Sender Name: ${senderName}
-- Sender Title: ${senderTitle}
-- Sender Company: ${senderCompany}
-- Sender Email: ${senderEmail}
-${senderPhone ? `- Sender Phone: ${senderPhone}` : ''}
-${senderWebsite ? `- Sender Website: ${senderWebsite}` : ''}
+SENDER SIGNATURE (USE EXACTLY AS SHOWN):
+${emailSignature}
 
 RECIPIENT INFORMATION:
 - Recipient Name: ${recipientName}
@@ -189,23 +156,11 @@ ${companyName ? `- Recipient Company: ${companyName}` : ''}
 ${context ? `ADDITIONAL CONTEXT:\n${context}` : ''}
 
 CRITICAL INSTRUCTIONS:
-- Use the ACTUAL sender name "${senderName}" in the signature
-- Use the ACTUAL company name "${senderCompany}" in the email
-- Use the ACTUAL job title "${senderTitle}" in the signature
-- DO NOT use placeholders like [Your Name] or [Your Company]
-- DO NOT use generic terms - use the specific information provided above
 - Make the email personal and authentic
 - Keep it concise and respectful of their time
 - Include a clear call-to-action
 - Use a professional yet approachable tone
-
-SIGNATURE FORMAT:
-Best regards,
-${senderName}
-${senderTitle}
-${senderCompany}
-${senderPhone ? senderPhone : ''}
-${senderWebsite ? senderWebsite : ''}
+- Use the EXACT signature provided above - do not modify it
 
 Return the response as JSON with 'subject' and 'body' fields.`;
     }
