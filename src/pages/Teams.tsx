@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Users, Settings, UserPlus, Trash2, Crown, Shield, Eye, AlertCircle } from "lucide-react";
+import { Plus, Users, Settings, UserPlus, Trash2, Crown, Shield, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -311,7 +311,6 @@ export default function Teams() {
     switch (role) {
       case 'owner': return <Crown className="h-4 w-4 text-yellow-500" />;
       case 'admin': return <Shield className="h-4 w-4 text-blue-500" />;
-      case 'viewer': return <Eye className="h-4 w-4 text-gray-500" />;
       default: return <Users className="h-4 w-4 text-green-500" />;
     }
   };
@@ -320,7 +319,6 @@ export default function Teams() {
     switch (role) {
       case 'owner': return 'bg-yellow-500';
       case 'admin': return 'bg-blue-500';
-      case 'viewer': return 'bg-gray-500';
       default: return 'bg-green-500';
     }
   };
@@ -631,11 +629,10 @@ export default function Teams() {
                 <SelectContent>
                   <SelectItem value="member">Member</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="viewer">Viewer</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Members can view and edit, Admins can manage settings, Viewers can only view
+                Members can view and edit, Admins can manage settings and invite members
               </p>
             </div>
           </div>
