@@ -44,7 +44,7 @@ export function useSendOpportunityEmail() {
       // Get the company to find a contact email
       const { data: company } = await apiClient.supabase
         .from('companies')
-        .select('*, contacts(email)')
+        .select('*, contacts(id, name, email)')
         .eq('id', opportunity.companyId)
         .single();
 
@@ -52,7 +52,8 @@ export function useSendOpportunityEmail() {
         throw new Error('Company not found');
       }
 
-      const recipientEmail = company.contacts?.[0]?.email || company.general_email;
+      const primaryContact = company.contacts?.[0];
+      const recipientEmail = primaryContact?.email || company.general_email;
       
       if (!recipientEmail) {
         // Return a special error that indicates missing email but not a complete failure
@@ -65,10 +66,15 @@ export function useSendOpportunityEmail() {
 
       // Send email via CRM email function
       const { data, error } = await apiClient.callFunction('send-crm-email', {
-        to: recipientEmail,
+        toEmail: recipientEmail,
+        toName: primaryContact?.name || company.name || company.company_name || '',
         subject: opportunity.emailSubject,
         body: opportunity.emailBody,
+        bodyText: opportunity.emailBody,
         companyId: opportunity.companyId,
+        contactId: primaryContact?.id,
+        enableAutoResponder: false,
+        templateStyle: 'professional',
         sendImmediately,
       });
 

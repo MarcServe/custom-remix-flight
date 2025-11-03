@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import { z } from 'zod';
-import leadGenieLogo from '@/assets/lead-genie-logo.png';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -169,48 +168,48 @@ export default function Auth() {
       <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl animate-pulse" />
       <div className="absolute bottom-20 right-10 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
       
-      <Card className="w-full max-w-md relative z-10 animate-fade-in shadow-2xl backdrop-blur-md bg-card/98 border-2" style={{ animationDelay: '0.3s' }}>
-        <CardHeader className="text-center space-y-4">
+      <Card className="w-full max-w-md relative z-10 animate-fade-in shadow-[0_15px_45px_-20px_rgba(72,50,250,0.6)] backdrop-blur-md bg-card/98 border-2 border-primary/40 ring-2 ring-primary/20" style={{ animationDelay: '0.3s' }}>
+        <CardHeader className="text-center space-y-3 pb-2">
           <div className="flex justify-center animate-fade-in" style={{ animationDelay: '0.3s' }}>
-            <img src={leadGenieLogo} alt="LeadGenie CRM" className="h-20 w-auto drop-shadow-sm" />
+            <img src="/leadgenie-auth-logo.png" alt="LeadGenie CRM" className="h-20 w-auto drop-shadow" />
           </div>
 
-          <div className="space-y-2 animate-fade-in" style={{ animationDelay: '0.4s' }}>
-            <CardTitle className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+          <div className="space-y-1 animate-fade-in" style={{ animationDelay: '0.4s' }}>
+            <CardTitle className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
               LeadGenie CRM
             </CardTitle>
-            <CardDescription className="text-base text-muted-foreground">
+            <CardDescription className="text-sm text-muted-foreground">
               AI-Powered Lead Generation &amp; Enrichment
             </CardDescription>
           </div>
 
-          <div className="rounded-2xl border border-primary/20 bg-muted/40 p-5 text-left shadow-sm animate-fade-in" style={{ animationDelay: '0.5s' }}>
-            <p className="text-sm text-muted-foreground mb-4">
-              Modern sales platform powered by AI. Discover best-fit accounts, enrich contacts automatically, and close deals faster with guided workflows.
+          <div className="rounded-xl border-2 border-primary/40 bg-card/95/80 px-4 py-4 text-center shadow-[0_10px_30px_-18px_rgba(72,50,250,0.7)] animate-fade-in">
+            <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+              Modern sales platform powered by AI. Find best-fit accounts, enrich contacts automatically, and close deals faster with guided workflows.
             </p>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground tracking-wide uppercase">
+            <div className="grid gap-2 text-center">
+              <div className="border-2 border-primary/50 rounded-lg px-3 py-3 bg-card/90 shadow-[0_8px_18px_-12px_rgba(72,50,250,0.65)]">
+                <p className="text-[11px] font-semibold text-foreground tracking-wide uppercase">
                   AI Lead Finder
                 </p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Search and discover companies that match your ideal customer profile with intelligent enrichment filling in the gaps.
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Discover companies that match your ICP and let AI fill in the missing details instantly.
                 </p>
               </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground tracking-wide uppercase">
+              <div className="border-2 border-primary/50 rounded-lg px-3 py-3 bg-card/90 shadow-[0_8px_18px_-12px_rgba(72,50,250,0.65)]">
+                <p className="text-[11px] font-semibold text-foreground tracking-wide uppercase">
                   Smart Contact Management
                 </p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Track every relationship, automate follow-ups, and keep contact records clean with AI assistance.
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Stay on top of every relationship with automated reminders and clean, enriched records.
                 </p>
               </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground tracking-wide uppercase">
+              <div className="border-2 border-primary/50 rounded-lg px-3 py-3 bg-card/90 shadow-[0_8px_18px_-12px_rgba(72,50,250,0.65)]">
+                <p className="text-[11px] font-semibold text-foreground tracking-wide uppercase">
                   Pipeline Analytics
                 </p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Visualize your sales funnel, forecast revenue, and focus on the deals that move the needle.
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Visualize your funnel, forecast revenue, and focus on the deals that move the needle.
                 </p>
               </div>
             </div>
