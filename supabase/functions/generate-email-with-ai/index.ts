@@ -35,27 +35,36 @@ serve(async (req) => {
     }
 
     // Fetch user profile
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('full_name, email, job_title, phone')
       .eq('id', user.id)
       .single();
 
+    if (profileError) {
+      console.error('Error fetching profile:', profileError);
+    }
+    console.log('Fetched profile data:', profile);
+
     // Fetch business profile
-    const { data: businessProfile } = await supabase
+    const { data: businessProfile, error: businessError } = await supabase
       .from('business_profiles')
       .select('company_name, website, phone')
       .eq('user_id', user.id)
       .single();
 
-    console.log('User profile:', profile);
-    console.log('Business profile:', businessProfile);
+    if (businessError) {
+      console.error('Error fetching business profile:', businessError);
+    }
+    console.log('Fetched business profile data:', businessProfile);
 
-    // Extract sender information
-    const senderName = profile?.full_name || 'Professional';
+    // Extract sender information with fallbacks
+    const senderName = profile?.full_name || 'Your Name';
     const senderEmail = profile?.email || user.email || '';
     const senderTitle = profile?.job_title || '';
     const senderCompany = businessProfile?.company_name || '';
+
+    console.log('Using sender info:', { senderName, senderTitle, senderCompany, senderEmail });
 
     let systemPrompt: string;
     let userPrompt: string;
