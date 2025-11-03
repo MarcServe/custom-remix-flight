@@ -194,7 +194,7 @@ export default function Invoices() {
                 Let AI create a professional invoice or quotation based on your data
               </DialogDescription>
             </DialogHeader>
-            <ScrollArea className="flex-1 px-1">
+            <ScrollArea className="flex-1 px-1 max-h-[60vh]">
               <div className="grid gap-4 py-4 pr-3">
               <div className="grid gap-2">
                 <Label htmlFor="type">Type</Label>

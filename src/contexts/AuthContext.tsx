@@ -59,16 +59,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(session?.user ?? null);
         setLoading(false);
 
-        // Handle auth events - only show welcome toast for actual sign-ins, not initial session restoration
-        if (event === 'SIGNED_IN' && !initialLoadRef.current) {
-          toast.success("Welcome back!", {
-            description: "You've successfully signed in.",
-          });
-        } else if (event === 'SIGNED_OUT') {
-          setUserRole(null);
-          toast.info("Signed out", {
-            description: "You've been signed out successfully.",
-          });
+        // Only show toasts after initial load is complete to avoid showing on page refresh
+        if (!initialLoadRef.current) {
+          if (event === 'SIGNED_IN') {
+            toast.success("Welcome back!", {
+              description: "You've successfully signed in.",
+            });
+          } else if (event === 'SIGNED_OUT') {
+            setUserRole(null);
+            toast.info("Signed out", {
+              description: "You've been signed out successfully.",
+            });
+          }
         }
       }
     );
@@ -78,7 +80,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
-      // Mark initial load as complete
+      // Mark initial load as complete after session check
       initialLoadRef.current = false;
     });
 
