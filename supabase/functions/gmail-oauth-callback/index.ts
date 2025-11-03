@@ -2,6 +2,15 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 serve(async (req: Request) => {
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+  
+  // Dynamically detect the app URL from request headers or environment
+  const origin = req.headers.get('origin') || 
+                 req.headers.get('referer')?.split('/').slice(0, 3).join('/') || 
+                 Deno.env.get('APP_URL');
+  
+  const appUrl = origin || SUPABASE_URL.replace('.supabase.co', '.lovableproject.com').replace('/functions/v1', '');
+
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get('code');
@@ -10,8 +19,27 @@ serve(async (req: Request) => {
 
     if (error) {
       console.error('OAuth error:', error);
+      const redirectUrl = `${appUrl}/integrations/email-providers?gmail_error=${encodeURIComponent(error)}`;
       return new Response(
-        `<html><body><script>window.close();</script><p>Authorization failed. You can close this window.</p></body></html>`,
+        `<html>
+          <head>
+            <title>Authorization Failed</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 50px; }
+              .error { color: #ef4444; font-size: 24px; margin-bottom: 20px; }
+              .message { color: #64748b; }
+            </style>
+          </head>
+          <body>
+            <div class="error">✗ Authorization Failed</div>
+            <div class="message">Redirecting you back...</div>
+            <script>
+              setTimeout(function() {
+                window.location.href = '${redirectUrl}';
+              }, 1000);
+            </script>
+          </body>
+        </html>`,
         { headers: { 'Content-Type': 'text/html' }, status: 400 }
       );
     }
@@ -26,7 +54,6 @@ serve(async (req: Request) => {
     // Exchange code for tokens
     const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
     const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET');
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const redirectUri = `${SUPABASE_URL}/functions/v1/gmail-oauth-callback`;
 
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
@@ -68,7 +95,7 @@ serve(async (req: Request) => {
 
     const { error: dbError } = await supabase
       .from('crm_connections')
-      .insert({
+      .upsert({
         user_id,
         provider: 'gmail_direct',
         connection_id: `gmail_direct_${Date.now()}`,
@@ -88,6 +115,8 @@ serve(async (req: Request) => {
           supports_attachments: true,
           api_based: true,
         },
+      }, {
+        onConflict: 'user_id,provider'
       });
 
     if (dbError) {
@@ -97,15 +126,56 @@ serve(async (req: Request) => {
 
     console.log('Successfully stored Gmail connection for user:', user_id);
 
+    // Redirect back to the app instead of closing popup
+    const redirectUrl = `${appUrl}/integrations/email-providers?gmail_connected=true`;
+
     return new Response(
-      `<html><body><script>window.close();</script><p>Successfully connected Gmail! You can close this window.</p></body></html>`,
+      `<html>
+        <head>
+          <title>Redirecting...</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 50px; }
+            .success { color: #22c55e; font-size: 24px; margin-bottom: 20px; }
+            .message { color: #64748b; }
+          </style>
+        </head>
+        <body>
+          <div class="success">✓ Gmail Connected Successfully!</div>
+          <div class="message">Redirecting you back...</div>
+          <script>
+            setTimeout(function() {
+              window.location.href = '${redirectUrl}';
+            }, 1000);
+          </script>
+        </body>
+      </html>`,
       { headers: { 'Content-Type': 'text/html' }, status: 200 }
     );
 
   } catch (error: any) {
     console.error('Error in gmail-oauth-callback:', error);
+    const redirectUrl = `${appUrl}/integrations/email-providers?gmail_error=${encodeURIComponent(error.message)}`;
+    
     return new Response(
-      `<html><body><script>window.close();</script><p>Error: ${error.message}. You can close this window.</p></body></html>`,
+      `<html>
+        <head>
+          <title>Connection Error</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 50px; }
+            .error { color: #ef4444; font-size: 24px; margin-bottom: 20px; }
+            .message { color: #64748b; }
+          </style>
+        </head>
+        <body>
+          <div class="error">✗ Connection Error</div>
+          <div class="message">Redirecting you back...</div>
+          <script>
+            setTimeout(function() {
+              window.location.href = '${redirectUrl}';
+            }, 1000);
+          </script>
+        </body>
+      </html>`,
       { headers: { 'Content-Type': 'text/html' }, status: 500 }
     );
   }

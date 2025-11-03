@@ -354,22 +354,22 @@ export default function Conversations() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
+    <div className="container mx-auto p-4 sm:p-6 max-w-7xl">
       <div className="mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
+            <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg shrink-0">
               <MessageSquare className="h-6 w-6 text-white" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold">Active Conversations</h1>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold">Conversations</h1>
               <p className="text-sm text-muted-foreground">
-                View and respond to email conversations with AI assistance
+                All email threads and replies
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+            <div className="text-left sm:text-right">
               <p className="text-xs text-muted-foreground">
                 Last synced: {format(lastSyncTime, 'HH:mm:ss')}
               </p>
@@ -377,16 +377,19 @@ export default function Conversations() {
                 Auto-refresh: 30s
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleManualRefresh}
-              disabled={isRefreshing}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-            <PendingReviewsBadge />
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleManualRefresh}
+                disabled={isRefreshing}
+                className="flex-1 sm:flex-initial"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <PendingReviewsBadge />
+            </div>
           </div>
         </div>
       </div>
@@ -479,20 +482,20 @@ export default function Conversations() {
                           : 'hover:bg-muted'
                       }`}
                     >
-                      <div className="flex items-center gap-2 mb-1 min-w-0">
-                        <div className="font-medium truncate flex-1 min-w-0">{conv.title}</div>
-                        {conv.type === 'standalone' && (
-                          <Badge variant="secondary" className="text-xs shrink-0">Standalone</Badge>
+                      <div className="flex flex-col gap-2 w-full">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-medium whitespace-normal line-clamp-2 flex-1">{conv.title}</div>
+                          {conv.type === 'standalone' && (
+                            <Badge variant="secondary" className="text-xs shrink-0">Standalone</Badge>
+                          )}
+                        </div>
+                        {conv.subtitle && (
+                          <p className="text-sm text-muted-foreground whitespace-normal line-clamp-2">{conv.subtitle}</p>
+                        )}
+                        {conv.goal && (
+                          <p className="text-xs text-muted-foreground whitespace-normal line-clamp-2">Goal: {conv.goal}</p>
                         )}
                       </div>
-                      <div className="text-sm text-muted-foreground line-clamp-2 break-words">
-                        {conv.subtitle}
-                      </div>
-                      {conv.goal && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Goal: {conv.goal}
-                        </div>
-                      )}
                       {conv.type === 'sequence' && conv.sequenceData && (
                         <div className="flex gap-2 mt-2">
                           <Badge variant="outline">
