@@ -170,7 +170,10 @@ export default function Auth() {
       <div className="absolute bottom-20 right-10 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
       
       <Card className="w-full max-w-md relative z-10 animate-fade-in shadow-2xl backdrop-blur-md bg-card/98 border-2" style={{ animationDelay: '0.3s' }}>
-        <CardHeader className="text-center space-y-3">
+        <CardHeader className="text-center space-y-4">
+          <div className="flex justify-center animate-fade-in" style={{ animationDelay: '0.3s' }}>
+            <img src={leadGenieLogo} alt="LeadGenie CRM" className="h-24 w-auto" />
+          </div>
           <CardTitle className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-fade-in" style={{ animationDelay: '0.4s' }}>
             LeadGenie CRM
           </CardTitle>
