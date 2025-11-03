@@ -12,20 +12,28 @@ serve(async (req) => {
   }
 
   try {
-    const { context, type } = await req.json();
+    const requestBody = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
-    // Create prompt based on invoice/quotation type
-    const systemPrompt = type === 'invoice' 
-      ? `You are a professional business communication assistant. Generate a polite and professional email to accompany an invoice. The email should be concise, friendly, and include all relevant details.`
-      : `You are a professional business communication assistant. Generate a polite and professional email to accompany a quotation. The email should be persuasive, highlight value, and encourage a response.`;
+    let systemPrompt: string;
+    let userPrompt: string;
 
-    const userPrompt = type === 'invoice'
-      ? `Generate a professional email to send with invoice ${context.invoiceNumber} to ${context.companyName}.
+    // Check if this is an invoice/quotation request (has 'type' field)
+    if (requestBody.type) {
+      const { context, type } = requestBody;
+      console.log('Processing invoice/quotation email:', type);
+      
+      // Create prompt based on invoice/quotation type
+      systemPrompt = type === 'invoice' 
+        ? `You are a professional business communication assistant. Generate a polite and professional email to accompany an invoice. The email should be concise, friendly, and include all relevant details.`
+        : `You are a professional business communication assistant. Generate a polite and professional email to accompany a quotation. The email should be persuasive, highlight value, and encourage a response.`;
+
+      userPrompt = type === 'invoice'
+        ? `Generate a professional email to send with invoice ${context.invoiceNumber} to ${context.companyName}.
 Amount: $${context.amount}
 Due Date: ${context.dueDate}
 Items: ${context.lineItems}
@@ -38,7 +46,7 @@ The email should:
 - Be warm and professional
 
 Return the response as JSON with 'subject' and 'body' fields.`
-      : `Generate a professional quotation email for quote ${context.invoiceNumber} to ${context.companyName}.
+        : `Generate a professional quotation email for quote ${context.invoiceNumber} to ${context.companyName}.
 Amount: $${context.amount}
 Valid Until: ${context.dueDate}
 Services: ${context.lineItems}
@@ -52,6 +60,27 @@ The email should:
 - Be persuasive yet professional
 
 Return the response as JSON with 'subject' and 'body' fields.`;
+    } else {
+      // This is a personal/sales email request
+      const { recipientName, companyName, context } = requestBody;
+      console.log('Processing personal email for:', recipientName);
+      
+      systemPrompt = `You are a professional business communication assistant. Generate persuasive and warm sales/outreach emails that feel personal and authentic. Keep emails concise, engaging, and action-oriented.`;
+
+      userPrompt = `Generate a professional business outreach email to ${recipientName}${companyName ? ` at ${companyName}` : ''}.
+
+${context ? `Additional context: ${context}` : ''}
+
+The email should:
+- Start with a warm, personalized greeting
+- Be concise and respectful of their time
+- Clearly communicate value proposition
+- Include a clear call-to-action
+- Feel authentic and not overly salesy
+- Be professional yet approachable
+
+Return the response as JSON with 'subject' and 'body' fields.`;
+    }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -83,8 +112,12 @@ Return the response as JSON with 'subject' and 'body' fields.`;
       result = JSON.parse(content);
     } catch (e) {
       // If parsing fails, create a structured response from the text
+      const fallbackSubject = requestBody.type 
+        ? `${requestBody.type === 'invoice' ? 'Invoice' : 'Quotation'} - ${requestBody.context?.companyName || 'Business Communication'}`
+        : `Message to ${requestBody.recipientName || 'Contact'}`;
+      
       result = {
-        subject: `${type === 'invoice' ? 'Invoice' : 'Quotation'} ${context.invoiceNumber} - ${context.companyName}`,
+        subject: fallbackSubject,
         body: content
       };
     }
