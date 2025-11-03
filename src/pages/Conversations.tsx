@@ -482,20 +482,20 @@ export default function Conversations() {
                           : 'hover:bg-muted'
                       }`}
                     >
-                      <div className="flex items-start gap-2 mb-1">
-                        <div className="font-medium break-words flex-1 min-w-0">{conv.title}</div>
-                        {conv.type === 'standalone' && (
-                          <Badge variant="secondary" className="text-xs shrink-0 mt-0.5">Standalone</Badge>
+                      <div className="flex flex-col gap-2 w-full">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-medium whitespace-normal line-clamp-2 flex-1">{conv.title}</div>
+                          {conv.type === 'standalone' && (
+                            <Badge variant="secondary" className="text-xs shrink-0">Standalone</Badge>
+                          )}
+                        </div>
+                        {conv.subtitle && (
+                          <p className="text-sm text-muted-foreground whitespace-normal line-clamp-2">{conv.subtitle}</p>
+                        )}
+                        {conv.goal && (
+                          <p className="text-xs text-muted-foreground whitespace-normal line-clamp-2">Goal: {conv.goal}</p>
                         )}
                       </div>
-                      <div className="text-sm text-muted-foreground break-words">
-                        {conv.subtitle}
-                      </div>
-                      {conv.goal && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Goal: {conv.goal}
-                        </div>
-                      )}
                       {conv.type === 'sequence' && conv.sequenceData && (
                         <div className="flex gap-2 mt-2">
                           <Badge variant="outline">
