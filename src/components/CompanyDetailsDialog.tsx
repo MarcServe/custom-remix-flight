@@ -264,6 +264,24 @@ export function CompanyDetailsDialog({
 
     setIsSaving(true);
     try {
+      // Check if company already exists by website
+      const { supabase: supabaseClient } = await import("@/integrations/supabase/client");
+      const { data: existingCompany } = await supabaseClient
+        .from('companies')
+        .select('id, name')
+        .eq('website', company.website)
+        .maybeSingle();
+
+      if (existingCompany) {
+        toast({
+          title: 'Already Exists',
+          description: `${existingCompany.name} is already in your CRM`,
+          variant: 'destructive',
+        });
+        setIsSaving(false);
+        return;
+      }
+
       // Create company
       const { data: createdCompany, error: companyError } = await companiesApi.createCompany({
         name: company.name,
