@@ -144,27 +144,22 @@ export default function LeadFinder() {
         try {
           // Check if company already exists by website or name
           let existingCompany = null;
-          
+
           // If website exists, check by website
           if (company.website && company.website.trim()) {
-            const { data } = await supabase
-              .from('companies')
-              .select('id')
-              .eq('website', company.website)
-              .maybeSingle();
-            existingCompany = data;
-          }
-          
-          // If no website or no match found, check by name
-          if (!existingCompany) {
-            const { data } = await supabase
-              .from('companies')
-              .select('id')
-              .ilike('name', company.name)
-              .maybeSingle();
+            const {
+              data
+            } = await supabase.from('companies').select('id').eq('website', company.website).maybeSingle();
             existingCompany = data;
           }
 
+          // If no website or no match found, check by name
+          if (!existingCompany) {
+            const {
+              data
+            } = await supabase.from('companies').select('id').ilike('name', company.name).maybeSingle();
+            existingCompany = data;
+          }
           if (existingCompany) {
             // Company already exists, skip
             console.log('Company already exists:', company.name);
@@ -173,16 +168,17 @@ export default function LeadFinder() {
 
           // Create company
           // Generate unique website placeholder if none exists
-          const websiteValue = company.website && company.website.trim() 
-            ? company.website 
-            : `no-website-${crypto.randomUUID()}`;
-          
+          const websiteValue = company.website && company.website.trim() ? company.website : `no-website-${crypto.randomUUID()}`;
+
           // Get current user
-          const { data: { user } } = await supabase.auth.getUser();
+          const {
+            data: {
+              user
+            }
+          } = await supabase.auth.getUser();
           if (!user) {
             throw new Error('User not authenticated');
           }
-            
           const {
             data: createdCompany,
             error: companyError
@@ -289,7 +285,7 @@ export default function LeadFinder() {
   };
   const availableSubcategories = industryCategory ? getIndustrySubcategories(industryCategory) : [];
   const filteredSubcategories = availableSubcategories.filter(sub => sub.toLowerCase().includes(subcategorySearch.toLowerCase()));
-  const isFormValid = (size && geography && industryCategory) || (customSearchText.trim().length > 0);
+  const isFormValid = size && geography && industryCategory || customSearchText.trim().length > 0;
   const isLoading = streamingSearch.isLoading;
 
   // Create results object compatible with existing code
@@ -609,7 +605,7 @@ export default function LeadFinder() {
               <Separator orientation="vertical" className="h-4" />
               <div className="flex items-center gap-2">
                 <Zap className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="font-mono">${(results.usage.estimatedCost ?? 0).toFixed(4)}</span>
+                
               </div>
             </div>}
         </div>
@@ -701,13 +697,7 @@ export default function LeadFinder() {
 
                   <div className="space-y-1.5">
                     <Label htmlFor="custom-search" className="text-xs font-medium">Custom Search (Optional)</Label>
-                    <Textarea
-                      id="custom-search"
-                      placeholder="e.g., Find me hospitals in Cardiff with 1-10 employees, specialised in taking care of old and disabled"
-                      value={customSearchText}
-                      onChange={e => setCustomSearchText(e.target.value)}
-                      className="text-xs min-h-[80px] resize-none"
-                    />
+                    <Textarea id="custom-search" placeholder="e.g., Find me hospitals in Cardiff with 1-10 employees, specialised in taking care of old and disabled" value={customSearchText} onChange={e => setCustomSearchText(e.target.value)} className="text-xs min-h-[80px] resize-none" />
                     <p className="text-[10px] text-muted-foreground">
                       Describe your search in natural language to refine results
                     </p>
@@ -928,15 +918,15 @@ export default function LeadFinder() {
                             <p className="text-blue-700 dark:text-blue-300">You have saved results from a previous search.</p>
                           </div>
                           <Button size="sm" onClick={() => {
-                            const restored = streamingSearch.restoreStoredResults();
-                            if (!restored) {
-                              toast({
-                                title: 'No Results',
-                                description: 'No previous results found',
-                                variant: 'destructive'
-                              });
-                            }
-                          }} className="h-7 text-xs whitespace-nowrap">
+                      const restored = streamingSearch.restoreStoredResults();
+                      if (!restored) {
+                        toast({
+                          title: 'No Results',
+                          description: 'No previous results found',
+                          variant: 'destructive'
+                        });
+                      }
+                    }} className="h-7 text-xs whitespace-nowrap">
                             <RefreshCw className="h-3 w-3 mr-1" />
                             Load Results
                           </Button>
