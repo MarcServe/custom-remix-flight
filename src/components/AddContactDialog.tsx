@@ -21,6 +21,7 @@ const contactSchema = z.object({
   phone: z.string().max(50, "Phone must be less than 50 characters").optional(),
   title: z.string().max(200, "Title must be less than 200 characters").optional(),
   company_id: z.string().uuid().optional().nullable(),
+  company_name: z.string().max(200, "Company name must be less than 200 characters").optional(),
   linkedin_url: z.string().url("Invalid URL").optional().or(z.literal('')),
   twitter_url: z.string().url("Invalid URL").optional().or(z.literal('')),
   location: z.string().max(200, "Location must be less than 200 characters").optional(),
@@ -47,6 +48,7 @@ export function AddContactDialog({ open, onOpenChange, onSuccess }: AddContactDi
       phone: "",
       title: "",
       company_id: null,
+      company_name: "",
       linkedin_url: "",
       twitter_url: "",
       location: "",
@@ -73,6 +75,23 @@ export function AddContactDialog({ open, onOpenChange, onSuccess }: AddContactDi
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
+      let finalCompanyId = values.company_id;
+
+      // If user entered a company name manually, create the company first
+      if (values.company_name && !values.company_id) {
+        const { data: newCompany, error: companyError } = await supabase
+          .from("companies")
+          .insert({
+            user_id: user.id,
+            name: values.company_name,
+          })
+          .select()
+          .single();
+
+        if (companyError) throw companyError;
+        finalCompanyId = newCompany.id;
+      }
+
       const { data, error } = await supabase
         .from("people")
         .insert({
@@ -82,7 +101,7 @@ export function AddContactDialog({ open, onOpenChange, onSuccess }: AddContactDi
           email: values.email || null,
           phone: values.phone || null,
           title: values.title || null,
-          company_id: values.company_id || null,
+          company_id: finalCompanyId || null,
           linkedin_url: values.linkedin_url || null,
           twitter_url: values.twitter_url || null,
           location: values.location || null,
@@ -205,32 +224,56 @@ export function AddContactDialog({ open, onOpenChange, onSuccess }: AddContactDi
 
               <FormField
                 control={form.control}
-                name="company_id"
+                name="company_name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Company (Optional)</FormLabel>
-                    <Select 
-                      value={field.value || undefined} 
-                      onValueChange={(value) => field.onChange(value || null)}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select company (optional)" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {companies?.map((company) => (
-                          <SelectItem key={company.id} value={company.id}>
-                            {company.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Company Name (Optional)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="Enter company name" 
+                        {...field}
+                        disabled={!!form.watch("company_id")}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="company_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Or Select Existing Company</FormLabel>
+                  <Select 
+                    value={field.value || undefined} 
+                    onValueChange={(value) => {
+                      field.onChange(value || null);
+                      if (value) {
+                        form.setValue("company_name", "");
+                      }
+                    }}
+                    disabled={!!form.watch("company_name")}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select from existing companies" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {companies?.map((company) => (
+                        <SelectItem key={company.id} value={company.id}>
+                          {company.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="grid grid-cols-2 gap-4">
               <FormField
