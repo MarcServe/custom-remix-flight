@@ -399,6 +399,7 @@ export type Database = {
           email_template_style: string | null
           id: string
           industry: string | null
+          phone: string | null
           services_description: string
           target_audience: string | null
           tone_preference: string | null
@@ -426,6 +427,7 @@ export type Database = {
           email_template_style?: string | null
           id?: string
           industry?: string | null
+          phone?: string | null
           services_description: string
           target_audience?: string | null
           tone_preference?: string | null
@@ -453,6 +455,7 @@ export type Database = {
           email_template_style?: string | null
           id?: string
           industry?: string | null
+          phone?: string | null
           services_description?: string
           target_audience?: string | null
           tone_preference?: string | null

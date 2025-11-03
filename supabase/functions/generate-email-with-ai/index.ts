@@ -142,29 +142,33 @@ Return the response as JSON with 'subject' and 'body' fields.`;
       const { recipientName, companyName, context } = requestBody;
       console.log('Processing personal email for:', recipientName);
       
-      systemPrompt = `You are an expert sales email writer. Write complete, ready-to-send emails with REAL CONTENT - never include instructions, brackets, or placeholders in the output. The email should be a finished product that can be sent immediately.`;
+      systemPrompt = `You are an expert sales email writer. Write complete, ready-to-send emails with REAL CONTENT ONLY. NEVER use brackets, placeholders, or instructions in the output. Replace any missing information with professional, general language.`;
 
-      userPrompt = `Write a complete, professional outreach email.
+      userPrompt = `Write a complete professional outreach email to ${recipientName}${companyName ? ` at ${companyName}` : ''}.
 
-TO: ${recipientName}${companyName ? ` at ${companyName}` : ''}
+You are: ${senderName}${senderTitle ? `, ${senderTitle}` : ''}${senderCompany ? ` from ${senderCompany}` : ''}
 
-FROM: ${senderName}${senderTitle ? `, ${senderTitle}` : ''}${senderCompany ? ` at ${senderCompany}` : ''}
+${context ? `CONTEXT: ${context}\n` : ''}
 
-${context ? `CONTEXT/NOTES:\n${context}\n` : ''}
-
-WRITING GUIDELINES:
-- Start with a personalized greeting using their name
-- Write 3-4 short paragraphs with actual content (not instructions or placeholders)
-- If you need to mention something specific about them, write something plausible and professional (e.g., "I noticed your team has been expanding" or "I saw your company is active in the ${companyName ? companyName.split(' ')[0] : 'industry'} space")
-- Focus on ${senderCompany || 'our'} value proposition and how it can help them
-- Include a specific, low-pressure call to action (e.g., "Would you be open to a brief 15-minute call next week?")
-- End with this EXACT signature:
+STRICT RULES - NO EXCEPTIONS:
+1. NEVER write [brackets] or (placeholders) anywhere in the email
+2. If company name is missing, use general terms like "your team" or "your organization"
+3. Write ACTUAL content, not instructions like "mention their work" - just write the actual content
+4. Make the email about AI solutions that streamline sales processes and increase efficiency
+5. Be specific about benefits: lead qualification, automated outreach, CRM integration
+6. End with: "Would you be open to a brief 15-minute call next week to discuss this further?"
+7. Close with this EXACT signature:
 
 ${emailSignature}
 
-CRITICAL: Write a COMPLETE email with real sentences - NO brackets, NO placeholder instructions, NO [mention X], NO (e.g., ....). Write as if you're actually sending this email right now.
+FORBIDDEN PATTERNS (never use these):
+- [Your Company Name]
+- [Sales Director Company]
+- [mention something specific]
+- (e.g., your team's recent success)
+- any text in brackets or parentheses with instructions
 
-Return as JSON: {"subject": "...", "body": "..."}`;
+Return as JSON: {"subject": "Streamlining Sales with AI", "body": "actual email content here"}`;
     }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
