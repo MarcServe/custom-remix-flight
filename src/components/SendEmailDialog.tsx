@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, Send, Sparkles, Code, Eye, Bot } from "lucide-react";
 import { RichTextEditor } from "./email/RichTextEditor";
 import { EmailTemplateSelector, EMAIL_TEMPLATES, type EmailTemplate } from "./email/EmailTemplateSelector";
+import { FileAttachmentSelector } from "./email/FileAttachmentSelector";
 
 interface SendEmailDialogProps {
   open: boolean;
@@ -38,6 +39,7 @@ export function SendEmailDialog({
   const [sender, setSender] = useState<'gmail' | 'resend' | 'smtp' | 'sendgrid'>('resend');
   const [template, setTemplate] = useState<EmailTemplate>('blank');
   const [enableAutoResponder, setEnableAutoResponder] = useState(false);
+  const [attachments, setAttachments] = useState<any[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
@@ -147,6 +149,7 @@ export function SendEmailDialog({
           contactId,
           sender,
           enableAutoResponder,
+          attachments: attachments.length > 0 ? attachments : undefined,
         },
       });
 
@@ -164,6 +167,7 @@ export function SendEmailDialog({
       setContext("");
       setTemplate('blank');
       setEnableAutoResponder(false);
+      setAttachments([]);
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error sending email:", error);
@@ -318,6 +322,12 @@ export function SendEmailDialog({
             <EmailTemplateSelector
               value={template}
               onChange={setTemplate}
+              disabled={isSending || isGenerating}
+            />
+
+            <FileAttachmentSelector
+              selectedFiles={attachments}
+              onFilesChange={setAttachments}
               disabled={isSending || isGenerating}
             />
 

@@ -11,6 +11,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { FileAttachmentSelector } from "./email/FileAttachmentSelector";
 
 interface SendInvoiceEmailDialogProps {
   invoice: any;
@@ -33,6 +34,7 @@ export default function SendInvoiceEmailDialog({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [context, setContext] = useState("");
+  const [attachments, setAttachments] = useState<any[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Fetch companies
@@ -194,6 +196,7 @@ export default function SendInvoiceEmailDialog({
           invoiceHtml,
           invoiceNumber: invoice.invoice_number,
           attachInvoice: true,
+          attachments: attachments.length > 0 ? attachments : undefined,
         },
       });
 
@@ -355,6 +358,12 @@ export default function SendInvoiceEmailDialog({
               rows={3}
             />
           </div>
+
+          <FileAttachmentSelector
+            selectedFiles={attachments}
+            onFilesChange={setAttachments}
+            disabled={sendEmail.isPending || isGenerating}
+          />
 
           <p className="text-xs text-muted-foreground">
             The {invoice?.invoice_type === 'invoice' ? 'invoice' : 'quotation'} will be attached as an HTML document

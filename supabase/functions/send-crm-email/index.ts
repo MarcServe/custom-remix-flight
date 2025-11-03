@@ -23,6 +23,13 @@ interface EmailRequest {
   invoiceHtml?: string; // Invoice/Quotation HTML to attach
   invoiceNumber?: string; // Invoice/Quotation number
   attachInvoice?: boolean; // Whether to attach the invoice
+  attachments?: Array<{ // File attachments
+    id?: string;
+    file_name: string;
+    file_type: string;
+    file_size: number;
+    storage_path: string;
+  }>;
 }
 
 serve(async (req) => {
@@ -53,7 +60,7 @@ serve(async (req) => {
     }
 
     const emailRequest: EmailRequest = await req.json();
-    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false } = emailRequest;
+    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, attachments = [] } = emailRequest;
     
     // Fetch user profile for signature and business email
     const { data: userProfile } = await supabaseClient
@@ -106,6 +113,44 @@ serve(async (req) => {
 
     console.log(`Sending email to ${toEmail} from user ${user.email} using ${sender}`);
 
+    // Fetch and prepare attachments if any
+    const attachmentData: Array<{ filename: string; content: string; type: string }> = [];
+    
+    if (attachments && attachments.length > 0) {
+      console.log(`Processing ${attachments.length} attachments`);
+      
+      for (const attachment of attachments) {
+        try {
+          // Download file from storage
+          const { data: fileData, error: downloadError } = await supabaseClient.storage
+            .from('crm-files')
+            .download(attachment.storage_path);
+          
+          if (downloadError) {
+            console.error(`Failed to download attachment ${attachment.file_name}:`, downloadError);
+            continue;
+          }
+          
+          // Convert to base64
+          const arrayBuffer = await fileData.arrayBuffer();
+          const base64 = btoa(
+            new Uint8Array(arrayBuffer)
+              .reduce((data, byte) => data + String.fromCharCode(byte), '')
+          );
+          
+          attachmentData.push({
+            filename: attachment.file_name,
+            content: base64,
+            type: attachment.file_type || 'application/octet-stream',
+          });
+          
+          console.log(`Attachment prepared: ${attachment.file_name} (${attachment.file_size} bytes)`);
+        } catch (attachError) {
+          console.error(`Error processing attachment ${attachment.file_name}:`, attachError);
+        }
+      }
+    }
+
     let messageId: string | null = null;
     let provider = sender;
 
@@ -155,16 +200,32 @@ serve(async (req) => {
 
       console.log(`Sending via Gmail Direct API from: ${fromEmail}`);
 
-      // Build Gmail API message
+      // Build Gmail API message with attachments
+      const boundary = '===============' + Math.random().toString().substr(2) + '==';
       const emailLines = [
         `From: ${fromEmail}`,
         `To: ${toEmail}`,
         `Subject: ${subject}`,
         'MIME-Version: 1.0',
+        `Content-Type: multipart/mixed; boundary="${boundary}"`,
+        '',
+        `--${boundary}`,
         'Content-Type: text/plain; charset=utf-8',
         '',
-        emailBodyText
+        emailBodyText,
       ];
+
+      // Add attachments if any
+      for (const attachment of attachmentData) {
+        emailLines.push(`--${boundary}`);
+        emailLines.push(`Content-Type: ${attachment.type}; name="${attachment.filename}"`);
+        emailLines.push('Content-Transfer-Encoding: base64');
+        emailLines.push(`Content-Disposition: attachment; filename="${attachment.filename}"`);
+        emailLines.push('');
+        emailLines.push(attachment.content);
+      }
+
+      emailLines.push(`--${boundary}--`);
 
       const emailMessage = emailLines.join('\r\n');
       const encodedMessage = btoa(emailMessage)
@@ -247,6 +308,10 @@ serve(async (req) => {
           headers: {
             'X-Entity-Ref-ID': threadId, // Custom header for tracking
           },
+          attachments: attachmentData.length > 0 ? attachmentData.map(att => ({
+            filename: att.filename,
+            content: att.content,
+          })) : undefined,
         }),
       });
 
@@ -321,6 +386,12 @@ serve(async (req) => {
               value: wrappedHtml,
             },
           ],
+          attachments: attachmentData.length > 0 ? attachmentData.map(att => ({
+            content: att.content,
+            filename: att.filename,
+            type: att.type,
+            disposition: 'attachment',
+          })) : undefined,
           custom_args: {
             thread_id: threadId,
             crm_tracking: 'true',
@@ -375,6 +446,10 @@ serve(async (req) => {
         headers: {
           'X-Entity-Ref-ID': threadId, // Custom header for tracking
         },
+        attachments: attachmentData.length > 0 ? attachmentData.map(att => ({
+          filename: att.filename,
+          content: att.content,
+        })) : undefined,
       }),
       });
 
