@@ -1194,9 +1194,6 @@ export default function LeadFinder() {
                     </div>
                   </div>)}
               </div>
-
-              {/* Usage Stats Footer */}
-              {filteredAndSortedResults.usage}
             </div>}
         </div>
       </div>
