@@ -36,6 +36,35 @@ export default function SendInvoiceEmailDialog({
   const [context, setContext] = useState("");
   const [attachments, setAttachments] = useState<any[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [sender, setSender] = useState<'gmail' | 'gmail_direct' | 'resend' | 'smtp' | 'sendgrid'>('resend');
+
+  // Fetch email connections
+  const { data: connections } = useQuery({
+    queryKey: ['email-connections'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('crm_connections')
+        .select('provider, status, from_email')
+        .eq('status', 'active')
+        .in('provider', ['gmail', 'gmail_direct', 'outlook', 'smtp', 'resend', 'sendgrid']);
+      return data || [];
+    },
+  });
+
+  const { data: businessProfile } = useQuery({
+    queryKey: ['business-profile'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      
+      const { data } = await supabase
+        .from('business_profiles')
+        .select('company_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      return data;
+    },
+  });
 
   // Fetch companies
   const { data: companies } = useQuery({
@@ -209,6 +238,7 @@ export default function SendInvoiceEmailDialog({
           invoiceNumber: invoice.invoice_number,
           attachInvoice: true,
           attachments: attachments.length > 0 ? attachments : undefined,
+          sender: sender || undefined,
         },
       });
 
@@ -322,6 +352,90 @@ export default function SendInvoiceEmailDialog({
               value={customEmail}
               onChange={(e) => setCustomEmail(e.target.value)}
             />
+          </div>
+
+          {/* Sender Selection */}
+          <div className="space-y-2">
+            <Label htmlFor="sender">Send From</Label>
+            <Select value={sender} onValueChange={(value) => setSender(value as 'gmail' | 'gmail_direct' | 'resend' | 'smtp' | 'sendgrid')}>
+              <SelectTrigger id="sender">
+                <SelectValue placeholder="Select sender..." />
+              </SelectTrigger>
+              <SelectContent>
+                {connections?.some(c => c.provider === 'resend' && c.status === 'active') && (
+                  <SelectItem value="resend">
+                    <div className="flex items-center gap-2">
+                      <span>🚀</span>
+                      <div>
+                        <div className="font-medium">Resend</div>
+                        <div className="text-xs text-muted-foreground">
+                          {businessProfile?.company_name || 'Your Business'} &lt;{connections.find(c => c.provider === 'resend')?.from_email}&gt;
+                        </div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                )}
+                {connections?.some(c => c.provider === 'sendgrid' && c.status === 'active') && (
+                  <SelectItem value="sendgrid">
+                    <div className="flex items-center gap-2">
+                      <span>📬</span>
+                      <div>
+                        <div className="font-medium">SendGrid</div>
+                        <div className="text-xs text-muted-foreground">
+                          {businessProfile?.company_name || 'Your Business'} &lt;{connections.find(c => c.provider === 'sendgrid')?.from_email}&gt;
+                        </div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                )}
+                {connections?.some(c => (c.provider === 'gmail' || c.provider === 'gmail_direct') && c.status === 'active') && (
+                  <SelectItem value="gmail_direct">
+                    <div className="flex items-center gap-2">
+                      <span>📧</span>
+                      <div>
+                        <div className="font-medium">Gmail</div>
+                        <div className="text-xs text-muted-foreground">
+                          {connections.find(c => c.provider === 'gmail' || c.provider === 'gmail_direct')?.from_email || 'Connected account'}
+                        </div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                )}
+                {connections?.some(c => c.provider === 'smtp' && c.status === 'active') && (
+                  <SelectItem value="smtp">
+                    <div className="flex items-center gap-2">
+                      <span>⚙️</span>
+                      <div>
+                        <div className="font-medium">SMTP Direct</div>
+                        <div className="text-xs text-muted-foreground">
+                          {businessProfile?.company_name || 'Your Business'} &lt;{connections.find(c => c.provider === 'smtp')?.from_email}&gt;
+                        </div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            {sender === 'resend' && (
+              <p className="text-xs text-muted-foreground">
+                ✓ Tracking enabled • Opens, clicks & replies monitored
+              </p>
+            )}
+            {sender === 'sendgrid' && (
+              <p className="text-xs text-muted-foreground">
+                ✓ Enterprise delivery • Full engagement tracking
+              </p>
+            )}
+            {(sender === 'gmail' || sender === 'gmail_direct') && (
+              <p className="text-xs text-muted-foreground">
+                ✓ Email will appear in your Gmail Sent folder
+              </p>
+            )}
+            {sender === 'smtp' && (
+              <p className="text-xs text-muted-foreground">
+                ✓ Direct SMTP delivery • No tracking
+              </p>
+            )}
           </div>
 
           {/* Email Content */}

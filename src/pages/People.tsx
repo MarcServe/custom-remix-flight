@@ -5,13 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send } from "lucide-react";
+import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send, Plus } from "lucide-react";
 import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
 import { PersonDetailsDialog } from "@/components/PersonDetailsDialog";
 import BulkEmailDialog from "@/components/BulkEmailDialog";
+import { AddContactDialog } from "@/components/AddContactDialog";
 
 export default function People() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [addContactDialogOpen, setAddContactDialogOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<any>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [bulkEmailDialogOpen, setBulkEmailDialogOpen] = useState(false);
@@ -84,6 +86,15 @@ export default function People() {
                   Bulk Send ({selectedPeopleIds.size})
                 </Button>
               )}
+              <Button 
+                onClick={() => setAddContactDialogOpen(true)} 
+                size="lg" 
+                variant="outline"
+                className="flex-1 sm:flex-none"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Contact
+              </Button>
               <Button 
                 onClick={() => setImportDialogOpen(true)} 
                 size="lg" 
@@ -206,6 +217,12 @@ export default function People() {
           </CardContent>
         </Card>
       )}
+
+      <AddContactDialog
+        open={addContactDialogOpen}
+        onOpenChange={setAddContactDialogOpen}
+        onSuccess={refetch}
+      />
 
       <ImportLeadsDialog
         open={importDialogOpen}
