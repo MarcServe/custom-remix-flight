@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +19,43 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY not configured');
     }
+
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const authHeader = req.headers.get('Authorization')!;
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    // Get authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error('User not authenticated');
+    }
+
+    // Fetch user profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name, email, job_title, phone')
+      .eq('id', user.id)
+      .single();
+
+    // Fetch business profile
+    const { data: businessProfile } = await supabase
+      .from('business_profiles')
+      .select('company_name, website, phone')
+      .eq('user_id', user.id)
+      .single();
+
+    console.log('User profile:', profile);
+    console.log('Business profile:', businessProfile);
+
+    // Extract sender information
+    const senderName = profile?.full_name || 'Professional';
+    const senderEmail = profile?.email || user.email || '';
+    const senderTitle = profile?.job_title || '';
+    const senderCompany = businessProfile?.company_name || '';
 
     let systemPrompt: string;
     let userPrompt: string;
@@ -65,19 +103,38 @@ Return the response as JSON with 'subject' and 'body' fields.`;
       const { recipientName, companyName, context } = requestBody;
       console.log('Processing personal email for:', recipientName);
       
-      systemPrompt = `You are a professional business communication assistant. Generate persuasive and warm sales/outreach emails that feel personal and authentic. Keep emails concise, engaging, and action-oriented.`;
+      systemPrompt = `You are a professional business communication assistant. Generate persuasive and warm sales/outreach emails that feel personal and authentic. Keep emails concise, engaging, and action-oriented. ALWAYS use the actual sender information provided - NEVER use placeholders.`;
 
-      userPrompt = `Generate a professional business outreach email to ${recipientName}${companyName ? ` at ${companyName}` : ''}.
+      userPrompt = `Generate a professional business outreach email with these details:
 
-${context ? `Additional context: ${context}` : ''}
+SENDER INFORMATION (USE THESE EXACT VALUES):
+- Sender Name: ${senderName}
+- Sender Title: ${senderTitle}
+- Sender Company: ${senderCompany}
+- Sender Email: ${senderEmail}
 
-The email should:
-- Start with a warm, personalized greeting
-- Be concise and respectful of their time
-- Clearly communicate value proposition
+RECIPIENT INFORMATION:
+- Recipient Name: ${recipientName}
+${companyName ? `- Recipient Company: ${companyName}` : ''}
+
+${context ? `ADDITIONAL CONTEXT:\n${context}` : ''}
+
+CRITICAL INSTRUCTIONS:
+- Use the ACTUAL sender name "${senderName}" in the signature
+- Use the ACTUAL company name "${senderCompany}" in the email
+- Use the ACTUAL job title "${senderTitle}" in the signature
+- DO NOT use placeholders like [Your Name] or [Your Company]
+- DO NOT use generic terms - use the specific information provided above
+- Make the email personal and authentic
+- Keep it concise and respectful of their time
 - Include a clear call-to-action
-- Feel authentic and not overly salesy
-- Be professional yet approachable
+- Use a professional yet approachable tone
+
+SIGNATURE FORMAT:
+Best regards,
+${senderName}
+${senderTitle}
+${senderCompany}
 
 Return the response as JSON with 'subject' and 'body' fields.`;
     }
