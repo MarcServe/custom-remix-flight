@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +12,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Send, Sparkles, Code, Eye, Bot } from "lucide-react";
 import { RichTextEditor } from "./email/RichTextEditor";
-import { EmailTemplateSelector, EMAIL_TEMPLATES, type EmailTemplate } from "./email/EmailTemplateSelector";
-import { TemplateStyleSelector, type EmailTemplateStyle } from "./email/TemplateStyleSelector";
 
 interface SendEmailDialogProps {
   open: boolean;
@@ -37,8 +35,6 @@ export function SendEmailDialog({
   const [bodyText, setBodyText] = useState("");
   const [context, setContext] = useState("");
   const [sender, setSender] = useState<'gmail' | 'resend' | 'smtp' | 'sendgrid'>('resend');
-  const [template, setTemplate] = useState<EmailTemplate>('blank');
-  const [templateStyle, setTemplateStyle] = useState<EmailTemplateStyle>('professional');
   const [enableAutoResponder, setEnableAutoResponder] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -64,38 +60,12 @@ export function SendEmailDialog({
       
       const { data } = await supabase
         .from('business_profiles')
-        .select('company_name, email_template_style')
+        .select('company_name')
         .eq('user_id', user.id)
         .maybeSingle();
       return data;
     },
   });
-
-  // Set default template style from business profile
-  useEffect(() => {
-    if (businessProfile?.email_template_style) {
-      setTemplateStyle(businessProfile.email_template_style as EmailTemplateStyle);
-    }
-  }, [businessProfile]);
-
-  // Apply template when changed
-  useEffect(() => {
-    if (template !== 'blank') {
-      const templateData = EMAIL_TEMPLATES[template];
-      let processedSubject = templateData.subject;
-      let processedBody = templateData.body;
-
-      // Replace variables
-      const firstName = recipientName.split(' ')[0];
-      processedSubject = processedSubject.replace(/{{firstName}}/g, firstName);
-      processedBody = processedBody.replace(/{{firstName}}/g, firstName);
-      processedBody = processedBody.replace(/{{companyName}}/g, companyId ? 'your company' : 'your team');
-
-      setSubject(processedSubject);
-      setBodyHtml(processedBody);
-      setBodyText(processedBody.replace(/<[^>]+>/g, ''));
-    }
-  }, [template, recipientName, companyId]);
 
   const handleGenerateWithAI = async () => {
     setIsGenerating(true);
@@ -156,7 +126,6 @@ export function SendEmailDialog({
           contactId,
           sender,
           enableAutoResponder,
-          templateStyle,
         },
       });
 
@@ -171,9 +140,8 @@ export function SendEmailDialog({
       setSubject("");
       setBodyHtml("");
       setBodyText("");
-      setTemplate('blank');
+      setContext("");
       setEnableAutoResponder(false);
-      setTemplateStyle(businessProfile?.email_template_style as EmailTemplateStyle || 'professional');
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error sending email:", error);
@@ -324,19 +292,6 @@ export function SendEmailDialog({
                 className="resize-none text-sm"
               />
             </div>
-
-            <EmailTemplateSelector
-              value={template}
-              onChange={setTemplate}
-              disabled={isSending || isGenerating}
-            />
-
-            <TemplateStyleSelector
-              value={templateStyle}
-              onChange={setTemplateStyle}
-              disabled={isSending || isGenerating}
-              showPreview={false}
-            />
 
             <div className="flex justify-between items-center">
               <Label>Email Content</Label>

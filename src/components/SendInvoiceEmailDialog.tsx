@@ -342,7 +342,7 @@ export default function SendInvoiceEmailDialog({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="Email body..."
-              className="min-h-[200px] resize-none"
+              className="min-h-[200px] max-h-[200px] overflow-y-auto"
             />
           </div>
 
