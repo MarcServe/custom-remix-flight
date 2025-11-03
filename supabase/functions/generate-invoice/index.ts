@@ -140,14 +140,21 @@ Return the data in the following JSON format:
             content: prompt,
           },
         ],
-        temperature: 0.3,
       }),
     });
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error('AI API error:', errorText);
-      throw new Error(`AI API error: ${aiResponse.status}`);
+      console.error('AI API error:', aiResponse.status, errorText);
+      
+      if (aiResponse.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again later.');
+      }
+      if (aiResponse.status === 402) {
+        throw new Error('Payment required. Please add credits to your Lovable AI workspace.');
+      }
+      
+      throw new Error(`AI API error: ${aiResponse.status} - ${errorText}`);
     }
 
     const aiData = await aiResponse.json();
