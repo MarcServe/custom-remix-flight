@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
       const { data: conn, error: connError } = await supabase
         .from('crm_connections')
         .select('*')
-        .eq('id', senderConnectionId)
+        .eq('connection_id', senderConnectionId)
         .eq('user_id', user.id)
         .single();
       
