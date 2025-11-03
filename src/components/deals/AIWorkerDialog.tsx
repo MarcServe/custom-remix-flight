@@ -35,7 +35,7 @@ export function AIWorkerDialog({ open, onOpenChange }: AIWorkerDialogProps) {
 
   const handleSendEmail = async (opportunity: any, sendImmediately: boolean) => {
     try {
-      await sendEmail.mutateAsync({
+      const emailResult = await sendEmail.mutateAsync({
         opportunity,
         sendImmediately,
       });
@@ -43,7 +43,15 @@ export function AIWorkerDialog({ open, onOpenChange }: AIWorkerDialogProps) {
       // Create deal automatically
       await createDeal.mutateAsync(opportunity);
 
-      toast.success(sendImmediately ? "Email sent and deal created!" : "Deal created! Review the email in your drafts.");
+      // Check if email sending failed due to missing email
+      if (emailResult && 'missingEmail' in emailResult && emailResult.missingEmail) {
+        toast.warning(
+          `Deal created for ${emailResult.companyName}. Add a contact email to send the outreach.`,
+          { duration: 5000 }
+        );
+      } else {
+        toast.success(sendImmediately ? "Email sent and deal created!" : "Deal created! Review the email in your drafts.");
+      }
     } catch (error) {
       // Error handling is done in the mutation
     }
@@ -60,16 +68,37 @@ export function AIWorkerDialog({ open, onOpenChange }: AIWorkerDialogProps) {
     }
 
     let successCount = 0;
+    let missingEmailCount = 0;
+    
     for (const opp of opportunities) {
       try {
-        await handleSendEmail(opp, sendImmediately);
-        successCount++;
+        const emailResult = await sendEmail.mutateAsync({
+          opportunity: opp,
+          sendImmediately,
+        });
+
+        // Create deal regardless of email status
+        await createDeal.mutateAsync(opp);
+
+        if (emailResult && 'missingEmail' in emailResult && emailResult.missingEmail) {
+          missingEmailCount++;
+        } else {
+          successCount++;
+        }
       } catch (error) {
         console.error("Failed to process opportunity:", error);
       }
     }
 
-    toast.success(`Processed ${successCount} of ${opportunities.length} opportunities`);
+    if (missingEmailCount > 0) {
+      toast.warning(
+        `Created ${opportunities.length} deals. ${missingEmailCount} need contact emails to send outreach.`,
+        { duration: 5000 }
+      );
+    } else {
+      toast.success(`Processed ${successCount} opportunities successfully`);
+    }
+    
     setSelectedOpportunities(new Set());
   };
 
@@ -241,9 +270,10 @@ export function AIWorkerDialog({ open, onOpenChange }: AIWorkerDialogProps) {
                               handleSendEmail(opportunity, false);
                             }}
                             disabled={sendEmail.isPending || createDeal.isPending}
+                            title="Create deal and save email as draft"
                           >
                             <Mail className="h-4 w-4 mr-2" />
-                            Save as Draft
+                            Create Deal
                           </Button>
                           <Button
                             size="sm"
@@ -252,9 +282,10 @@ export function AIWorkerDialog({ open, onOpenChange }: AIWorkerDialogProps) {
                               handleSendEmail(opportunity, true);
                             }}
                             disabled={sendEmail.isPending || createDeal.isPending}
+                            title="Create deal and send email (requires contact email)"
                           >
                             <Send className="h-4 w-4 mr-2" />
-                            Send Now
+                            Create & Send
                           </Button>
                         </div>
                       </CardContent>

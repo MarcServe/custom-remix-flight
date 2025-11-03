@@ -55,7 +55,12 @@ export function useSendOpportunityEmail() {
       const recipientEmail = company.contacts?.[0]?.email || company.general_email;
       
       if (!recipientEmail) {
-        throw new Error('No email address found for this company. Please add a contact first.');
+        // Return a special error that indicates missing email but not a complete failure
+        return { 
+          success: false, 
+          missingEmail: true,
+          companyName: opportunity.companyName 
+        };
       }
 
       // Send email via CRM email function
@@ -68,7 +73,7 @@ export function useSendOpportunityEmail() {
       });
 
       if (error) throw error;
-      return data;
+      return { success: true, data };
     },
     onError: (error: Error) => {
       console.error('Error sending email:', error);
