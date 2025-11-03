@@ -45,29 +45,25 @@ export function ConnectEmailDialog({
   const handleDirectGmailConnect = async () => {
     setLoading(true);
     try {
-      const { success, error } = await gmailDirectClient.connectWithPopup();
+      // Use redirect flow instead of popup (better browser compatibility)
+      const { error } = await gmailDirectClient.connectWithRedirect();
       
       if (error) {
         console.error('Direct Gmail OAuth error:', error);
         toast.error("Failed to connect Gmail", {
           description: error.message
         });
+        setLoading(false);
         return;
       }
 
-      if (success) {
-        toast.success("Gmail connected successfully!", {
-          description: "Your Gmail account is now connected"
-        });
-        onSuccess();
-        onOpenChange(false);
-      }
+      // Redirect will happen, no need to handle success here
+      // The page will reload after OAuth completes
     } catch (error) {
       console.error('Unexpected error:', error);
       toast.error("Connection failed", {
         description: "An unexpected error occurred. Please try again."
       });
-    } finally {
       setLoading(false);
     }
   };
@@ -291,7 +287,7 @@ export function ConnectEmailDialog({
             <Alert className="border-primary/50 bg-primary/5">
               <Info className="h-4 w-4 text-primary" />
               <AlertDescription className="text-sm">
-                Direct Gmail integration. A new window will open to sign in. Make sure pop-ups are allowed in your browser.
+                Direct Gmail integration. You'll be redirected to Google to sign in, then returned here automatically.
               </AlertDescription>
             </Alert>
 

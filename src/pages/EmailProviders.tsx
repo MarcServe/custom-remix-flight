@@ -107,6 +107,30 @@ export default function EmailProviders() {
   const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'gmail_direct' | 'outlook' | 'smtp'>('gmail');
   const [selectedApiProvider, setSelectedApiProvider] = useState<'resend' | 'sendgrid'>('resend');
 
+  // Handle OAuth callback from redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gmailConnected = params.get('gmail_connected');
+    const gmailError = params.get('gmail_error');
+
+    if (gmailConnected === 'true') {
+      toast.success("Gmail connected successfully!", {
+        description: "Your Gmail account is now connected"
+      });
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+      // Refresh connections
+      queryClient.invalidateQueries({ queryKey: ['nango-connections'] });
+      queryClient.invalidateQueries({ queryKey: ['api-key-connections'] });
+    } else if (gmailError) {
+      toast.error("Failed to connect Gmail", {
+        description: decodeURIComponent(gmailError)
+      });
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [queryClient]);
+
   const { data: oauthConnections, isLoading: isLoadingOAuth } = useQuery({
     queryKey: ['nango-connections'],
     queryFn: async () => {

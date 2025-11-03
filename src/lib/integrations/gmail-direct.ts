@@ -92,9 +92,9 @@ export const gmailDirectClient = {
   },
 
   /**
-   * Open OAuth popup and wait for connection
+   * Connect using redirect flow (recommended for all browsers)
    */
-  async connectWithPopup(): Promise<{ success: boolean; error: Error | null }> {
+  async connectWithRedirect(): Promise<{ error: Error | null }> {
     try {
       const { authUrl, error: authError } = await this.initiateOAuth();
 
@@ -102,52 +102,47 @@ export const gmailDirectClient = {
         throw authError || new Error('Failed to get auth URL');
       }
 
-      // Open popup
-      const width = 600;
-      const height = 700;
-      const left = window.screen.width / 2 - width / 2;
-      const top = window.screen.height / 2 - height / 2;
+      // Store the current page URL to return to after OAuth
+      const returnUrl = window.location.pathname + window.location.search;
+      localStorage.setItem('gmail_oauth_return_url', returnUrl);
+      localStorage.setItem('gmail_oauth_in_progress', 'true');
 
-      const popup = window.open(
-        authUrl,
-        'Gmail OAuth',
-        `width=${width},height=${height},left=${left},top=${top}`
-      );
+      // Redirect to OAuth URL
+      window.location.href = authUrl;
 
-      if (!popup) {
-        throw new Error('Failed to open popup. Please allow popups for this site.');
-      }
-
-      // Wait for popup to close
-      return new Promise((resolve) => {
-        const checkInterval = setInterval(() => {
-          if (popup.closed) {
-            clearInterval(checkInterval);
-            // Give a moment for the database to update
-            setTimeout(() => {
-              resolve({ success: true, error: null });
-            }, 1000);
-          }
-        }, 500);
-
-        // Timeout after 5 minutes
-        setTimeout(() => {
-          clearInterval(checkInterval);
-          if (!popup.closed) {
-            popup.close();
-          }
-          resolve({ 
-            success: false, 
-            error: new Error('OAuth timeout') 
-          });
-        }, 300000);
-      });
+      return { error: null };
     } catch (error) {
-      console.error('Exception in connectWithPopup:', error);
+      console.error('Exception in connectWithRedirect:', error);
       return { 
-        success: false, 
         error: error instanceof Error ? error : new Error('Unknown error') 
       };
     }
+  },
+
+  /**
+   * Check if we just returned from OAuth redirect
+   */
+  isOAuthCallback(): boolean {
+    return localStorage.getItem('gmail_oauth_in_progress') === 'true';
+  },
+
+  /**
+   * Complete OAuth after redirect
+   */
+  async completeOAuthRedirect(): Promise<{ success: boolean; returnUrl: string | null }> {
+    const inProgress = localStorage.getItem('gmail_oauth_in_progress');
+    const returnUrl = localStorage.getItem('gmail_oauth_return_url');
+
+    // Clean up
+    localStorage.removeItem('gmail_oauth_in_progress');
+    localStorage.removeItem('gmail_oauth_return_url');
+
+    if (inProgress === 'true') {
+      // Give the database a moment to update
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return { success: true, returnUrl };
+    }
+
+    return { success: false, returnUrl: null };
   },
 };
