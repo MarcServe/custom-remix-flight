@@ -57,12 +57,33 @@ serve(async (req: Request) => {
     
     console.log('Sending team invitation:', { teamId, email, role, teamName });
 
+    // Check if user is admin/owner of the team
+    const { data: membership, error: membershipError } = await supabaseClient
+      .from('team_members')
+      .select('role')
+      .eq('team_id', teamId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (membershipError || !membership || !['owner', 'admin'].includes(membership.role)) {
+      console.error('Permission denied:', membershipError);
+      return new Response(
+        JSON.stringify({ error: 'Only team owners and admins can send invitations' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Get inviter profile
     const { data: inviterProfile } = await supabaseClient
       .from('profiles')
       .select('full_name, email')
       .eq('id', user.id)
       .single();
+
+    // Generate secure token and expiration date
+    const token = crypto.randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
 
     // Create invitation in database
     const { data: invitation, error: inviteError } = await supabaseClient
@@ -72,6 +93,8 @@ serve(async (req: Request) => {
         email: email.toLowerCase(),
         role,
         invited_by_user_id: user.id,
+        token,
+        expires_at: expiresAt.toISOString(),
       })
       .select()
       .single();
@@ -84,10 +107,24 @@ serve(async (req: Request) => {
       );
     }
 
-    // Send email via Resend
-    const resend = new Resend(Deno.env.get('RESEND_API_KEY'));
-    const appUrl = Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '') || 'http://localhost:5173';
+    // Send email via Resend (if API key is available)
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    const appUrl = Deno.env.get('APP_URL') || 'http://localhost:5173';
     const inviteUrl = `${appUrl}/#/auth?invitation=${invitation.token}`;
+
+    if (!resendApiKey) {
+      console.warn('RESEND_API_KEY not configured - invitation created but email not sent');
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          invitation: { id: invitation.id, email: invitation.email },
+          warning: 'Invitation created but email not sent (RESEND_API_KEY not configured)'
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const resend = new Resend(resendApiKey);
 
     const emailHtml = `
 <!DOCTYPE html>
