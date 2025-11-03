@@ -16,7 +16,7 @@ import { PendingReviewsBadge } from "@/components/sequences/PendingReviewsBadge"
 import { AutoResponseReviewModal } from "@/components/sequences/AutoResponseReviewModal";
 import { usePendingReviews, PendingReview } from "@/hooks/use-pending-reviews";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEmailThreadsRealtime } from "@/hooks/use-realtime";
 
 interface EmailThread {
@@ -66,6 +66,7 @@ export default function Conversations() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   
   // Subscribe to realtime updates for email threads
   useEmailThreadsRealtime();
@@ -176,6 +177,29 @@ export default function Conversations() {
       );
     },
   });
+
+  // Auto-select conversation from URL parameter (after conversations are loaded)
+  useEffect(() => {
+    const sequenceId = searchParams.get('sequence');
+    if (sequenceId && conversations) {
+      const conversation = conversations.find(c => c.id === sequenceId);
+      if (conversation) {
+        setSelectedSequence(sequenceId);
+        // Clear the URL parameter after selecting
+        setSearchParams({}, { replace: true });
+        toast({
+          title: "Conversation loaded",
+          description: `Viewing conversation with ${conversation.title}`,
+        });
+      } else {
+        toast({
+          title: "Conversation not found",
+          description: "The requested conversation could not be found",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [searchParams, conversations, setSearchParams, toast]);
 
   const { data: threads, refetch: refetchThreads } = useQuery({
     queryKey: ['email-threads', selectedSequence],

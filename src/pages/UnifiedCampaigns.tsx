@@ -56,6 +56,7 @@ interface UnifiedActivity {
   recipient_info: string;
   status: string;
   timestamp: string;
+  company_sequence_id?: string;
   details?: any;
 }
 
@@ -166,6 +167,7 @@ export default function UnifiedCampaigns() {
         .select(`
           *,
           company_sequences(
+            id,
             companies(name),
             email_sequences(name)
           )
@@ -183,6 +185,7 @@ export default function UnifiedCampaigns() {
         recipient_info: activity.company_sequences?.companies?.name || 'Unknown Company',
         status: activity.status,
         timestamp: activity.sent_at || activity.created_at,
+        company_sequence_id: activity.company_sequence_id,
         details: {
           subject: activity.subject,
           opened: !!activity.opened_at,
@@ -336,9 +339,13 @@ export default function UnifiedCampaigns() {
                       key={activity.id}
                       className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer"
                       onClick={() => {
-                        // If activity has a reply, go to conversations to view the thread
+                        // If activity has a reply, go to conversations with deep link to the specific conversation
                         if (activity.details?.replied || activity.status === 'replied') {
-                          navigate('/conversations');
+                          if (activity.company_sequence_id) {
+                            navigate(`/conversations?sequence=${activity.company_sequence_id}`);
+                          } else {
+                            navigate('/conversations');
+                          }
                         }
                         // Otherwise, if it's a sequence activity, navigate to sequences
                         else if (activity.type === 'sequence' || activity.type === 'auto_response') {
