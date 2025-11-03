@@ -86,6 +86,17 @@ serve(async (req: Request) => {
       .eq('id', user.id)
       .single();
 
+    // Get the user's verified email from crm_connections for sending
+    const { data: emailConnection } = await supabaseAdmin
+      .from('crm_connections')
+      .select('from_email')
+      .eq('user_id', user.id)
+      .eq('provider', 'resend')
+      .eq('status', 'active')
+      .single();
+
+    const fromEmail = emailConnection?.from_email || inviterProfile?.email || 'noreply@yourdomain.com';
+
     // Generate secure token and expiration date
     const token = crypto.randomUUID();
     const expiresAt = new Date();
@@ -177,7 +188,7 @@ serve(async (req: Request) => {
     `.trim();
 
     const { error: emailError } = await resend.emails.send({
-      from: 'Team Invitations <onboarding@resend.dev>',
+      from: `Team Invitations <${fromEmail}>`,
       to: [email],
       subject: `You've been invited to join ${teamName}`,
       html: emailHtml,
