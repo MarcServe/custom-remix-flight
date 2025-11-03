@@ -36,7 +36,7 @@ export function SendEmailDialog({
   const [bodyHtml, setBodyHtml] = useState("");
   const [bodyText, setBodyText] = useState("");
   const [context, setContext] = useState("");
-  const [sender, setSender] = useState<'gmail' | 'resend' | 'smtp' | 'sendgrid'>('resend');
+  const [sender, setSender] = useState<'gmail' | 'gmail_direct' | 'resend' | 'smtp' | 'sendgrid'>('resend');
   const [template, setTemplate] = useState<EmailTemplate>('blank');
   const [enableAutoResponder, setEnableAutoResponder] = useState(false);
   const [attachments, setAttachments] = useState<any[]>([]);
@@ -51,7 +51,7 @@ export function SendEmailDialog({
         .from('crm_connections')
         .select('provider, status, from_email')
         .eq('status', 'active')
-        .in('provider', ['gmail', 'outlook', 'smtp', 'resend', 'sendgrid']);
+        .in('provider', ['gmail', 'gmail_direct', 'outlook', 'smtp', 'resend', 'sendgrid']);
       return data || [];
     },
   });
@@ -205,7 +205,7 @@ export function SendEmailDialog({
 
             <div className="space-y-2">
               <Label htmlFor="sender">Send From</Label>
-              <Select value={sender} onValueChange={(value) => setSender(value as 'gmail' | 'resend' | 'smtp' | 'sendgrid')}>
+              <Select value={sender} onValueChange={(value) => setSender(value as 'gmail' | 'gmail_direct' | 'resend' | 'smtp' | 'sendgrid')}>
                 <SelectTrigger id="sender">
                   <SelectValue placeholder="Select sender..." />
                 </SelectTrigger>
@@ -236,14 +236,14 @@ export function SendEmailDialog({
                       </div>
                     </SelectItem>
                   )}
-                  {connections?.some(c => c.provider === 'gmail') && (
-                    <SelectItem value="gmail">
+                  {connections?.some(c => (c.provider === 'gmail' || c.provider === 'gmail_direct') && c.status === 'active') && (
+                    <SelectItem value="gmail_direct">
                       <div className="flex items-center gap-2">
                         <span>📧</span>
                         <div>
                           <div className="font-medium">Gmail</div>
                           <div className="text-xs text-muted-foreground">
-                            {connections.find(c => c.provider === 'gmail')?.from_email || 'Connected account'}
+                            {connections.find(c => c.provider === 'gmail' || c.provider === 'gmail_direct')?.from_email || 'Connected account'}
                           </div>
                         </div>
                       </div>
@@ -274,7 +274,7 @@ export function SendEmailDialog({
                   ✓ Enterprise delivery • Full engagement tracking
                 </p>
               )}
-              {sender === 'gmail' && (
+              {(sender === 'gmail' || sender === 'gmail_direct') && (
                 <p className="text-xs text-muted-foreground">
                   ✓ Email will appear in your Gmail Sent folder
                 </p>
