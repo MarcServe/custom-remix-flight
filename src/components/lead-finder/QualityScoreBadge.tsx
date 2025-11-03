@@ -33,5 +33,9 @@ export function QualityScoreBadge({
     grade,
     color
   } = getGrade(score);
-  return;
+  return (
+    <Badge variant="outline" className={cn("font-semibold", color, className)}>
+      Score: {grade}
+    </Badge>
+  );
 }

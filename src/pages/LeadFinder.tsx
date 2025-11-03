@@ -23,6 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { companiesApi } from "@/lib/api/companies";
+import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { industryTaxonomy, getIndustryCategories, getIndustrySubcategories, formatIndustryString } from "@/lib/data/industry-taxonomy";
@@ -141,6 +142,19 @@ export default function LeadFinder() {
       let errorCount = 0;
       for (const company of selectedCompanies) {
         try {
+          // Check if company already exists by website
+          const { data: existingCompany } = await supabase
+            .from('companies')
+            .select('id')
+            .eq('website', company.website)
+            .maybeSingle();
+
+          if (existingCompany) {
+            // Company already exists, skip
+            console.log('Company already exists:', company.name);
+            continue;
+          }
+
           // Create company
           const {
             data: createdCompany,
