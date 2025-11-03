@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import { z } from 'zod';
-import leadGenieBackground from '@/assets/lead-genie-logo.png';
+import genieImage from '@/assets/genie.png';
+import leadGenieLogo from '@/assets/lead-genie-logo.png';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -152,7 +153,7 @@ export default function Auth() {
       {/* Full-page logo with gradient overlays */}
       <div className="absolute inset-0 pointer-events-none">
         <img 
-          src={leadGenieBackground} 
+          src={genieImage} 
           alt="LeadGenie CRM" 
           className="w-full h-full object-cover object-center opacity-15 animate-fade-in"
           style={{ 
@@ -172,7 +173,7 @@ export default function Auth() {
       <Card className="w-full max-w-md relative z-10 animate-fade-in shadow-[0_15px_45px_-20px_rgba(72,50,250,0.6)] backdrop-blur-md bg-card/98 border-2 border-primary/40 ring-2 ring-primary/20" style={{ animationDelay: '0.3s' }}>
         <CardHeader className="text-center space-y-3 pb-2">
           <div className="flex justify-center animate-fade-in" style={{ animationDelay: '0.3s' }}>
-            <img src="/leadgenie-auth-logo.png" alt="LeadGenie CRM" className="h-20 w-auto drop-shadow" />
+            <img src={leadGenieLogo} alt="LeadGenie CRM" className="h-20 w-auto drop-shadow" />
           </div>
 
           <div className="space-y-1 animate-fade-in" style={{ animationDelay: '0.4s' }}>
