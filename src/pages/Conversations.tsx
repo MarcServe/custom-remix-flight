@@ -18,6 +18,7 @@ import { usePendingReviews, PendingReview } from "@/hooks/use-pending-reviews";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEmailThreadsRealtime } from "@/hooks/use-realtime";
+import { contactsApi } from "@/lib/api/contacts";
 
 interface EmailThread {
   id: string;
@@ -70,6 +71,32 @@ export default function Conversations() {
   
   // Subscribe to realtime updates for email threads
   useEmailThreadsRealtime();
+
+  // Auto-add test contact if needed
+  useEffect(() => {
+    const addTestContact = async () => {
+      try {
+        // Check if contact already exists
+        const existingContacts = await contactsApi.getContactsByCompany('0855efb0-4875-4b84-adca-fc837d3abebc');
+        const hasLunaContact = existingContacts?.some(c => c.email === 'lunamorgan511@gmail.com');
+        
+        if (!hasLunaContact) {
+          await contactsApi.createContact({
+            company_id: '0855efb0-4875-4b84-adca-fc837d3abebc',
+            name: 'Luna Morgan',
+            email: 'lunamorgan511@gmail.com',
+            title: 'Test Contact',
+            is_primary_contact: false,
+          });
+          console.log('✅ Added Luna Morgan as test contact');
+        }
+      } catch (error) {
+        console.error('Failed to add test contact:', error);
+      }
+    };
+
+    addTestContact();
+  }, []);
   
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null);
   const [generatedResponse, setGeneratedResponse] = useState<{ subject: string; body: string } | null>(null);
