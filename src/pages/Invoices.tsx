@@ -22,6 +22,7 @@ export default function Invoices() {
     dealId: "",
     type: "invoice",
     context: "",
+    customPricing: "",
   });
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
 
@@ -83,7 +84,7 @@ export default function Invoices() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       setAiDialogOpen(false);
-      setAiFormData({ companyId: "", dealId: "", type: "invoice", context: "" });
+      setAiFormData({ companyId: "", dealId: "", type: "invoice", context: "", customPricing: "" });
       toast({ title: "Success", description: "Invoice generated successfully" });
     },
     onError: (error) => {
@@ -249,6 +250,26 @@ export default function Invoices() {
                   placeholder="E.g., 3 months of consulting services, monthly retainer..."
                   rows={4}
                 />
+              </div>
+              
+              <Separator className="my-2" />
+              
+              <div className="grid gap-2">
+                <Label htmlFor="customPricing">Custom Pricing (Optional)</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Specify custom line items and pricing. Format: "Item Name - $Price" (one per line)
+                </p>
+                <Textarea
+                  id="customPricing"
+                  value={aiFormData.customPricing}
+                  onChange={(e) => setAiFormData({ ...aiFormData, customPricing: e.target.value })}
+                  placeholder="E.g.,&#10;Consulting Services - $5000&#10;Website Development - $3000&#10;Monthly Support (3 months) - $1500"
+                  rows={5}
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to let AI determine pricing from context
+                </p>
               </div>
             </div>
             <DialogFooter>

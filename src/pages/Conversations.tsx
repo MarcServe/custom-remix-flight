@@ -81,20 +81,23 @@ export default function Conversations() {
 
   const { data: pendingReviews } = usePendingReviews();
 
-  // Polling fallback - refetch conversations every 30 seconds
+  // Enhanced polling - refetch conversations more frequently
   useEffect(() => {
     const interval = setInterval(() => {
-      console.log('Auto-refreshing conversations...');
+      console.log('Auto-refreshing conversations and threads...');
       queryClient.invalidateQueries({ queryKey: ['active-conversations'] });
-      queryClient.invalidateQueries({ queryKey: ['email-threads'] });
+      if (selectedSequence) {
+        queryClient.invalidateQueries({ queryKey: ['email-threads', selectedSequence] });
+      }
       setLastSyncTime(new Date());
-    }, 30000); // 30 seconds
+    }, 15000); // 15 seconds for better responsiveness
 
     return () => clearInterval(interval);
-  }, [queryClient]);
+  }, [queryClient, selectedSequence]);
 
   const { data: conversations, isLoading, refetch: refetchConversations } = useQuery({
     queryKey: ['active-conversations'],
+    refetchInterval: 15000, // Refetch conversations list every 15 seconds
     queryFn: async () => {
       console.log('Fetching active conversations...');
       setLastSyncTime(new Date());
@@ -368,15 +371,15 @@ export default function Conversations() {
               </p>
             </div>
           </div>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
-            <div className="text-left sm:text-right">
-              <p className="text-xs text-muted-foreground">
-                Last synced: {format(lastSyncTime, 'HH:mm:ss')}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Auto-refresh: 30s
-              </p>
-            </div>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+              <div className="text-left sm:text-right">
+                <p className="text-xs text-muted-foreground">
+                  Last synced: {format(lastSyncTime, 'HH:mm:ss')}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Auto-refresh: 15s
+                </p>
+              </div>
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <Button
                 variant="outline"
