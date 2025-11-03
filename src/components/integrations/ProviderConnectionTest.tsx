@@ -20,6 +20,9 @@ export function ProviderConnectionTest({ provider, connectionId }: ProviderConne
     details?: any;
   } | null>(null);
 
+  // OAuth providers (Gmail, Outlook) are for receiving only
+  const isOAuthProvider = ['gmail', 'gmail_direct', 'outlook', 'microsoft'].includes(provider.toLowerCase());
+
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
@@ -85,28 +88,44 @@ export function ProviderConnectionTest({ provider, connectionId }: ProviderConne
       <CardHeader>
         <CardTitle className="text-base">Connection Test</CardTitle>
         <CardDescription>
-          Send a test email to verify your provider configuration
+          {isOAuthProvider 
+            ? 'OAuth provider connection status' 
+            : 'Send a test email to verify your provider configuration'
+          }
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button
-          onClick={handleTest}
-          disabled={testing}
-          variant="outline"
-          className="w-full"
-        >
-          {testing ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Sending Test Email...
-            </>
-          ) : (
-            <>
-              <Send className="h-4 w-4 mr-2" />
-              Send Test Email
-            </>
-          )}
-        </Button>
+        {isOAuthProvider ? (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="ml-2">
+              <strong>Gmail/Outlook is for receiving emails only.</strong>
+              <p className="mt-2 text-sm">
+                Your {provider} connection is working and will receive inbound emails and parse replies. 
+                To send test emails and campaigns, please connect Resend or SendGrid as your sending provider.
+              </p>
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Button
+            onClick={handleTest}
+            disabled={testing}
+            variant="outline"
+            className="w-full"
+          >
+            {testing ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Sending Test Email...
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4 mr-2" />
+                Send Test Email
+              </>
+            )}
+          </Button>
+        )}
 
         {testResult && (
           <Alert variant={testResult.success ? 'default' : 'destructive'}>
@@ -150,11 +169,13 @@ export function ProviderConnectionTest({ provider, connectionId }: ProviderConne
           </Alert>
         )}
 
-        <div className="text-xs text-muted-foreground space-y-1">
-          <p>• Test email will be sent to your account email</p>
-          <p>• Check your inbox to confirm delivery</p>
-          <p>• Verify tracking capabilities are working</p>
-        </div>
+        {!isOAuthProvider && (
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p>• Test email will be sent to your account email</p>
+            <p>• Check your inbox to confirm delivery</p>
+            <p>• Verify tracking capabilities are working</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
