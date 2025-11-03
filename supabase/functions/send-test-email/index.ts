@@ -49,18 +49,52 @@ Deno.serve(async (req) => {
     // Get sender connection (optional for API-key providers like Resend/SendGrid)
     let connection = null;
     if (senderConnectionId) {
-      const { data: conn } = await supabase
+      console.log('Looking for connection with ID:', senderConnectionId);
+      const { data: conn, error: connError } = await supabase
         .from('crm_connections')
         .select('*')
         .eq('id', senderConnectionId)
+        .eq('user_id', user.id)
         .single();
+      
+      if (connError) {
+        console.error('Error fetching connection:', connError);
+      }
+      connection = conn;
+    } else if (provider) {
+      // Try to find connection by provider if no ID was provided
+      console.log('Looking for connection by provider:', provider);
+      const { data: conn, error: connError } = await supabase
+        .from('crm_connections')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('provider', provider)
+        .eq('status', 'active')
+        .maybeSingle();
+      
+      if (connError) {
+        console.error('Error fetching connection by provider:', connError);
+      }
       connection = conn;
     }
 
-    console.log('Connection found:', !!connection, 'Provider:', provider);
+    console.log('Connection found:', !!connection, 'Provider:', provider, 'Connection ID:', connection?.id);
+
+    // Gmail/Outlook OAuth sending not yet supported - recommend using Resend/SendGrid for now
+    if (provider && ['gmail', 'gmail_direct', 'outlook', 'microsoft'].includes(provider.toLowerCase())) {
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: 'Gmail/Outlook test emails are not yet supported. Please use Resend or SendGrid for sending test emails. Gmail is connected for receiving emails and webhooks.'
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
 
     // For API-key providers (resend, sendgrid), connection is optional
-    // For OAuth providers (gmail, outlook), connection is required
     if (!connection && provider && !['resend', 'sendgrid'].includes(provider.toLowerCase())) {
       throw new Error('Sender connection required for this provider');
     }
