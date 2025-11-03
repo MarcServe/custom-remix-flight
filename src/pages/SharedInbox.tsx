@@ -192,10 +192,10 @@ export default function SharedInbox() {
 
   if (teams.length === 0) {
     return (
-      <div className="container mx-auto p-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Shared Inbox</h1>
-          <p className="text-muted-foreground mt-1">
+      <div className="container mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold">Shared Inbox</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Collaborate on emails with your team
           </p>
         </div>
@@ -210,16 +210,16 @@ export default function SharedInbox() {
         )}
 
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
+          <CardContent className="flex flex-col items-center justify-center py-12 sm:py-16 px-4">
             <div className="rounded-full bg-muted p-4 mb-4">
-              <Inbox className="h-12 w-12 text-muted-foreground" />
+              <Inbox className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground" />
             </div>
-            <h3 className="text-2xl font-semibold mb-2">No Teams Yet</h3>
-            <p className="text-muted-foreground text-center mb-6 max-w-md">
+            <h3 className="text-xl sm:text-2xl font-semibold mb-2 text-center">No Teams Yet</h3>
+            <p className="text-muted-foreground text-center mb-6 max-w-md text-sm sm:text-base">
               Shared inboxes require a team. Create your first team to start collaborating on emails with your colleagues.
             </p>
-            <Link to="/teams">
-              <Button>
+            <Link to="/teams" className="w-full sm:w-auto">
+              <Button className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
                 Create Your First Team
                 <ArrowRight className="h-4 w-4 ml-2" />
@@ -232,19 +232,19 @@ export default function SharedInbox() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Shared Inbox</h1>
-          <p className="text-muted-foreground mt-1">
+    <div className="container mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl sm:text-3xl font-bold">Shared Inbox</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Collaborate on emails with your team
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
           {loadError && (
-            <Alert className="mb-0">
+            <Alert className="mb-0 w-full">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
+              <AlertDescription className="truncate">
                 {loadError}
               </AlertDescription>
             </Alert>
@@ -256,7 +256,7 @@ export default function SharedInbox() {
               setSelectedTeam(team);
             }}
           >
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder="Select team" />
             </SelectTrigger>
             <SelectContent>
@@ -267,7 +267,7 @@ export default function SharedInbox() {
               ))}
             </SelectContent>
           </Select>
-          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
+          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             New Inbox
           </Button>
@@ -300,42 +300,42 @@ export default function SharedInbox() {
               {inboxes.map((inbox) => (
                 <Card key={inbox.id}>
                   <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-blue-500 text-white">
+                    <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="p-2 rounded-lg bg-blue-500 text-white flex-shrink-0">
                           <Inbox className="h-5 w-5" />
                         </div>
-                        <div>
-                          <CardTitle>{inbox.name}</CardTitle>
-                          <CardDescription>{inbox.description}</CardDescription>
+                        <div className="min-w-0 flex-1">
+                          <CardTitle className="truncate text-lg sm:text-xl">{inbox.name}</CardTitle>
+                          <CardDescription className="truncate">{inbox.description}</CardDescription>
                         </div>
                       </div>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" className="w-full sm:w-auto">
                         <Settings className="h-4 w-4 mr-2" />
                         Configure
                       </Button>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                       {inbox.email_address && (
-                        <div>
-                          <p className="text-muted-foreground">Email Address</p>
-                          <p className="font-medium">{inbox.email_address}</p>
+                        <div className="min-w-0">
+                          <p className="text-muted-foreground mb-1">Email Address</p>
+                          <p className="font-medium truncate">{inbox.email_address}</p>
                         </div>
                       )}
                       <div>
-                        <p className="text-muted-foreground">Auto-Assign</p>
+                        <p className="text-muted-foreground mb-1">Auto-Assign</p>
                         <Badge variant={inbox.auto_assign ? 'default' : 'secondary'}>
                           {inbox.auto_assign ? 'Enabled' : 'Disabled'}
                         </Badge>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Strategy</p>
+                        <p className="text-muted-foreground mb-1">Strategy</p>
                         <p className="font-medium">{getStrategyLabel(inbox.assignment_strategy)}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Created</p>
+                        <p className="text-muted-foreground mb-1">Created</p>
                         <p className="font-medium">
                           {new Date(inbox.created_at).toLocaleDateString()}
                         </p>
@@ -363,21 +363,21 @@ export default function SharedInbox() {
             <div className="space-y-3">
               {assignments.map((assignment) => (
                 <Card key={assignment.id}>
-                  <CardContent className="flex items-center justify-between p-4">
-                    <div className="flex items-center gap-3">
-                      <Mail className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">
+                  <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <Mail className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate capitalize">
                           {assignment.entity_type.replace('_', ' ')}
                         </div>
-                        <div className="text-sm text-muted-foreground">
+                        <div className="text-sm text-muted-foreground truncate">
                           Assigned to {assignment.profiles?.full_name}
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto flex-shrink-0">
                       <Badge>{assignment.status}</Badge>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
                         View
                       </Button>
                     </div>

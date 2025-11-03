@@ -142,11 +142,11 @@ export function InternalNotesPanel({ entityType, entityId, teamId }: InternalNot
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
           <MessageSquare className="h-5 w-5" />
           Internal Notes
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-sm">
           Add private notes visible only to your team
         </CardDescription>
       </CardHeader>
@@ -159,11 +159,13 @@ export function InternalNotesPanel({ entityType, entityId, teamId }: InternalNot
             placeholder="Add a note..."
             rows={3}
             disabled={submitting}
+            className="resize-none"
           />
           <Button
             onClick={handleAddNote}
             disabled={!newNote.trim() || submitting}
             size="sm"
+            className="w-full sm:w-auto"
           >
             <Send className="h-4 w-4 mr-2" />
             Add Note
@@ -172,27 +174,27 @@ export function InternalNotesPanel({ entityType, entityId, teamId }: InternalNot
 
         {/* Notes list */}
         {loading ? (
-          <div className="text-center py-8 text-muted-foreground">
+          <div className="text-center py-8 text-muted-foreground text-sm">
             Loading notes...
           </div>
         ) : notes.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>No notes yet. Add the first one!</p>
+            <p className="text-sm">No notes yet. Add the first one!</p>
           </div>
         ) : (
           <div className="space-y-4">
             {notes.map((note) => (
-              <div key={note.id} className="border rounded-lg p-4 space-y-2">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-8 w-8">
+              <div key={note.id} className="border rounded-lg p-3 sm:p-4 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <Avatar className="h-8 w-8 flex-shrink-0">
                       <AvatarFallback>
                         {note.profiles?.full_name?.charAt(0) || note.profiles?.email?.charAt(0) || '?'}
                       </AvatarFallback>
                     </Avatar>
-                    <div>
-                      <div className="font-medium text-sm">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-sm truncate">
                         {note.profiles?.full_name || 'Unknown User'}
                       </div>
                       <div className="text-xs text-muted-foreground">
@@ -204,12 +206,12 @@ export function InternalNotesPanel({ entityType, entityId, teamId }: InternalNot
                     variant="ghost"
                     size="icon"
                     onClick={() => handleDeleteNote(note.id)}
-                    className="h-8 w-8"
+                    className="h-8 w-8 flex-shrink-0"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-                <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                <p className="text-sm whitespace-pre-wrap break-words">{note.content}</p>
               </div>
             ))}
           </div>

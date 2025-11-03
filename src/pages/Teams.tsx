@@ -336,15 +336,15 @@ export default function Teams() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Teams</h1>
-          <p className="text-muted-foreground mt-1">
+    <div className="container mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl sm:text-3xl font-bold">Teams</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Manage your teams and collaborate with your colleagues
           </p>
         </div>
-        <Button onClick={() => { resetForm(); setIsCreateDialogOpen(true); }}>
+        <Button onClick={() => { resetForm(); setIsCreateDialogOpen(true); }} className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-2" />
           Create Team
         </Button>
@@ -374,25 +374,25 @@ export default function Teams() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
           {/* Teams List */}
           <Card className="lg:col-span-1">
             <CardHeader>
-              <CardTitle>Your Teams</CardTitle>
+              <CardTitle className="text-lg sm:text-xl">Your Teams</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {teams.map((team) => (
                 <button
                   key={team.id}
                   onClick={() => setSelectedTeam(team)}
-                  className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                  className={`w-full text-left p-3 rounded-lg border transition-colors min-w-0 ${
                     selectedTeam?.id === team.id
                       ? 'bg-primary text-primary-foreground border-primary'
                       : 'hover:bg-accent'
                   }`}
                 >
-                  <div className="font-medium">{team.name}</div>
-                  <div className="text-sm opacity-80">{team.description || 'No description'}</div>
+                  <div className="font-medium truncate">{team.name}</div>
+                  <div className="text-sm opacity-80 truncate">{team.description || 'No description'}</div>
                 </button>
               ))}
             </CardContent>
@@ -402,17 +402,19 @@ export default function Teams() {
           {selectedTeam && (
             <Card className="lg:col-span-3">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>{selectedTeam.name}</CardTitle>
-                    <CardDescription>{selectedTeam.description}</CardDescription>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <CardTitle className="text-lg sm:text-xl truncate">{selectedTeam.name}</CardTitle>
+                    <CardDescription className="truncate">{selectedTeam.description}</CardDescription>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <Button
                       onClick={() => { resetInviteForm(); setIsInviteDialogOpen(true); }}
+                      className="w-full sm:w-auto"
                     >
                       <UserPlus className="h-4 w-4 mr-2" />
-                      Add Member
+                      <span className="hidden sm:inline">Add Member</span>
+                      <span className="sm:hidden">Add</span>
                     </Button>
                   </div>
                 </div>
@@ -435,14 +437,14 @@ export default function Teams() {
                           {teamInvitations.map((invitation) => (
                             <div
                               key={invitation.id}
-                              className="flex items-center justify-between p-3 border border-dashed rounded-lg bg-muted/30"
+                              className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border border-dashed rounded-lg bg-muted/30 gap-3"
                             >
-                              <div className="flex items-center gap-3">
-                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                                   <UserPlus className="h-4 w-4 text-primary" />
                                 </div>
-                                <div>
-                                  <div className="font-medium text-sm">
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium text-sm truncate">
                                     {invitation.email}
                                   </div>
                                   <div className="text-xs text-muted-foreground">
@@ -451,7 +453,7 @@ export default function Teams() {
                                   </div>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-shrink-0">
                                 <Badge variant="outline" className="capitalize">
                                   {getRoleIcon(invitation.role)}
                                   <span className="ml-1">{invitation.role}</span>
@@ -480,19 +482,19 @@ export default function Teams() {
                         {teamMembers.map((member) => (
                           <div
                             key={member.id}
-                            className="flex items-center justify-between p-4 border rounded-lg"
+                            className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border rounded-lg gap-3"
                           >
-                            <div className="flex items-center gap-3">
-                              <Avatar>
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <Avatar className="flex-shrink-0">
                                 <AvatarFallback>
                                   {member.profiles?.full_name?.charAt(0) || member.profiles?.email?.charAt(0) || '?'}
                                 </AvatarFallback>
                               </Avatar>
-                              <div>
-                                <div className="font-medium">
+                              <div className="min-w-0 flex-1">
+                                <div className="font-medium truncate">
                                   {member.profiles?.full_name || 'Unknown User'}
                                 </div>
-                                <div className="text-sm text-muted-foreground">
+                                <div className="text-sm text-muted-foreground truncate">
                                   {member.profiles?.email}
                                 </div>
                                 <div className="text-xs text-muted-foreground mt-1">
