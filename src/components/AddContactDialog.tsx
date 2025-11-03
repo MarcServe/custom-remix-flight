@@ -208,18 +208,17 @@ export function AddContactDialog({ open, onOpenChange, onSuccess }: AddContactDi
                 name="company_id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Company</FormLabel>
+                    <FormLabel>Company (Optional)</FormLabel>
                     <Select 
-                      value={field.value || ""} 
+                      value={field.value || undefined} 
                       onValueChange={(value) => field.onChange(value || null)}
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select company" />
+                          <SelectValue placeholder="Select company (optional)" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
                         {companies?.map((company) => (
                           <SelectItem key={company.id} value={company.id}>
                             {company.name}
