@@ -14,8 +14,8 @@ export default defineConfig(({ mode }) => ({
     react(), 
     mode === "development" && componentTagger(),
     mode === "production" && sentryVitePlugin({
-      org: "your-sentry-org",
-      project: "your-sentry-project",
+      org: "biz-boosters-ltd",
+      project: "javascript-react",
       authToken: process.env.SENTRY_AUTH_TOKEN,
       sourcemaps: {
         assets: "./dist/**",
