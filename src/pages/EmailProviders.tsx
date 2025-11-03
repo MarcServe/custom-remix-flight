@@ -247,7 +247,7 @@ export default function EmailProviders() {
 
   // Check if user has any tracking-enabled connections
   const hasTrackingEnabled = connections?.some(c => 
-    c.status === 'active' && ['gmail', 'outlook', 'resend', 'sendgrid'].includes(c.provider)
+    c.status === 'active' && ['gmail', 'gmail_direct', 'outlook', 'resend', 'sendgrid'].includes(c.provider)
   );
 
   const hasOnlySMTP = connections?.some(c => c.status === 'active' && c.provider === 'smtp') 
@@ -345,7 +345,7 @@ export default function EmailProviders() {
                 <p className="text-2xl font-bold mt-1">
                   {connections.filter(c => 
                     c.status === 'active' && 
-                    ['gmail', 'outlook', 'resend', 'sendgrid'].includes(c.provider)
+                    ['gmail', 'gmail_direct', 'outlook', 'resend', 'sendgrid'].includes(c.provider)
                   ).length}
                 </p>
               </div>

@@ -16,7 +16,7 @@ interface EmailRequest {
   bodyText?: string; // Plain text version
   companyId?: string;
   contactId?: string;
-  sender?: 'gmail' | 'resend' | 'smtp' | 'sendgrid';
+  sender?: 'gmail' | 'gmail_direct' | 'resend' | 'smtp' | 'sendgrid';
   testConnection?: boolean; // Test SMTP connection without sending
 }
 
@@ -65,7 +65,7 @@ serve(async (req) => {
       .maybeSingle();
     
     // Determine sender based on business profile preference
-    let sender: 'gmail' | 'resend' | 'smtp' | 'sendgrid' = emailRequest.sender || businessProfile?.email_provider || 'resend';
+    let sender: 'gmail' | 'gmail_direct' | 'resend' | 'smtp' | 'sendgrid' = emailRequest.sender || businessProfile?.email_provider || 'resend';
     
     console.log(`Email provider preference: ${businessProfile?.email_provider}, Using: ${sender}`);
 
@@ -97,54 +97,91 @@ serve(async (req) => {
     let messageId: string | null = null;
     let provider = sender;
 
-    if (sender === 'gmail') {
-      // Send via Nango/Gmail
+    if (sender === 'gmail' || sender === 'gmail_direct') {
+      // Send via Gmail Direct OAuth
       const { data: connection, error: connectionError } = await supabaseClient
         .from('crm_connections')
-        .select('connection_id, provider')
+        .select('id, metadata, from_email')
         .eq('user_id', user.id)
-        .eq('provider', 'gmail')
+        .in('provider', ['gmail', 'gmail_direct'])
         .eq('status', 'active')
         .maybeSingle();
 
       if (connectionError || !connection) {
-        throw new Error('Gmail not connected. Please connect Gmail in Settings or use Resend.');
+        throw new Error('Gmail not connected. Please connect Gmail in Settings.');
       }
 
-      const nangoSecretKey = Deno.env.get('NANGO_SECRET_KEY');
-      if (!nangoSecretKey) {
-        throw new Error('Gmail integration not configured.');
+      const metadata = connection.metadata as any;
+      let accessToken = metadata?.access_token;
+      const refreshToken = metadata?.refresh_token;
+      const expiresAt = metadata?.expires_at;
+
+      // Check if token is expired and refresh if needed
+      if (expiresAt && new Date(expiresAt) <= new Date()) {
+        console.log('Gmail access token expired, refreshing...');
+        
+        const refreshResponse = await supabaseClient.functions.invoke('gmail-oauth-refresh', {
+          body: { connection_id: connection.id }
+        });
+
+        if (refreshResponse.error || !refreshResponse.data?.access_token) {
+          throw new Error('Failed to refresh Gmail token. Please reconnect your Gmail account.');
+        }
+
+        accessToken = refreshResponse.data.access_token;
       }
 
-      console.log(`Sending via Gmail using connection ${connection.connection_id}`);
+      if (!accessToken) {
+        throw new Error('Gmail access token not found. Please reconnect your Gmail account.');
+      }
 
-      const nangoResponse = await fetch('https://api.nango.dev/v1/gmail/messages', {
+      // Get from email
+      const fromEmail = connection.from_email || userProfile?.email || user.email;
+      if (!fromEmail) {
+        throw new Error('Could not determine sender email address.');
+      }
+
+      console.log(`Sending via Gmail Direct API from: ${fromEmail}`);
+
+      // Build Gmail API message
+      const emailLines = [
+        `From: ${fromEmail}`,
+        `To: ${toEmail}`,
+        `Subject: ${subject}`,
+        'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset=utf-8',
+        '',
+        emailBodyText
+      ];
+
+      const emailMessage = emailLines.join('\r\n');
+      const encodedMessage = btoa(emailMessage)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      // Send via Gmail API
+      const gmailResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${nangoSecretKey}`,
-          'Connection-Id': connection.connection_id,
-          'Provider-Config-Key': 'google-mail',
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-      body: JSON.stringify({
-        to: [{ email: toEmail, name: toName }],
-        subject,
-        body: {
-          content: emailBodyText,
-          type: 'text/plain',
-        },
-      }),
+        body: JSON.stringify({
+          raw: encodedMessage
+        }),
       });
 
-      if (!nangoResponse.ok) {
-        const errorData = await nangoResponse.text();
+      if (!gmailResponse.ok) {
+        const errorData = await gmailResponse.text();
         console.error('Gmail API error:', errorData);
         throw new Error(`Failed to send via Gmail: ${errorData}`);
       }
 
-      const nangoData = await nangoResponse.json();
-      messageId = nangoData.id || null;
-      console.log('Email sent via Gmail:', nangoData);
+      const gmailData = await gmailResponse.json();
+      messageId = gmailData.id || null;
+      provider = 'gmail_direct';
+      console.log('Email sent via Gmail Direct:', gmailData);
     } else if (sender === 'smtp') {
       // Send via Resend using verified business email
       const { data: connection, error: connectionError } = await supabaseClient

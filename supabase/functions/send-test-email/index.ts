@@ -80,12 +80,12 @@ Deno.serve(async (req) => {
 
     console.log('Connection found:', !!connection, 'Provider:', provider, 'Connection ID:', connection?.id);
 
-    // Gmail/Outlook OAuth sending not yet supported - recommend using Resend/SendGrid for now
-    if (provider && ['gmail', 'gmail_direct', 'outlook', 'microsoft'].includes(provider.toLowerCase())) {
+    // Outlook OAuth sending not yet supported - Gmail Direct now works!
+    if (provider && ['outlook', 'microsoft'].includes(provider.toLowerCase())) {
       return new Response(
         JSON.stringify({ 
           success: false,
-          error: 'Gmail/Outlook test emails are not yet supported. Please use Resend or SendGrid for sending test emails. Gmail is connected for receiving emails and webhooks.'
+          error: 'Outlook test emails are not yet supported. Please use Gmail, Resend, or SendGrid for sending test emails. Outlook is connected for receiving emails and webhooks.'
         }),
         {
           status: 400,
@@ -94,8 +94,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // For API-key providers (resend, sendgrid), connection is optional
-    if (!connection && provider && !['resend', 'sendgrid'].includes(provider.toLowerCase())) {
+    // For API-key providers (resend, sendgrid) and Gmail Direct, connection is optional
+    if (!connection && provider && !['resend', 'sendgrid', 'gmail', 'gmail_direct'].includes(provider.toLowerCase())) {
       throw new Error('Sender connection required for this provider');
     }
 
@@ -132,7 +132,76 @@ Deno.serve(async (req) => {
       
       let messageId;
       
-      if (emailProvider === 'sendgrid' && SENDGRID_API_KEY) {
+      if (emailProvider === 'gmail_direct' || emailProvider === 'gmail') {
+        // Send via Gmail Direct API
+        if (!connection) {
+          throw new Error('Gmail connection not found. Please reconnect your Gmail account.');
+        }
+
+        const metadata = connection.metadata as any;
+        let accessToken = metadata?.access_token;
+        const expiresAt = metadata?.expires_at;
+
+        // Check if token is expired and refresh if needed
+        if (expiresAt && new Date(expiresAt) <= new Date()) {
+          console.log('Gmail access token expired, refreshing...');
+          
+          const refreshResponse = await supabase.functions.invoke('gmail-oauth-refresh', {
+            body: { connection_id: connection.id }
+          });
+
+          if (refreshResponse.error || !refreshResponse.data?.access_token) {
+            throw new Error('Failed to refresh Gmail token. Please reconnect your Gmail account.');
+          }
+
+          accessToken = refreshResponse.data.access_token;
+        }
+
+        if (!accessToken) {
+          throw new Error('Gmail access token not found. Please reconnect your Gmail account.');
+        }
+
+        const fromEmail = connection.from_email || userProfile?.email || user.email;
+        
+        // Build Gmail API message
+        const emailLines = [
+          `From: ${fromEmail}`,
+          `To: ${testEmail}`,
+          `Subject: ${testSubject}`,
+          'MIME-Version: 1.0',
+          'Content-Type: text/plain; charset=utf-8',
+          '',
+          testBody
+        ];
+
+        const emailMessage = emailLines.join('\r\n');
+        const encodedMessage = btoa(emailMessage)
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/, '');
+
+        // Send via Gmail API
+        const gmailResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            raw: encodedMessage
+          }),
+        });
+
+        if (!gmailResponse.ok) {
+          const errorData = await gmailResponse.text();
+          console.error('Gmail API error:', errorData);
+          throw new Error(`Failed to send via Gmail: ${errorData}`);
+        }
+
+        const gmailData = await gmailResponse.json();
+        messageId = gmailData.id || 'gmail-sent';
+        console.log('Test email sent via Gmail Direct:', messageId);
+      } else if (emailProvider === 'sendgrid' && SENDGRID_API_KEY) {
         const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
           method: 'POST',
           headers: {
@@ -213,7 +282,7 @@ Deno.serve(async (req) => {
           success: true, 
           messageId, 
           provider: emailProvider,
-          trackingEnabled: ['resend', 'sendgrid'].includes(emailProvider),
+          trackingEnabled: ['resend', 'sendgrid', 'gmail_direct', 'gmail'].includes(emailProvider),
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
