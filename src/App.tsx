@@ -30,6 +30,9 @@ import AutomationRules from "./pages/AutomationRules";
 import ABTesting from "./pages/ABTesting";
 import Teams from "./pages/Teams";
 import SharedInbox from "./pages/SharedInbox";
+import Calendar from "./pages/Calendar";
+import Files from "./pages/Files";
+import Invoices from "./pages/Invoices";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -82,6 +85,9 @@ const App = () => (
                           <Route path="/ab-testing" element={<ABTesting />} />
                           <Route path="/teams" element={<Teams />} />
                           <Route path="/shared-inbox" element={<SharedInbox />} />
+                          <Route path="/calendar" element={<Calendar />} />
+                          <Route path="/files" element={<Files />} />
+                          <Route path="/invoices" element={<Invoices />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </main>

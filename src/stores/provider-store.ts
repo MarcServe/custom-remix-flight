@@ -16,7 +16,7 @@ interface ProviderStore {
 export const useProviderStore = create<ProviderStore>()(
   persist(
     (set) => ({
-      defaultProvider: 'lovable',
+      defaultProvider: 'openai',
       defaultModels: {
         lovable: 'google/gemini-2.5-flash',
         openai: 'gpt-4o-mini',

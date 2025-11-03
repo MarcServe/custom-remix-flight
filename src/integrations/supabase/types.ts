@@ -460,6 +460,94 @@ export type Database = {
         }
         Relationships: []
       }
+      calendar_events: {
+        Row: {
+          attendees: Json | null
+          company_id: string | null
+          created_at: string | null
+          deal_id: string | null
+          description: string | null
+          end_time: string
+          event_type: string | null
+          id: string
+          is_all_day: boolean | null
+          location: string | null
+          metadata: Json | null
+          recurrence_rule: string | null
+          reminder_minutes: number | null
+          start_time: string
+          status: string | null
+          team_id: string | null
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          attendees?: Json | null
+          company_id?: string | null
+          created_at?: string | null
+          deal_id?: string | null
+          description?: string | null
+          end_time: string
+          event_type?: string | null
+          id?: string
+          is_all_day?: boolean | null
+          location?: string | null
+          metadata?: Json | null
+          recurrence_rule?: string | null
+          reminder_minutes?: number | null
+          start_time: string
+          status?: string | null
+          team_id?: string | null
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          attendees?: Json | null
+          company_id?: string | null
+          created_at?: string | null
+          deal_id?: string | null
+          description?: string | null
+          end_time?: string
+          event_type?: string | null
+          id?: string
+          is_all_day?: boolean | null
+          location?: string | null
+          metadata?: Json | null
+          recurrence_rule?: string | null
+          reminder_minutes?: number | null
+          start_time?: string
+          status?: string | null
+          team_id?: string | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_conversations: {
         Row: {
           company_id: string | null
@@ -781,6 +869,68 @@ export type Database = {
           verified_at?: string | null
         }
         Relationships: []
+      }
+      crm_files: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          entity_id: string | null
+          entity_type: string | null
+          file_name: string
+          file_size: number
+          file_type: string
+          id: string
+          is_public: boolean | null
+          metadata: Json | null
+          storage_path: string
+          tags: string[] | null
+          team_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          file_name: string
+          file_size: number
+          file_type: string
+          id?: string
+          is_public?: boolean | null
+          metadata?: Json | null
+          storage_path: string
+          tags?: string[] | null
+          team_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          file_name?: string
+          file_size?: number
+          file_type?: string
+          id?: string
+          is_public?: boolean | null
+          metadata?: Json | null
+          storage_path?: string
+          tags?: string[] | null
+          team_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_files_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       crm_sync_state: {
         Row: {
@@ -1563,6 +1713,112 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "internal_notes_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          ai_context: Json | null
+          ai_generated: boolean | null
+          company_id: string | null
+          created_at: string | null
+          currency: string | null
+          deal_id: string | null
+          due_date: string
+          id: string
+          invoice_number: string
+          invoice_type: string | null
+          issue_date: string
+          line_items: Json | null
+          metadata: Json | null
+          notes: string | null
+          paid_at: string | null
+          payment_status: string | null
+          status: string | null
+          subtotal: number
+          tax_amount: number | null
+          tax_rate: number | null
+          team_id: string | null
+          terms: string | null
+          total_amount: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_context?: Json | null
+          ai_generated?: boolean | null
+          company_id?: string | null
+          created_at?: string | null
+          currency?: string | null
+          deal_id?: string | null
+          due_date: string
+          id?: string
+          invoice_number: string
+          invoice_type?: string | null
+          issue_date?: string
+          line_items?: Json | null
+          metadata?: Json | null
+          notes?: string | null
+          paid_at?: string | null
+          payment_status?: string | null
+          status?: string | null
+          subtotal?: number
+          tax_amount?: number | null
+          tax_rate?: number | null
+          team_id?: string | null
+          terms?: string | null
+          total_amount?: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_context?: Json | null
+          ai_generated?: boolean | null
+          company_id?: string | null
+          created_at?: string | null
+          currency?: string | null
+          deal_id?: string | null
+          due_date?: string
+          id?: string
+          invoice_number?: string
+          invoice_type?: string | null
+          issue_date?: string
+          line_items?: Json | null
+          metadata?: Json | null
+          notes?: string | null
+          paid_at?: string | null
+          payment_status?: string | null
+          status?: string | null
+          subtotal?: number
+          tax_amount?: number | null
+          tax_rate?: number | null
+          team_id?: string | null
+          terms?: string | null
+          total_amount?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_team_id_fkey"
             columns: ["team_id"]
             isOneToOne: false
             referencedRelation: "teams"
