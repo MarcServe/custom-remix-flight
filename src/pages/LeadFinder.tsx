@@ -172,12 +172,17 @@ export default function LeadFinder() {
           }
 
           // Create company
+          // Generate unique website placeholder if none exists
+          const websiteValue = company.website && company.website.trim() 
+            ? company.website 
+            : `no-website-${crypto.randomUUID()}`;
+            
           const {
             data: createdCompany,
             error: companyError
           } = await companiesApi.createCompany({
             name: company.name,
-            website: company.website,
+            website: websiteValue,
             description: company.description,
             industry: company.industry,
             size: company.size,

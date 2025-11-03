@@ -300,9 +300,14 @@ export function CompanyDetailsDialog({
       }
 
       // Create company
+      // Generate unique website placeholder if none exists
+      const websiteValue = company.website && company.website.trim() 
+        ? company.website 
+        : `no-website-${crypto.randomUUID()}`;
+      
       const { data: createdCompany, error: companyError } = await companiesApi.createCompany({
         name: company.name,
-        website: company.website,
+        website: websiteValue,
         description: company.description,
         industry: company.industry,
         size: company.size,
@@ -322,6 +327,7 @@ export function CompanyDetailsDialog({
       });
 
       if (companyError) {
+        console.error('Error creating company:', companyError);
         throw companyError;
       }
 
@@ -360,11 +366,19 @@ export function CompanyDetailsDialog({
 
       // Close the dialog
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving company:', error);
+      
+      let errorMessage = 'Failed to save company to CRM';
+      
+      // Handle duplicate key error
+      if (error?.code === '23505') {
+        errorMessage = 'This company already exists in your CRM';
+      }
+      
       toast({
         title: 'Error',
-        description: 'Failed to save company to CRM',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
