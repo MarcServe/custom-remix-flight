@@ -9,17 +9,21 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:shadow-md",
-        destructive: "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
-        outline: "border-2 border-input bg-background hover:bg-accent hover:text-accent-foreground hover:border-accent",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent/50 hover:text-accent-foreground",
+        default: "bg-gradient-primary text-foreground shadow-md hover:opacity-90 hover:scale-105 hover:shadow-lg",
+        destructive: "bg-destructive text-destructive-foreground shadow-md hover:bg-destructive/90 hover:scale-105",
+        outline: "border-2 border-primary/30 bg-background hover:bg-gradient-primary hover:text-foreground hover:border-primary/50 hover:scale-105",
+        secondary: "bg-gradient-secondary text-foreground shadow-md hover:opacity-90 hover:scale-105 hover:shadow-lg",
+        ghost: "hover:bg-primary/20 hover:text-foreground hover:scale-105",
         link: "text-primary underline-offset-4 hover:underline",
+        accent: "bg-gradient-accent text-white shadow-md hover:opacity-90 hover:scale-105 hover:shadow-lg",
+        success: "bg-gradient-success text-success-foreground shadow-md hover:opacity-90 hover:scale-105 hover:shadow-lg",
+        warm: "bg-gradient-warm text-foreground shadow-md hover:opacity-90 hover:scale-105 hover:shadow-lg",
+        glow: "bg-gradient-primary text-foreground shadow-[0_4px_15px_hsl(280_30%_80%/0.3)] hover:shadow-[0_6px_25px_hsl(280_30%_80%/0.5)] hover:-translate-y-0.5 hover:scale-105",
       },
       size: {
         default: "h-10 px-4 py-2",
         sm: "h-9 rounded-md px-3 text-xs",
-        lg: "h-12 rounded-lg px-8 text-base",
+        lg: "h-12 rounded-lg px-8 text-base font-semibold",
         icon: "h-10 w-10",
       },
     },

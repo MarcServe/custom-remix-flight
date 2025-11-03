@@ -38,6 +38,8 @@ interface EmailProvider {
   name: string;
   description: string;
   icon: string;
+  isGoogleIcon?: boolean;
+  isOutlookIcon?: boolean;
   capabilities: ProviderCapabilities;
 }
 
@@ -55,6 +57,41 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
   const isConnected = connection && connection.status === 'active';
   const isPending = connection && connection.status === 'pending';
   const hasIssue = connection && connection.status === 'error';
+  
+  // Assign different gradient styles to each provider
+  const getCardStyle = () => {
+    switch(provider.id) {
+      case 'gmail_direct':
+        return 'bg-gradient-card border-primary/30 hover-lift shadow-lg';
+      case 'resend':
+        return 'bg-gradient-secondary border-secondary/30 hover-lift shadow-lg';
+      case 'sendgrid':
+        return 'bg-gradient-warm border-primary/30 hover-lift shadow-lg';
+      case 'outlook':
+        return 'bg-gradient-accent text-white border-accent/30 hover-lift shadow-lg';
+      case 'smtp':
+        return 'bg-gradient-card border-border hover-lift shadow-md';
+      default:
+        return 'bg-gradient-card border-border hover-lift shadow-md';
+    }
+  };
+  
+  const getButtonVariant = () => {
+    switch(provider.id) {
+      case 'gmail_direct':
+        return 'default';
+      case 'resend':
+        return 'accent';
+      case 'sendgrid':
+        return 'warm';
+      case 'outlook':
+        return 'secondary';
+      case 'smtp':
+        return 'glow';
+      default:
+        return 'default';
+    }
+  };
 
   const handleModeChange = async (mode: 'direct' | 'resend') => {
     if (!connection) return;
@@ -78,14 +115,18 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
   };
 
   return (
-    <Card className={`relative ${!provider.capabilities.tracking ? 'border-warning/30' : ''}`}>
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-3">
-            <div className="text-3xl">{provider.icon}</div>
+    <Card className={`relative hover:shadow-lg transition-shadow ${!provider.capabilities.tracking ? 'border-warning/30' : ''}`}>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {provider.isGoogleIcon || provider.isOutlookIcon ? (
+              <img src={provider.icon} alt={provider.name} className="w-8 h-8" />
+            ) : (
+              <div className="text-2xl">{provider.icon}</div>
+            )}
             <div>
-              <CardTitle className="text-lg">{provider.name}</CardTitle>
-              <CardDescription>{provider.description}</CardDescription>
+              <CardTitle className="text-base">{provider.name}</CardTitle>
+              <CardDescription className="text-xs">{provider.description}</CardDescription>
             </div>
           </div>
           {isConnected && (
@@ -109,51 +150,35 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
         </div>
       </CardHeader>
       
-      <CardContent className="space-y-4">
-        {/* Capabilities Section */}
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-muted-foreground">Capabilities</p>
-          <div className="space-y-1.5">
-            {provider.capabilities.tracking ? (
-              <>
-                <div className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="h-4 w-4 text-success" />
-                  <span>Opens/Clicks tracked</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="h-4 w-4 text-success" />
-                  <span>Bounce detection</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="h-4 w-4 text-success" />
-                  <span>Reply monitoring</span>
-                </div>
-                {provider.capabilities.webhookSupport && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <CheckCircle2 className="h-4 w-4 text-success" />
-                    <span>Webhook integration built-in</span>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="flex items-center gap-2 text-sm">
-                <XCircle className="h-4 w-4 text-destructive" />
-                <span>NO tracking (opens/clicks/replies)</span>
-              </div>
-            )}
-            
-            {provider.capabilities.dailyLimit ? (
-              <div className="flex items-center gap-2 text-sm">
-                <AlertTriangle className="h-4 w-4 text-warning" />
-                <span>Daily send limit: {provider.capabilities.dailyLimit}</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-sm">
-                <CheckCircle2 className="h-4 w-4 text-success" />
-                <span>No daily limits</span>
-              </div>
-            )}
-          </div>
+      <CardContent className="space-y-3 pt-3">
+        {/* Compact Capabilities */}
+        <div className="flex flex-wrap gap-1.5">
+          {provider.capabilities.tracking && (
+            <>
+              <Badge variant="outline" className="text-xs border-success/30 bg-success/5 text-success">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Tracking
+              </Badge>
+              <Badge variant="outline" className="text-xs border-success/30 bg-success/5 text-success">
+                Webhooks
+              </Badge>
+            </>
+          )}
+          {!provider.capabilities.tracking && (
+            <Badge variant="outline" className="text-xs border-destructive/30 bg-destructive/5 text-destructive">
+              <XCircle className="h-3 w-3 mr-1" />
+              No Tracking
+            </Badge>
+          )}
+          {provider.capabilities.dailyLimit ? (
+            <Badge variant="outline" className="text-xs border-warning/30 bg-warning/5 text-warning">
+              {provider.capabilities.dailyLimit}/day
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-xs border-primary/30 bg-primary/5">
+              Unlimited
+            </Badge>
+          )}
         </div>
 
         {/* Warning for SMTP without tracking */}
@@ -247,15 +272,16 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-2 pt-2">
+        <div className="flex gap-2">
           {!isConnected && !isPending && (
-            <Button onClick={onConnect} className="w-full">
-              Connect {provider.name}
+            <Button onClick={onConnect} size="sm" variant={getButtonVariant() as any} className="w-full">
+              Connect
             </Button>
           )}
           {isConnected && (
             <Button 
               variant="outline" 
+              size="sm"
               onClick={() => connection && onDisconnect(connection.id)}
               className="w-full"
             >
@@ -263,7 +289,7 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
             </Button>
           )}
           {isPending && (
-            <Button disabled className="w-full">
+            <Button disabled size="sm" className="w-full">
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Setting up...
             </Button>

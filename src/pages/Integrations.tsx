@@ -13,16 +13,34 @@ import { EmailProviderCard } from "@/components/integrations/EmailProviderCard";
 import { ConnectEmailDialog } from "@/components/integrations/ConnectEmailDialog";
 import { EmailDeliverabilityDialog } from "@/components/integrations/EmailDeliverabilityDialog";
 import { nangoClient } from "@/lib/integrations/nango";
+import { gmailDirectClient } from "@/lib/integrations/gmail-direct";
+import { EMAIL_PROVIDER_CONFIG } from "@/config/email-providers";
 import { toast } from "sonner";
 import { Mail, Shield, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 
 const emailProviders = [
-  {
+  ...(EMAIL_PROVIDER_CONFIG.gmail_direct_enabled ? [{
+    id: 'gmail_direct' as const,
+    name: 'Gmail (Direct)',
+    description: 'Direct OAuth integration with Google',
+    icon: '📧',
+    capabilities: {
+      tracking: true,
+      opens: true,
+      clicks: true,
+      replies: true,
+      bounceDetection: true,
+      dailyLimit: 500,
+      webhookSupport: true,
+      sendingMethod: 'api' as const,
+    },
+  }] : []),
+  ...(EMAIL_PROVIDER_CONFIG.nango_enabled ? [{
     id: 'gmail' as const,
-    name: 'Gmail',
-    description: 'Quick connect with Google OAuth',
+    name: 'Gmail (Nango)',
+    description: 'Quick connect with Google OAuth via Nango',
     icon: '📧',
     capabilities: {
       tracking: false,
@@ -34,7 +52,7 @@ const emailProviders = [
       webhookSupport: false,
       sendingMethod: 'direct' as const,
     },
-  },
+  }] : []),
   {
     id: 'outlook' as const,
     name: 'Outlook',
@@ -73,7 +91,7 @@ export default function Integrations() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'outlook' | 'smtp'>('gmail');
+  const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'gmail_direct' | 'outlook' | 'smtp'>('gmail_direct');
   const [testEmailDialogOpen, setTestEmailDialogOpen] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
@@ -81,8 +99,16 @@ export default function Integrations() {
   const { data: connections, isLoading } = useQuery({
     queryKey: ['nango-connections'],
     queryFn: async () => {
-      const { data } = await nangoClient.getConnections();
-      return data || [];
+      const nangoConns = await nangoClient.getConnections();
+      const directGmailConns = await gmailDirectClient.getConnections();
+      
+      // Combine both connection types
+      const allConnections = [
+        ...(nangoConns.data || []),
+        ...directGmailConns,
+      ];
+      
+      return allConnections;
     },
   });
 
@@ -119,13 +145,26 @@ export default function Integrations() {
     },
   });
 
-  const handleConnect = (provider: 'gmail' | 'outlook' | 'smtp') => {
+  const handleConnect = (provider: 'gmail' | 'gmail_direct' | 'outlook' | 'smtp') => {
     setSelectedProvider(provider);
     setConnectDialogOpen(true);
   };
 
-  const handleDisconnect = (connectionId: string) => {
-    disconnectMutation.mutate(connectionId);
+  const handleDisconnect = async (connectionId: string) => {
+    // Find connection to determine which client to use
+    const connection = connections?.find(c => c.id === connectionId);
+    
+    if (connection?.provider === 'gmail_direct') {
+      const { error } = await gmailDirectClient.disconnect(connectionId);
+      if (error) {
+        toast.error('Failed to disconnect');
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['nango-connections'] });
+        toast.success('Connection removed');
+      }
+    } else {
+      disconnectMutation.mutate(connectionId);
+    }
   };
 
   const handleConnectionSuccess = () => {

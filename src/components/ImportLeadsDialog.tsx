@@ -58,6 +58,10 @@ export function ImportLeadsDialog({ open, onOpenChange }: ImportLeadsDialogProps
 
   const importMutation = useMutation({
     mutationFn: async (contactIds: string[]) => {
+      // Get current user ID
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      
       const contactsToImport = contacts?.filter(c => contactIds.includes(c.id)) || [];
       
       const peopleData = contactsToImport.map(contact => {
@@ -74,6 +78,7 @@ export function ImportLeadsDialog({ open, onOpenChange }: ImportLeadsDialogProps
           title: contact.title,
           linkedin_url: contact.linkedin_url,
           company_id: contact.company_id,
+          user_id: user.id,
         };
       });
 

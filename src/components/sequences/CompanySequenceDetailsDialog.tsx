@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -26,13 +26,20 @@ import {
   Play,
   Pause,
   AlertCircle,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Edit
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
-import { useUpdateSequenceStatus } from "@/hooks/use-company-sequences";
+import { useUpdateSequenceStatus, useSendSequenceEmail } from "@/hooks/use-company-sequences";
 import { useMarkCampaignAsViewed } from "@/hooks/use-campaign-views";
 import { SequenceSettingsCard } from "./SequenceSettingsCard";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CompanySequenceDetailsDialogProps {
   open: boolean;
@@ -79,7 +86,11 @@ export function CompanySequenceDetailsDialog({
   sequence,
 }: CompanySequenceDetailsDialogProps) {
   const updateStatusMutation = useUpdateSequenceStatus();
+  const sendEmailMutation = useSendSequenceEmail();
   const markCampaignAsViewed = useMarkCampaignAsViewed();
+  const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
+  const [editingStep, setEditingStep] = useState<number | null>(null);
+  const [editedContent, setEditedContent] = useState<{subject: string; body: string}>({subject: '', body: ''});
 
   // Mark campaign as viewed when dialog opens
   useEffect(() => {
@@ -90,6 +101,59 @@ export function CompanySequenceDetailsDialog({
 
   const handleStatusChange = async (status: 'active' | 'paused') => {
     await updateStatusMutation.mutateAsync({ id: sequence.id, status });
+  };
+
+  const toggleStepExpansion = (stepIdx: number) => {
+    setExpandedSteps(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(stepIdx)) {
+        newSet.delete(stepIdx);
+      } else {
+        newSet.add(stepIdx);
+      }
+      return newSet;
+    });
+  };
+
+  const handleEditStep = (stepIdx: number) => {
+    const personalizedEmail = sequence.personalized_emails?.[stepIdx];
+    setEditingStep(stepIdx);
+    setEditedContent({
+      subject: personalizedEmail?.subject || sequence.email_sequences.steps[stepIdx].subject,
+      body: personalizedEmail?.body || sequence.email_sequences.steps[stepIdx].body,
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (editingStep === null) return;
+
+    try {
+      const updatedEmails = [...(sequence.personalized_emails || sequence.email_sequences.steps)];
+      updatedEmails[editingStep] = {
+        ...updatedEmails[editingStep],
+        subject: editedContent.subject,
+        body: editedContent.body,
+      };
+
+      const { error } = await supabase
+        .from('company_sequences')
+        .update({ personalized_emails: updatedEmails })
+        .eq('id', sequence.id);
+
+      if (error) throw error;
+
+      toast.success('Email updated successfully');
+      setEditingStep(null);
+      window.location.reload(); // Refresh to show updated content
+    } catch (error) {
+      console.error('Failed to update email:', error);
+      toast.error('Failed to update email');
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingStep(null);
+    setEditedContent({ subject: '', body: '' });
   };
 
   const totalSteps = sequence.email_sequences.steps?.length || 0;
@@ -137,6 +201,18 @@ export function CompanySequenceDetailsDialog({
               <Badge variant="outline" className={getStatusColor(sequence.status)}>
                 {sequence.status}
               </Badge>
+              {sequence.status === 'draft' && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => handleStatusChange('active')}
+                  disabled={updateStatusMutation.isPending}
+                  className="bg-gradient-primary"
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Activate Sequence
+                </Button>
+              )}
               {sequence.status === 'active' && (
                 <Button
                   size="sm"
@@ -281,6 +357,11 @@ export function CompanySequenceDetailsDialog({
                 const activity = getActivityStatus(idx);
                 const isCurrent = idx === sequence.current_step;
                 const isPast = idx < sequence.current_step;
+                const isFuture = idx > sequence.current_step;
+                const isExpanded = expandedSteps.has(idx);
+                const isEditing = editingStep === idx;
+                const personalizedEmail = sequence.personalized_emails?.[idx];
+                const emailContent = personalizedEmail || step;
 
                 return (
                   <Card 
@@ -293,7 +374,7 @@ export function CompanySequenceDetailsDialog({
                   >
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-1">
                           <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                             isCurrent ? 'bg-gradient-primary' :
                             isPast ? 'bg-green-500' :
@@ -305,7 +386,7 @@ export function CompanySequenceDetailsDialog({
                               {idx + 1}
                             </span>
                           </div>
-                          <div>
+                          <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
                               <Badge variant="outline" className="font-mono text-xs">
                                 Step {idx + 1}
@@ -336,15 +417,53 @@ export function CompanySequenceDetailsDialog({
                                 </>
                               )}
                             </div>
-                            <CardTitle className="text-base font-semibold">{step.subject}</CardTitle>
+                            {isEditing ? (
+                              <Input
+                                value={editedContent.subject}
+                                onChange={(e) => setEditedContent(prev => ({ ...prev, subject: e.target.value }))}
+                                className="font-semibold"
+                                placeholder="Email subject"
+                              />
+                            ) : (
+                              <CardTitle className="text-base font-semibold">{emailContent.subject}</CardTitle>
+                            )}
                           </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {!activity?.sent_at && isFuture && !isEditing && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEditStep(idx)}
+                            >
+                              <Edit className="h-4 w-4 mr-1" />
+                              Edit
+                            </Button>
+                          )}
+                          {isEditing && (
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={handleSaveEdit}>
+                                Save
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={handleCancelEdit}>
+                                Cancel
+                              </Button>
+                            </div>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => toggleStepExpansion(idx)}
+                          >
+                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </Button>
                         </div>
                       </div>
                     </CardHeader>
                     
                     {activity?.sent_at && (
-                      <CardContent>
-                        <div className="flex items-center flex-wrap gap-4 text-xs text-muted-foreground">
+                      <CardContent className="pt-0">
+                        <div className="flex items-center flex-wrap gap-4 text-xs text-muted-foreground mb-3">
                           <div className="flex items-center gap-1.5">
                             <Send className="h-3 w-3" />
                             Sent: {format(new Date(activity.sent_at), "MMM d, h:mm a")}
@@ -390,6 +509,28 @@ export function CompanySequenceDetailsDialog({
                               No tracking data available
                             </Badge>
                           )}
+                        </div>
+                      </CardContent>
+                    )}
+
+                    {isExpanded && (
+                      <CardContent className="pt-0 border-t mt-3">
+                        <div className="space-y-3 pt-3">
+                          <div>
+                            <p className="text-sm font-semibold mb-2">Email Body:</p>
+                            {isEditing ? (
+                              <Textarea
+                                value={editedContent.body}
+                                onChange={(e) => setEditedContent(prev => ({ ...prev, body: e.target.value }))}
+                                className="min-h-[200px] font-mono text-sm"
+                                placeholder="Email body"
+                              />
+                            ) : (
+                              <div className="text-sm whitespace-pre-wrap bg-muted/50 p-4 rounded-lg border">
+                                {emailContent.body}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </CardContent>
                     )}

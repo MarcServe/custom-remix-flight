@@ -165,7 +165,7 @@ export default function Deals() {
                   {deal.amount && (
                     <div className="flex items-center gap-2 text-lg font-semibold text-primary">
                       <DollarSign className="h-5 w-5" />
-                      ${deal.amount.toLocaleString()}
+                      £{deal.amount.toLocaleString()}
                     </div>
                   )}
                   {deal.close_date && (

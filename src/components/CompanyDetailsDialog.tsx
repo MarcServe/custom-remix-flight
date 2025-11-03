@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus, Database, Loader2 } from "lucide-react";
+import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus, Database, Loader2, Phone, TrendingUp, Award, CheckCircle2, XCircle, Circle, Copy, Linkedin, Shield } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { GenerateSequenceForCompanyDialog } from "@/components/sequences/GenerateSequenceForCompanyDialog";
@@ -14,14 +14,21 @@ import { useDeleteCompany } from "@/hooks/use-companies";
 import { useCompanyEvents, useDeleteEvent } from "@/hooks/use-events";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { companiesApi } from "@/lib/api/companies";
+import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Contact {
   id?: string;
   name: string;
   email?: string;
   emailVerified?: boolean;
+  emailConfidence?: number; // Lead finder format
+  email_confidence?: number; // Database format
   linkedinUrl?: string;
+  linkedin_url?: string; // Database format
   title?: string;
   department?: string;
   phone?: string;
@@ -45,6 +52,10 @@ interface Company {
   fundingInfo?: string;
   funding_stage?: string; // Database format
   funding_total?: string; // Database format
+  fundingStage?: string; // Lead finder format
+  revenue?: string; // Lead finder format
+  foundingYear?: number; // Lead finder format
+  founding_year?: number; // Database format
   employeeCount?: number;
   employee_count?: number; // Database format
   companyPhone?: string;
@@ -58,6 +69,8 @@ interface Company {
     fundingInfo?: string;
     recentNews?: string;
     technologies?: string[];
+    revenue?: string;
+    foundingYear?: number;
   };
   socialProfiles?: {
     linkedin?: string;
@@ -83,6 +96,11 @@ interface Company {
   }>;
   contacts?: Contact[];
   primaryContact?: Contact;
+  enrichmentTier?: string; // Lead finder format
+  qualityScore?: number; // Lead finder format
+  dataCompleteness?: number; // Lead finder format
+  enrichmentStatus?: string; // Lead finder format
+  contactStatus?: string; // Lead finder format
 }
 
 interface CompanyDetailsDialogProps {
@@ -146,6 +164,7 @@ export function CompanyDetailsDialog({
     linkedinUrl: company.linkedinUrl || company.linkedin_url,
     recentNews: company.recentNews || company.recent_news || (company.enrichment_data as any)?.recentNews,
     fundingInfo: company.fundingInfo || 
+                 company.fundingStage ||
                  (company.funding_stage && company.funding_total ? `${company.funding_stage} - ${company.funding_total}` : null) ||
                  (company.enrichment_data as any)?.fundingInfo,
     products: company.products || (company.enrichment_data as any)?.products,
@@ -155,6 +174,8 @@ export function CompanyDetailsDialog({
     generalEmail: company.generalEmail || company.general_email,
     socialProfiles: company.socialProfiles || company.social_profiles,
     keyExecutives: company.keyExecutives || company.key_executives,
+    revenue: company.revenue || (company.enrichment_data as any)?.revenue,
+    foundingYear: company.foundingYear || company.founding_year || (company.enrichment_data as any)?.foundingYear,
   };
 
   const hasContacts = normalizedCompany.contacts && normalizedCompany.contacts.length > 0;
@@ -164,6 +185,54 @@ export function CompanyDetailsDialog({
   const showNavigation = allCompanies && currentIndex !== undefined && onNavigate;
   const canGoPrev = showNavigation && currentIndex > 0;
   const canGoNext = showNavigation && allCompanies && currentIndex < allCompanies.length - 1;
+
+  // Calculate data completeness with field breakdown
+  const dataFields = {
+    core: [
+      { name: 'Name', value: company.name, required: true },
+      { name: 'Website', value: company.website, required: false },
+      { name: 'Description', value: company.description, required: false },
+      { name: 'Industry', value: company.industry, required: true },
+      { name: 'Size', value: company.size, required: true },
+      { name: 'Geography', value: company.geography, required: true },
+    ],
+    enrichment: [
+      { name: 'LinkedIn URL', value: normalizedCompany.linkedinUrl, required: false },
+      { name: 'Employee Count', value: normalizedCompany.employeeCount, required: false },
+      { name: 'Founding Year', value: normalizedCompany.foundingYear, required: false },
+      { name: 'Revenue', value: normalizedCompany.revenue, required: false },
+      { name: 'Company Phone', value: normalizedCompany.companyPhone, required: false },
+      { name: 'General Email', value: normalizedCompany.generalEmail, required: false },
+      { name: 'Products', value: normalizedCompany.products, required: false },
+      { name: 'Recent News', value: normalizedCompany.recentNews, required: false },
+      { name: 'Funding Info', value: normalizedCompany.fundingInfo, required: false },
+      { name: 'Technologies', value: normalizedCompany.technologies?.length > 0, required: false },
+      { name: 'Key Executives', value: normalizedCompany.keyExecutives?.length > 0, required: false },
+      { name: 'Social Profiles', value: normalizedCompany.socialProfiles && Object.keys(normalizedCompany.socialProfiles).length > 0, required: false },
+      { name: 'Contacts', value: hasContacts, required: false },
+    ],
+  };
+
+  const allFields = [...dataFields.core, ...dataFields.enrichment];
+  const filledFields = allFields.filter(f => f.value).length;
+  const completeness = Math.round((filledFields / allFields.length) * 100);
+
+  // Determine data sources
+  const getDataSources = () => {
+    const sources: string[] = [];
+    if (isSearching) {
+      sources.push('Exa Search');
+      if (company.wasEnriched || company.enrichmentTier) {
+        sources.push('Perplexity AI');
+      }
+      if (hasContacts) {
+        sources.push('GetProspect');
+      }
+    }
+    return sources;
+  };
+
+  const dataSources = getDataSources();
 
   const handleSendEmailToContact = (contact: Contact) => {
     if (!contact.email) {
@@ -183,18 +252,73 @@ export function CompanyDetailsDialog({
     setEmailDialogOpen(true);
   };
 
+  const handleCopyEmail = (email: string, contactName: string) => {
+    navigator.clipboard.writeText(email);
+    toast({
+      title: "Email Copied",
+      description: `${email} copied to clipboard`,
+    });
+  };
+
   const handleSaveToCRM = async () => {
     if (!company) return;
 
     setIsSaving(true);
     try {
+      // Check if company already exists by website or name
+      const { supabase: supabaseClient } = await import("@/integrations/supabase/client");
+      
+      let existingCompany = null;
+      
+      // If website exists, check by website
+      if (company.website && company.website.trim()) {
+        const { data } = await supabaseClient
+          .from('companies')
+          .select('id, name')
+          .eq('website', company.website)
+          .maybeSingle();
+        existingCompany = data;
+      }
+      
+      // If no website or no match found, check by name
+      if (!existingCompany) {
+        const { data } = await supabaseClient
+          .from('companies')
+          .select('id, name')
+          .ilike('name', company.name)
+          .maybeSingle();
+        existingCompany = data;
+      }
+
+      if (existingCompany) {
+        toast({
+          title: 'Already Exists',
+          description: `${existingCompany.name} is already in your CRM`,
+          variant: 'destructive',
+        });
+        setIsSaving(false);
+        return;
+      }
+
       // Create company
+      // Generate unique website placeholder if none exists
+      const websiteValue = company.website && company.website.trim() 
+        ? company.website 
+        : `no-website-${crypto.randomUUID()}`;
+      
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
       const { data: createdCompany, error: companyError } = await companiesApi.createCompany({
         name: company.name,
-        website: company.website,
+        website: websiteValue,
         description: company.description,
         industry: company.industry,
         size: company.size,
+        user_id: user.id,
         geography: company.geography,
         linkedin_url: company.linkedinUrl,
         company_phone: company.companyPhone,
@@ -211,6 +335,7 @@ export function CompanyDetailsDialog({
       });
 
       if (companyError) {
+        console.error('Error creating company:', companyError);
         throw companyError;
       }
 
@@ -249,11 +374,19 @@ export function CompanyDetailsDialog({
 
       // Close the dialog
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving company:', error);
+      
+      let errorMessage = 'Failed to save company to CRM';
+      
+      // Handle duplicate key error
+      if (error?.code === '23505') {
+        errorMessage = 'This company already exists in your CRM';
+      }
+      
       toast({
         title: 'Error',
-        description: 'Failed to save company to CRM',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -372,6 +505,18 @@ export function CompanyDetailsDialog({
                 {company.size && (
                   <Badge variant="outline">{company.size}</Badge>
                 )}
+                {isSearching && (
+                  <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">
+                    <Database className="h-3 w-3 mr-1" />
+                    {completeness}% Complete
+                  </Badge>
+                )}
+                {company.qualityScore !== undefined && (
+                  <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
+                    <Award className="h-3 w-3 mr-1" />
+                    Score: {company.qualityScore}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -384,18 +529,79 @@ export function CompanyDetailsDialog({
           </TabsList>
 
           <TabsContent value="overview" className="data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:flex-1 data-[state=active]:overflow-hidden mt-0">
-            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-6 pt-4">
+            <ScrollArea className="flex-1 px-6 pb-6">
+              <div className="space-y-6 pt-4">
+            
+            {/* Data Completeness Panel - Only show for Lead Finder results */}
+            {isSearching && (
+              <div className="space-y-3 p-4 rounded-lg border bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Database className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-semibold">Data Completeness</h3>
+                  </div>
+                  <Badge variant="outline" className="bg-background">
+                    {filledFields}/{allFields.length} fields
+                  </Badge>
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Overall Progress</span>
+                    <span className="font-medium">{completeness}%</span>
+                  </div>
+                  <Progress value={completeness} className="h-2" />
+                </div>
+
+                {/* Data Sources */}
+                {dataSources.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <span className="text-xs text-muted-foreground">Sources:</span>
+                    {dataSources.map((source, idx) => (
+                      <Badge key={idx} variant="secondary" className="text-xs">
+                        {source}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                {/* Field Status Grid */}
+                <div className="pt-2 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Field Status:</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    {allFields.map((field, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5 text-xs">
+                        {field.value ? (
+                          <CheckCircle2 className="h-3 w-3 text-green-600" />
+                        ) : field.required ? (
+                          <XCircle className="h-3 w-3 text-red-600" />
+                        ) : (
+                          <Circle className="h-3 w-3 text-muted-foreground/40" />
+                        )}
+                        <span className={field.value ? "text-foreground" : "text-muted-foreground"}>
+                          {field.name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Overview Section */}
             <div className="space-y-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Overview
-              </h3>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <Building2 className="h-4 w-4 text-blue-500" />
+                </div>
+                <h3 className="text-sm font-semibold">Company Overview</h3>
+              </div>
               {company.description && (
-                <p className="text-sm text-foreground leading-relaxed">
+                <p className="text-sm text-foreground leading-relaxed pl-10">
                   {company.description}
                 </p>
               )}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 pl-10">
                 {company.geography && (
                   <div className="flex items-center gap-2 text-sm">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
@@ -403,16 +609,37 @@ export function CompanyDetailsDialog({
                     <span className="text-muted-foreground">{company.geography}</span>
                   </div>
                 )}
+                {company.size && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Company Size:</span>
+                    <span className="text-muted-foreground">{company.size}</span>
+                  </div>
+                )}
                 {normalizedCompany.employeeCount && (
                   <div className="flex items-center gap-2 text-sm">
                     <Users className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">Employees:</span>
-                    <span className="text-muted-foreground">{normalizedCompany.employeeCount}</span>
+                    <span className="text-muted-foreground">{normalizedCompany.employeeCount.toLocaleString()}</span>
+                  </div>
+                )}
+                {normalizedCompany.foundingYear && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Founded:</span>
+                    <span className="text-muted-foreground">{normalizedCompany.foundingYear}</span>
+                  </div>
+                )}
+                {normalizedCompany.revenue && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Revenue:</span>
+                    <span className="text-muted-foreground">{normalizedCompany.revenue}</span>
                   </div>
                 )}
                 {normalizedCompany.companyPhone && (
                   <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <Phone className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">Phone:</span>
                     <a href={`tel:${normalizedCompany.companyPhone}`} className="text-primary hover:underline">
                       {normalizedCompany.companyPhone}
@@ -438,6 +665,7 @@ export function CompanyDetailsDialog({
               <>
                 <Separator />
                 
+                {/* Products & Services */}
                 {normalizedCompany.products && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
@@ -445,6 +673,12 @@ export function CompanyDetailsDialog({
                         <Package className="h-4 w-4 text-blue-500" />
                       </div>
                       <h3 className="text-sm font-semibold">Products & Services</h3>
+                      {isSearching && (
+                        <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/20">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Enriched
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
                       {normalizedCompany.products}
@@ -452,13 +686,20 @@ export function CompanyDetailsDialog({
                   </div>
                 )}
 
+                {/* Technologies */}
                 {normalizedCompany.technologies && normalizedCompany.technologies.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
                         <Sparkles className="h-4 w-4 text-indigo-500" />
                       </div>
-                      <h3 className="text-sm font-semibold">Technologies</h3>
+                      <h3 className="text-sm font-semibold">Technology Stack</h3>
+                      {isSearching && (
+                        <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/20">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Enriched
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-2 pl-10">
                       {normalizedCompany.technologies.map((tech, idx) => (
@@ -470,13 +711,20 @@ export function CompanyDetailsDialog({
                   </div>
                 )}
 
+                {/* Recent News */}
                 {normalizedCompany.recentNews && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
                         <Newspaper className="h-4 w-4 text-purple-500" />
                       </div>
-                      <h3 className="text-sm font-semibold">Recent News</h3>
+                      <h3 className="text-sm font-semibold">Recent News & Updates</h3>
+                      {isSearching && (
+                        <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/20">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Enriched
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
                       {normalizedCompany.recentNews}
@@ -484,13 +732,20 @@ export function CompanyDetailsDialog({
                   </div>
                 )}
 
+                {/* Funding Information */}
                 {normalizedCompany.fundingInfo && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
                         <DollarSign className="h-4 w-4 text-green-500" />
                       </div>
-                      <h3 className="text-sm font-semibold">Funding Information</h3>
+                      <h3 className="text-sm font-semibold">Funding & Investment</h3>
+                      {isSearching && (
+                        <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/20">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Enriched
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed pl-10">
                       {normalizedCompany.fundingInfo}
@@ -498,13 +753,20 @@ export function CompanyDetailsDialog({
                   </div>
                 )}
 
+                {/* Key Executives */}
                 {normalizedCompany.keyExecutives && normalizedCompany.keyExecutives.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
                         <Users className="h-4 w-4 text-amber-500" />
                       </div>
-                      <h3 className="text-sm font-semibold">Key Executives</h3>
+                      <h3 className="text-sm font-semibold">Leadership Team</h3>
+                      {isSearching && (
+                        <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/20">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Enriched
+                        </Badge>
+                      )}
                     </div>
                     <div className="space-y-2 pl-10">
                       {normalizedCompany.keyExecutives.map((exec, idx) => (
@@ -518,13 +780,14 @@ export function CompanyDetailsDialog({
                   </div>
                 )}
 
+                {/* Social Profiles */}
                 {normalizedCompany.socialProfiles && Object.keys(normalizedCompany.socialProfiles).length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center">
                         <Globe className="h-4 w-4 text-pink-500" />
                       </div>
-                      <h3 className="text-sm font-semibold">Social Profiles</h3>
+                      <h3 className="text-sm font-semibold">Social Media Presence</h3>
                     </div>
                     <div className="flex flex-wrap gap-2 pl-10">
                       {normalizedCompany.socialProfiles.linkedin && (
@@ -577,70 +840,166 @@ export function CompanyDetailsDialog({
                     <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
                       <Users className="h-4 w-4 text-cyan-500" />
                     </div>
-                    <h3 className="text-sm font-semibold">Team Contacts</h3>
+                    <h3 className="text-sm font-semibold">Team Contacts ({company.contacts.length})</h3>
+                    {isSearching && (
+                      <Badge variant="outline" className="text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
+                        <Database className="h-3 w-3 mr-1" />
+                        GetProspect
+                      </Badge>
+                    )}
                   </div>
                   
                   <div className="space-y-3 pl-10">
-                    {company.contacts.map((contact, idx) => (
-                      <div key={idx} className="p-3 rounded-lg border bg-card/50 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm">{contact.name}</span>
-                            {contact.emailVerified && (
-                              <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
-                                Verified
-                              </Badge>
-                            )}
-                            {contact === company.primaryContact && (
-                              <Badge className="text-xs bg-primary/10 text-primary border-primary/20">
-                                Primary
-                              </Badge>
+                    {company.contacts.map((contact, idx) => {
+                      const emailConfidence = contact.emailConfidence || contact.email_confidence;
+                      const contactLinkedIn = contact.linkedinUrl || contact.linkedin_url;
+                      
+                      return (
+                        <div key={idx} className="p-4 rounded-lg border bg-card/50 hover:bg-card/70 transition-colors space-y-3">
+                          {/* Header with name and badges */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-sm">{contact.name}</span>
+                                
+                                {/* Verification Badge */}
+                                {contact.emailVerified && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger>
+                                        <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
+                                          <Shield className="h-3 w-3 mr-1" />
+                                          Verified
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Email address has been verified</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                                
+                                {/* Email Confidence Score */}
+                                {emailConfidence && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger>
+                                        <Badge 
+                                          variant="outline" 
+                                          className={`text-xs ${
+                                            emailConfidence >= 90 
+                                              ? 'bg-green-500/10 text-green-600 border-green-500/20' 
+                                              : emailConfidence >= 70 
+                                              ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20'
+                                              : 'bg-orange-500/10 text-orange-600 border-orange-500/20'
+                                          }`}
+                                        >
+                                          <TrendingUp className="h-3 w-3 mr-1" />
+                                          {emailConfidence}% confidence
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Email accuracy confidence score</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                                
+                                {/* Primary Contact Badge */}
+                                {contact === company.primaryContact && (
+                                  <Badge className="text-xs bg-primary/10 text-primary border-primary/20">
+                                    Primary
+                                  </Badge>
+                                )}
+                              </div>
+                              
+                              {/* Title and Department */}
+                              {contact.title && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {contact.title}
+                                  {contact.department && ` • ${contact.department}`}
+                                </p>
+                              )}
+                            </div>
+                            
+                            {/* Action Button */}
+                            {contact.email && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSendEmailToContact(contact);
+                                }}
+                              >
+                                <Mail className="h-4 w-4 mr-1" />
+                                Send
+                              </Button>
                             )}
                           </div>
-                          {contact.email && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSendEmailToContact(contact);
-                              }}
-                            >
-                              <Mail className="h-4 w-4 mr-1" />
-                              Email
-                            </Button>
-                          )}
+                          
+                          {/* Contact Details */}
+                          <div className="space-y-2">
+                            {/* Email with Copy Button */}
+                            {contact.email && (
+                              <div className="flex items-center gap-2 group">
+                                <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                <a 
+                                  href={`mailto:${contact.email}`}
+                                  className="text-xs text-primary hover:underline font-mono flex-1 min-w-0 truncate"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {contact.email}
+                                </a>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCopyEmail(contact.email!, contact.name);
+                                  }}
+                                  title="Copy email"
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            )}
+                            
+                            {/* Phone */}
+                            {contact.phone && (
+                              <div className="flex items-center gap-2">
+                                <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                <a 
+                                  href={`tel:${contact.phone}`}
+                                  className="text-xs text-primary hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {contact.phone}
+                                </a>
+                              </div>
+                            )}
+                            
+                            {/* LinkedIn Profile */}
+                            {contactLinkedIn && (
+                              <div className="flex items-center gap-2">
+                                <Linkedin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                <a 
+                                  href={contactLinkedIn}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  View LinkedIn Profile
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        
-                        {contact.title && (
-                          <p className="text-xs text-muted-foreground">{contact.title}</p>
-                        )}
-                        
-                        {contact.email && (
-                          <a 
-                            href={`mailto:${contact.email}`}
-                            className="text-xs text-primary hover:underline font-mono inline-flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Mail className="h-3 w-3" />
-                            {contact.email}
-                          </a>
-                        )}
-                        
-                        {contact.linkedinUrl && (
-                          <a 
-                            href={contact.linkedinUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            LinkedIn Profile
-                          </a>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </>
@@ -714,10 +1073,12 @@ export function CompanyDetailsDialog({
                )}
                 </div>
               </div>
+            </ScrollArea>
           </TabsContent>
 
           <TabsContent value="activity" className="data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:flex-1 data-[state=active]:overflow-hidden mt-0">
-            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4 pt-4">
+            <ScrollArea className="flex-1 px-6 pb-6">
+              <div className="space-y-4 pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                     Recent Activity
@@ -755,7 +1116,8 @@ export function CompanyDetailsDialog({
                      <p className="text-xs mt-1">Start tracking interactions with this company</p>
                  </div>
                 )}
-               </div>
+              </div>
+            </ScrollArea>
           </TabsContent>
         </Tabs>
       </DialogContent>

@@ -69,13 +69,37 @@ Deno.serve(async (req) => {
       contacts = allContacts || [];
     }
 
-    const primaryContact = contacts[0] || {
-      name: 'Hiring Manager',
-      title: 'Decision Maker',
-      email: company.website ? `contact@${company.website.replace(/^https?:\/\/(www\.)?/, '')}` : null,
-    };
+    let primaryContact = contacts[0];
 
-    console.log(`Using contact: ${primaryContact.name} (${primaryContact.title})`);
+    // If no contact exists, create a default one
+    if (!primaryContact) {
+      const fallbackEmail = company.website 
+        ? `contact@${company.website.replace(/^https?:\/\/(www\.)?/, '')}` 
+        : company.general_email || `info@${company.name.toLowerCase().replace(/\s+/g, '')}.com`;
+
+      const { data: newContact, error: contactError } = await supabase
+        .from('contacts')
+        .insert({
+          company_id: companyId,
+          name: 'Hiring Manager',
+          title: 'Decision Maker',
+          email: fallbackEmail,
+          email_verified: true,
+          is_primary_contact: true,
+        })
+        .select()
+        .single();
+
+      if (contactError) {
+        console.error('Failed to create fallback contact:', contactError);
+        throw new Error(`Could not create contact: ${contactError.message}`);
+      }
+
+      primaryContact = newContact;
+      console.log(`Created fallback contact: ${primaryContact.name} (${primaryContact.email})`);
+    } else {
+      console.log(`Using existing contact: ${primaryContact.name} (${primaryContact.title})`);
+    }
 
     // Fetch user's business profile for context
     const authHeader = req.headers.get('Authorization');
@@ -147,7 +171,7 @@ Deno.serve(async (req) => {
       }
 
       personalizedEmails.push({
-        stepNumber: i + 1,
+        stepNumber: i,
         subject: personalized.subject,
         body: personalized.body,
         personalizedHooks: personalized.personalizedHooks || [],

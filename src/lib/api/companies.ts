@@ -3,6 +3,7 @@ import { apiClient } from './client';
 export interface Company {
   id: string;
   name: string;
+  user_id: string;
   website?: string;
   description?: string;
   industry?: string;

@@ -48,6 +48,7 @@ export interface LeadFinderRequest {
   size: string;
   geography: string;
   industry: string;
+  customSearchText?: string;
   dryRun?: boolean;
   provider?: 'lovable' | 'openai' | 'perplexity';
   model?: string;

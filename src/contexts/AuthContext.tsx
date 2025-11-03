@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 interface AuthContextType {
   user: User | null;
@@ -33,7 +33,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<'admin' | 'sales_rep' | 'viewer' | null>(null);
-  const { toast } = useToast();
   const initialLoadRef = useRef(true);
 
   // Fetch user role when user changes
@@ -62,14 +61,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
         // Handle auth events - only show welcome toast for actual sign-ins, not initial session restoration
         if (event === 'SIGNED_IN' && !initialLoadRef.current) {
-          toast({
-            title: "Welcome back!",
+          toast.success("Welcome back!", {
             description: "You've successfully signed in.",
           });
         } else if (event === 'SIGNED_OUT') {
           setUserRole(null);
-          toast({
-            title: "Signed out",
+          toast.info("Signed out", {
             description: "You've been signed out successfully.",
           });
         }
@@ -86,7 +83,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     });
 
     return () => subscription.unsubscribe();
-  }, [toast]);
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -96,20 +93,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       });
 
       if (error) {
-        toast({
-          title: "Sign in failed",
+        toast.error("Sign in failed", {
           description: error.message,
-          variant: "destructive",
         });
         return { error };
       }
 
       return { error: null };
     } catch (error: any) {
-      toast({
-        title: "Sign in failed",
+      toast.error("Sign in failed", {
         description: error.message,
-        variant: "destructive",
       });
       return { error };
     }
@@ -131,25 +124,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       });
 
       if (error) {
-        toast({
-          title: "Sign up failed",
+        toast.error("Sign up failed", {
           description: error.message,
-          variant: "destructive",
         });
         return { error };
       }
 
-      toast({
-        title: "Success!",
-        description: "Please check your email to confirm your account.",
+      toast.success("Account created!", {
+        description: "Please check your email to verify your account. The verification link will be sent shortly.",
+        duration: 6000,
       });
 
       return { error: null };
     } catch (error: any) {
-      toast({
-        title: "Sign up failed",
+      toast.error("Sign up failed", {
         description: error.message,
-        variant: "destructive",
       });
       return { error };
     }
@@ -160,10 +149,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     } catch (error: any) {
-      toast({
-        title: "Sign out failed",
+      toast.error("Sign out failed", {
         description: error.message,
-        variant: "destructive",
       });
     }
   };
@@ -177,25 +164,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       });
 
       if (error) {
-        toast({
-          title: "Password reset failed",
+        toast.error("Password reset failed", {
           description: error.message,
-          variant: "destructive",
         });
         return { error };
       }
 
-      toast({
-        title: "Check your email",
+      toast.success("Check your email", {
         description: "We've sent you a password reset link.",
       });
 
       return { error: null };
     } catch (error: any) {
-      toast({
-        title: "Password reset failed",
+      toast.error("Password reset failed", {
         description: error.message,
-        variant: "destructive",
       });
       return { error };
     }

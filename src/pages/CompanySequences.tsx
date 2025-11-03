@@ -53,6 +53,7 @@ interface CompanySequence {
   personalized_emails: any[];
   auto_respond_enabled: boolean;
   automation_rules?: any;
+  created_at: string;
   companies: {
     name: string;
     industry?: string;
@@ -416,6 +417,15 @@ export default function CompanySequences() {
                             {sequence.companies.geography && (
                               <Badge variant="outline">{sequence.companies.geography}</Badge>
                             )}
+                            <Badge variant="outline" className="text-xs">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Created {new Date(sequence.created_at).toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </Badge>
                             {engagement.topProvider && (
                               <TooltipProvider>
                                 <Tooltip>
@@ -448,22 +458,12 @@ export default function CompanySequences() {
                         {sequence.status === 'draft' && (
                           <Button
                             size="sm"
-                            onClick={async () => {
-                              try {
-                                await sendEmailMutation.mutateAsync({
-                                  companySequenceId: sequence.id,
-                                  stepNumber: 0
-                                });
-                                await handleStatusChange(sequence.id, 'active');
-                              } catch (error) {
-                                console.error('Failed to send first email:', error);
-                              }
-                            }}
-                            disabled={sendEmailMutation.isPending || updateStatusMutation.isPending}
+                            onClick={() => handleStatusChange(sequence.id, 'active')}
+                            disabled={updateStatusMutation.isPending}
                             className="bg-gradient-primary hover:opacity-90"
                           >
-                            <Send className="h-4 w-4 mr-2" />
-                            {sendEmailMutation.isPending ? 'Sending...' : 'Start Sequence'}
+                            <Play className="h-4 w-4 mr-2" />
+                            Activate Sequence
                           </Button>
                         )}
                         {sequence.status === 'active' && (

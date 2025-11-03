@@ -8,8 +8,7 @@ import { useSequences } from "@/hooks/use-sequences";
 import { usePersonalizeSequence } from "@/hooks/use-company-sequences";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, Mail, Eye } from "lucide-react";
-import { SequencePreviewDialog } from "./SequencePreviewDialog";
+import { Loader2, Sparkles } from "lucide-react";
 
 interface PersonalizeSequenceDialogProps {
   open: boolean;
@@ -32,14 +31,6 @@ export function PersonalizeSequenceDialog({
 }: PersonalizeSequenceDialogProps) {
   const [selectedSequenceId, setSelectedSequenceId] = useState<string>(defaultSequenceId || "");
   const [tone, setTone] = useState<'professional' | 'casual' | 'technical'>('professional');
-  const [sendImmediately, setSendImmediately] = useState(defaultSendImmediately);
-  const [showPreview, setShowPreview] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
-  const [previewData, setPreviewData] = useState<{
-    companySequenceId: string;
-    personalizedEmails: any[];
-  } | null>(null);
 
   const { data: sequencesData, isLoading: isLoadingSequences } = useSequences();
   const personalizeSequence = usePersonalizeSequence();
@@ -49,13 +40,10 @@ export function PersonalizeSequenceDialog({
 
   // Sync with props when dialog opens
   useEffect(() => {
-    if (open) {
-      setSendImmediately(defaultSendImmediately);
-      if (defaultSequenceId) {
-        setSelectedSequenceId(defaultSequenceId);
-      }
+    if (open && defaultSequenceId) {
+      setSelectedSequenceId(defaultSequenceId);
     }
-  }, [open, defaultSendImmediately, defaultSequenceId]);
+  }, [open, defaultSequenceId]);
 
   const handlePersonalize = async () => {
     if (!selectedSequenceId) return;
@@ -69,67 +57,17 @@ export function PersonalizeSequenceDialog({
       });
 
       if (result?.data) {
-        const companySequenceId = (result.data as any).companySequenceId;
-        const personalizedEmails = (result.data as any).personalizedEmails || [];
-        
-        // If preview is enabled, show preview dialog
-        if (showPreview && companySequenceId) {
-          setPreviewData({
-            companySequenceId,
-            personalizedEmails,
-          });
-          setPreviewDialogOpen(true);
-          onOpenChange(false);
-          return;
-        }
-
-        // If user wants to send immediately without preview, send the first email
-        if (sendImmediately && companySequenceId) {
-          setIsSending(true);
-          try {
-            const { data: sendData, error: sendError } = await supabase.functions.invoke(
-              'send-sequence-email',
-              {
-                body: {
-                  companySequenceId,
-                  stepNumber: 0,
-                },
-              }
-            );
-
-            if (sendError) throw sendError;
-
-            // Update status to active
-            const { error: statusError } = await supabase
-              .from('company_sequences')
-              .update({ status: 'active' })
-              .eq('id', companySequenceId);
-
-            if (statusError) throw statusError;
-
-            const contactName = (result.data as any).contact?.name || 'contact';
-            toast({
-              title: 'Sequence Started!',
-              description: `First email sent to ${contactName}. Remaining emails will be sent according to the schedule.`,
-            });
-          } catch (sendError: any) {
-            console.error('Error sending sequence:', sendError);
-            toast({
-              title: 'Sequence Created',
-              description: 'Sequence was personalized but failed to send. You can send it manually from the sequences page.',
-              variant: 'destructive',
-            });
-          } finally {
-            setIsSending(false);
-          }
-        }
+        const contactName = (result.data as any).contact?.name || 'contact';
+        const timestamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        toast({
+          title: 'Sequence Created!',
+          description: `Personalized sequence created for ${companyName} (${contactName}) at ${timestamp}. Find it at the top of your Sequences page under "Draft" status.`,
+        });
       }
 
       onOpenChange(false);
       setSelectedSequenceId("");
       setTone('professional');
-      setSendImmediately(false);
-      setShowPreview(false);
     } catch (error) {
       console.error('Error personalizing sequence:', error);
     }
@@ -179,75 +117,23 @@ export function PersonalizeSequenceDialog({
             </Select>
           </div>
 
-          <div className="flex items-center space-x-2 pt-2">
-            <Checkbox
-              id="showPreview"
-              checked={showPreview}
-              onCheckedChange={(checked) => setShowPreview(checked as boolean)}
-            />
-            <Label
-              htmlFor="showPreview"
-              className="text-sm font-normal cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <Eye className="h-4 w-4" />
-                <span>Preview and edit before sending</span>
-              </div>
-            </Label>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="sendImmediately"
-              checked={sendImmediately}
-              onCheckedChange={(checked) => setSendImmediately(checked as boolean)}
-            />
-            <Label
-              htmlFor="sendImmediately"
-              className="text-sm font-normal cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4" />
-                <span>Send first email immediately</span>
-              </div>
-            </Label>
-          </div>
         </div>
 
         <div className="flex gap-2 justify-end">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSending}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             onClick={handlePersonalize}
-            disabled={!selectedSequenceId || personalizeSequence.isPending || isSending}
+            disabled={!selectedSequenceId || personalizeSequence.isPending}
           >
-            {(personalizeSequence.isPending || isSending) && (
+            {personalizeSequence.isPending && (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             )}
-            {isSending ? 'Sending...' : 
-             showPreview ? 'Preview Sequence' :
-             sendImmediately ? 'Personalize & Send' : 'Personalize & Create'}
+            Create Draft Sequence
           </Button>
         </div>
       </DialogContent>
-
-      {/* Preview Dialog */}
-      {previewData && (
-        <SequencePreviewDialog
-          open={previewDialogOpen}
-          onOpenChange={(open) => {
-            setPreviewDialogOpen(open);
-            if (!open) {
-              setPreviewData(null);
-            }
-          }}
-          companyName={companyName}
-          companySequenceId={previewData.companySequenceId}
-          personalizedEmails={previewData.personalizedEmails}
-          sendImmediately={sendImmediately}
-        />
-      )}
     </Dialog>
   );
 }

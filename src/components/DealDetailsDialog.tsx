@@ -386,7 +386,7 @@ export function DealDetailsDialog({
                       <CardContent>
                         <div className="flex items-center gap-2 text-2xl font-bold text-primary">
                           <DollarSign className="h-5 w-5" />
-                          {deal.amount.toLocaleString()}
+                          £{deal.amount.toLocaleString()}
                         </div>
                       </CardContent>
                     </Card>

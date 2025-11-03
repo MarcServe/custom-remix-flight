@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,6 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { companiesApi } from "@/lib/api/companies";
+import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { industryTaxonomy, getIndustryCategories, getIndustrySubcategories, formatIndustryString } from "@/lib/data/industry-taxonomy";
@@ -35,6 +37,7 @@ export default function LeadFinder() {
   const [industryCategory, setIndustryCategory] = useState("");
   const [industrySubcategory, setIndustrySubcategory] = useState("");
   const [subcategorySearch, setSubcategorySearch] = useState("");
+  const [customSearchText, setCustomSearchText] = useState("");
   const [dryRun, setDryRun] = useState(true);
   const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(true);
   const [selectedCompany, setSelectedCompany] = useState<any>(null);
@@ -109,6 +112,7 @@ export default function LeadFinder() {
       size,
       geography,
       industry: industryString,
+      customSearchText,
       dryRun: shouldDryRun,
       provider: providerConfig.provider,
       model: providerConfig.model,
@@ -138,16 +142,53 @@ export default function LeadFinder() {
       let errorCount = 0;
       for (const company of selectedCompanies) {
         try {
+          // Check if company already exists by website or name
+          let existingCompany = null;
+
+          // If website exists, check by website
+          if (company.website && company.website.trim()) {
+            const {
+              data
+            } = await supabase.from('companies').select('id').eq('website', company.website).maybeSingle();
+            existingCompany = data;
+          }
+
+          // If no website or no match found, check by name
+          if (!existingCompany) {
+            const {
+              data
+            } = await supabase.from('companies').select('id').ilike('name', company.name).maybeSingle();
+            existingCompany = data;
+          }
+          if (existingCompany) {
+            // Company already exists, skip
+            console.log('Company already exists:', company.name);
+            continue;
+          }
+
           // Create company
+          // Generate unique website placeholder if none exists
+          const websiteValue = company.website && company.website.trim() ? company.website : `no-website-${crypto.randomUUID()}`;
+
+          // Get current user
+          const {
+            data: {
+              user
+            }
+          } = await supabase.auth.getUser();
+          if (!user) {
+            throw new Error('User not authenticated');
+          }
           const {
             data: createdCompany,
             error: companyError
           } = await companiesApi.createCompany({
             name: company.name,
-            website: company.website,
+            website: websiteValue,
             description: company.description,
             industry: company.industry,
             size: company.size,
+            user_id: user.id,
             geography: company.geography,
             linkedin_url: company.linkedinUrl,
             company_phone: company.companyPhone,
@@ -244,7 +285,7 @@ export default function LeadFinder() {
   };
   const availableSubcategories = industryCategory ? getIndustrySubcategories(industryCategory) : [];
   const filteredSubcategories = availableSubcategories.filter(sub => sub.toLowerCase().includes(subcategorySearch.toLowerCase()));
-  const isFormValid = size && geography && industryCategory;
+  const isFormValid = size && geography && industryCategory || customSearchText.trim().length > 0;
   const isLoading = streamingSearch.isLoading;
 
   // Create results object compatible with existing code
@@ -564,7 +605,7 @@ export default function LeadFinder() {
               <Separator orientation="vertical" className="h-4" />
               <div className="flex items-center gap-2">
                 <Zap className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="font-mono">${(results.usage.estimatedCost ?? 0).toFixed(4)}</span>
+                
               </div>
             </div>}
         </div>
@@ -653,6 +694,14 @@ export default function LeadFinder() {
                         </PopoverContent>
                       </Popover>
                     </div>}
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="custom-search" className="text-xs font-medium">Custom Search (Optional)</Label>
+                    <Textarea id="custom-search" placeholder="e.g., Find me hospitals in Cardiff with 1-10 employees, specialised in taking care of old and disabled" value={customSearchText} onChange={e => setCustomSearchText(e.target.value)} className="text-xs min-h-[80px] resize-none" />
+                    <p className="text-[10px] text-muted-foreground">
+                      Describe your search in natural language to refine results
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -869,15 +918,15 @@ export default function LeadFinder() {
                             <p className="text-blue-700 dark:text-blue-300">You have saved results from a previous search.</p>
                           </div>
                           <Button size="sm" onClick={() => {
-                            const restored = streamingSearch.restoreStoredResults();
-                            if (!restored) {
-                              toast({
-                                title: 'No Results',
-                                description: 'No previous results found',
-                                variant: 'destructive'
-                              });
-                            }
-                          }} className="h-7 text-xs whitespace-nowrap">
+                      const restored = streamingSearch.restoreStoredResults();
+                      if (!restored) {
+                        toast({
+                          title: 'No Results',
+                          description: 'No previous results found',
+                          variant: 'destructive'
+                        });
+                      }
+                    }} className="h-7 text-xs whitespace-nowrap">
                             <RefreshCw className="h-3 w-3 mr-1" />
                             Load Results
                           </Button>
@@ -1145,35 +1194,6 @@ export default function LeadFinder() {
                     </div>
                   </div>)}
               </div>
-
-              {/* Usage Stats Footer */}
-              {filteredAndSortedResults.usage && <div className="mt-6 pt-4 border-t">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="space-y-1">
-                      <div className="text-xs text-muted-foreground font-medium">Provider</div>
-                      <div className="text-xs font-mono capitalize">{filteredAndSortedResults.provider}</div>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-xs text-muted-foreground font-medium">Tokens</div>
-                      <div className="text-xs font-mono">
-                        {filteredAndSortedResults.usage.totalTokens.toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-xs text-muted-foreground font-medium">Cost</div>
-                      <div className="text-xs font-mono font-semibold">
-                        ${(filteredAndSortedResults.usage.estimatedCost ?? 0).toFixed(4)}
-                      </div>
-                    </div>
-                    {filteredAndSortedResults.traceUrl && <div className="space-y-1">
-                        <div className="text-xs text-muted-foreground font-medium">Trace</div>
-                        <a href={filteredAndSortedResults.traceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono">
-                          View
-                          <ExternalLink className="h-2.5 w-2.5" />
-                        </a>
-                      </div>}
-                  </div>
-                </div>}
             </div>}
         </div>
       </div>

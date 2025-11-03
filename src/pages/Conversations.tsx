@@ -479,8 +479,8 @@ export default function Conversations() {
                           : 'hover:bg-muted'
                       }`}
                     >
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="font-medium truncate flex-1">{conv.title}</div>
+                      <div className="flex items-center gap-2 mb-1 min-w-0">
+                        <div className="font-medium truncate flex-1 min-w-0">{conv.title}</div>
                         {conv.type === 'standalone' && (
                           <Badge variant="secondary" className="text-xs shrink-0">Standalone</Badge>
                         )}
