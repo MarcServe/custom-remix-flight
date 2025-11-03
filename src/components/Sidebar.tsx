@@ -255,7 +255,7 @@ export const Sidebar = () => {
         <div className="flex h-16 items-center border-b px-3 justify-between">
         {!isCollapsed && (
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            LeadGeni
+            LeadGenie
           </h1>
         )}
         <Button
