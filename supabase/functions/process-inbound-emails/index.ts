@@ -32,14 +32,33 @@ serve(async (req) => {
       const payload = await req.json();
       console.log('Resend payload keys:', Object.keys(payload));
       
-      from = payload.from;
-      to = payload.to;
-      subject = payload.subject;
-      bodyHtml = payload.bodyHtml || payload.html || '';
-      bodyText = payload.bodyText || payload.text || '';
-      messageId = payload.messageId || payload.message_id || `resend-${Date.now()}`;
-      threadId = payload.threadId || payload.thread_id || null;
-      inReplyTo = payload.inReplyTo || payload.in_reply_to || null;
+      // Extract from email with multiple fallback paths for nested Resend structure
+      const rawFrom = 
+        payload?.data?.from?.email ?? 
+        payload?.data?.from ?? 
+        payload?.from?.email ??
+        payload?.from ??
+        payload?.data?.envelope?.from ??
+        payload?.envelope?.from;
+
+      if (!rawFrom) {
+        console.error('Inbound email missing from address', payload);
+        return new Response(
+          JSON.stringify({ error: 'Missing from address' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      from = rawFrom.trim().toLowerCase();
+      
+      // Extract other fields with similar fallback paths
+      to = payload?.data?.to?.email ?? payload?.data?.to ?? payload?.to?.email ?? payload?.to ?? '';
+      subject = payload?.data?.subject ?? payload?.subject ?? '';
+      bodyHtml = payload?.data?.html_body ?? payload?.data?.bodyHtml ?? payload?.html ?? payload?.bodyHtml ?? '';
+      bodyText = payload?.data?.text_body ?? payload?.data?.bodyText ?? payload?.text ?? payload?.bodyText ?? '';
+      messageId = payload?.data?.message_id ?? payload?.messageId ?? payload?.message_id ?? `resend-${Date.now()}`;
+      threadId = payload?.data?.thread_id ?? payload?.threadId ?? payload?.thread_id ?? null;
+      inReplyTo = payload?.data?.in_reply_to ?? payload?.inReplyTo ?? payload?.in_reply_to ?? null;
       
       console.log('✅ Resend webhook parsed:', { from, to, subject, messageId, hasBody: !!bodyText });
     } else if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
@@ -341,18 +360,24 @@ Return a JSON object with: sentiment, keyPoints (array), questionsAsked (array),
     // Use matched thread_id if available for proper threading
     const useThreadId = matchedActivity?.thread_id || threadId;
     
+    // Validate required fields before insert
+    if (!from || !to) {
+      console.error('Missing required email fields:', { from, to });
+      throw new Error(`Missing required email fields. from: ${from}, to: ${to}`);
+    }
+
     const { data: thread, error: threadError } = await supabaseClient
       .from('email_threads')
       .insert({
         company_sequence_id: matchedSequence.id,
-        message_id: messageId,
+        message_id: messageId || `fallback-${Date.now()}`,
         thread_id: useThreadId,
         direction: 'inbound',
-        subject,
+        subject: subject || '(no subject)',
         body_html: bodyHtml,
         body_text: bodyText,
-        from_email: from,
-        to_email: to,
+        from_email: from,  // Now guaranteed to be non-null
+        to_email: to,      // Now guaranteed to be non-null
         sentiment,
         ai_analysis: aiAnalysis,
       })
