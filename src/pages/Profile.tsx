@@ -28,6 +28,8 @@ export default function Profile() {
     full_name: "",
     job_title: "",
     email: "",
+    phone: "",
+    website: "",
     avatar_url: "",
   });
   const [businessProfile, setBusinessProfile] = useState({
@@ -72,7 +74,7 @@ export default function Profile() {
       // Load personal profile
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("full_name, job_title, email, avatar_url")
+        .select("full_name, job_title, email, phone, website, avatar_url")
         .eq("id", user.id)
         .single();
 
@@ -81,6 +83,8 @@ export default function Profile() {
           full_name: profileData.full_name || "",
           job_title: profileData.job_title || "",
           email: profileData.email || user.email || "",
+          phone: profileData.phone || "",
+          website: profileData.website || "",
           avatar_url: profileData.avatar_url || "",
         });
       }
@@ -143,6 +147,8 @@ export default function Profile() {
           full_name: profile.full_name,
           job_title: profile.job_title,
           email: profile.email,
+          phone: profile.phone,
+          website: profile.website,
         })
         .eq("id", user.id);
 
@@ -288,6 +294,36 @@ export default function Profile() {
                 </p>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={profile.phone}
+                    onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                    placeholder="e.g., +44 20 1234 5678"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Phone will appear in email signatures
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="website">Website</Label>
+                  <Input
+                    id="website"
+                    type="url"
+                    value={profile.website}
+                    onChange={(e) => setProfile({ ...profile, website: e.target.value })}
+                    placeholder="e.g., https://yourcompany.com"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Website will appear in email signatures
+                  </p>
+                </div>
+              </div>
+
               <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
                 <p className="text-sm font-medium">Email Signature Preview</p>
                 <div className="text-sm text-muted-foreground">
@@ -297,6 +333,8 @@ export default function Profile() {
                   </p>
                   <p>{profile.job_title || "Your Job Title"}</p>
                   <p>{businessProfile.company_name || "Your Company"}</p>
+                  {profile.phone && <p>{profile.phone}</p>}
+                  {profile.website && <p>{profile.website}</p>}
                 </div>
               </div>
 

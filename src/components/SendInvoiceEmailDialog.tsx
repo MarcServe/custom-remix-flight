@@ -239,15 +239,15 @@ export default function SendInvoiceEmailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Send {invoice?.invoice_type === 'invoice' ? 'Invoice' : 'Quotation'} via Email</DialogTitle>
           <DialogDescription>
             Send {invoice?.invoice_number} to a company or contact
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 max-h-[55vh] px-1">
+        <ScrollArea className="flex-1 overflow-y-auto px-1">
           <div className="space-y-4 pr-4">
           {/* Recipient Selection */}
           <div className="grid gap-2">
@@ -362,7 +362,7 @@ export default function SendInvoiceEmailDialog({
           </div>
         </ScrollArea>
 
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0 mt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

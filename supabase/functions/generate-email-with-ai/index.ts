@@ -45,7 +45,7 @@ serve(async (req) => {
     // Fetch user profile
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('full_name, email, job_title, phone')
+      .select('full_name, email, job_title, phone, website')
       .eq('id', user.id)
       .single();
 
@@ -71,8 +71,10 @@ serve(async (req) => {
     const senderEmail = profile?.email || user.email || '';
     const senderTitle = profile?.job_title || '';
     const senderCompany = businessProfile?.company_name || '';
+    const senderPhone = profile?.phone || businessProfile?.phone || '';
+    const senderWebsite = profile?.website || businessProfile?.website || '';
 
-    console.log('Using sender info:', { senderName, senderTitle, senderCompany, senderEmail });
+    console.log('Using sender info:', { senderName, senderTitle, senderCompany, senderEmail, senderPhone, senderWebsite });
 
     let systemPrompt: string;
     let userPrompt: string;
@@ -95,6 +97,8 @@ SENDER INFORMATION (USE THESE EXACT VALUES):
 - Sender Title: ${senderTitle}
 - Sender Company: ${senderCompany}
 - Sender Email: ${senderEmail}
+${senderPhone ? `- Sender Phone: ${senderPhone}` : ''}
+${senderWebsite ? `- Sender Website: ${senderWebsite}` : ''}
 
 INVOICE DETAILS:
 Amount: $${context.amount}
@@ -119,6 +123,8 @@ Best regards,
 ${senderName}
 ${senderTitle}
 ${senderCompany}
+${senderPhone ? senderPhone : ''}
+${senderWebsite ? senderWebsite : ''}
 
 Return the response as JSON with 'subject' and 'body' fields.`
         : `Generate a professional quotation email for quote ${context.invoiceNumber} to ${context.companyName}.
@@ -128,6 +134,8 @@ SENDER INFORMATION (USE THESE EXACT VALUES):
 - Sender Title: ${senderTitle}
 - Sender Company: ${senderCompany}
 - Sender Email: ${senderEmail}
+${senderPhone ? `- Sender Phone: ${senderPhone}` : ''}
+${senderWebsite ? `- Sender Website: ${senderWebsite}` : ''}
 
 QUOTATION DETAILS:
 Amount: $${context.amount}
@@ -153,6 +161,8 @@ Best regards,
 ${senderName}
 ${senderTitle}
 ${senderCompany}
+${senderPhone ? senderPhone : ''}
+${senderWebsite ? senderWebsite : ''}
 
 Return the response as JSON with 'subject' and 'body' fields.`;
     } else {
@@ -169,6 +179,8 @@ SENDER INFORMATION (USE THESE EXACT VALUES):
 - Sender Title: ${senderTitle}
 - Sender Company: ${senderCompany}
 - Sender Email: ${senderEmail}
+${senderPhone ? `- Sender Phone: ${senderPhone}` : ''}
+${senderWebsite ? `- Sender Website: ${senderWebsite}` : ''}
 
 RECIPIENT INFORMATION:
 - Recipient Name: ${recipientName}
@@ -192,6 +204,8 @@ Best regards,
 ${senderName}
 ${senderTitle}
 ${senderCompany}
+${senderPhone ? senderPhone : ''}
+${senderWebsite ? senderWebsite : ''}
 
 Return the response as JSON with 'subject' and 'body' fields.`;
     }
