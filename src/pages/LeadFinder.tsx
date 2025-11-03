@@ -1196,33 +1196,7 @@ export default function LeadFinder() {
               </div>
 
               {/* Usage Stats Footer */}
-              {filteredAndSortedResults.usage && <div className="mt-6 pt-4 border-t">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="space-y-1">
-                      <div className="text-xs text-muted-foreground font-medium">Provider</div>
-                      <div className="text-xs font-mono capitalize">{filteredAndSortedResults.provider}</div>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-xs text-muted-foreground font-medium">Tokens</div>
-                      <div className="text-xs font-mono">
-                        {filteredAndSortedResults.usage.totalTokens.toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-xs text-muted-foreground font-medium">Cost</div>
-                      <div className="text-xs font-mono font-semibold">
-                        ${(filteredAndSortedResults.usage.estimatedCost ?? 0).toFixed(4)}
-                      </div>
-                    </div>
-                    {filteredAndSortedResults.traceUrl && <div className="space-y-1">
-                        <div className="text-xs text-muted-foreground font-medium">Trace</div>
-                        <a href={filteredAndSortedResults.traceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono">
-                          View
-                          <ExternalLink className="h-2.5 w-2.5" />
-                        </a>
-                      </div>}
-                  </div>
-                </div>}
+              {filteredAndSortedResults.usage}
             </div>}
         </div>
       </div>
