@@ -20,22 +20,30 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
-    // Initialize Supabase client
+    // Initialize Supabase client with service role for profile fetching
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const authHeader = req.headers.get('Authorization')!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
+    
+    // Use anon key client for auth
+    const supabaseAnon = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
       global: { headers: { Authorization: authHeader } }
     });
 
     // Get authenticated user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { user }, error: userError } = await supabaseAnon.auth.getUser();
     if (userError || !user) {
+      console.error('Auth error:', userError);
       throw new Error('User not authenticated');
     }
 
+    console.log('Authenticated user ID:', user.id);
+
+    // Use service role client to fetch profile data (bypasses RLS)
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
     // Fetch user profile
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('full_name, email, job_title, phone')
       .eq('id', user.id)
@@ -44,10 +52,10 @@ serve(async (req) => {
     if (profileError) {
       console.error('Error fetching profile:', profileError);
     }
-    console.log('Fetched profile data:', profile);
+    console.log('Fetched profile data:', JSON.stringify(profile));
 
     // Fetch business profile
-    const { data: businessProfile, error: businessError } = await supabase
+    const { data: businessProfile, error: businessError } = await supabaseAdmin
       .from('business_profiles')
       .select('company_name, website, phone')
       .eq('user_id', user.id)
@@ -56,7 +64,7 @@ serve(async (req) => {
     if (businessError) {
       console.error('Error fetching business profile:', businessError);
     }
-    console.log('Fetched business profile data:', businessProfile);
+    console.log('Fetched business profile data:', JSON.stringify(businessProfile));
 
     // Extract sender information with fallbacks
     const senderName = profile?.full_name || 'Your Name';

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Send, Sparkles, Code, Eye, Bot } from "lucide-react";
 import { RichTextEditor } from "./email/RichTextEditor";
+import { EmailTemplateSelector, EMAIL_TEMPLATES, type EmailTemplate } from "./email/EmailTemplateSelector";
 
 interface SendEmailDialogProps {
   open: boolean;
@@ -35,6 +36,7 @@ export function SendEmailDialog({
   const [bodyText, setBodyText] = useState("");
   const [context, setContext] = useState("");
   const [sender, setSender] = useState<'gmail' | 'resend' | 'smtp' | 'sendgrid'>('resend');
+  const [template, setTemplate] = useState<EmailTemplate>('blank');
   const [enableAutoResponder, setEnableAutoResponder] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -66,6 +68,25 @@ export function SendEmailDialog({
       return data;
     },
   });
+
+  // Apply template when changed
+  useEffect(() => {
+    if (template !== 'blank') {
+      const templateData = EMAIL_TEMPLATES[template];
+      let processedSubject = templateData.subject;
+      let processedBody = templateData.body;
+
+      // Replace variables
+      const firstName = recipientName.split(' ')[0];
+      processedSubject = processedSubject.replace(/{{firstName}}/g, firstName);
+      processedBody = processedBody.replace(/{{firstName}}/g, firstName);
+      processedBody = processedBody.replace(/{{companyName}}/g, companyId ? 'your company' : 'your team');
+
+      setSubject(processedSubject);
+      setBodyHtml(processedBody);
+      setBodyText(processedBody.replace(/<[^>]+>/g, ''));
+    }
+  }, [template, recipientName, companyId]);
 
   const handleGenerateWithAI = async () => {
     setIsGenerating(true);
@@ -141,6 +162,7 @@ export function SendEmailDialog({
       setBodyHtml("");
       setBodyText("");
       setContext("");
+      setTemplate('blank');
       setEnableAutoResponder(false);
       onOpenChange(false);
     } catch (error: any) {
@@ -292,6 +314,12 @@ export function SendEmailDialog({
                 className="resize-none text-sm"
               />
             </div>
+
+            <EmailTemplateSelector
+              value={template}
+              onChange={setTemplate}
+              disabled={isSending || isGenerating}
+            />
 
             <div className="flex justify-between items-center">
               <Label>Email Content</Label>
