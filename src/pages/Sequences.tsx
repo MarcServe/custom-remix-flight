@@ -151,7 +151,7 @@ export default function Sequences() {
         <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
         <div className="relative px-6 py-12">
           <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
                   <Mail className="h-6 w-6 text-purple-500" />
@@ -388,7 +388,7 @@ export default function Sequences() {
                   </Select>
                 </div>
 
-                <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/50">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 rounded-lg border bg-muted/50">
                   <div className="space-y-0.5">
                     <Label htmlFor="auto-respond" className="text-sm font-medium cursor-pointer">
                       Enable Auto-Response
@@ -404,7 +404,7 @@ export default function Sequences() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/50">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 rounded-lg border bg-muted/50">
                   <div className="space-y-0.5">
                     <Label htmlFor="send-immediately" className="text-sm font-medium cursor-pointer">
                       Send First Email Immediately
@@ -477,7 +477,7 @@ export default function Sequences() {
                               {/* Step Header */}
                               <CollapsibleTrigger asChild>
                                 <div className="p-4 cursor-pointer hover:bg-primary/5 transition-colors">
-                                  <div className="flex items-center justify-between">
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <div className="flex items-center gap-4 flex-1 min-w-0">
                                       <div className="w-12 h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-lg shrink-0">
                                         <span className="text-white font-bold text-lg">{idx + 1}</span>
@@ -518,7 +518,7 @@ export default function Sequences() {
                               <CollapsibleContent>
                                 <Separator />
                                 <div className="p-4 space-y-3 bg-muted/30">
-                                  <div className="flex items-center justify-between">
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                       Email Body
                                     </span>
@@ -651,7 +651,7 @@ export default function Sequences() {
 
             {/* Saved Sequences */}
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-2xl font-bold">Saved Sequences</h2>
                 <Badge variant="secondary" className="text-sm">
                   {sequences.length} total
@@ -711,7 +711,7 @@ export default function Sequences() {
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex items-center gap-2 text-sm font-medium">
                             <Layers className="h-4 w-4 text-primary" />
                             {sequence.steps?.length || 0} steps

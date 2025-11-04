@@ -206,7 +206,7 @@ export default function EmailDeliverability() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold">Email Health</h1>
@@ -252,7 +252,7 @@ export default function EmailDeliverability() {
                 <CardTitle className="text-sm font-medium">Overall Score</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className={`text-3xl font-bold ${getScoreColor(latestMetric.overall_score)}`}>
                       {latestMetric.overall_score}
@@ -272,7 +272,7 @@ export default function EmailDeliverability() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="text-3xl font-bold">{latestMetric.bounce_rate.toFixed(2)}%</div>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -296,7 +296,7 @@ export default function EmailDeliverability() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="text-3xl font-bold">{latestMetric.spam_complaint_rate.toFixed(2)}%</div>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -320,7 +320,7 @@ export default function EmailDeliverability() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className={`text-3xl font-bold ${getScoreColor(latestMetric.sender_reputation)}`}>
                       {latestMetric.sender_reputation}
@@ -358,7 +358,7 @@ export default function EmailDeliverability() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm">SPF Record</span>
                       {latestMetric.spf_valid ? (
                         <Badge className="bg-green-500">Valid</Badge>
@@ -366,7 +366,7 @@ export default function EmailDeliverability() {
                         <Badge variant="destructive">Invalid</Badge>
                       )}
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm">DKIM Record</span>
                       {latestMetric.dkim_valid ? (
                         <Badge className="bg-green-500">Valid</Badge>
@@ -374,7 +374,7 @@ export default function EmailDeliverability() {
                         <Badge variant="destructive">Invalid</Badge>
                       )}
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm">DMARC Record</span>
                       {latestMetric.dmarc_valid ? (
                         <Badge className="bg-green-500">Valid</Badge>
@@ -382,7 +382,7 @@ export default function EmailDeliverability() {
                         <Badge variant="destructive">Invalid</Badge>
                       )}
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-sm">MX Records</span>
                       {latestMetric.mx_records_valid ? (
                         <Badge className="bg-green-500">Valid</Badge>
@@ -472,7 +472,7 @@ export default function EmailDeliverability() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <h4 className="font-semibold">SPF (Sender Policy Framework)</h4>
                       {latestMetric.spf_valid ? (
                         <CheckCircle className="h-5 w-5 text-green-500" />
@@ -486,7 +486,7 @@ export default function EmailDeliverability() {
                   </div>
 
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <h4 className="font-semibold">DKIM (DomainKeys Identified Mail)</h4>
                       {latestMetric.dkim_valid ? (
                         <CheckCircle className="h-5 w-5 text-green-500" />
@@ -500,7 +500,7 @@ export default function EmailDeliverability() {
                   </div>
 
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <h4 className="font-semibold">DMARC (Domain-based Message Authentication)</h4>
                       {latestMetric.dmarc_valid ? (
                         <CheckCircle className="h-5 w-5 text-green-500" />
@@ -533,7 +533,7 @@ export default function EmailDeliverability() {
                   ) : (
                     <div className="space-y-3">
                       {bounceEvents.slice(0, 10).map((event) => (
-                        <div key={event.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div key={event.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg">
                           <div className="flex-1">
                             <div className="font-medium">{event.recipient_email}</div>
                             <div className="text-sm text-muted-foreground">{event.bounce_reason || 'No reason provided'}</div>

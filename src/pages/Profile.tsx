@@ -531,7 +531,7 @@ export default function Profile() {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <Label>Auto-Response Status</Label>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -859,7 +859,7 @@ export default function Profile() {
                   {connections.map((connection) => (
                     <div
                       key={connection.connection_id}
-                      className="flex items-center justify-between p-3 border rounded-lg"
+                      className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg"
                     >
                       <div className="space-y-1">
                         <p className="font-medium capitalize">{connection.provider}</p>

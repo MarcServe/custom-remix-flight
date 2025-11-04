@@ -128,13 +128,14 @@ export default function Events() {
   const renderCalendarView = () => (
     <Card>
       <CardContent className="p-6">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
           <h2 className="text-2xl font-bold">{format(currentMonth, 'MMMM yyyy')}</h2>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+              className="w-full sm:w-auto"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -142,6 +143,7 @@ export default function Events() {
               variant="outline"
               size="sm"
               onClick={() => setCurrentMonth(new Date())}
+              className="w-full sm:w-auto"
             >
               Today
             </Button>
@@ -149,6 +151,7 @@ export default function Events() {
               variant="outline"
               size="sm"
               onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+              className="w-full sm:w-auto"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -246,16 +249,17 @@ export default function Events() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Filters</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
                 <Button 
                   variant={viewMode === 'list' ? 'default' : 'outline'} 
                   size="sm"
                   onClick={() => setViewMode('list')}
+                  className="w-full sm:w-auto"
                 >
                   <List className="h-4 w-4 mr-2" />
                   List
@@ -264,11 +268,12 @@ export default function Events() {
                   variant={viewMode === 'calendar' ? 'default' : 'outline'} 
                   size="sm"
                   onClick={() => setViewMode('calendar')}
+                  className="w-full sm:w-auto"
                 >
                   <Calendar className="h-4 w-4 mr-2" />
                   Calendar
                 </Button>
-                <Button onClick={() => setDialogOpen(true)}>
+                <Button className="w-full sm:w-auto" onClick={() => setDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Event
                 </Button>

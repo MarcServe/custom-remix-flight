@@ -600,7 +600,7 @@ export default function Conversations() {
           <div>
             <Card className="border-2 border-primary/30 bg-primary/5">
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-5 w-5 text-primary" />
                     <CardTitle className="text-lg">
@@ -854,7 +854,7 @@ export default function Conversations() {
 
                 {/* Reply Section */}
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between flex-wrap gap-3">
                     <div className="flex-1">
                       <h3 className="font-semibold">Reply</h3>
                       {selectedSeqData?.auto_respond_enabled && (

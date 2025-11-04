@@ -92,7 +92,7 @@ export function AutomationMetrics() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Activity className="h-5 w-5" />
@@ -110,7 +110,7 @@ export function AutomationMetrics() {
               variant="outline"
               size="sm"
               onClick={() => navigate('/company-sequences')}
-              className="gap-2"
+              className="gap-2 w-full sm:w-auto"
             >
               <Settings className="h-4 w-4" />
               Manage Campaigns
@@ -164,7 +164,7 @@ export function AutomationMetrics() {
           </div>
 
           <div className="mt-4 pt-4 border-t">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
                 Metrics update in real-time. Automation runs hourly via cron job.
               </p>
@@ -172,7 +172,7 @@ export function AutomationMetrics() {
                 variant="link"
                 size="sm"
                 onClick={() => navigate('/company-sequences')}
-                className="text-xs h-auto p-0"
+                className="text-xs h-auto p-0 w-full sm:w-auto"
               >
                 View all campaigns →
               </Button>
@@ -184,7 +184,7 @@ export function AutomationMetrics() {
       {/* Auto-Response Metrics Card */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-primary" />

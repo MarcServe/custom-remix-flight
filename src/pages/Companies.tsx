@@ -94,7 +94,7 @@ export default function Companies() {
 
   return (
     <div className="space-y-4 md:space-y-6 pt-12 lg:pt-0">
-      <div className="flex items-center justify-between px-4 md:px-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 md:px-0">
         <div>
           <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Companies</h1>
           <p className="text-muted-foreground mt-1 md:mt-2 text-sm md:text-base">

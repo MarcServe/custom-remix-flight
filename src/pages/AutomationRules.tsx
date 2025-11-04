@@ -264,7 +264,7 @@ export default function AutomationRules() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Automation Rules</h1>
           <p className="text-muted-foreground mt-1">
@@ -429,7 +429,7 @@ export default function AutomationRules() {
                   {executions.map((execution) => (
                     <div
                       key={execution.id}
-                      className="flex items-center justify-between p-3 border rounded-lg"
+                      className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg"
                     >
                       <div>
                         <div className="font-medium">{execution.action_taken || 'No action'}</div>

@@ -406,7 +406,7 @@ export default function EmailProviders() {
               {/* Resend Webhook Setup */}
               {connections.some(c => c.provider === 'resend' && c.status === 'active') && (
                 <div className="p-4 rounded-lg border-2 bg-card space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-2xl">🚀</span>
                       <h5 className="font-semibold">Resend Webhooks</h5>
@@ -457,7 +457,7 @@ export default function EmailProviders() {
               {/* SendGrid Webhook Setup */}
               {connections.some(c => c.provider === 'sendgrid' && c.status === 'active') && (
                 <div className="p-4 rounded-lg border-2 bg-card space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-2xl">📬</span>
                       <h5 className="font-semibold">SendGrid Event Webhooks</h5>
@@ -512,7 +512,7 @@ export default function EmailProviders() {
               {/* Gmail/Outlook OAuth */}
               {connections.some(c => ['gmail', 'outlook'].includes(c.provider) && c.status === 'active') && (
                 <div className="p-4 rounded-lg border-2 bg-card space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-2xl">📧</span>
                       <h5 className="font-semibold">Gmail / Outlook OAuth</h5>

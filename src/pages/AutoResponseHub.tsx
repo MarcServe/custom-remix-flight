@@ -318,7 +318,7 @@ export default function AutoResponseHub() {
       {/* Responses List */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
+          <CardTitle className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span>Pending Responses</span>
             <Button
               variant="outline"

@@ -266,7 +266,7 @@ export default function UnifiedCampaigns() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <Card>
           <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-2">
               <Mail className="h-5 w-5 text-muted-foreground" />
               <Badge variant="secondary">{stats.totalBulkCampaigns}</Badge>
             </div>
@@ -277,7 +277,7 @@ export default function UnifiedCampaigns() {
 
         <Card>
           <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-2">
               <Building2 className="h-5 w-5 text-muted-foreground" />
               <Badge variant="secondary">{stats.totalSequenceCampaigns}</Badge>
             </div>
@@ -288,7 +288,7 @@ export default function UnifiedCampaigns() {
 
         <Card>
           <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-2">
               <Users className="h-5 w-5 text-muted-foreground" />
               <Badge variant="secondary">{stats.totalBulkCampaigns}</Badge>
             </div>
@@ -299,7 +299,7 @@ export default function UnifiedCampaigns() {
 
         <Card>
           <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-2">
               <Sparkles className="h-5 w-5 text-primary" />
               <Badge className="bg-gradient-primary text-white">{stats.autoResponsesEnabled}</Badge>
             </div>

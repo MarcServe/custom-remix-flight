@@ -84,13 +84,14 @@ export default function Deals() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Deals</h1>
           <p className="text-muted-foreground">Track your sales pipeline</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Button
+            className="w-full sm:w-auto"
             onClick={() => setAiWorkerOpen(true)}
             variant="outline"
             size="sm"
@@ -100,6 +101,7 @@ export default function Deals() {
             AI Worker
           </Button>
           <Button
+            className="w-full sm:w-auto"
             onClick={() => setCreateDialogOpen(true)}
             size="sm"
           >
@@ -107,6 +109,7 @@ export default function Deals() {
             New Deal
           </Button>
           <Button
+            className="w-full sm:w-auto"
             variant={view === "grid" ? "default" : "outline"}
             size="sm"
             onClick={() => setView("grid")}
@@ -115,6 +118,7 @@ export default function Deals() {
             Grid
           </Button>
           <Button
+            className="w-full sm:w-auto"
             variant={view === "kanban" ? "default" : "outline"}
             size="sm"
             onClick={() => setView("kanban")}

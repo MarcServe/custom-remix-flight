@@ -500,7 +500,7 @@ export default function LeadFinder() {
       {/* Active Search Recovery Banner */}
       {streamingSearch.hasActiveSearch && !streamingSearch.isLoading && streamingSearch.currentStatus !== 'Complete' && <Alert className="sticky top-0 z-20 rounded-none border-x-0 border-t-0 bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900">
           <RefreshCw className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-          <AlertDescription className="flex items-center justify-between flex-wrap gap-2">
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between flex-wrap gap-2">
             <div className="flex-1 min-w-0">
               <div className="text-sm text-orange-900 dark:text-orange-100 font-medium mb-1">
                 🔄 Search in Progress ({streamingSearch.progress}% complete)
@@ -541,7 +541,7 @@ export default function LeadFinder() {
       {/* Stored Results Banner */}
       {streamingSearch.hasStoredResults && streamingSearch.leads.length > 0 && !streamingSearch.hasActiveSearch && <Alert className="sticky top-0 z-10 rounded-none border-x-0 border-t-0 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
           <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          <AlertDescription className="flex items-center justify-between">
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-sm text-blue-900 dark:text-blue-100 font-medium">
               💾 You have {streamingSearch.leads.length} saved lead{streamingSearch.leads.length !== 1 ? 's' : ''} from your previous search
             </span>
@@ -585,7 +585,7 @@ export default function LeadFinder() {
       
       {/* Top Bar */}
       <div className="border-b bg-card/50 backdrop-blur supports-[backdrop-filter]:bg-card/50">
-        <div className="flex items-center justify-between h-14 px-4 md:px-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between h-14 px-4 md:px-6">
           <div className="flex items-center gap-2 md:gap-3">
             <div className="flex items-center justify-center w-7 h-7 md:w-8 md:h-8 rounded-lg bg-primary/10">
               <Search className="h-3.5 w-3.5 md:h-4 md:w-4 text-primary" />
@@ -787,7 +787,7 @@ export default function LeadFinder() {
                   <Separator />
                   
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Filters & Sorting
                       </h2>
@@ -799,7 +799,7 @@ export default function LeadFinder() {
 
                     {/* Quality Score Slider */}
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <Label className="text-xs font-medium">Min Quality Score</Label>
                         <span className="text-xs font-mono text-muted-foreground">{minQualityScore}</span>
                       </div>
@@ -881,7 +881,7 @@ export default function LeadFinder() {
         <div className="flex-1 overflow-y-auto">
           {/* Progress Indicator */}
           {isLoading && <div className="p-4 md:p-6 space-y-3 border-b bg-secondary/20">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
                   <span className="text-sm font-medium">{streamingSearch.currentStatus}</span>
@@ -912,7 +912,7 @@ export default function LeadFinder() {
                     <Alert className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900">
                       <Database className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                       <AlertDescription className="text-xs">
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between gap-3">
                           <div>
                             <p className="font-semibold mb-1 text-blue-900 dark:text-blue-100">Previous Results Available</p>
                             <p className="text-blue-700 dark:text-blue-300">You have saved results from a previous search.</p>
@@ -947,7 +947,7 @@ export default function LeadFinder() {
                               {streamingSearch.currentStatus || 'Background search is running...'}
                             </p>
                             {streamingSearch.progress > 0 && <div className="space-y-1">
-                                <div className="flex items-center justify-between text-xs">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-xs">
                                   <span>Progress</span>
                                   <span className="font-mono">{streamingSearch.progress}%</span>
                                 </div>

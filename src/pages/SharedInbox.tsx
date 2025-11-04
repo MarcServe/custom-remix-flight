@@ -287,14 +287,14 @@ export default function SharedInbox() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Shared Inbox</h1>
           <p className="text-muted-foreground mt-1">
             Collaborate on emails with your team
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
           {loadError && (
             <Alert className="mb-0">
               <AlertCircle className="h-4 w-4" />
@@ -310,7 +310,7 @@ export default function SharedInbox() {
               setSelectedTeam(team);
             }}
           >
-            <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder="Select team" />
             </SelectTrigger>
             <SelectContent>
@@ -321,7 +321,7 @@ export default function SharedInbox() {
               ))}
             </SelectContent>
           </Select>
-          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
+          <Button className="w-full sm:w-auto" onClick={() => { resetForm(); setIsDialogOpen(true); }}>
             <Plus className="h-4 w-4 mr-2" />
             New Inbox
           </Button>
@@ -354,7 +354,7 @@ export default function SharedInbox() {
               {inboxes.map((inbox) => (
                 <Card key={inbox.id}>
                   <CardHeader>
-                    <div className="flex items-start justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex items-center gap-3">
                         <div className="p-2 rounded-lg bg-blue-500 text-white">
                           <Inbox className="h-5 w-5" />
@@ -371,7 +371,7 @@ export default function SharedInbox() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                       {inbox.email_address && (
                         <div>
                           <p className="text-muted-foreground">Email Address</p>
@@ -417,7 +417,7 @@ export default function SharedInbox() {
             <div className="space-y-3">
               {assignments.map((assignment) => (
                 <Card key={assignment.id}>
-                  <CardContent className="flex items-center justify-between p-4">
+                  <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4">
                     <div className="flex items-center gap-3">
                       <Mail className="h-5 w-5 text-muted-foreground" />
                       <div>
@@ -504,7 +504,7 @@ export default function SharedInbox() {
               </Select>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-0.5">
                 <Label>Auto-Assign</Label>
                 <p className="text-sm text-muted-foreground">
@@ -596,7 +596,7 @@ export default function SharedInbox() {
               </Select>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-0.5">
                 <Label>Auto-Assign</Label>
                 <p className="text-sm text-muted-foreground">

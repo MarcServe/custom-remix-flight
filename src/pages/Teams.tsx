@@ -335,7 +335,7 @@ export default function Teams() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Teams</h1>
           <p className="text-muted-foreground mt-1">
@@ -400,7 +400,7 @@ export default function Teams() {
           {selectedTeam && (
             <Card className="lg:col-span-3">
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <CardTitle>{selectedTeam.name}</CardTitle>
                     <CardDescription>{selectedTeam.description}</CardDescription>
@@ -433,7 +433,7 @@ export default function Teams() {
                           {teamInvitations.map((invitation) => (
                             <div
                               key={invitation.id}
-                              className="flex items-center justify-between p-3 border border-dashed rounded-lg bg-muted/30"
+                              className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border border-dashed rounded-lg bg-muted/30"
                             >
                               <div className="flex items-center gap-3">
                                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
@@ -449,7 +449,7 @@ export default function Teams() {
                                   </div>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant="outline" className="capitalize">
                                   {getRoleIcon(invitation.role)}
                                   <span className="ml-1">{invitation.role}</span>
@@ -478,7 +478,7 @@ export default function Teams() {
                         {teamMembers.map((member) => (
                           <div
                             key={member.id}
-                            className="flex items-center justify-between p-4 border rounded-lg"
+                            className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg"
                           >
                             <div className="flex items-center gap-3">
                               <Avatar>
@@ -504,7 +504,7 @@ export default function Teams() {
                                 onValueChange={(value) => updateMemberRole(member.id, value)}
                                 disabled={member.role === 'owner'}
                               >
-                                <SelectTrigger className="w-32">
+                              <SelectTrigger className="w-full sm:w-32">
                                   <div className="flex items-center gap-2">
                                     {getRoleIcon(member.role)}
                                     <SelectValue />

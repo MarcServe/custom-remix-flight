@@ -250,7 +250,7 @@ export default function CompanySequences() {
         <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
         <div className="relative px-6 py-12">
           <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
                   <BarChart3 className="h-6 w-6 text-purple-500" />
@@ -556,7 +556,7 @@ export default function CompanySequences() {
 
                     {/* Progress Bar */}
                     <div className="space-y-2 mb-4">
-                      <div className="flex items-center justify-between text-sm">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm">
                         <span className="text-muted-foreground">Progress</span>
                         <span className="font-medium">
                           Step {sequence.current_step + 1} of {totalSteps}

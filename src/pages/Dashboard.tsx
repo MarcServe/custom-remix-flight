@@ -226,7 +226,7 @@ export default function Dashboard() {
             <div className="absolute inset-0 bg-grid-white/[0.05] pointer-events-none" />
             <div className="relative p-6 md:p-8 h-full flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between mb-4 md:mb-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6">
                   <div className="w-14 h-14 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg">
                     <DollarSign className="h-7 w-7 text-white" />
                   </div>
@@ -254,7 +254,7 @@ export default function Dashboard() {
             onClick={() => navigate("/companies")}
           >
             <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                 <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
                   <Building2 className="h-6 w-6 text-blue-500" />
                 </div>
@@ -276,7 +276,7 @@ export default function Dashboard() {
             onClick={() => navigate("/people")}
           >
             <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                 <div className="w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center">
                   <Users className="h-6 w-6 text-purple-500" />
                 </div>
@@ -341,7 +341,7 @@ export default function Dashboard() {
           {/* Upcoming Events Widget */}
           <Card className="lg:col-span-2 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50">
             <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <Clock className="h-5 w-5 text-primary" />
                   Upcoming Events
@@ -393,7 +393,7 @@ export default function Dashboard() {
           {/* Recent Companies - Moved below activity */}
           <Card className="lg:col-span-4 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50 hover:shadow-primary/10 hover:shadow-xl">
             <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <TrendingUp className="h-5 w-5 text-primary" />
                   Recent Activity
