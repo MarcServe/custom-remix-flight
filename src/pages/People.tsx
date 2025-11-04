@@ -74,13 +74,13 @@ export default function People() {
                 </p>
               </div>
             </div>
-            <div className="flex gap-2 w-full sm:w-auto">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap w-full sm:w-auto">
               {selectedPeopleIds.size > 0 && (
                 <Button 
                   onClick={() => setBulkEmailDialogOpen(true)} 
                   size="lg"
                   variant="default"
-                  className="flex-1 sm:flex-none"
+                className="w-full sm:w-auto"
                 >
                   <Send className="mr-2 h-4 w-4" />
                   Bulk Send ({selectedPeopleIds.size})
@@ -90,7 +90,7 @@ export default function People() {
                 onClick={() => setAddContactDialogOpen(true)} 
                 size="lg" 
                 variant="outline"
-                className="flex-1 sm:flex-none"
+              className="w-full sm:w-auto"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Contact
@@ -99,7 +99,7 @@ export default function People() {
                 onClick={() => setImportDialogOpen(true)} 
                 size="lg" 
                 variant={selectedPeopleIds.size > 0 ? "outline" : "default"}
-                className="flex-1 sm:flex-none"
+              className="w-full sm:w-auto"
               >
                 <Upload className="mr-2 h-4 w-4" />
                 Import Leads
