@@ -413,7 +413,7 @@ export default function EmailProviders() {
                     </div>
                   </div>
                   <Separator />
-                  <ol className="space-y-2 text-sm">
+                  <ol className="space-y-2 text-xs sm:text-sm leading-relaxed">
                     <li className="flex items-start gap-2">
                       <span className="font-semibold shrink-0">1.</span>
                       <span>Go to <a href="https://resend.com/webhooks" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Resend Webhooks Dashboard</a></span>
@@ -422,22 +422,24 @@ export default function EmailProviders() {
                       <span className="font-semibold shrink-0">2.</span>
                       <span>Create a new webhook endpoint with this URL:</span>
                     </li>
-                    <li className="ml-6">
-                      <div className="flex items-center gap-2 p-2 bg-muted rounded border font-mono text-xs">
-                        <code className="flex-1">
-                          https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook
-                        </code>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0"
-                          onClick={() => {
-                            navigator.clipboard.writeText('https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook');
-                            toast.success('Webhook URL copied');
-                          }}
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
+                    <li className="pl-6 md:pl-8">
+                      <div className="w-full overflow-hidden rounded border bg-muted">
+                        <div className="flex items-start gap-2 p-2">
+                          <code className="flex-1 break-all text-xs font-mono leading-relaxed text-foreground/90">
+                            https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook
+                          </code>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="mt-1 h-7 w-7 p-0 shrink-0"
+                            onClick={() => {
+                              navigator.clipboard.writeText('https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook');
+                              toast.success('Webhook URL copied');
+                            }}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                     </li>
                     <li className="flex items-start gap-2">
@@ -462,7 +464,7 @@ export default function EmailProviders() {
                     </div>
                   </div>
                   <Separator />
-                  <ol className="space-y-2 text-sm">
+                  <ol className="space-y-2 text-xs sm:text-sm leading-relaxed">
                     <li className="flex items-start gap-2">
                       <span className="font-semibold shrink-0">1.</span>
                       <span>Go to <a href="https://app.sendgrid.com/settings/mail_settings" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">SendGrid Mail Settings</a></span>
@@ -475,22 +477,24 @@ export default function EmailProviders() {
                       <span className="font-semibold shrink-0">3.</span>
                       <span>Add this HTTP Post URL:</span>
                     </li>
-                    <li className="ml-6">
-                      <div className="flex items-center gap-2 p-2 bg-muted rounded border font-mono text-xs">
-                        <code className="flex-1">
-                          https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook
-                        </code>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0"
-                          onClick={() => {
-                            navigator.clipboard.writeText('https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook');
-                            toast.success('Webhook URL copied');
-                          }}
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
+                    <li className="pl-6 md:pl-8">
+                      <div className="w-full overflow-hidden rounded border bg-muted">
+                        <div className="flex items-start gap-2 p-2">
+                          <code className="flex-1 break-all text-xs font-mono leading-relaxed text-foreground/90">
+                            https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook
+                          </code>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="mt-1 h-7 w-7 p-0 shrink-0"
+                            onClick={() => {
+                              navigator.clipboard.writeText('https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/email-webhook');
+                              toast.success('Webhook URL copied');
+                            }}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                     </li>
                     <li className="flex items-start gap-2">
