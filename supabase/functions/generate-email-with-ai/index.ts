@@ -183,7 +183,31 @@ Return as JSON: {"subject": "Streamlining Sales with AI", "body": "actual email 
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        response_format: { type: "json_object" },
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'format_email',
+              description: 'Format the email with subject and body',
+              parameters: {
+                type: 'object',
+                properties: {
+                  subject: {
+                    type: 'string',
+                    description: 'The email subject line'
+                  },
+                  body: {
+                    type: 'string',
+                    description: 'The complete email body text'
+                  }
+                },
+                required: ['subject', 'body'],
+                additionalProperties: false
+              }
+            }
+          }
+        ],
+        tool_choice: { type: 'function', function: { name: 'format_email' } }
       }),
     });
 
@@ -194,21 +218,58 @@ Return as JSON: {"subject": "Streamlining Sales with AI", "body": "actual email 
     }
 
     const data = await response.json();
-    const content = data.choices[0].message.content;
+    console.log('AI response:', JSON.stringify(data, null, 2));
     
     let result;
-    try {
-      result = JSON.parse(content);
-    } catch (e) {
-      // If parsing fails, create a structured response from the text
-      const fallbackSubject = requestBody.type 
-        ? `${requestBody.type === 'invoice' ? 'Invoice' : 'Quotation'} - ${requestBody.context?.companyName || 'Business Communication'}`
-        : `Message to ${requestBody.recipientName || 'Contact'}`;
+    
+    // Extract from tool call if available
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    if (toolCall?.function?.arguments) {
+      try {
+        result = JSON.parse(toolCall.function.arguments);
+        console.log('Parsed from tool call:', result);
+      } catch (e) {
+        console.error('Failed to parse tool call arguments:', e);
+      }
+    }
+    
+    // Fallback to content parsing if tool call failed
+    if (!result) {
+      const content = data.choices[0].message.content;
+      console.log('Raw content:', content);
       
-      result = {
-        subject: fallbackSubject,
-        body: content
-      };
+      try {
+        // Try to extract JSON from markdown code blocks
+        let jsonStr = content;
+        
+        // Remove ```json and ``` markers
+        if (jsonStr.includes('```json')) {
+          jsonStr = jsonStr.split('```json')[1].split('```')[0].trim();
+        } else if (jsonStr.includes('```')) {
+          jsonStr = jsonStr.split('```')[1].split('```')[0].trim();
+        }
+        
+        result = JSON.parse(jsonStr);
+        console.log('Parsed from content:', result);
+      } catch (e) {
+        console.error('Failed to parse content as JSON:', e);
+        
+        // Last resort: create structured response from plain text
+        const fallbackSubject = requestBody.type 
+          ? `${requestBody.type === 'invoice' ? 'Invoice' : 'Quotation'} - ${requestBody.context?.companyName || 'Business Communication'}`
+          : `Message to ${requestBody.recipientName || 'Contact'}`;
+        
+        result = {
+          subject: fallbackSubject,
+          body: content
+        };
+        console.log('Using fallback structure:', result);
+      }
+    }
+    
+    // Validate result has required fields
+    if (!result.subject || !result.body) {
+      throw new Error('AI response missing required fields (subject or body)');
     }
 
     return new Response(JSON.stringify(result), {
