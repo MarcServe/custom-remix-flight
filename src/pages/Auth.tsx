@@ -69,8 +69,32 @@ export default function Auth() {
 
     setLoading(true);
     const { error } = await signIn(email, password);
-    setLoading(false);
 
+    if (!error && invitationToken) {
+      // If signing in with an invitation, accept it
+      try {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const { data, error: inviteError } = await supabase.rpc('accept_team_invitation', {
+          invitation_token: invitationToken
+        });
+
+        if (inviteError) {
+          console.error('Error accepting invitation:', inviteError);
+          toast.error('Failed to accept invitation. Please try from Teams page.');
+        } else if (data && typeof data === 'object' && 'success' in data && data.success) {
+          toast.success('Successfully joined the team!');
+          setLoading(false);
+          navigate('/teams');
+          return;
+        }
+      } catch (err) {
+        console.error('Error processing invitation:', err);
+        toast.error('Failed to process invitation');
+      }
+    }
+
+    setLoading(false);
     if (!error) {
       navigate('/');
     }
@@ -93,23 +117,43 @@ export default function Auth() {
     const { error } = await signUp(email, password, fullName);
 
     if (!error && invitationToken) {
-      // If signing up with an invitation, accept it
+      // Wait for profile creation, then accept invitation with retry logic
       try {
-        const { supabase } = await import('@/integrations/supabase/client');
-        const { data, error: inviteError } = await supabase.rpc('accept_team_invitation', {
-          invitation_token: invitationToken
-        });
+        let success = false;
+        let lastError = null;
+        
+        // Retry up to 3 times with increasing delays
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, attempt * 500));
+          
+          const { data, error: inviteError } = await supabase.rpc('accept_team_invitation', {
+            invitation_token: invitationToken
+          });
 
-        if (inviteError) {
-          console.error('Error accepting invitation:', inviteError);
-        } else if (data && typeof data === 'object' && 'success' in data && data.success) {
-          // Successfully joined team, navigate to teams page
-          setLoading(false);
-          navigate('/teams');
-          return;
+          if (inviteError) {
+            console.error(`Invitation acceptance attempt ${attempt} failed:`, inviteError);
+            lastError = inviteError;
+          } else if (data && typeof data === 'object' && 'success' in data) {
+            if (data.success) {
+              success = true;
+              toast.success('Successfully joined the team!');
+              setLoading(false);
+              navigate('/teams');
+              return;
+            } else if (data.error) {
+              lastError = new Error(data.error as string);
+            }
+          }
+        }
+        
+        // All retries failed
+        if (!success) {
+          console.error('Failed to accept invitation after retries:', lastError);
+          toast.error('Joined successfully but could not accept invitation. Please check Teams page.');
         }
       } catch (err) {
         console.error('Error processing invitation:', err);
+        toast.error('Joined successfully but could not accept invitation');
       }
     }
 

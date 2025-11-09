@@ -11,9 +11,6 @@ export default defineConfig(({ mode }) => {
         org: process.env.SENTRY_ORG ?? "biz-boosters-ltd",
         project: process.env.SENTRY_PROJECT ?? "javascript-react",
         authToken: process.env.SENTRY_AUTH_TOKEN,
-        release:
-          process.env.SENTRY_RELEASE ?? process.env.VERCEL_GIT_COMMIT_SHA,
-        include: "./dist",
         telemetry: false,
         sourcemaps: {
           assets: "./dist/**",

@@ -67,7 +67,7 @@ export function useSendOpportunityEmail() {
       // Send email via CRM email function
       const { data, error } = await apiClient.callFunction('send-crm-email', {
         toEmail: recipientEmail,
-        toName: primaryContact?.name || company.name || company.company_name || '',
+        toName: primaryContact?.name || company.name || '',
         subject: opportunity.emailSubject,
         body: opportunity.emailBody,
         bodyText: opportunity.emailBody,

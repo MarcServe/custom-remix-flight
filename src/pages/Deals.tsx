@@ -91,11 +91,10 @@ export default function Deals() {
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Button
-            className="w-full sm:w-auto"
             onClick={() => setAiWorkerOpen(true)}
             variant="outline"
             size="sm"
-            className="bg-gradient-to-r from-primary/10 to-primary/5 hover:from-primary/20 hover:to-primary/10"
+            className="w-full sm:w-auto bg-gradient-to-r from-primary/10 to-primary/5 hover:from-primary/20 hover:to-primary/10"
           >
             <Sparkles className="h-4 w-4 mr-2" />
             AI Worker

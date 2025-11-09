@@ -82,6 +82,48 @@ export default function Teams() {
     }
   }, [selectedTeam]);
 
+  // Real-time subscriptions for team updates
+  useEffect(() => {
+    if (!selectedTeam) return;
+
+    const membersChannel = supabase
+      .channel(`team-members-${selectedTeam.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'team_members',
+          filter: `team_id=eq.${selectedTeam.id}`
+        },
+        () => {
+          loadTeamMembers(selectedTeam.id);
+        }
+      )
+      .subscribe();
+
+    const invitationsChannel = supabase
+      .channel(`team-invitations-${selectedTeam.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'team_invitations',
+          filter: `team_id=eq.${selectedTeam.id}`
+        },
+        () => {
+          loadTeamInvitations(selectedTeam.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(membersChannel);
+      supabase.removeChannel(invitationsChannel);
+    };
+  }, [selectedTeam]);
+
   const loadTeams = async () => {
     try {
       setLoading(true);
