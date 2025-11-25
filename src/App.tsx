@@ -33,6 +33,7 @@ import SharedInbox from "./pages/SharedInbox";
 import Files from "./pages/Files";
 import Invoices from "./pages/Invoices";
 import Auth from "./pages/Auth";
+import Subscription from "./pages/Subscription";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -86,6 +87,7 @@ const App = () => (
                           <Route path="/shared-inbox" element={<SharedInbox />} />
                           <Route path="/files" element={<Files />} />
                           <Route path="/invoices" element={<Invoices />} />
+                          <Route path="/subscription" element={<Subscription />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </main>
