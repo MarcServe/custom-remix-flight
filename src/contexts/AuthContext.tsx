@@ -8,6 +8,10 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   userRole: 'admin' | 'sales_rep' | 'viewer' | null;
+  subscribed: boolean;
+  productId: string | null;
+  subscriptionEnd: string | null;
+  checkSubscription: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -33,6 +37,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<'admin' | 'sales_rep' | 'viewer' | null>(null);
+  const [subscribed, setSubscribed] = useState(false);
+  const [productId, setProductId] = useState<string | null>(null);
+  const [subscriptionEnd, setSubscriptionEnd] = useState<string | null>(null);
   const initialLoadRef = useRef(true);
 
   // Fetch user role when user changes
@@ -59,6 +66,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(session?.user ?? null);
         setLoading(false);
 
+        // Check subscription when user signs in
+        if (session?.user) {
+          setTimeout(() => {
+            checkSubscription();
+          }, 0);
+        } else {
+          setSubscribed(false);
+          setProductId(null);
+          setSubscriptionEnd(null);
+        }
+
         // Only show toasts after initial load is complete to avoid showing on page refresh
         if (!initialLoadRef.current) {
           if (event === 'SIGNED_IN') {
@@ -80,6 +98,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      
+      // Check subscription for existing session
+      if (session?.user) {
+        setTimeout(() => {
+          checkSubscription();
+        }, 0);
+      }
+      
       // Mark initial load as complete after session check
       initialLoadRef.current = false;
     });
@@ -185,11 +211,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
+  const checkSubscription = async () => {
+    try {
+      console.log('[AUTH] Checking subscription status...');
+      const { data, error } = await supabase.functions.invoke('check-subscription');
+      
+      if (error) {
+        console.error('[AUTH] Error checking subscription:', error);
+        return;
+      }
+
+      console.log('[AUTH] Subscription check result:', data);
+      setSubscribed(data?.subscribed || false);
+      setProductId(data?.product_id || null);
+      setSubscriptionEnd(data?.subscription_end || null);
+    } catch (error) {
+      console.error('[AUTH] Error in checkSubscription:', error);
+    }
+  };
+
   const value = {
     user,
     session,
     loading,
     userRole,
+    subscribed,
+    productId,
+    subscriptionEnd,
+    checkSubscription,
     signIn,
     signUp,
     signOut,
