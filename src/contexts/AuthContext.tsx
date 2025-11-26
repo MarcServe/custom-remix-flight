@@ -11,6 +11,9 @@ interface AuthContextType {
   subscribed: boolean;
   productId: string | null;
   subscriptionEnd: string | null;
+  trialEndsAt: string | null;
+  hasAccess: boolean;
+  isInTrial: boolean;
   checkSubscription: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: any }>;
@@ -40,9 +43,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [subscribed, setSubscribed] = useState(false);
   const [productId, setProductId] = useState<string | null>(null);
   const [subscriptionEnd, setSubscriptionEnd] = useState<string | null>(null);
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const initialLoadRef = useRef(true);
 
-  // Fetch user role when user changes
+  // Calculate if user is in trial period
+  const isInTrial = trialEndsAt ? new Date(trialEndsAt) > new Date() : false;
+  const hasAccess = subscribed || isInTrial;
+
+  // Fetch user role and trial info when user changes
   useEffect(() => {
     if (user) {
       supabase
@@ -53,8 +61,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         .then(({ data }) => {
           setUserRole(data?.role || 'sales_rep');
         });
+
+      // Calculate trial end date (7 days from user creation)
+      supabase
+        .from('profiles')
+        .select('created_at')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (data?.created_at) {
+            const trialEnd = new Date(data.created_at);
+            trialEnd.setDate(trialEnd.getDate() + 7);
+            setTrialEndsAt(trialEnd.toISOString());
+          }
+        });
     } else {
       setUserRole(null);
+      setTrialEndsAt(null);
     }
   }, [user]);
 
@@ -238,6 +261,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     subscribed,
     productId,
     subscriptionEnd,
+    trialEndsAt,
+    hasAccess,
+    isInTrial,
     checkSubscription,
     signIn,
     signUp,
