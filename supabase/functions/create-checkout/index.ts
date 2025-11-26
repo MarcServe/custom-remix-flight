@@ -10,7 +10,7 @@ const corsHeaders = {
 // LeadGenie product prices by currency
 const LEADGENIE_PRICES = {
   usd: "price_1SXOt7P8zypO5fiCd7FkOQCp",
-  gbp: "price_1SXXPUP8zypO5fiCNHGCmBft"
+  gbp: "price_1SXXe4P8zypO5fiC4dDpEHBz"
 };
 
 const logStep = (step: string, details?: any) => {

@@ -17,7 +17,7 @@ const LEADGENIE_PRICES = {
     symbol: "$"
   },
   gbp: { 
-    price_id: "price_1SXXPUP8zypO5fiCNHGCmBft",
+    price_id: "price_1SXXe4P8zypO5fiC4dDpEHBz",
     amount: "9.99",
     symbol: "£"
   }
