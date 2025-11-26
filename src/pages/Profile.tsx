@@ -12,16 +12,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { nangoClient } from "@/lib/integrations/nango";
-import { Loader2, Building2, Save, User, Mail, Palette } from "lucide-react";
+import { Loader2, Building2, Save, User, Mail, Palette, Sparkles, Clock } from "lucide-react";
 import { EmailTemplatePreview } from "@/components/email/EmailTemplatePreview";
 import { SendTestEmailButton } from "@/components/email/SendTestEmailButton";
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { LogoUpload } from "@/components/ui/logo-upload";
 import { TemplateStyleSelector, type EmailTemplateStyle } from "@/components/email/TemplateStyleSelector";
+import { format } from "date-fns";
+import { useNavigate } from "react-router-dom";
 
 export default function Profile() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, subscribed, isInTrial, trialEndsAt } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState({
@@ -358,6 +361,65 @@ export default function Profile() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Trial Status Card */}
+          {isInTrial && !subscribed && trialEndsAt && (
+            <Card className="border-blue-500 bg-blue-50 dark:bg-blue-950/20">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-blue-500" />
+                    <CardTitle className="text-blue-700 dark:text-blue-400">Free Trial Active</CardTitle>
+                  </div>
+                  <Badge variant="outline" className="border-blue-500 text-blue-700 dark:text-blue-400">
+                    Trial Period
+                  </Badge>
+                </div>
+                <CardDescription className="text-blue-600 dark:text-blue-300">
+                  You're currently enjoying your 7-day free trial of LeadGenie Premium
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between items-center p-3 bg-white dark:bg-gray-900 rounded-lg">
+                  <span className="text-sm text-muted-foreground">Trial ends on</span>
+                  <span className="font-semibold text-blue-700 dark:text-blue-400">
+                    {format(new Date(trialEndsAt), 'MMMM dd, yyyy')}
+                  </span>
+                </div>
+                <Button 
+                  onClick={() => navigate('/subscription')}
+                  className="w-full"
+                  variant="default"
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Subscribe to Continue After Trial
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {subscribed && (
+            <Card className="border-green-500 bg-green-50 dark:bg-green-950/20">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-green-500" />
+                  <CardTitle className="text-green-700 dark:text-green-400">Premium Subscription Active</CardTitle>
+                </div>
+                <CardDescription className="text-green-600 dark:text-green-300">
+                  You have full access to all LeadGenie Premium features
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  onClick={() => navigate('/subscription')}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Manage Subscription
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="business" className="space-y-4">
