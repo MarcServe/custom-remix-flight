@@ -7,6 +7,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// LeadGenie product prices by currency
+const LEADGENIE_PRICES = {
+  usd: "price_1SXOt7P8zypO5fiCd7FkOQCp",
+  gbp: "price_1SXXPUP8zypO5fiCNHGCmBft"
+};
+
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
   console.log(`[CREATE-CHECKOUT] ${step}${detailsStr}`);
@@ -44,25 +50,43 @@ serve(async (req) => {
     
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     let customerId;
+    let customerCurrency = "usd"; // default to USD
+
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
       logStep("Found existing customer", { customerId });
+      
+      // Check customer's existing subscriptions to determine currency
+      const existingSubscriptions = await stripe.subscriptions.list({
+        customer: customerId,
+        limit: 1,
+      });
+      
+      if (existingSubscriptions.data.length > 0) {
+        // Get currency from existing subscription
+        customerCurrency = existingSubscriptions.data[0].currency;
+        logStep("Customer has existing subscription", { currency: customerCurrency });
+      }
     } else {
       logStep("No existing customer found");
     }
+
+    // Select the appropriate price based on customer's currency
+    const priceId = LEADGENIE_PRICES[customerCurrency as keyof typeof LEADGENIE_PRICES] || LEADGENIE_PRICES.usd;
+    logStep("Selected price", { priceId, currency: customerCurrency });
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : user.email,
       line_items: [
         {
-          price: "price_1SXOt7P8zypO5fiCd7FkOQCp",
+          price: priceId,
           quantity: 1,
         },
       ],
       mode: "subscription",
-      success_url: `${req.headers.get("origin")}/`,
-      cancel_url: `${req.headers.get("origin")}/`,
+      success_url: `${req.headers.get("origin")}/subscription?success=true`,
+      cancel_url: `${req.headers.get("origin")}/subscription?canceled=true`,
     });
 
     logStep("Checkout session created", { sessionId: session.id, url: session.url });
