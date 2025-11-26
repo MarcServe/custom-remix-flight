@@ -10,7 +10,7 @@ import { format } from "date-fns";
 const LEADGENIE_PRODUCT_ID = "prod_TUNeoAZWiDngEH";
 
 export default function Subscription() {
-  const { subscribed, productId, subscriptionEnd, checkSubscription } = useAuth();
+  const { subscribed, productId, subscriptionEnd, trialEndsAt, isInTrial, checkSubscription } = useAuth();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -105,6 +105,40 @@ export default function Subscription() {
           )}
         </Button>
       </div>
+
+      {isInTrial && !subscribed && (
+        <Card className="mb-6 border-blue-500">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-blue-500" />
+                <CardTitle>Free Trial Active</CardTitle>
+              </div>
+              <span className="text-sm bg-blue-500/10 text-blue-500 px-3 py-1 rounded-full">
+                Trial Period
+              </span>
+            </div>
+            <CardDescription>
+              You're currently in your 7-day free trial
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {trialEndsAt && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Trial ends on</span>
+                  <span className="font-medium">
+                    {format(new Date(trialEndsAt), 'MMM dd, yyyy')}
+                  </span>
+                </div>
+              )}
+              <p className="text-sm text-muted-foreground">
+                Subscribe now to continue using premium features after your trial ends.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {subscribed && (
         <Card className="mb-6 border-primary">
