@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FolderOpen } from "lucide-react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FolderOpen, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -82,6 +82,7 @@ const navigation: NavigationItem[] = [
     href: "#settings", 
     icon: Settings,
     children: [
+      { name: "Subscription", href: "/subscription", icon: CreditCard },
       { name: "Automation Rules", href: "/automation-rules", icon: Zap },
       { name: "A/B Testing", href: "/ab-testing", icon: Activity },
     ]
