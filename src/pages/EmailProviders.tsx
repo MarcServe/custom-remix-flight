@@ -304,21 +304,29 @@ export default function EmailProviders() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {emailProviders.map((provider) => {
-              const connection = connections?.find(
-                (c) => c.provider === provider.id && c.status !== 'disconnected'
-              );
-              
-              return (
-                <EmailProviderCard
-                  key={provider.id}
-                  provider={provider}
-                  connection={connection}
-                  onConnect={() => handleConnect(provider.id)}
-                  onDisconnect={handleDisconnect}
-                />
-              );
-            })}
+            {emailProviders
+              .filter((provider) => {
+                // Filter out Outlook if disabled in config
+                if (provider.id === 'outlook' && !EMAIL_PROVIDER_CONFIG.outlook_enabled) {
+                  return false;
+                }
+                return true;
+              })
+              .map((provider) => {
+                const connection = connections?.find(
+                  (c) => c.provider === provider.id && c.status !== 'disconnected'
+                );
+                
+                return (
+                  <EmailProviderCard
+                    key={provider.id}
+                    provider={provider}
+                    connection={connection}
+                    onConnect={() => handleConnect(provider.id)}
+                    onDisconnect={handleDisconnect}
+                  />
+                );
+              })}
           </div>
         </CardContent>
       </Card>
