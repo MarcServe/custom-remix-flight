@@ -616,13 +616,16 @@ export type Database = {
           industry: string | null
           key_executives: Json | null
           langfuse_trace_id: string | null
+          last_analyzed_at: string | null
           linkedin_url: string | null
           name: string
           recent_news: string | null
           size: string | null
           social_profiles: Json | null
           status: string | null
+          suggested_actions: Json | null
           tech_stack: string[] | null
+          temperature: string | null
           updated_at: string | null
           user_id: string
           website: string | null
@@ -650,13 +653,16 @@ export type Database = {
           industry?: string | null
           key_executives?: Json | null
           langfuse_trace_id?: string | null
+          last_analyzed_at?: string | null
           linkedin_url?: string | null
           name: string
           recent_news?: string | null
           size?: string | null
           social_profiles?: Json | null
           status?: string | null
+          suggested_actions?: Json | null
           tech_stack?: string[] | null
+          temperature?: string | null
           updated_at?: string | null
           user_id: string
           website?: string | null
@@ -684,13 +690,16 @@ export type Database = {
           industry?: string | null
           key_executives?: Json | null
           langfuse_trace_id?: string | null
+          last_analyzed_at?: string | null
           linkedin_url?: string | null
           name?: string
           recent_news?: string | null
           size?: string | null
           social_profiles?: Json | null
           status?: string | null
+          suggested_actions?: Json | null
           tech_stack?: string[] | null
+          temperature?: string | null
           updated_at?: string | null
           user_id?: string
           website?: string | null

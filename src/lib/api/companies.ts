@@ -42,6 +42,14 @@ export interface Company {
   enrichment_status?: string;
   enrichment_confidence?: string;
   enrichment_error?: string;
+  // AI Analysis
+  temperature?: 'hot' | 'warm' | 'cold';
+  suggested_actions?: Array<{
+    action: string;
+    priority: 'high' | 'medium' | 'low';
+    reason: string;
+  }>;
+  last_analyzed_at?: string;
   // Relations
   people?: any[];
   contacts?: any[];

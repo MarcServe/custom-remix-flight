@@ -19,6 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { SuggestedActions } from "@/components/ProspectAnalyzer";
 
 interface Contact {
   id?: string;
@@ -101,6 +102,14 @@ interface Company {
   dataCompleteness?: number; // Lead finder format
   enrichmentStatus?: string; // Lead finder format
   contactStatus?: string; // Lead finder format
+  // AI Analysis
+  temperature?: 'hot' | 'warm' | 'cold';
+  suggested_actions?: Array<{
+    action: string;
+    priority: 'high' | 'medium' | 'low';
+    reason: string;
+  }>;
+  last_analyzed_at?: string;
 }
 
 interface CompanyDetailsDialogProps {
@@ -676,6 +685,28 @@ export function CompanyDetailsDialog({
                 )}
               </div>
             </div>
+
+            {/* AI Suggested Actions */}
+            {company.suggested_actions && company.suggested_actions.length > 0 && (
+              <>
+                <Separator />
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                      <TrendingUp className="h-4 w-4 text-purple-600" />
+                    </div>
+                    <h3 className="text-sm font-semibold">AI-Suggested Next Actions</h3>
+                    <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/20">
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      AI-Powered
+                    </Badge>
+                  </div>
+                  <div className="pl-10">
+                    <SuggestedActions actions={company.suggested_actions as any} />
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Enriched Data Sections - Show if ANY enriched data exists */}
             {(normalizedCompany.wasEnriched || normalizedCompany.products || normalizedCompany.recentNews || normalizedCompany.fundingInfo || 
