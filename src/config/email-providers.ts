@@ -10,6 +10,9 @@ export const EMAIL_PROVIDER_CONFIG = {
   // Enable/disable Direct Gmail OAuth (standalone implementation)
   gmail_direct_enabled: true,
   
+  // Enable/disable Outlook provider in UI (backend scripts remain active)
+  outlook_enabled: false,
+  
   // Default Gmail provider to show/use: 'nango' or 'direct'
   default_gmail: 'direct' as 'nango' | 'direct',
   
