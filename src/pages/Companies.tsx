@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone } from "lucide-react";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
+import { ProspectAnalyzer, TemperatureBadge } from "@/components/ProspectAnalyzer";
 import type { Company } from "@/lib/api/companies";
 
 export default function Companies() {
+  const queryClient = useQueryClient();
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
@@ -103,6 +105,15 @@ export default function Companies() {
         </div>
       </div>
 
+      {companies && companies.length > 0 && (
+        <div className="px-4 md:px-0">
+          <ProspectAnalyzer 
+            companies={companies} 
+            onAnalysisComplete={() => queryClient.invalidateQueries({ queryKey: ["companies-full"] })}
+          />
+        </div>
+      )}
+
       <div className="space-y-3 px-4 md:px-0 max-h-[calc(100vh-12rem)] overflow-y-auto">
         {companies?.map((company, index) => {
           const contactCount = company.contacts?.length || 0;
@@ -125,6 +136,7 @@ export default function Companies() {
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <h3 className="text-base md:text-lg font-semibold truncate">{company.name}</h3>
                       <div className="flex gap-1 flex-shrink-0">
+                        <TemperatureBadge temperature={company.temperature} />
                         {company.status && (
                           <Badge variant="secondary" className="text-xs">
                             {company.status}
