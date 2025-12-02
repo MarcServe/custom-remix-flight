@@ -398,17 +398,23 @@ export function CompanyDetailsDialog({
         hint: error?.hint,
       });
       
+      // Handle duplicate company as informational, not an error
+      if (error?.code === '23505') {
+        toast({
+          title: 'Already Saved',
+          description: 'This company is already in your CRM.',
+        });
+        return;
+      }
+      
       let errorMessage = 'Failed to save company to CRM';
       
-      // Handle specific error cases
-      if (error?.code === '23505') {
-        errorMessage = 'This company already exists in your CRM';
-      } else if (error?.message === 'User not authenticated') {
+      // Handle other error cases
+      if (error?.message === 'User not authenticated') {
         errorMessage = 'Please sign in again to continue';
       } else if (error?.code === '42501' || error?.message?.includes('permission denied') || error?.message?.includes('RLS')) {
         errorMessage = 'Permission denied. Please refresh the page and try again.';
       } else if (error?.message) {
-        // Show the actual error message if available
         errorMessage = error.message;
       }
       
