@@ -138,11 +138,13 @@ export function CompanyDetailsDialog({
   onNavigate,
 }: CompanyDetailsDialogProps) {
   const [isEnriching, setIsEnriching] = useState(false);
+  const [isExtractingEmail, setIsExtractingEmail] = useState(false);
   const [generateSequenceDialogOpen, setGenerateSequenceDialogOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [extractedEmail, setExtractedEmail] = useState<string | null>(null);
   const [emailRecipient, setEmailRecipient] = useState<{
     email: string;
     name: string;
@@ -499,6 +501,60 @@ export function CompanyDetailsDialog({
     }
   };
 
+  const handleExtractEmail = async () => {
+    if (!company.website) {
+      toast({
+        title: "Website required",
+        description: "This company needs a website URL to extract email.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsExtractingEmail(true);
+    toast({
+      title: "Extracting email",
+      description: `Scanning ${company.website} for contact email...`,
+    });
+
+    try {
+      const { data, error } = await supabase.functions.invoke('extract-website-email', {
+        body: {
+          companyId: company.id,
+          website: company.website,
+          companyName: company.name,
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.success && data.email) {
+        setExtractedEmail(data.email);
+        toast({
+          title: "Email found",
+          description: `Extracted: ${data.email}`,
+        });
+        
+        // Invalidate queries to refresh company data
+        queryClient.invalidateQueries({ queryKey: ['companies'] });
+      } else {
+        toast({
+          title: "No email found",
+          description: data.error || "Could not find a business email on the website",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Extract email error:", error);
+      toast({
+        title: "Error extracting email",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExtractingEmail(false);
+    }
+  };
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -703,13 +759,18 @@ export function CompanyDetailsDialog({
                     </a>
                   </div>
                 )}
-                {normalizedCompany.generalEmail && (
+                {(normalizedCompany.generalEmail || extractedEmail) && (
                   <div className="flex items-center gap-2 text-sm">
                     <Mail className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">Email:</span>
-                    <a href={`mailto:${normalizedCompany.generalEmail}`} className="text-primary hover:underline">
-                      {normalizedCompany.generalEmail}
+                    <a href={`mailto:${extractedEmail || normalizedCompany.generalEmail}`} className="text-primary hover:underline">
+                      {extractedEmail || normalizedCompany.generalEmail}
                     </a>
+                    {extractedEmail && (
+                      <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
+                        Just extracted
+                      </Badge>
+                    )}
                   </div>
                 )}
               </div>
@@ -1157,6 +1218,27 @@ export function CompanyDetailsDialog({
                 >
                   <Search className="h-3.5 w-3.5 mr-2" />
                   {isEnriching ? "Finding..." : "Find Prospects"}
+                </Button>
+              )}
+              {/* Extract Email Button - show for saved companies with website but no email */}
+              {hasBeenSaved && company.website && !normalizedCompany.generalEmail && !extractedEmail && (
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  onClick={handleExtractEmail}
+                  disabled={isExtractingEmail}
+                >
+                  {isExtractingEmail ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                      Extracting...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="h-3.5 w-3.5 mr-2" />
+                      Extract Email
+                    </>
+                  )}
                 </Button>
               )}
               <Button 

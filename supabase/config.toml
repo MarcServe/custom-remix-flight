@@ -95,3 +95,6 @@ verify_jwt = true
 
 [functions.autonomous-lead-discovery]
 verify_jwt = false  # Called by cron job
+
+[functions.extract-website-email]
+verify_jwt = true
