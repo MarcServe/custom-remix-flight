@@ -634,18 +634,19 @@ export const useLeadFinderStream = () => {
                 }, 2000);
               } else if (event.type === 'website-scraping') {
                 // PHASE 4: Website scraping progress
+                const isComplete = event.status === 'complete' || event.status === 'completed';
                 setState(prev => ({
                   ...prev,
                   currentStatus: event.message,
                   progress: event.progress || prev.progress,
                   websiteScrapingProgress: event.status === 'started' ? {
-                    total: 0,
+                    total: event.total || 0,
                     completed: 0,
                     currentCompany: '',
-                  } : event.status === 'complete' ? null : {
-                    total: event.total || 0,
-                    completed: event.completed || 0,
-                    currentCompany: event.company || '',
+                  } : isComplete ? null : {
+                    total: event.total || event.totalLeads || 0,
+                    completed: event.completed || event.scrapedCount || 0,
+                    currentCompany: event.company || event.leadName || '',
                   },
                 }));
               } else if (event.type === 'enrichment-status') {

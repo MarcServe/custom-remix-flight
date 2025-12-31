@@ -832,6 +832,17 @@ async function scrapeWebsiteForContacts(websiteUrl: string): Promise<ScrapedWebs
 
 // ============= PHASE 2: Progressive Website Scraping with Streaming =============
 
+// Safe SSE send that continues even if stream is closed
+const safeSendEvent = async (sendEvent: (data: any) => Promise<void>, data: any): Promise<boolean> => {
+  try {
+    await sendEvent(data);
+    return true;
+  } catch (error) {
+    console.log('SSE stream closed, continuing with database updates only');
+    return false;
+  }
+};
+
 async function scrapeWebsitesProgressively(
   leads: any[],
   sendEvent: (data: any) => Promise<void>,
@@ -848,28 +859,54 @@ async function scrapeWebsitesProgressively(
   
   console.log(`Starting website scraping for ${leadsWithWebsites.length} leads`);
   
-  await sendEvent({
+  // First, get all lead IDs from database for this search to ensure we can update them
+  const { data: existingLeads, error: fetchError } = await supabase
+    .from('lead_finder_leads')
+    .select('id, company_data')
+    .eq('search_id', searchId);
+  
+  if (fetchError) {
+    console.error('Error fetching existing leads:', fetchError);
+  }
+  
+  // Create a map of company name -> lead ID for efficient updates
+  const leadIdMap = new Map<string, string>();
+  if (existingLeads) {
+    for (const dbLead of existingLeads) {
+      const name = dbLead.company_data?.name?.toLowerCase();
+      if (name) {
+        leadIdMap.set(name, dbLead.id);
+      }
+    }
+  }
+  console.log(`Found ${leadIdMap.size} leads in database to update`);
+  
+  await safeSendEvent(sendEvent, {
     type: 'website-scraping',
     status: 'started',
     message: `Scraping ${leadsWithWebsites.length} company websites for contact info...`,
-    totalLeads: leadsWithWebsites.length,
-    scrapedCount: 0
+    total: leadsWithWebsites.length,
+    completed: 0,
+    company: ''
   });
   
   let scrapedCount = 0;
   let successCount = 0;
+  let sseActive = true; // Track if SSE is still working
   
   for (const lead of leadsWithWebsites) {
     try {
-      // Send progress update
-      await sendEvent({
-        type: 'website-scraping',
-        status: 'scraping',
-        leadName: lead.name,
-        message: `Scraping ${lead.name} website (${scrapedCount + 1}/${leadsWithWebsites.length})...`,
-        totalLeads: leadsWithWebsites.length,
-        scrapedCount
-      });
+      // Send progress update (non-blocking)
+      if (sseActive) {
+        sseActive = await safeSendEvent(sendEvent, {
+          type: 'website-scraping',
+          status: 'scraping',
+          message: `Scraping ${lead.name} website (${scrapedCount + 1}/${leadsWithWebsites.length})...`,
+          total: leadsWithWebsites.length,
+          completed: scrapedCount,
+          company: lead.name
+        });
+      }
       
       // Scrape the website
       const scrapedData = await scrapeWebsiteForContacts(lead.website);
@@ -911,38 +948,46 @@ async function scrapeWebsitesProgressively(
           successCount++;
           
           // Recalculate quality score with new data
-          // Email adds +10, phone adds +15, each social adds +3
-          let bonusScore = 0;
-          if (scrapedData.bestEmail && !lead.generalEmail) bonusScore += 10;
-          if (scrapedData.bestPhone && !lead.companyPhone) bonusScore += 15;
-          const newSocialsCount = Object.keys(scrapedData.socialProfiles || {}).length;
-          bonusScore += newSocialsCount * 3;
-          
           lead.qualityScore = calculateFinalQualityScore(lead);
           lead.dataCompleteness = calculateDataCompleteness(lead);
           lead.wasScraped = true;
           
-          // Update lead in database
-          await supabase
-            .from('lead_finder_leads')
-            .update({
-              company_data: lead,
-              enrichment_status: 'scraped'
-            })
-            .eq('search_id', searchId)
-            .eq('company_data->>name', lead.name);
+          // Get the database ID for this lead
+          const leadId = leadIdMap.get(lead.name?.toLowerCase());
           
-          // Stream the updated lead to client
-          await sendEvent({
-            type: 'lead-update',
-            lead: lead,
-            updateType: 'website-scraping',
-            scrapedData: {
-              emailsFound: scrapedData.emails.length,
-              phonesFound: scrapedData.phones.length,
-              socialsFound: Object.keys(scrapedData.socialProfiles).length
+          if (leadId) {
+            // Update lead in database using the actual ID
+            const { error: updateError } = await supabase
+              .from('lead_finder_leads')
+              .update({
+                company_data: lead,
+                enrichment_status: 'scraped',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', leadId);
+            
+            if (updateError) {
+              console.error(`Error updating lead ${lead.name}:`, updateError);
+            } else {
+              console.log(`Successfully updated ${lead.name} in database`);
             }
-          });
+          } else {
+            console.warn(`No database ID found for lead: ${lead.name}`);
+          }
+          
+          // Stream the updated lead to client (non-blocking)
+          if (sseActive) {
+            sseActive = await safeSendEvent(sendEvent, {
+              type: 'lead-update',
+              lead: lead,
+              updateType: 'website-scraping',
+              scrapedData: {
+                emailsFound: scrapedData.emails.length,
+                phonesFound: scrapedData.phones.length,
+                socialsFound: Object.keys(scrapedData.socialProfiles).length
+              }
+            });
+          }
         }
       }
       
@@ -957,17 +1002,26 @@ async function scrapeWebsitesProgressively(
     }
   }
   
-  // Send completion event
-  await sendEvent({
+  // Update search record with final scraping status
+  await supabase
+    .from('lead_finder_searches')
+    .update({ 
+      current_status: `Website scraping complete. Found contact info for ${successCount}/${leadsWithWebsites.length} companies.`,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', searchId);
+  
+  // Send completion event (non-blocking)
+  await safeSendEvent(sendEvent, {
     type: 'website-scraping',
-    status: 'completed',
+    status: 'complete',
     message: `Website scraping complete. Found contact info for ${successCount}/${leadsWithWebsites.length} companies.`,
-    totalLeads: leadsWithWebsites.length,
-    scrapedCount,
+    total: leadsWithWebsites.length,
+    completed: scrapedCount,
     successCount
   });
   
-  console.log(`Website scraping complete: ${successCount}/${leadsWithWebsites.length} leads updated`);
+  console.log(`Website scraping complete: ${successCount}/${leadsWithWebsites.length} leads updated in database`);
 }
 
 // ============= END PHASE 2: Progressive Website Scraping =============
