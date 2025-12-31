@@ -92,3 +92,6 @@ verify_jwt = true
 
 [functions.analyze-prospects]
 verify_jwt = true
+
+[functions.autonomous-lead-discovery]
+verify_jwt = false  # Called by cron job

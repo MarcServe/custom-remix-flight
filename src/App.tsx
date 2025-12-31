@@ -13,6 +13,7 @@ import Companies from "./pages/Companies";
 import Deals from "./pages/Deals";
 import People from "./pages/People";
 import LeadFinder from "./pages/LeadFinder";
+import LeadInbox from "./pages/LeadInbox";
 import BusinessProfile from "./pages/BusinessProfile";
 import Profile from "./pages/Profile";
 import Pipeline from "./pages/Pipeline";
@@ -68,6 +69,7 @@ const App = () => (
                           <Route path="/deals" element={<Deals />} />
                           <Route path="/people" element={<People />} />
                           <Route path="/lead-finder" element={<LeadFinder />} />
+                          <Route path="/lead-inbox" element={<LeadInbox />} />
                           <Route path="/business-profile" element={<BusinessProfile />} />
                           <Route path="/profile" element={<Profile />} />
                           <Route path="/pipeline" element={<Pipeline />} />
