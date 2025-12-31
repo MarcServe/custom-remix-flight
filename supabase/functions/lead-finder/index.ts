@@ -637,6 +637,199 @@ async function searchWithApify(
   return results;
 }
 
+// ============= PHASE 1: Crawl4AI-Style Website Scraping =============
+
+// Helper: Extract emails from HTML using RFC 5322-like pattern
+function extractEmailsFromHtml(html: string): string[] {
+  const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
+  const matches = html.match(emailPattern) || [];
+  
+  // Filter out false positives (image files, CSS, JS assets, common non-emails)
+  const excludePatterns = /\.(png|jpg|jpeg|gif|svg|css|js|woff|woff2|ttf|ico|webp)$/i;
+  const excludeDomains = /(example\.com|domain\.com|email\.com|yourcompany\.com|test\.com|sentry\.io|cloudflare|w3\.org)/i;
+  
+  const validEmails = matches
+    .filter(email => !excludePatterns.test(email))
+    .filter(email => !excludeDomains.test(email))
+    .filter(email => email.length < 50) // Reasonable email length
+    .map(email => email.toLowerCase());
+  
+  // Deduplicate and prioritize business emails
+  const unique = [...new Set(validEmails)];
+  
+  // Sort to prioritize contact/info emails
+  return unique.sort((a, b) => {
+    const priorityPrefixes = ['contact', 'info', 'hello', 'sales', 'support', 'enquiries', 'enquiry', 'admin'];
+    const aPrefix = a.split('@')[0];
+    const bPrefix = b.split('@')[0];
+    const aPriority = priorityPrefixes.findIndex(p => aPrefix.includes(p));
+    const bPriority = priorityPrefixes.findIndex(p => bPrefix.includes(p));
+    if (aPriority !== -1 && bPriority === -1) return -1;
+    if (bPriority !== -1 && aPriority === -1) return 1;
+    if (aPriority !== -1 && bPriority !== -1) return aPriority - bPriority;
+    return 0;
+  });
+}
+
+// Helper: Extract phone numbers from HTML
+function extractPhonesFromHtml(html: string): string[] {
+  const phonePatterns = [
+    // US format: (xxx) xxx-xxxx, xxx-xxx-xxxx, xxx.xxx.xxxx
+    /\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g,
+    // International with +: +1 xxx xxx xxxx, +44 xxxx xxxxxx
+    /\+\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}/g,
+    // UK format: 0xxxx xxxxxx
+    /0\d{4}[-.\s]?\d{6}/g,
+  ];
+  
+  const allMatches: string[] = [];
+  
+  for (const pattern of phonePatterns) {
+    const matches = html.match(pattern) || [];
+    allMatches.push(...matches);
+  }
+  
+  // Clean and deduplicate
+  const cleaned = allMatches
+    .map(phone => phone.replace(/\s+/g, ' ').trim())
+    .filter(phone => phone.length >= 10 && phone.length <= 20);
+  
+  return [...new Set(cleaned)];
+}
+
+// Helper: Extract social media profile URLs from HTML
+function extractSocialProfilesFromHtml(html: string): Record<string, string> {
+  const socialPatterns: Record<string, RegExp> = {
+    linkedin: /https?:\/\/(www\.)?linkedin\.com\/company\/[a-zA-Z0-9_-]+\/?/gi,
+    twitter: /https?:\/\/(www\.)?(twitter\.com|x\.com)\/[a-zA-Z0-9_]+\/?/gi,
+    facebook: /https?:\/\/(www\.)?(facebook\.com|fb\.com)\/[a-zA-Z0-9._-]+\/?/gi,
+    instagram: /https?:\/\/(www\.)?instagram\.com\/[a-zA-Z0-9._]+\/?/gi,
+    youtube: /https?:\/\/(www\.)?youtube\.com\/(channel\/|c\/|user\/|@)[a-zA-Z0-9_-]+\/?/gi,
+    tiktok: /https?:\/\/(www\.)?tiktok\.com\/@[a-zA-Z0-9._-]+\/?/gi,
+  };
+  
+  const profiles: Record<string, string> = {};
+  
+  for (const [platform, pattern] of Object.entries(socialPatterns)) {
+    const matches = html.match(pattern) || [];
+    if (matches.length > 0 && matches[0]) {
+      // Take the first match and clean it up
+      let url = matches[0].replace(/\/$/, ''); // Remove trailing slash
+      
+      // Skip generic/non-company pages
+      const skipPatterns = [
+        /\/(sharer|share|intent|login|signup|help|about)$/i,
+        /facebook\.com\/(sharer|plugins|dialog)/i,
+        /twitter\.com\/(intent|share)/i,
+      ];
+      
+      if (!skipPatterns.some(p => p.test(url))) {
+        profiles[platform] = url;
+      }
+    }
+  }
+  
+  return profiles;
+}
+
+// Interface for scraped website data
+interface ScrapedWebsiteData {
+  emails: string[];
+  phones: string[];
+  socialProfiles: Record<string, string>;
+  bestEmail: string | null;
+  bestPhone: string | null;
+}
+
+// Main function: Scrape a website for contact information
+async function scrapeWebsiteForContacts(websiteUrl: string): Promise<ScrapedWebsiteData | null> {
+  if (!websiteUrl) return null;
+  
+  // Normalize URL
+  let url = websiteUrl;
+  if (!url.startsWith('http')) {
+    url = `https://${url}`;
+  }
+  
+  try {
+    new URL(url); // Validate URL format
+  } catch {
+    console.log(`Invalid URL for scraping: ${websiteUrl}`);
+    return null;
+  }
+  
+  const combinedHtml: string[] = [];
+  const pagesToFetch = [
+    url,
+    `${url.replace(/\/$/, '')}/contact`,
+    `${url.replace(/\/$/, '')}/contact-us`,
+    `${url.replace(/\/$/, '')}/about`,
+    `${url.replace(/\/$/, '')}/about-us`,
+  ];
+  
+  const fetchOptions = {
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+    },
+  };
+  
+  // Fetch main page and contact pages with timeout
+  for (const pageUrl of pagesToFetch) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
+      const response = await fetch(pageUrl, {
+        ...fetchOptions,
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        const html = await response.text();
+        combinedHtml.push(html);
+        console.log(`Scraped ${pageUrl} successfully (${html.length} chars)`);
+      }
+    } catch (error) {
+      // Silently skip failed pages (404, timeout, blocked, etc.)
+      if (pageUrl === url) {
+        console.log(`Failed to scrape main page: ${url}`);
+      }
+    }
+    
+    // Small delay between requests to be polite
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
+  if (combinedHtml.length === 0) {
+    console.log(`No pages scraped for ${websiteUrl}`);
+    return null;
+  }
+  
+  const fullHtml = combinedHtml.join('\n');
+  
+  // Extract all data
+  const emails = extractEmailsFromHtml(fullHtml);
+  const phones = extractPhonesFromHtml(fullHtml);
+  const socialProfiles = extractSocialProfilesFromHtml(fullHtml);
+  
+  console.log(`Scraped ${websiteUrl}: ${emails.length} emails, ${phones.length} phones, ${Object.keys(socialProfiles).length} socials`);
+  
+  return {
+    emails,
+    phones,
+    socialProfiles,
+    bestEmail: emails[0] || null, // First email is prioritized (contact/info)
+    bestPhone: phones[0] || null,
+  };
+}
+
+// ============= END PHASE 1: Website Scraping Helpers =============
+
 // SerpAPI search function for Google Search and Google Maps results
 async function searchWithSerpAPI(
   query: string,
