@@ -185,7 +185,56 @@ Deno.serve(async (req) => {
           console.log(`[autonomous-lead-discovery] Auto-approving ${autoApprovedLeads.length} leads for user ${setting.user_id}`);
           
           for (const lead of autoApprovedLeads) {
-            await saveLeadToCompanies(supabase, lead, setting.user_id);
+            const companyId = await saveLeadToCompanies(supabase, lead, setting.user_id);
+            
+            // Auto-enroll in sequence if enabled
+            if (setting.auto_enroll_enabled && setting.auto_enroll_sequence_id && companyId) {
+              await enrollInSequence(supabase, companyId, setting.auto_enroll_sequence_id);
+            }
+
+            // Track feedback for AI learning
+            await trackAutoApprovalFeedback(supabase, setting.user_id, lead);
+          }
+
+          // Send webhook notification for high-quality auto-approved leads
+          if (setting.webhook_enabled && setting.webhook_url) {
+            const highQualityLeads = autoApprovedLeads.filter(
+              l => l.quality_score >= (setting.notify_min_quality_score || 70)
+            );
+            
+            if (highQualityLeads.length > 0 && setting.notify_on_auto_approve) {
+              await sendWebhookNotification(setting.webhook_url, {
+                type: 'auto_approved_leads',
+                count: highQualityLeads.length,
+                leads: highQualityLeads.map(l => ({
+                  name: l.company_name,
+                  website: l.company_website,
+                  industry: l.industry,
+                  qualityScore: l.quality_score,
+                })),
+              });
+            }
+          }
+        }
+
+        // Send webhook for all new pending leads if webhook enabled
+        const pendingLeads = autonomousLeadsToInsert.filter(l => l.status === 'pending');
+        if (setting.webhook_enabled && setting.webhook_url && pendingLeads.length > 0) {
+          const notifiableLeads = pendingLeads.filter(
+            l => l.quality_score >= (setting.notify_min_quality_score || 70)
+          );
+          
+          if (notifiableLeads.length > 0) {
+            await sendWebhookNotification(setting.webhook_url, {
+              type: 'new_leads_pending_review',
+              count: notifiableLeads.length,
+              leads: notifiableLeads.map(l => ({
+                name: l.company_name,
+                website: l.company_website,
+                industry: l.industry,
+                qualityScore: l.quality_score,
+              })),
+            });
           }
         }
 
@@ -342,7 +391,7 @@ async function parseStreamingResponse(response: Response): Promise<any[]> {
   return leads;
 }
 
-async function saveLeadToCompanies(supabase: any, lead: any, userId: string): Promise<void> {
+async function saveLeadToCompanies(supabase: any, lead: any, userId: string): Promise<string | null> {
   try {
     const companyData = lead.company_data || {};
     
@@ -370,7 +419,7 @@ async function saveLeadToCompanies(supabase: any, lead: any, userId: string): Pr
 
     if (error) {
       console.error('[autonomous-lead-discovery] Error saving company:', error);
-      return;
+      return null;
     }
 
     // Update the autonomous lead with the company_id
@@ -401,7 +450,133 @@ async function saveLeadToCompanies(supabase: any, lead: any, userId: string): Pr
       await supabase.from('contacts').insert(contactsToInsert);
     }
 
+    return company.id;
+
   } catch (error) {
     console.error('[autonomous-lead-discovery] Error in saveLeadToCompanies:', error);
+    return null;
+  }
+}
+
+async function enrollInSequence(supabase: any, companyId: string, sequenceId: string): Promise<void> {
+  try {
+    const { error } = await supabase.from('company_sequences').insert({
+      company_id: companyId,
+      sequence_id: sequenceId,
+      status: 'active',
+      current_step: 0,
+      auto_respond_enabled: true,
+    });
+
+    if (error) {
+      console.error('[autonomous-lead-discovery] Error enrolling in sequence:', error);
+    } else {
+      console.log(`[autonomous-lead-discovery] Enrolled company ${companyId} in sequence ${sequenceId}`);
+    }
+  } catch (error) {
+    console.error('[autonomous-lead-discovery] Error in enrollInSequence:', error);
+  }
+}
+
+async function trackAutoApprovalFeedback(supabase: any, userId: string, lead: any): Promise<void> {
+  try {
+    // Insert feedback analytics
+    await supabase.from('lead_feedback_analytics').insert({
+      user_id: userId,
+      action: 'auto_approved',
+      quality_score: lead.quality_score,
+      industry: lead.industry,
+      geography: lead.geography,
+      company_size: lead.company_size,
+      source: lead.source,
+      time_to_decision_seconds: 0, // Auto-approved immediately
+    });
+
+    // Update learned preferences
+    await supabase.rpc('update_discovery_learning', {
+      p_user_id: userId,
+      p_action: 'auto_approved',
+      p_industry: lead.industry,
+      p_geography: lead.geography,
+      p_company_size: lead.company_size,
+    });
+  } catch (error) {
+    console.error('[autonomous-lead-discovery] Error tracking feedback:', error);
+  }
+}
+
+async function sendWebhookNotification(webhookUrl: string, payload: any): Promise<void> {
+  try {
+    // Detect webhook type and format accordingly
+    const isSlack = webhookUrl.includes('hooks.slack.com');
+    const isDiscord = webhookUrl.includes('discord.com/api/webhooks');
+
+    let body: any;
+
+    if (isSlack) {
+      // Slack format
+      const leadsText = payload.leads.map((l: any) => 
+        `• *${l.name}* (${l.industry || 'Unknown'}) - Quality: ${l.qualityScore}%`
+      ).join('\n');
+
+      body = {
+        text: `🎯 LeadGenie: ${payload.count} new ${payload.type === 'auto_approved_leads' ? 'auto-approved' : 'pending'} leads`,
+        blocks: [
+          {
+            type: 'header',
+            text: {
+              type: 'plain_text',
+              text: `🎯 ${payload.count} New Leads Discovered`,
+              emoji: true,
+            },
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: leadsText,
+            },
+          },
+        ],
+      };
+    } else if (isDiscord) {
+      // Discord format
+      const leadsText = payload.leads.map((l: any) => 
+        `• **${l.name}** (${l.industry || 'Unknown'}) - Quality: ${l.qualityScore}%`
+      ).join('\n');
+
+      body = {
+        content: `🎯 **LeadGenie: ${payload.count} new ${payload.type === 'auto_approved_leads' ? 'auto-approved' : 'pending'} leads**`,
+        embeds: [
+          {
+            title: 'New Leads Discovered',
+            description: leadsText,
+            color: payload.type === 'auto_approved_leads' ? 0x22c55e : 0x3b82f6,
+          },
+        ],
+      };
+    } else {
+      // Generic webhook
+      body = {
+        event: payload.type,
+        count: payload.count,
+        leads: payload.leads,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      console.error('[autonomous-lead-discovery] Webhook failed:', response.status, await response.text());
+    } else {
+      console.log('[autonomous-lead-discovery] Webhook notification sent successfully');
+    }
+  } catch (error) {
+    console.error('[autonomous-lead-discovery] Error sending webhook:', error);
   }
 }

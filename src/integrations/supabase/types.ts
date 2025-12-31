@@ -382,57 +382,102 @@ export type Database = {
       autonomous_discovery_settings: {
         Row: {
           auto_approve_threshold: number | null
+          auto_enroll_enabled: boolean | null
+          auto_enroll_sequence_id: string | null
+          avoid_industries: string[] | null
+          avoid_keywords: string[] | null
           created_at: string
           custom_search_query: string | null
           discovery_frequency: string
           enabled: boolean
           enrich_with_perplexity: boolean
+          feedback_learning_enabled: boolean | null
           id: string
           last_run_at: string | null
+          learned_company_sizes: string[] | null
+          learned_geographies: string[] | null
+          learned_industries: string[] | null
+          learned_keywords: string[] | null
           max_leads_per_run: number
           next_run_at: string | null
+          notify_min_quality_score: number | null
+          notify_on_auto_approve: boolean | null
           target_company_sizes: string[] | null
           target_geographies: string[] | null
           target_industries: string[] | null
+          total_approved: number | null
+          total_rejected: number | null
           updated_at: string
           use_serp_api: boolean
           user_id: string
+          webhook_enabled: boolean | null
+          webhook_url: string | null
         }
         Insert: {
           auto_approve_threshold?: number | null
+          auto_enroll_enabled?: boolean | null
+          auto_enroll_sequence_id?: string | null
+          avoid_industries?: string[] | null
+          avoid_keywords?: string[] | null
           created_at?: string
           custom_search_query?: string | null
           discovery_frequency?: string
           enabled?: boolean
           enrich_with_perplexity?: boolean
+          feedback_learning_enabled?: boolean | null
           id?: string
           last_run_at?: string | null
+          learned_company_sizes?: string[] | null
+          learned_geographies?: string[] | null
+          learned_industries?: string[] | null
+          learned_keywords?: string[] | null
           max_leads_per_run?: number
           next_run_at?: string | null
+          notify_min_quality_score?: number | null
+          notify_on_auto_approve?: boolean | null
           target_company_sizes?: string[] | null
           target_geographies?: string[] | null
           target_industries?: string[] | null
+          total_approved?: number | null
+          total_rejected?: number | null
           updated_at?: string
           use_serp_api?: boolean
           user_id: string
+          webhook_enabled?: boolean | null
+          webhook_url?: string | null
         }
         Update: {
           auto_approve_threshold?: number | null
+          auto_enroll_enabled?: boolean | null
+          auto_enroll_sequence_id?: string | null
+          avoid_industries?: string[] | null
+          avoid_keywords?: string[] | null
           created_at?: string
           custom_search_query?: string | null
           discovery_frequency?: string
           enabled?: boolean
           enrich_with_perplexity?: boolean
+          feedback_learning_enabled?: boolean | null
           id?: string
           last_run_at?: string | null
+          learned_company_sizes?: string[] | null
+          learned_geographies?: string[] | null
+          learned_industries?: string[] | null
+          learned_keywords?: string[] | null
           max_leads_per_run?: number
           next_run_at?: string | null
+          notify_min_quality_score?: number | null
+          notify_on_auto_approve?: boolean | null
           target_company_sizes?: string[] | null
           target_geographies?: string[] | null
           target_industries?: string[] | null
+          total_approved?: number | null
+          total_rejected?: number | null
           updated_at?: string
           use_serp_api?: boolean
           user_id?: string
+          webhook_enabled?: boolean | null
+          webhook_url?: string | null
         }
         Relationships: []
       }
@@ -1961,6 +2006,56 @@ export type Database = {
           },
         ]
       }
+      lead_feedback_analytics: {
+        Row: {
+          action: string
+          autonomous_lead_id: string | null
+          company_size: string | null
+          created_at: string
+          geography: string | null
+          id: string
+          industry: string | null
+          quality_score: number | null
+          source: string | null
+          time_to_decision_seconds: number | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          autonomous_lead_id?: string | null
+          company_size?: string | null
+          created_at?: string
+          geography?: string | null
+          id?: string
+          industry?: string | null
+          quality_score?: number | null
+          source?: string | null
+          time_to_decision_seconds?: number | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          autonomous_lead_id?: string | null
+          company_size?: string | null
+          created_at?: string
+          geography?: string | null
+          id?: string
+          industry?: string | null
+          quality_score?: number | null
+          source?: string | null
+          time_to_decision_seconds?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_feedback_analytics_autonomous_lead_id_fkey"
+            columns: ["autonomous_lead_id"]
+            isOneToOne: false
+            referencedRelation: "autonomous_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_finder_leads: {
         Row: {
           company_data: Json
@@ -2469,6 +2564,16 @@ export type Database = {
           status: string
           website: string
         }[]
+      }
+      update_discovery_learning: {
+        Args: {
+          p_action: string
+          p_company_size: string
+          p_geography: string
+          p_industry: string
+          p_user_id: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
