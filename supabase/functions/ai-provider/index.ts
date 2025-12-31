@@ -33,6 +33,17 @@ interface AIProviderResponse {
   traceUrl: string;
 }
 
+// Map Gemini models to OpenAI equivalents
+function mapModelToOpenAI(model: string): string {
+  const modelMap: Record<string, string> = {
+    'google/gemini-2.5-flash': 'gpt-4o-mini',
+    'google/gemini-2.5-flash-lite': 'gpt-4o-mini',
+    'google/gemini-2.5-pro': 'gpt-4o',
+    'google/gemini-3-pro-preview': 'gpt-4o',
+  };
+  return modelMap[model] || model;
+}
+
 function calculateCost(provider: string, tokens: number, model?: string): number {
   const pricing: Record<string, Record<string, number>> = {
     lovable: {
@@ -136,7 +147,11 @@ async function handleOpenAI(config: AIProviderRequest): Promise<AIProviderRespon
   // Trim the API key to remove any whitespace or newlines
   const cleanApiKey = OPENAI_API_KEY.trim();
 
-  const model = config.model || 'gpt-4o-mini';
+  // Map Gemini models to OpenAI equivalents if needed
+  const requestedModel = config.model || 'gpt-4o-mini';
+  const model = mapModelToOpenAI(requestedModel);
+  
+  console.log(`OpenAI request - requested model: ${requestedModel}, mapped to: ${model}`);
   
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -154,8 +169,21 @@ async function handleOpenAI(config: AIProviderRequest): Promise<AIProviderRespon
     }),
   });
 
+  if (response.status === 429) {
+    const error = await response.text();
+    console.error('OpenAI rate limit error:', error);
+    throw new Error('RATE_LIMIT: OpenAI rate limit exceeded. Please try again later.');
+  }
+
+  if (response.status === 402 || response.status === 401) {
+    const error = await response.text();
+    console.error('OpenAI auth/billing error:', error);
+    throw new Error('PAYMENT_REQUIRED: OpenAI API key invalid or billing issue.');
+  }
+
   if (!response.ok) {
     const error = await response.text();
+    console.error('OpenAI error:', response.status, error);
     throw new Error(`OpenAI error: ${error}`);
   }
 
@@ -262,9 +290,11 @@ serve(async (req) => {
   try {
     const requestBody: AIProviderRequest = await req.json();
     
-    // Get default provider from environment
-    const defaultProvider = Deno.env.get('AI_PROVIDER') || 'lovable';
+    // Default to OpenAI instead of Lovable AI
+    const defaultProvider = Deno.env.get('AI_PROVIDER') || 'openai';
     const provider = requestBody.provider || defaultProvider as 'lovable' | 'openai' | 'perplexity';
+
+    console.log(`AI Provider request - provider: ${provider}, model: ${requestBody.model}`);
 
     let result: AIProviderResponse;
 
@@ -284,13 +314,21 @@ serve(async (req) => {
   } catch (error: any) {
     console.error('AI Provider error:', error);
     
+    // Return appropriate status codes for rate limit and payment errors
+    let status = 500;
+    if (error.message?.includes('RATE_LIMIT')) {
+      status = 429;
+    } else if (error.message?.includes('PAYMENT_REQUIRED')) {
+      status = 402;
+    }
+    
     return new Response(
       JSON.stringify({ 
         error: error.message,
         details: error.toString(),
       }),
       {
-        status: 500,
+        status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
