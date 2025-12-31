@@ -290,9 +290,8 @@ serve(async (req) => {
   try {
     const requestBody: AIProviderRequest = await req.json();
     
-    // Default to OpenAI instead of Lovable AI
-    const defaultProvider = Deno.env.get('AI_PROVIDER') || 'openai';
-    const provider = requestBody.provider || defaultProvider as 'lovable' | 'openai' | 'perplexity';
+    // Default to OpenAI (ignore AI_PROVIDER env to avoid Lovable credits usage)
+    const provider = (requestBody.provider || 'openai') as 'lovable' | 'openai' | 'perplexity';
 
     console.log(`AI Provider request - provider: ${provider}, model: ${requestBody.model}`);
 

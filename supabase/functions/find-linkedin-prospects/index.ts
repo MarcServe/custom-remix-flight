@@ -97,10 +97,18 @@ Return ONLY the JSON array:`;
       const errorBody = await aiProviderResponse.text();
       console.error("AI Provider error response:", aiProviderResponse.status, errorBody);
       
-      // Surface payment/rate limit errors with user-friendly messages
+      // Surface billing/rate limit errors with user-friendly messages
       if (aiProviderResponse.status === 402) {
+        let message = "AI provider billing issue. Please check your OpenAI API key and billing.";
+        try {
+          const parsed = JSON.parse(errorBody);
+          if (parsed?.error) message = parsed.error;
+        } catch {
+          // ignore parse errors
+        }
+
         return new Response(
-          JSON.stringify({ error: "Lovable AI credits exhausted. Please add credits to your workspace at Settings → Workspace → Usage." }),
+          JSON.stringify({ error: message }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
