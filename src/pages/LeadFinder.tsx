@@ -35,7 +35,7 @@ export default function LeadFinder() {
   const [size, setSize] = useState("");
   const [geography, setGeography] = useState("");
   const [industryCategory, setIndustryCategory] = useState("");
-  const [industrySubcategory, setIndustrySubcategory] = useState("");
+  const [industrySubcategories, setIndustrySubcategories] = useState<string[]>([]);
   const [subcategorySearch, setSubcategorySearch] = useState("");
   const [customSearchText, setCustomSearchText] = useState("");
   const [dryRun, setDryRun] = useState(true);
@@ -54,7 +54,7 @@ export default function LeadFinder() {
 
   // Filter states
   const [minQualityScore, setMinQualityScore] = useState<number>(0);
-  const [mustHaveContacts, setMustHaveContacts] = useState(false);
+  const [mustHaveEmail, setMustHaveEmail] = useState(false);
   const [mustHaveLinkedIn, setMustHaveLinkedIn] = useState(false);
   const [mustHaveNews, setMustHaveNews] = useState(false);
   const [mustHaveFunding, setMustHaveFunding] = useState(false);
@@ -110,7 +110,9 @@ export default function LeadFinder() {
     forceSave?: boolean;
   }) => {
     const shouldDryRun = options?.forceSave ? false : dryRun;
-    const industryString = industrySubcategory ? formatIndustryString(industryCategory, industrySubcategory) : industryCategory;
+    const industryString = industrySubcategories.length > 0 
+      ? industrySubcategories.map(sub => formatIndustryString(industryCategory, sub)).join(', ')
+      : industryCategory;
     await streamingSearch.findLeads({
       size,
       geography,
@@ -329,9 +331,13 @@ export default function LeadFinder() {
           return false;
         }
 
-        // Must have contacts filter
-        if (mustHaveContacts && (!company.contacts || company.contacts.length === 0)) {
-          return false;
+        // Must have email filter - check generalEmail OR contacts with email
+        if (mustHaveEmail) {
+          const hasGeneralEmail = company.generalEmail && company.generalEmail.trim();
+          const hasContactEmail = company.contacts && company.contacts.some((c: any) => c.email && c.email.trim());
+          if (!hasGeneralEmail && !hasContactEmail) {
+            return false;
+          }
         }
 
         // Must have LinkedIn filter
@@ -380,14 +386,14 @@ export default function LeadFinder() {
   } : null;
   const clearFilters = () => {
     setMinQualityScore(0);
-    setMustHaveContacts(false);
+    setMustHaveEmail(false);
     setMustHaveLinkedIn(false);
     setMustHaveNews(false);
     setMustHaveFunding(false);
     setSortBy('quality');
     setSourceFilter('all');
   };
-  const hasActiveFilters = minQualityScore > 0 || mustHaveContacts || mustHaveLinkedIn || mustHaveNews || mustHaveFunding || sortBy !== 'quality' || sourceFilter !== 'all';
+  const hasActiveFilters = minQualityScore > 0 || mustHaveEmail || mustHaveLinkedIn || mustHaveNews || mustHaveFunding || sortBy !== 'quality' || sourceFilter !== 'all';
 
   // Copy email to clipboard
   const handleCopyEmail = (email: string, e: React.MouseEvent) => {
@@ -671,7 +677,7 @@ export default function LeadFinder() {
                     <Label htmlFor="industry-category" className="text-xs font-medium">Industry Category</Label>
                     <Select value={industryCategory} onValueChange={value => {
                     setIndustryCategory(value);
-                    setIndustrySubcategory("");
+                    setIndustrySubcategories([]);
                     setSubcategorySearch("");
                   }}>
                       <SelectTrigger id="industry-category" className="h-9 text-xs">
@@ -684,31 +690,42 @@ export default function LeadFinder() {
                   </div>
 
                   {industryCategory && <div className="space-y-1.5">
-                      <Label htmlFor="industry-subcategory" className="text-xs font-medium">Subcategory (Optional)</Label>
+                      <Label htmlFor="industry-subcategory" className="text-xs font-medium">Subcategories (Optional)</Label>
                       <Popover>
                         <PopoverTrigger asChild>
-                          <Button variant="outline" role="combobox" className="w-full h-9 justify-between text-xs font-normal">
-                            {industrySubcategory || "Select subcategory"}
+                          <Button variant="outline" role="combobox" className="w-full min-h-9 h-auto justify-between text-xs font-normal py-2">
+                            <span className="text-left flex-1 truncate">
+                              {industrySubcategories.length === 0 
+                                ? "Select subcategories" 
+                                : industrySubcategories.length === 1 
+                                  ? industrySubcategories[0]
+                                  : `${industrySubcategories.length} selected`}
+                            </span>
                             <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                           <div className="p-2">
                             <Input placeholder="Search..." value={subcategorySearch} onChange={e => setSubcategorySearch(e.target.value)} className="h-8 text-xs mb-2" />
+                            {industrySubcategories.length > 0 && (
+                              <Button variant="ghost" size="sm" className="w-full h-7 text-xs text-muted-foreground mb-2" onClick={() => setIndustrySubcategories([])}>
+                                Clear all ({industrySubcategories.length})
+                              </Button>
+                            )}
                             <ScrollArea className="h-[200px]">
                               <div className="space-y-1">
-                                <Button variant="ghost" className="w-full h-8 justify-start text-xs font-normal" onClick={() => {
-                              setIndustrySubcategory("");
-                              setSubcategorySearch("");
-                            }}>
-                                  None
-                                </Button>
-                                {filteredSubcategories.length > 0 ? filteredSubcategories.map(subcategory => <Button key={subcategory} variant="ghost" className="w-full h-8 justify-start text-xs font-normal" onClick={() => {
-                              setIndustrySubcategory(subcategory);
-                              setSubcategorySearch("");
-                            }}>
-                                      {subcategory}
-                                    </Button>) : <div className="p-2 text-xs text-muted-foreground text-center">
+                                {filteredSubcategories.length > 0 ? filteredSubcategories.map(subcategory => (
+                                  <div key={subcategory} className="flex items-center space-x-2 px-2 py-1.5 hover:bg-accent rounded-md cursor-pointer" onClick={() => {
+                                    setIndustrySubcategories(prev => 
+                                      prev.includes(subcategory) 
+                                        ? prev.filter(s => s !== subcategory)
+                                        : [...prev, subcategory]
+                                    );
+                                  }}>
+                                    <Checkbox checked={industrySubcategories.includes(subcategory)} />
+                                    <span className="text-xs">{subcategory}</span>
+                                  </div>
+                                )) : <div className="p-2 text-xs text-muted-foreground text-center">
                                     No results found
                                   </div>}
                               </div>
@@ -861,12 +878,11 @@ export default function LeadFinder() {
                       </Select>
                     </div>
 
-                    {/* Filter Checkboxes */}
                     <div className="space-y-2 pt-1">
                       <div className="flex items-center space-x-2">
-                        <Checkbox id="mustHaveContacts" checked={mustHaveContacts} onCheckedChange={checked => setMustHaveContacts(checked as boolean)} />
-                        <Label htmlFor="mustHaveContacts" className="text-xs font-normal cursor-pointer">
-                          Must have contacts
+                        <Checkbox id="mustHaveEmail" checked={mustHaveEmail} onCheckedChange={checked => setMustHaveEmail(checked as boolean)} />
+                        <Label htmlFor="mustHaveEmail" className="text-xs font-normal cursor-pointer">
+                          Must have email
                         </Label>
                       </div>
 
