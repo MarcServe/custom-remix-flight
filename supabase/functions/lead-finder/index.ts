@@ -1534,15 +1534,29 @@ ${JSON.stringify(batch, null, 2)}`;
       console.log(`Final: ${leads.length} unique leads`);
 
       // PHASE 2 & 3: Start background enrichment and contact finding
+      // Setup keepalive ping to prevent connection timeout during long operations
+      let keepaliveActive = true;
+      const keepaliveInterval = setInterval(async () => {
+        if (!keepaliveActive) return;
+        try {
+          await sendEvent({ type: 'keepalive', timestamp: Date.now() });
+        } catch (e) {
+          console.log('Keepalive failed, stream may be closed');
+          keepaliveActive = false;
+        }
+      }, 10000); // Ping every 10 seconds
+
       const backgroundPromise = (async () => {
         try {
           // Step 0: Website Scraping (NEW - extract emails, phones, socials directly from websites)
           const leadsWithWebsites = leads.filter(l => l.website);
           if (leadsWithWebsites.length > 0) {
-            await sendEvent({
+            await safeSendEvent(sendEvent, {
               type: 'website-scraping',
               status: 'started',
               message: `Scraping ${leadsWithWebsites.length} company websites for contact info...`,
+              total: leadsWithWebsites.length,
+              completed: 0,
               progress: 82
             });
             await supabase
@@ -1616,6 +1630,11 @@ ${JSON.stringify(batch, null, 2)}`;
           console.log('All background tasks completed');
         } catch (error) {
           console.error('Background tasks error:', error);
+        } finally {
+          // Stop keepalive pings when background tasks complete
+          keepaliveActive = false;
+          clearInterval(keepaliveInterval);
+          console.log('Keepalive stopped');
         }
       })();
 

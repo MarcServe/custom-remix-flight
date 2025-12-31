@@ -649,6 +649,9 @@ export const useLeadFinderStream = () => {
                     currentCompany: event.company || event.leadName || '',
                   },
                 }));
+              } else if (event.type === 'keepalive') {
+                // PHASE 2: Keepalive ping - just acknowledge to keep connection alive
+                console.log('Keepalive received:', event.timestamp);
               } else if (event.type === 'enrichment-status') {
                 // PHASE 2: Update status with enrichment progress
                 setState(prev => ({
