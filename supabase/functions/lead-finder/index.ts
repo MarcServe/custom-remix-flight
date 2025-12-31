@@ -558,6 +558,82 @@ async function findContactsProgressively(
   console.log(`Contact finding complete for batch ${batchNumber}`);
 }
 
+// Apify search function for extended local business data
+async function searchWithApify(
+  query: string,
+  geography: string,
+  industry: string,
+  traceId: string
+): Promise<any[]> {
+  const APIFY_API_TOKEN = Deno.env.get("APIFY_API_TOKEN");
+  if (!APIFY_API_TOKEN) {
+    console.log("APIFY_API_TOKEN not configured, skipping Apify search");
+    return [];
+  }
+
+  const results: any[] = [];
+
+  try {
+    // Use Apify's Google Maps Scraper actor
+    const searchQuery = `${industry} ${geography} ${query}`.trim();
+    console.log(`Apify search query: "${searchQuery}"`);
+
+    const actorRunUrl = "https://api.apify.com/v2/acts/nwua9Gu5YrADL7ZDj/run-sync-get-dataset-items";
+    
+    const response = await fetch(`${actorRunUrl}?token=${APIFY_API_TOKEN}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        searchStringsArray: [searchQuery],
+        maxCrawledPlacesPerSearch: 20,
+        language: "en",
+        maxImages: 0,
+        maxReviews: 0,
+        scrapeReviewerName: false,
+        scrapeReviewerId: false,
+        scrapeReviewerUrl: false,
+        scrapeReviewId: false,
+        scrapeReviewUrl: false,
+        scrapeResponseFromOwnerText: false,
+      }),
+    });
+
+    if (response.ok) {
+      const places = await response.json();
+      console.log(`Apify found ${places.length} results`);
+
+      for (const place of places) {
+        if (place.title || place.name) {
+          results.push({
+            url: place.website || place.url,
+            title: place.title || place.name,
+            text: place.description || place.categoryName || '',
+            source: 'apify',
+            // Business data from Apify
+            address: place.address || place.street,
+            phone: place.phone,
+            rating: place.totalScore,
+            reviews: place.reviewsCount,
+            hours: place.openingHours?.join(', '),
+            place_id: place.placeId,
+            categories: place.categories,
+            city: place.city,
+            postalCode: place.postalCode,
+            countryCode: place.countryCode,
+          });
+        }
+      }
+    } else {
+      const errorText = await response.text();
+      console.error(`Apify API error: ${response.status} - ${errorText}`);
+    }
+  } catch (error) {
+    console.error("Apify search error:", error);
+  }
+
+  return results;
+}
+
 // SerpAPI search function for Google Search and Google Maps results
 async function searchWithSerpAPI(
   query: string,
@@ -645,8 +721,8 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi } = await req.json();
-  console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi });
+  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify } = await req.json();
+  console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify });
 
   // Initialize Supabase with authenticated user
   const authHeader = req.headers.get('Authorization')!;
@@ -708,7 +784,7 @@ Deno.serve(async (req) => {
           .from('lead_finder_searches')
           .insert({
             user_id: user.id,
-            search_params: { size, geography, industry, provider, model, enrichWithPerplexity, customSearchText, useSerpApi },
+            search_params: { size, geography, industry, provider, model, enrichWithPerplexity, customSearchText, useSerpApi, useApify },
             status: 'running',
             progress: 5,
             current_status: 'Initializing search...'
@@ -729,8 +805,11 @@ Deno.serve(async (req) => {
       const EXA_API_KEY = Deno.env.get("EXA_API_KEY");
       if (!EXA_API_KEY) throw new Error("Missing EXA_API_KEY");
 
-      // PHASE 1: Search with Exa AI and optionally SerpAPI in parallel
-      const searchSources = useSerpApi ? 'Exa AI + SerpAPI (Google)' : 'Exa AI';
+      // PHASE 1: Search with Exa AI and optionally SerpAPI/Apify in parallel
+      const searchSourcesList = ['Exa AI'];
+      if (useSerpApi) searchSourcesList.push('SerpAPI');
+      if (useApify) searchSourcesList.push('Apify');
+      const searchSources = searchSourcesList.join(' + ');
       await sendEvent({ type: 'status', message: `Searching with ${searchSources}...`, progress: 10 });
       await supabase
         .from('lead_finder_searches')
@@ -773,11 +852,15 @@ Deno.serve(async (req) => {
         }).then(r => r.ok ? r.json() : { results: [] }).catch(() => ({ results: [] }))
       );
 
-      // Run Exa and SerpAPI searches in parallel
+      // Run Exa, SerpAPI, and Apify searches in parallel
       const searchPromises: Promise<any>[] = [Promise.all(exaPromises)];
       
       if (useSerpApi) {
         searchPromises.push(searchWithSerpAPI(customContext, geography, industryContext, trace.id));
+      }
+      
+      if (useApify) {
+        searchPromises.push(searchWithApify(customContext, geography, industryContext, trace.id));
       }
 
       const searchResults = await Promise.all(searchPromises);
@@ -796,20 +879,32 @@ Deno.serve(async (req) => {
       // Process SerpAPI results if enabled
       let serpApiResultCount = 0;
       let googleMapsResultCount = 0;
-      if (useSerpApi && searchResults[1]) {
-        const serpResults = searchResults[1] as any[];
+      let apifyResultCount = 0;
+      let searchResultIndex = 1;
+      
+      if (useSerpApi && searchResults[searchResultIndex]) {
+        const serpResults = searchResults[searchResultIndex] as any[];
         serpApiResultCount = serpResults.filter(r => r.source === 'serpapi').length;
         googleMapsResultCount = serpResults.filter(r => r.source === 'google_maps').length;
         allResults.push(...serpResults);
         console.log(`SerpAPI added ${serpApiResultCount} Google Search + ${googleMapsResultCount} Google Maps results`);
+        searchResultIndex++;
+      }
+      
+      // Process Apify results if enabled
+      if (useApify && searchResults[searchResultIndex]) {
+        const apifyResults = searchResults[searchResultIndex] as any[];
+        apifyResultCount = apifyResults.length;
+        allResults.push(...apifyResults);
+        console.log(`Apify added ${apifyResultCount} results`);
       }
 
       const deduplicatedResults = deduplicateResults(allResults);
       const exaCount = deduplicatedResults.filter((r: any) => r.source === 'exa' || !r.source).length;
-      console.log(`Found ${deduplicatedResults.length} unique companies (Exa: ${exaCount}, SerpAPI: ${serpApiResultCount}, Maps: ${googleMapsResultCount})`);
-      await endSpan(exaSpan, { totalResults: allResults.length, uniqueResults: deduplicatedResults.length, serpApiResults: serpApiResultCount, googleMapsResults: googleMapsResultCount });
+      console.log(`Found ${deduplicatedResults.length} unique companies (Exa: ${exaCount}, SerpAPI: ${serpApiResultCount}, Maps: ${googleMapsResultCount}, Apify: ${apifyResultCount})`);
+      await endSpan(exaSpan, { totalResults: allResults.length, uniqueResults: deduplicatedResults.length, serpApiResults: serpApiResultCount, googleMapsResults: googleMapsResultCount, apifyResults: apifyResultCount });
 
-      await sendEvent({ type: 'status', message: `Found ${deduplicatedResults.length} companies. Processing...`, progress: 20, sources: { exa: exaCount, serpapi: serpApiResultCount, googleMaps: googleMapsResultCount } });
+      await sendEvent({ type: 'status', message: `Found ${deduplicatedResults.length} companies. Processing...`, progress: 20, sources: { exa: exaCount, serpapi: serpApiResultCount, googleMaps: googleMapsResultCount, apify: apifyResultCount } });
       await supabase
         .from('lead_finder_searches')
         .update({ progress: 20, current_status: `Found ${deduplicatedResults.length} companies. Processing...` })
