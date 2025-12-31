@@ -51,6 +51,12 @@ interface Usage {
   estimatedCost: number;
 }
 
+interface WebsiteScrapingProgress {
+  total: number;
+  completed: number;
+  currentCompany: string;
+}
+
 interface StreamState {
   leads: Lead[];
   isLoading: boolean;
@@ -62,6 +68,7 @@ interface StreamState {
   traceUrl: string | null;
   searchId: string | null;
   hasActiveSearch: boolean;
+  websiteScrapingProgress: WebsiteScrapingProgress | null;
 }
 
 interface SearchParams {
@@ -97,6 +104,7 @@ export const useLeadFinderStream = () => {
     traceUrl: null,
     searchId: null,
     hasActiveSearch: false,
+    websiteScrapingProgress: null,
   });
 
   // Simplified initial load - only run once on mount
@@ -447,6 +455,7 @@ export const useLeadFinderStream = () => {
       traceUrl: null,
       searchId,
       hasActiveSearch: true,
+      websiteScrapingProgress: null,
     });
 
     // Save initial active search state
@@ -623,11 +632,28 @@ export const useLeadFinderStream = () => {
                     leads: prev.leads.map(l => ({ ...l, _justUpdated: false }))
                   }));
                 }, 2000);
+              } else if (event.type === 'website-scraping') {
+                // PHASE 4: Website scraping progress
+                setState(prev => ({
+                  ...prev,
+                  currentStatus: event.message,
+                  progress: event.progress || prev.progress,
+                  websiteScrapingProgress: event.status === 'started' ? {
+                    total: 0,
+                    completed: 0,
+                    currentCompany: '',
+                  } : event.status === 'complete' ? null : {
+                    total: event.total || 0,
+                    completed: event.completed || 0,
+                    currentCompany: event.company || '',
+                  },
+                }));
               } else if (event.type === 'enrichment-status') {
                 // PHASE 2: Update status with enrichment progress
                 setState(prev => ({
                   ...prev,
                   currentStatus: event.message,
+                  websiteScrapingProgress: null, // Clear scraping progress when enrichment starts
                 }));
               } else if (event.type === 'contact-status') {
                 // PHASE 3: Update status with contact finding progress
@@ -844,6 +870,7 @@ export const useLeadFinderStream = () => {
       traceUrl: null,
       searchId: null,
       hasActiveSearch: false,
+      websiteScrapingProgress: null,
     });
   };
 

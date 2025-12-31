@@ -591,8 +591,16 @@ export default function LeadFinder() {
           <div className="flex items-start gap-3">
             <Loader2 className="h-4 w-4 animate-spin text-primary flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-medium mb-1">Finding Leads in Background</div>
+              <div className="text-xs font-medium mb-1">
+                {streamingSearch.websiteScrapingProgress ? 'Scraping Websites' : 'Finding Leads in Background'}
+              </div>
               <div className="text-xs text-muted-foreground truncate">{streamingSearch.currentStatus}</div>
+              {streamingSearch.websiteScrapingProgress && streamingSearch.websiteScrapingProgress.total > 0 && (
+                <div className="text-[10px] text-muted-foreground mt-1">
+                  <Globe className="h-3 w-3 inline mr-1" />
+                  {streamingSearch.websiteScrapingProgress.completed}/{streamingSearch.websiteScrapingProgress.total} websites
+                </div>
+              )}
               <Progress value={streamingSearch.progress} className="h-1 mt-2" />
             </div>
           </div>
