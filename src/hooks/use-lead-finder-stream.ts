@@ -27,6 +27,7 @@ interface Lead {
   dataCompleteness?: number;
   enrichmentTier?: 'basic' | 'deep';
   contactCount?: number;
+  source?: 'exa' | 'serpapi' | 'google_maps' | 'apify';
   _justUpdated?: boolean; // Internal flag for UI animations
 }
 
