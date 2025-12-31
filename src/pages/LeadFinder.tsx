@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy, StopCircle, X, AlertCircle, Clock } from "lucide-react";
+import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, Phone, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy, StopCircle, X, AlertCircle, Clock, Linkedin, Facebook, Twitter, Instagram, Youtube } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { exportCompaniesToCSV } from "@/lib/utils/export";
@@ -1181,11 +1181,45 @@ export default function LeadFinder() {
                                 {company.qualityScore !== undefined && <QualityScoreBadge score={company.qualityScore} />}
                               </div>
                               {company.qualityScore !== undefined && <QualityStars score={company.qualityScore} />}
-                              {company.website && <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono" onClick={e => e.stopPropagation()}>
-                                  <Globe className="h-3 w-3" />
-                                  {company.website}
-                                  <ExternalLink className="h-2.5 w-2.5" />
-                                </a>}
+                              {/* Website, Email, Phone row */}
+                              <div className="flex flex-wrap items-center gap-3">
+                                {company.website && <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono" onClick={e => e.stopPropagation()}>
+                                    <Globe className="h-3 w-3" />
+                                    {company.website.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}
+                                    <ExternalLink className="h-2.5 w-2.5" />
+                                  </a>}
+                                {company.generalEmail && <a href={`mailto:${company.generalEmail}`} className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                    <Mail className="h-3 w-3" />
+                                    {company.generalEmail}
+                                  </a>}
+                                {company.companyPhone && <a href={`tel:${company.companyPhone}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                    <Phone className="h-3 w-3" />
+                                    {company.companyPhone}
+                                  </a>}
+                              </div>
+                              {/* Social Media Links */}
+                              {company.socialProfiles && Object.keys(company.socialProfiles).some(k => company.socialProfiles[k]) && (
+                                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                  {company.socialProfiles.linkedin && <a href={company.socialProfiles.linkedin} target="_blank" rel="noopener noreferrer" className="p-1 rounded hover:bg-muted transition-colors" onClick={e => e.stopPropagation()} title="LinkedIn">
+                                      <Linkedin className="h-3.5 w-3.5 text-[#0A66C2]" />
+                                    </a>}
+                                  {company.socialProfiles.twitter && <a href={company.socialProfiles.twitter} target="_blank" rel="noopener noreferrer" className="p-1 rounded hover:bg-muted transition-colors" onClick={e => e.stopPropagation()} title="Twitter/X">
+                                      <Twitter className="h-3.5 w-3.5 text-foreground" />
+                                    </a>}
+                                  {company.socialProfiles.facebook && <a href={company.socialProfiles.facebook} target="_blank" rel="noopener noreferrer" className="p-1 rounded hover:bg-muted transition-colors" onClick={e => e.stopPropagation()} title="Facebook">
+                                      <Facebook className="h-3.5 w-3.5 text-[#1877F2]" />
+                                    </a>}
+                                  {company.socialProfiles.instagram && <a href={company.socialProfiles.instagram} target="_blank" rel="noopener noreferrer" className="p-1 rounded hover:bg-muted transition-colors" onClick={e => e.stopPropagation()} title="Instagram">
+                                      <Instagram className="h-3.5 w-3.5 text-[#E4405F]" />
+                                    </a>}
+                                  {company.socialProfiles.youtube && <a href={company.socialProfiles.youtube} target="_blank" rel="noopener noreferrer" className="p-1 rounded hover:bg-muted transition-colors" onClick={e => e.stopPropagation()} title="YouTube">
+                                      <Youtube className="h-3.5 w-3.5 text-[#FF0000]" />
+                                    </a>}
+                                  {company.socialProfiles.tiktok && <a href={company.socialProfiles.tiktok} target="_blank" rel="noopener noreferrer" className="p-1 rounded hover:bg-muted transition-colors text-xs" onClick={e => e.stopPropagation()} title="TikTok">
+                                      <span className="font-bold">TT</span>
+                                    </a>}
+                                </div>
+                              )}
                             </div>
                             {/* Enrichment/Contact completion badges */}
                             {company.wasEnriched && <Badge variant="outline" className="shrink-0 h-5 text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
@@ -1193,6 +1227,14 @@ export default function LeadFinder() {
                               </Badge>}
                             {company.contactCount > 0 && <Badge variant="outline" className="shrink-0 h-5 text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
                                 {company.contactCount} contact{company.contactCount > 1 ? 's' : ''}
+                              </Badge>}
+                            {company.generalEmail && <Badge variant="outline" className="shrink-0 h-5 text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                                <Mail className="h-3 w-3 mr-1" />
+                                Email
+                              </Badge>}
+                            {company.companyPhone && <Badge variant="outline" className="shrink-0 h-5 text-xs bg-blue-500/10 text-blue-600 border-blue-500/20">
+                                <Phone className="h-3 w-3 mr-1" />
+                                Phone
                               </Badge>}
                           </div>
                         </div>
