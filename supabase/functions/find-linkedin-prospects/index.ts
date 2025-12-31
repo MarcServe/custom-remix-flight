@@ -94,7 +94,24 @@ Return ONLY the JSON array:`;
     });
 
     if (!aiProviderResponse.ok) {
-      throw new Error(`AI Provider error: ${aiProviderResponse.statusText}`);
+      const errorBody = await aiProviderResponse.text();
+      console.error("AI Provider error response:", aiProviderResponse.status, errorBody);
+      
+      // Surface payment/rate limit errors with user-friendly messages
+      if (aiProviderResponse.status === 402) {
+        return new Response(
+          JSON.stringify({ error: "Lovable AI credits exhausted. Please add credits to your workspace at Settings → Workspace → Usage." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (aiProviderResponse.status === 429) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded. Please try again in a few moments." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      throw new Error(`AI Provider error: ${aiProviderResponse.status} - ${errorBody}`);
     }
 
     const aiResult = await aiProviderResponse.json();
