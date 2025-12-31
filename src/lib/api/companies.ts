@@ -20,11 +20,12 @@ export interface Company {
   company_phone?: string;
   general_email?: string;
   social_profiles?: {
+    linkedin?: string;
     twitter?: string;
     facebook?: string;
     instagram?: string;
     youtube?: string;
-    linkedin?: string;
+    tiktok?: string;
   };
   key_executives?: Array<{
     name: string;

@@ -27,10 +27,12 @@ export interface Lead {
   companyPhone?: string;
   generalEmail?: string;
   socialProfiles?: {
+    linkedin?: string;
     twitter?: string;
     facebook?: string;
     instagram?: string;
     youtube?: string;
+    tiktok?: string;
   };
   keyExecutives?: Array<{
     name: string;
