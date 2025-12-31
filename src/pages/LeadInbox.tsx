@@ -22,12 +22,9 @@ import {
   Building2, 
   Globe, 
   Mail, 
-  Phone, 
-  Linkedin, 
   Settings, 
   Zap,
   Clock,
-  Star,
   Users,
   RefreshCw,
   Loader2,
@@ -35,10 +32,13 @@ import {
   Brain,
   Send,
   Webhook,
-  TrendingUp
+  BarChart3,
+  Target
 } from "lucide-react";
 import { QualityScoreBadge } from "@/components/lead-finder/QualityScoreBadge";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
+import { LeadAnalyticsDashboard } from "@/components/lead-inbox/LeadAnalyticsDashboard";
+import { PersonaManager } from "@/components/lead-inbox/PersonaManager";
 
 type LeadStatus = 'pending' | 'approved' | 'rejected' | 'auto_approved';
 
@@ -401,6 +401,14 @@ export default function LeadInbox() {
             {(statusCounts?.pending || 0) > 0 && (
               <Badge variant="secondary" className="ml-1">{statusCounts?.pending}</Badge>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="analytics" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Analytics
+          </TabsTrigger>
+          <TabsTrigger value="personas" className="gap-2">
+            <Target className="h-4 w-4" />
+            Personas
           </TabsTrigger>
           <TabsTrigger value="settings" className="gap-2">
             <Settings className="h-4 w-4" />
@@ -891,7 +899,7 @@ export default function LeadInbox() {
               {settings && (
                 <div className="mt-6 p-4 bg-muted rounded-lg">
                   <h4 className="font-medium mb-2 flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4" />
+                    <Zap className="h-4 w-4" />
                     Discovery Status
                   </h4>
                   <div className="text-sm text-muted-foreground space-y-1">
@@ -902,6 +910,16 @@ export default function LeadInbox() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Analytics Tab */}
+        <TabsContent value="analytics">
+          <LeadAnalyticsDashboard />
+        </TabsContent>
+
+        {/* Personas Tab */}
+        <TabsContent value="personas">
+          <PersonaManager />
         </TabsContent>
       </Tabs>
 

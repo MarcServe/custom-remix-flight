@@ -495,6 +495,7 @@ export type Database = {
           geography: string | null
           id: string
           industry: string | null
+          persona_id: string | null
           quality_score: number | null
           reviewed_at: string | null
           source: string | null
@@ -515,6 +516,7 @@ export type Database = {
           geography?: string | null
           id?: string
           industry?: string | null
+          persona_id?: string | null
           quality_score?: number | null
           reviewed_at?: string | null
           source?: string | null
@@ -535,6 +537,7 @@ export type Database = {
           geography?: string | null
           id?: string
           industry?: string | null
+          persona_id?: string | null
           quality_score?: number | null
           reviewed_at?: string | null
           source?: string | null
@@ -542,7 +545,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "autonomous_leads_persona_id_fkey"
+            columns: ["persona_id"]
+            isOneToOne: false
+            referencedRelation: "discovery_personas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       business_profiles: {
         Row: {
@@ -1241,6 +1252,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      discovery_personas: {
+        Row: {
+          auto_enroll_sequence_id: string | null
+          conversion_rate: number | null
+          created_at: string
+          custom_search_query: string | null
+          description: string | null
+          exclude_industries: string[] | null
+          exclude_keywords: string[] | null
+          id: string
+          is_active: boolean | null
+          learned_company_sizes: string[] | null
+          learned_geographies: string[] | null
+          learned_industries: string[] | null
+          name: string
+          priority: number | null
+          target_company_sizes: string[] | null
+          target_geographies: string[] | null
+          target_industries: string[] | null
+          target_keywords: string[] | null
+          total_approved: number | null
+          total_leads_found: number | null
+          total_rejected: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_enroll_sequence_id?: string | null
+          conversion_rate?: number | null
+          created_at?: string
+          custom_search_query?: string | null
+          description?: string | null
+          exclude_industries?: string[] | null
+          exclude_keywords?: string[] | null
+          id?: string
+          is_active?: boolean | null
+          learned_company_sizes?: string[] | null
+          learned_geographies?: string[] | null
+          learned_industries?: string[] | null
+          name: string
+          priority?: number | null
+          target_company_sizes?: string[] | null
+          target_geographies?: string[] | null
+          target_industries?: string[] | null
+          target_keywords?: string[] | null
+          total_approved?: number | null
+          total_leads_found?: number | null
+          total_rejected?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_enroll_sequence_id?: string | null
+          conversion_rate?: number | null
+          created_at?: string
+          custom_search_query?: string | null
+          description?: string | null
+          exclude_industries?: string[] | null
+          exclude_keywords?: string[] | null
+          id?: string
+          is_active?: boolean | null
+          learned_company_sizes?: string[] | null
+          learned_geographies?: string[] | null
+          learned_industries?: string[] | null
+          name?: string
+          priority?: number | null
+          target_company_sizes?: string[] | null
+          target_geographies?: string[] | null
+          target_industries?: string[] | null
+          target_keywords?: string[] | null
+          total_approved?: number | null
+          total_leads_found?: number | null
+          total_rejected?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       email_ab_test_assignments: {
         Row: {
@@ -2010,40 +2099,64 @@ export type Database = {
         Row: {
           action: string
           autonomous_lead_id: string | null
+          company_id: string | null
+          company_sequence_id: string | null
           company_size: string | null
           created_at: string
+          email_bounced: boolean | null
+          email_clicked: boolean | null
+          email_opened: boolean | null
+          email_replied: boolean | null
+          engagement_score: number | null
           geography: string | null
           id: string
           industry: string | null
           quality_score: number | null
           source: string | null
           time_to_decision_seconds: number | null
+          updated_at: string | null
           user_id: string
         }
         Insert: {
           action: string
           autonomous_lead_id?: string | null
+          company_id?: string | null
+          company_sequence_id?: string | null
           company_size?: string | null
           created_at?: string
+          email_bounced?: boolean | null
+          email_clicked?: boolean | null
+          email_opened?: boolean | null
+          email_replied?: boolean | null
+          engagement_score?: number | null
           geography?: string | null
           id?: string
           industry?: string | null
           quality_score?: number | null
           source?: string | null
           time_to_decision_seconds?: number | null
+          updated_at?: string | null
           user_id: string
         }
         Update: {
           action?: string
           autonomous_lead_id?: string | null
+          company_id?: string | null
+          company_sequence_id?: string | null
           company_size?: string | null
           created_at?: string
+          email_bounced?: boolean | null
+          email_clicked?: boolean | null
+          email_opened?: boolean | null
+          email_replied?: boolean | null
+          engagement_score?: number | null
           geography?: string | null
           id?: string
           industry?: string | null
           quality_score?: number | null
           source?: string | null
           time_to_decision_seconds?: number | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: [
@@ -2052,6 +2165,20 @@ export type Database = {
             columns: ["autonomous_lead_id"]
             isOneToOne: false
             referencedRelation: "autonomous_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_feedback_analytics_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_feedback_analytics_company_sequence_id_fkey"
+            columns: ["company_sequence_id"]
+            isOneToOne: false
+            referencedRelation: "company_sequences"
             referencedColumns: ["id"]
           },
         ]
