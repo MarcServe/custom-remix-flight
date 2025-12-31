@@ -741,6 +741,60 @@ interface ScrapedWebsiteData {
   bestPhone: string | null;
 }
 
+// PHASE 5: Rotating User-Agent headers to avoid blocks
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0',
+];
+
+// PHASE 5: Get random User-Agent
+function getRandomUserAgent(): string {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
+// PHASE 5: Fetch with retry logic
+async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 1): Promise<Response | null> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // PHASE 5: Reduced to 3s timeout
+      
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          ...options.headers,
+          'User-Agent': getRandomUserAgent(), // PHASE 5: Rotate User-Agent on each attempt
+        },
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        return response;
+      }
+      
+      // Log specific failure reason
+      console.log(`Fetch failed for ${url}: HTTP ${response.status} ${response.statusText} (attempt ${attempt + 1}/${maxRetries + 1})`);
+      
+    } catch (error: any) {
+      const errorMessage = error.name === 'AbortError' ? 'timeout' : error.message || 'unknown error';
+      console.log(`Fetch error for ${url}: ${errorMessage} (attempt ${attempt + 1}/${maxRetries + 1})`);
+      
+      // Wait before retry (only if we have retries left)
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+  }
+  
+  return null;
+}
+
 // Main function: Scrape a website for contact information
 async function scrapeWebsiteForContacts(websiteUrl: string): Promise<ScrapedWebsiteData | null> {
   if (!websiteUrl) return null;
@@ -770,34 +824,25 @@ async function scrapeWebsiteForContacts(websiteUrl: string): Promise<ScrapedWebs
   const fetchOptions = {
     method: 'GET',
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.5',
+      'Accept-Encoding': 'gzip, deflate',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
     },
   };
   
-  // Fetch main page and contact pages with timeout
+  // PHASE 5: Fetch pages with retry logic and rotating User-Agent
   for (const pageUrl of pagesToFetch) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-      
-      const response = await fetch(pageUrl, {
-        ...fetchOptions,
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
+    const response = await fetchWithRetry(pageUrl, fetchOptions, 1); // 1 retry
+    
+    if (response) {
+      try {
         const html = await response.text();
         combinedHtml.push(html);
         console.log(`Scraped ${pageUrl} successfully (${html.length} chars)`);
-      }
-    } catch (error) {
-      // Silently skip failed pages (404, timeout, blocked, etc.)
-      if (pageUrl === url) {
-        console.log(`Failed to scrape main page: ${url}`);
+      } catch (error) {
+        console.log(`Failed to read response body for ${pageUrl}`);
       }
     }
     
@@ -806,7 +851,7 @@ async function scrapeWebsiteForContacts(websiteUrl: string): Promise<ScrapedWebs
   }
   
   if (combinedHtml.length === 0) {
-    console.log(`No pages scraped for ${websiteUrl}`);
+    console.log(`No pages scraped for ${websiteUrl} - website may be blocking requests`);
     return null;
   }
   
