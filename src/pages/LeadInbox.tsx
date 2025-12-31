@@ -31,7 +31,11 @@ import {
   Users,
   RefreshCw,
   Loader2,
-  Trash2
+  Trash2,
+  Brain,
+  Send,
+  Webhook,
+  TrendingUp
 } from "lucide-react";
 import { QualityScoreBadge } from "@/components/lead-finder/QualityScoreBadge";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
@@ -126,9 +130,65 @@ export default function LeadInbox() {
     },
   });
 
+  // Fetch sequences for auto-enroll dropdown
+  const { data: sequences } = useQuery({
+    queryKey: ['email-sequences'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('email_sequences')
+        .select('id, name')
+        .eq('created_by', user?.id)
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  // Helper to track feedback
+  const trackFeedback = async (lead: any, action: string, startTime: number) => {
+    const timeToDecision = Math.round((Date.now() - startTime) / 1000);
+    
+    // Insert feedback analytics
+    await supabase.from('lead_feedback_analytics').insert({
+      user_id: user?.id,
+      autonomous_lead_id: lead.id,
+      action,
+      quality_score: lead.quality_score,
+      industry: lead.industry,
+      geography: lead.geography,
+      company_size: lead.company_size,
+      source: lead.source,
+      time_to_decision_seconds: timeToDecision,
+    });
+
+    // Update learned preferences via RPC
+    await supabase.rpc('update_discovery_learning', {
+      p_user_id: user?.id,
+      p_action: action,
+      p_industry: lead.industry,
+      p_geography: lead.geography,
+      p_company_size: lead.company_size,
+    });
+  };
+
+  // Helper to enroll in sequence
+  const enrollInSequence = async (companyId: string, sequenceId: string) => {
+    const { error } = await supabase.from('company_sequences').insert({
+      company_id: companyId,
+      sequence_id: sequenceId,
+      status: 'active',
+      current_step: 0,
+      auto_respond_enabled: true,
+    });
+    if (error) console.error('Error enrolling in sequence:', error);
+  };
+
   // Approve lead mutation
   const approveLeadMutation = useMutation({
     mutationFn: async (leadIds: string[]) => {
+      const startTime = Date.now();
+      
       for (const leadId of leadIds) {
         // Get the lead data
         const { data: lead } = await supabase
@@ -195,12 +255,21 @@ export default function LeadInbox() {
             company_id: company?.id,
           })
           .eq('id', leadId);
+
+        // Track feedback for AI learning
+        await trackFeedback(lead, 'approved', startTime);
+
+        // Auto-enroll in sequence if enabled
+        if (settings?.auto_enroll_enabled && settings?.auto_enroll_sequence_id && company?.id) {
+          await enrollInSequence(company.id, settings.auto_enroll_sequence_id);
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['autonomous-leads'] });
       queryClient.invalidateQueries({ queryKey: ['autonomous-leads-counts'] });
       queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['autonomous-discovery-settings'] });
       setSelectedLeads(new Set());
       toast({ title: 'Leads approved', description: 'Leads have been added to your CRM.' });
     },
@@ -212,11 +281,24 @@ export default function LeadInbox() {
   // Reject lead mutation
   const rejectLeadMutation = useMutation({
     mutationFn: async (leadIds: string[]) => {
+      const startTime = Date.now();
+      
+      // Get leads for feedback tracking
+      const { data: leadsToReject } = await supabase
+        .from('autonomous_leads')
+        .select('*')
+        .in('id', leadIds);
+      
       const { error } = await supabase
         .from('autonomous_leads')
         .update({ status: 'rejected', reviewed_at: new Date().toISOString() })
         .in('id', leadIds);
       if (error) throw error;
+
+      // Track feedback for each rejected lead
+      for (const lead of (leadsToReject || [])) {
+        await trackFeedback(lead, 'rejected', startTime);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['autonomous-leads'] });
@@ -632,6 +714,156 @@ export default function LeadInbox() {
 
               <Separator />
 
+              {/* Auto-Outreach Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Send className="h-4 w-4" />
+                  <Label className="font-medium">Auto-Outreach</Label>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="auto_enroll_enabled" className="text-sm">Auto-enroll approved leads in sequence</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically start email sequences for approved leads
+                    </p>
+                  </div>
+                  <Switch
+                    id="auto_enroll_enabled"
+                    checked={localSettings?.auto_enroll_enabled || false}
+                    onCheckedChange={(checked) => handleSettingsChange('auto_enroll_enabled', checked)}
+                  />
+                </div>
+
+                {localSettings?.auto_enroll_enabled && (
+                  <div className="space-y-2 pl-4 border-l-2 border-muted">
+                    <Label>Select Sequence</Label>
+                    <Select
+                      value={localSettings?.auto_enroll_sequence_id || ''}
+                      onValueChange={(value) => handleSettingsChange('auto_enroll_sequence_id', value)}
+                    >
+                      <SelectTrigger className="w-64">
+                        <SelectValue placeholder="Choose a sequence..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sequences?.map((seq) => (
+                          <SelectItem key={seq.id} value={seq.id}>
+                            {seq.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* AI Learning Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Brain className="h-4 w-4" />
+                  <Label className="font-medium">AI Learning</Label>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="feedback_learning_enabled" className="text-sm">Learn from my decisions</Label>
+                    <p className="text-xs text-muted-foreground">
+                      AI will learn from which leads you approve/reject to improve future discovery
+                    </p>
+                  </div>
+                  <Switch
+                    id="feedback_learning_enabled"
+                    checked={localSettings?.feedback_learning_enabled ?? true}
+                    onCheckedChange={(checked) => handleSettingsChange('feedback_learning_enabled', checked)}
+                  />
+                </div>
+
+                {settings && (settings.total_approved > 0 || settings.total_rejected > 0) && (
+                  <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1">
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        <span>{settings.total_approved || 0} approved</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <XCircle className="h-4 w-4 text-red-600" />
+                        <span>{settings.total_rejected || 0} rejected</span>
+                      </div>
+                    </div>
+                    {settings.learned_industries?.length > 0 && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Preferred industries: {settings.learned_industries.slice(0, 3).join(', ')}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Webhook Notifications */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Webhook className="h-4 w-4" />
+                  <Label className="font-medium">Webhook Notifications</Label>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="webhook_enabled" className="text-sm">Send webhook notifications</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Get notified via Slack, Discord, or custom webhook
+                    </p>
+                  </div>
+                  <Switch
+                    id="webhook_enabled"
+                    checked={localSettings?.webhook_enabled || false}
+                    onCheckedChange={(checked) => handleSettingsChange('webhook_enabled', checked)}
+                  />
+                </div>
+
+                {localSettings?.webhook_enabled && (
+                  <div className="space-y-3 pl-4 border-l-2 border-muted">
+                    <div className="space-y-2">
+                      <Label htmlFor="webhook_url">Webhook URL</Label>
+                      <Input
+                        id="webhook_url"
+                        placeholder="https://hooks.slack.com/... or Discord webhook URL"
+                        value={localSettings?.webhook_url || ''}
+                        onChange={(e) => handleSettingsChange('webhook_url', e.target.value)}
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="notify_on_auto_approve"
+                        checked={localSettings?.notify_on_auto_approve ?? true}
+                        onCheckedChange={(checked) => handleSettingsChange('notify_on_auto_approve', checked)}
+                      />
+                      <Label htmlFor="notify_on_auto_approve" className="text-sm">
+                        Notify on auto-approved leads
+                      </Label>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Minimum quality score for notifications: {localSettings?.notify_min_quality_score || 70}</Label>
+                      <Slider
+                        value={[localSettings?.notify_min_quality_score || 70]}
+                        onValueChange={([value]) => handleSettingsChange('notify_min_quality_score', value)}
+                        min={0}
+                        max={100}
+                        step={10}
+                        className="w-64"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
               {/* Custom Search Query */}
               <div className="space-y-2">
                 <Label htmlFor="custom_search_query">Custom Search Query (optional)</Label>
@@ -658,7 +890,10 @@ export default function LeadInbox() {
               {/* Status Info */}
               {settings && (
                 <div className="mt-6 p-4 bg-muted rounded-lg">
-                  <h4 className="font-medium mb-2">Discovery Status</h4>
+                  <h4 className="font-medium mb-2 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4" />
+                    Discovery Status
+                  </h4>
                   <div className="text-sm text-muted-foreground space-y-1">
                     <p>Last run: {settings.last_run_at ? new Date(settings.last_run_at).toLocaleString() : 'Never'}</p>
                     <p>Next scheduled: {settings.next_run_at ? new Date(settings.next_run_at).toLocaleString() : 'Not scheduled'}</p>
