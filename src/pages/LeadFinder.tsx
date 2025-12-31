@@ -30,7 +30,7 @@ import { industryTaxonomy, getIndustryCategories, getIndustrySubcategories, form
 import { QualityScoreBadge } from "@/components/lead-finder/QualityScoreBadge";
 import { QualityStars } from "@/components/lead-finder/QualityStars";
 import { DataCompletenessBar } from "@/components/lead-finder/DataCompletenessBar";
-import { SourceBadges } from "@/components/lead-finder/SourceBadges";
+import { SourceBadges, SourcesSummary } from "@/components/lead-finder/SourceBadges";
 export default function LeadFinder() {
   const [size, setSize] = useState("");
   const [geography, setGeography] = useState("");
@@ -1019,6 +1019,9 @@ export default function LeadFinder() {
                     </Badge>}
                 </div>
                 
+                {/* Sources Summary */}
+                <SourcesSummary leads={filteredAndSortedResults.leads} />
+                
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   {filteredAndSortedResults.dryRun && filteredAndSortedResults.leads.length > 0 && <div className="flex items-center gap-2">
                       <Checkbox id="select-all" checked={selectedCompanyIndices.size === filteredAndSortedResults.leads.length && filteredAndSortedResults.leads.length > 0} onCheckedChange={toggleSelectAll} />
@@ -1188,7 +1191,7 @@ export default function LeadFinder() {
                           </div>}
 
                         {/* Source Badges */}
-                        <SourceBadges wasEnriched={company.wasEnriched} hasVerifiedContacts={company.contacts?.some((c: any) => c.emailVerified)} hasPatternContacts={company.contacts?.some((c: any) => !c.emailVerified)} />
+                        <SourceBadges source={company.source} wasEnriched={company.wasEnriched} hasVerifiedContacts={company.contacts?.some((c: any) => c.emailVerified)} hasPatternContacts={company.contacts?.some((c: any) => !c.emailVerified)} />
 
                         {/* Expandable Contacts List */}
                         {company.contacts && company.contacts.length > 0 && <ContactsList contacts={company.contacts.map((c: any) => ({
