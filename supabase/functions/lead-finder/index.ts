@@ -63,26 +63,29 @@ const calculateDataCompleteness = (lead: any) => {
 const calculateFinalQualityScore = (lead: any) => {
   let score = 0;
   
-  // Core data (max 40)
+  // Core data (max 35)
   if (lead.website) score += 15;
-  if (lead.linkedinUrl) score += 15;
+  if (lead.linkedinUrl) score += 10;
   if (lead.description && lead.description.length > 50) score += 10;
   
-  // Contact info (max 40)
+  // Direct contact info - HIGHLY VALUABLE (max 30)
+  if (lead.companyPhone) score += 15; // Increased - direct phone is valuable
+  if (lead.generalEmail) score += 10; // Increased - direct email is valuable
+  if (lead.address) score += 5; // Physical address
+  
+  // Contacts (max 20)
   if (lead.contacts && lead.contacts.length > 0) {
-    score += 20;
+    score += 10;
     if (lead.contacts.some((c: any) => c.emailVerified)) score += 5;
     if (lead.contacts.length > 1) score += 5;
   }
-  if (lead.generalEmail) score += 5;
-  if (lead.companyPhone) score += 5;
   
-  // Enrichment (max 20)
-  if (lead.keyExecutives && lead.keyExecutives.length > 0) score += 5;
-  if (lead.recentNews) score += 3;
-  if (lead.fundingInfo) score += 3;
+  // Enrichment (max 15)
+  if (lead.keyExecutives && lead.keyExecutives.length > 0) score += 3;
+  if (lead.recentNews) score += 2;
+  if (lead.fundingInfo) score += 2;
   if (lead.socialProfiles && Object.keys(lead.socialProfiles).length > 0) score += 3;
-  if (lead.products) score += 3;
+  if (lead.products) score += 2;
   if (lead.technologies) score += 3;
   
   return Math.min(score, 100);
@@ -585,7 +588,7 @@ async function searchWithApify(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         searchStringsArray: [searchQuery],
-        maxCrawledPlacesPerSearch: 20,
+        maxCrawledPlacesPerSearch: 50, // Increased from 20 for more results
         language: "en",
         maxImages: 0,
         maxReviews: 0,
@@ -656,7 +659,7 @@ async function searchWithSerpAPI(
     googleSearchUrl.searchParams.set("api_key", SERPAPI_API_KEY);
     googleSearchUrl.searchParams.set("engine", "google");
     googleSearchUrl.searchParams.set("q", searchQuery);
-    googleSearchUrl.searchParams.set("num", "20");
+    googleSearchUrl.searchParams.set("num", "50"); // Increased from 20
 
     const googleResponse = await fetch(googleSearchUrl.toString());
     if (googleResponse.ok) {
@@ -943,7 +946,12 @@ REQUIRED FIELDS (must attempt to extract):
 - size: "${size}"
 - geography: "${geography}"
 - linkedinUrl: LinkedIn company profile URL
-- source: PRESERVE from input data - one of "exa", "serpapi", or "google_maps"
+- source: PRESERVE from input data - one of "exa", "serpapi", "google_maps", or "apify"
+
+CRITICAL - PRESERVE CONTACT DATA FROM INPUT:
+- companyPhone: MUST preserve phone number from input data if present (check "phone" field in input)
+- generalEmail: Preserve email if found in input or content
+- address: MUST preserve address from input data if present
 
 MATCH INTELLIGENCE (REQUIRED - explain why each company was chosen):
 - matchReason: 1-3 sentences explaining WHY this company matches the search criteria. Reference specific evidence from the content that indicates a match for industry "${industryContext}", geography "${geography}"${customSearchText ? `, and requirements "${customSearchText}"` : ''}. Be specific and cite evidence.
@@ -958,8 +966,6 @@ HIGHLY VALUABLE FIELDS (extract if available in content):
 - products: Main products or services offered
 - recentNews: Recent company news, launches, or announcements
 - technologies: Tech stack or technologies used (as array)
-- companyPhone: Main company phone number (or use phone from Google Maps data if available)
-- generalEmail: General contact email
 - keyExecutives: Array of key executives with name and title
 - socialProfiles: IMPORTANT - Extract ALL social media URLs as object with these 6 platforms:
   * linkedin: Company LinkedIn page URL (linkedin.com/company/...)
@@ -970,13 +976,14 @@ HIGHLY VALUABLE FIELDS (extract if available in content):
   * tiktok: TikTok profile URL (tiktok.com/@...)
   Search website footer, about page, contact page for social icons and links.
 
-GOOGLE MAPS SPECIFIC FIELDS (preserve if source is google_maps):
-- address: Business address from Google Maps
-- googleRating: Rating out of 5 from Google
-- googleReviewCount: Number of Google reviews
+GOOGLE MAPS / APIFY SPECIFIC FIELDS (MUST preserve from input if source is google_maps or apify):
+- address: Business address - COPY DIRECTLY from input "address" field
+- companyPhone: Phone number - COPY DIRECTLY from input "phone" field  
+- googleRating: Rating out of 5 from Google (input "rating" field)
+- googleReviewCount: Number of Google reviews (input "reviews" field)
 - googleMapsUrl: Direct Google Maps URL
-- placeId: Google Place ID
-- businessHours: Operating hours
+- placeId: Google Place ID (input "place_id" field)
+- businessHours: Operating hours (input "hours" field)
 
 DATA QUALITY TIPS:
 - For descriptions, aim for 100+ characters when content allows
@@ -1033,6 +1040,42 @@ ${JSON.stringify(batch, null, 2)}`;
           } catch {
             continue;
           }
+
+          // POST-PROCESSING: Merge back original data from SerpAPI/Apify that AI might have missed
+          const originalBatch = batches[batchIndex];
+          batchLeads.forEach(lead => {
+            // Find matching original result by name or URL
+            const originalResult = originalBatch.find((orig: any) => {
+              const origName = (orig.title || '').toLowerCase().trim();
+              const leadName = (lead.name || '').toLowerCase().trim();
+              const origUrl = (orig.url || '').toLowerCase();
+              const leadUrl = (lead.website || '').toLowerCase();
+              return origName === leadName || 
+                     (origUrl && leadUrl && (origUrl.includes(leadUrl) || leadUrl.includes(origUrl)));
+            });
+
+            if (originalResult) {
+              // Preserve phone if AI missed it
+              if (!lead.companyPhone && originalResult.phone) {
+                lead.companyPhone = originalResult.phone;
+              }
+              // Preserve address if AI missed it
+              if (!lead.address && originalResult.address) {
+                lead.address = originalResult.address;
+              }
+              // Preserve Google Maps data
+              if (originalResult.source === 'google_maps' || originalResult.source === 'apify') {
+                if (!lead.googleRating && originalResult.rating) lead.googleRating = originalResult.rating;
+                if (!lead.googleReviewCount && originalResult.reviews) lead.googleReviewCount = originalResult.reviews;
+                if (!lead.placeId && originalResult.place_id) lead.placeId = originalResult.place_id;
+                if (!lead.businessHours && originalResult.hours) lead.businessHours = originalResult.hours;
+              }
+              // Ensure source is preserved
+              if (!lead.source && originalResult.source) {
+                lead.source = originalResult.source;
+              }
+            }
+          });
 
           if (batchIndex === 0) {
             extractionProvider = aiResult.provider || provider || 'lovable';
