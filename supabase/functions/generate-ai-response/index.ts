@@ -2,7 +2,17 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+
+// Map Gemini models to OpenAI equivalents
+function mapModelToOpenAI(model: string): string {
+  const modelMap: Record<string, string> = {
+    'google/gemini-2.5-flash': 'gpt-4o-mini',
+    'google/gemini-2.5-flash-lite': 'gpt-4o-mini',
+    'google/gemini-2.5-pro': 'gpt-4o',
+  };
+  return modelMap[model] || model;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -25,8 +35,8 @@ serve(async (req) => {
 
     const { companySequenceId, inboundThreadId, autoSend = false } = await req.json();
 
-    if (!LOVABLE_API_KEY) {
-      throw new Error('AI is not configured. Please enable Lovable AI.');
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is not configured. Please add it in Supabase Edge Function Secrets.');
     }
 
     console.log('Generating AI response for sequence:', companySequenceId);
@@ -147,17 +157,22 @@ Return ONLY a JSON object with this structure:
   "body": "complete email body with signature"
 }`;
 
-    console.log('Calling AI to generate response...');
+    console.log('Calling OpenAI to generate response...');
     const startTime = Date.now();
 
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    // Map model to OpenAI
+    const requestedModel = businessProfile.ai_model || 'google/gemini-2.5-flash';
+    const model = mapModelToOpenAI(requestedModel);
+    console.log(`Using model: ${model} (mapped from ${requestedModel})`);
+
+    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: businessProfile.ai_model || 'google/gemini-2.5-flash',
+        model,
         messages: [
           { 
             role: 'system', 
@@ -188,7 +203,15 @@ Return ONLY a JSON object with this structure:
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error('AI API error:', errorText);
+      console.error('OpenAI API error:', aiResponse.status, errorText);
+      
+      if (aiResponse.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again later.');
+      }
+      if (aiResponse.status === 401 || aiResponse.status === 402) {
+        throw new Error('OpenAI API key invalid or billing issue.');
+      }
+      
       throw new Error('Failed to generate email with AI');
     }
 
@@ -211,7 +234,7 @@ Return ONLY a JSON object with this structure:
       .insert({
         user_id: user.id,
         company_sequence_id: companySequenceId,
-        ai_model: businessProfile.ai_model || 'google/gemini-2.5-flash',
+        ai_model: model,
         ai_temperature: businessProfile.ai_temperature || 0.7,
         response_time_ms: responseTime,
         token_count: tokenCount,

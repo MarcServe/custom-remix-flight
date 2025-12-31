@@ -3,7 +3,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
 
 interface PersonalizeRequest {
   sequenceId: string;
@@ -19,6 +19,10 @@ Deno.serve(async (req) => {
   }
 
   try {
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY not configured. Please add it in Supabase Edge Function Secrets.');
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { sequenceId, companyId, contactId, tone = 'professional' }: PersonalizeRequest = await req.json();
 
@@ -137,15 +141,15 @@ Deno.serve(async (req) => {
         businessProfile
       );
 
-      // Call Lovable AI
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      // Call OpenAI
+      const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
+          model: 'gpt-4o-mini',
           messages: [
             { role: 'system', content: 'You are an expert at personalizing cold outreach emails for B2B sales. You create highly relevant, researched emails that reference real company context.' },
             { role: 'user', content: personalizationPrompt }
@@ -156,6 +160,15 @@ Deno.serve(async (req) => {
 
       if (!aiResponse.ok) {
         const errorText = await aiResponse.text();
+        console.error('OpenAI API error:', aiResponse.status, errorText);
+        
+        if (aiResponse.status === 429) {
+          throw new Error('Rate limit exceeded. Please try again later.');
+        }
+        if (aiResponse.status === 401 || aiResponse.status === 402) {
+          throw new Error('OpenAI API key invalid or billing issue.');
+        }
+        
         throw new Error(`AI personalization failed: ${errorText}`);
       }
 
