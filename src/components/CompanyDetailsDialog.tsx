@@ -184,18 +184,27 @@ export function CompanyDetailsDialog({
     companyPhone: company.companyPhone || company.company_phone,
     generalEmail: company.generalEmail || company.general_email,
     // Consolidate LinkedIn into socialProfiles and merge all social profiles
-    socialProfiles: {
-      linkedin: company.linkedinUrl || company.linkedin_url || company.socialProfiles?.linkedin || company.social_profiles?.linkedin,
-      twitter: company.socialProfiles?.twitter || company.social_profiles?.twitter,
-      facebook: company.socialProfiles?.facebook || company.social_profiles?.facebook,
-      instagram: company.socialProfiles?.instagram || company.social_profiles?.instagram,
-      youtube: company.socialProfiles?.youtube || company.social_profiles?.youtube,
-      tiktok: company.socialProfiles?.tiktok || company.social_profiles?.tiktok,
-    },
+    socialProfiles: (() => {
+      const profiles = {
+        linkedin: company.linkedinUrl || company.linkedin_url || company.socialProfiles?.linkedin || company.social_profiles?.linkedin,
+        twitter: company.socialProfiles?.twitter || company.social_profiles?.twitter,
+        facebook: company.socialProfiles?.facebook || company.social_profiles?.facebook,
+        instagram: company.socialProfiles?.instagram || company.social_profiles?.instagram,
+        youtube: company.socialProfiles?.youtube || company.social_profiles?.youtube,
+        tiktok: company.socialProfiles?.tiktok || company.social_profiles?.tiktok,
+      };
+      // Filter out undefined/null/empty values for cleaner object
+      return Object.fromEntries(
+        Object.entries(profiles).filter(([_, v]) => v && v.trim && v.trim() !== '')
+      ) as typeof profiles;
+    })(),
     keyExecutives: company.keyExecutives || company.key_executives,
     revenue: company.revenue || (company.enrichment_data as any)?.revenue,
     foundingYear: company.foundingYear || company.founding_year || (company.enrichment_data as any)?.foundingYear,
   };
+
+  // Helper to check if social profiles have any truthy URLs
+  const hasSocialProfiles = Object.values(normalizedCompany.socialProfiles).some(url => url && url.toString().trim() !== '');
 
   const hasContacts = normalizedCompany.contacts && normalizedCompany.contacts.length > 0;
   const hasBeenSaved = !!company.id;
@@ -727,7 +736,7 @@ export function CompanyDetailsDialog({
             {/* Enriched Data Sections - Show if ANY enriched data exists */}
             {(normalizedCompany.wasEnriched || normalizedCompany.products || normalizedCompany.recentNews || normalizedCompany.fundingInfo || 
               normalizedCompany.technologies?.length > 0 || normalizedCompany.keyExecutives?.length > 0 || 
-              (normalizedCompany.socialProfiles && Object.keys(normalizedCompany.socialProfiles).length > 0)) && (
+              hasSocialProfiles) && (
               <>
                 <Separator />
                 
@@ -846,8 +855,8 @@ export function CompanyDetailsDialog({
                   </div>
                 )}
 
-                {/* Social Profiles */}
-                {normalizedCompany.socialProfiles && Object.keys(normalizedCompany.socialProfiles).length > 0 && (
+                {/* Social Profiles - Only show if there are actual URLs */}
+                {hasSocialProfiles && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center">
