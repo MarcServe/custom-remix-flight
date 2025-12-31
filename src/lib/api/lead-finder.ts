@@ -44,6 +44,14 @@ export interface Lead {
   dataCompleteness?: number;
   enrichmentTier?: 'basic' | 'deep';
   contactCount?: number;
+  // SerpAPI-specific fields
+  source?: 'exa' | 'serpapi' | 'google_maps';
+  googleRating?: number;
+  googleReviewCount?: number;
+  address?: string;
+  googleMapsUrl?: string;
+  placeId?: string;
+  businessHours?: string;
 }
 
 export interface LeadFinderRequest {
@@ -55,6 +63,7 @@ export interface LeadFinderRequest {
   provider?: 'lovable' | 'openai' | 'perplexity';
   model?: string;
   enrichWithPerplexity?: boolean;
+  useSerpApi?: boolean;
 }
 
 export interface LeadFinderResponse {
@@ -85,6 +94,11 @@ export interface LeadFinderResponse {
     withLinkedIn: number;
     highQuality: number;
     averageScore: number;
+  };
+  sources?: {
+    exa: number;
+    serpapi: number;
+    googleMaps: number;
   };
 }
 

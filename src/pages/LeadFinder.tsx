@@ -40,6 +40,7 @@ export default function LeadFinder() {
   const [customSearchText, setCustomSearchText] = useState("");
   const [dryRun, setDryRun] = useState(true);
   const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(true);
+  const [useSerpApi, setUseSerpApi] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedCompanyIndices, setSelectedCompanyIndices] = useState<Set<number>>(new Set());
@@ -56,6 +57,7 @@ export default function LeadFinder() {
   const [mustHaveLinkedIn, setMustHaveLinkedIn] = useState(false);
   const [mustHaveNews, setMustHaveNews] = useState(false);
   const [mustHaveFunding, setMustHaveFunding] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'exa' | 'serpapi' | 'google_maps'>('all');
 
   // Sorting state
   const [sortBy, setSortBy] = useState<'quality' | 'completeness' | 'alphabetical' | 'employees'>('quality');
@@ -116,7 +118,8 @@ export default function LeadFinder() {
       dryRun: shouldDryRun,
       provider: providerConfig.provider,
       model: providerConfig.model,
-      enrichWithPerplexity
+      enrichWithPerplexity,
+      useSerpApi
     });
   };
   const handleCancelSearch = () => {
@@ -343,6 +346,15 @@ export default function LeadFinder() {
         if (mustHaveFunding && !company.fundingInfo) {
           return false;
         }
+
+        // Source filter
+        if (sourceFilter !== 'all') {
+          const companySource = company.source || 'exa';
+          if (companySource !== sourceFilter) {
+            return false;
+          }
+        }
+
         return true;
       });
 
@@ -371,8 +383,9 @@ export default function LeadFinder() {
     setMustHaveNews(false);
     setMustHaveFunding(false);
     setSortBy('quality');
+    setSourceFilter('all');
   };
-  const hasActiveFilters = minQualityScore > 0 || mustHaveContacts || mustHaveLinkedIn || mustHaveNews || mustHaveFunding || sortBy !== 'quality';
+  const hasActiveFilters = minQualityScore > 0 || mustHaveContacts || mustHaveLinkedIn || mustHaveNews || mustHaveFunding || sortBy !== 'quality' || sourceFilter !== 'all';
 
   // Copy email to clipboard
   const handleCopyEmail = (email: string, e: React.MouseEvent) => {
@@ -777,6 +790,14 @@ export default function LeadFinder() {
                     <Label htmlFor="enrichWithPerplexity" className="text-xs font-normal cursor-pointer flex items-center gap-1">
                       <Sparkles className="h-3 w-3 text-primary" />
                       Enrich with Perplexity
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="useSerpApi" checked={useSerpApi} onCheckedChange={checked => setUseSerpApi(checked as boolean)} />
+                    <Label htmlFor="useSerpApi" className="text-xs font-normal cursor-pointer flex items-center gap-1">
+                      <Globe className="h-3 w-3 text-blue-500" />
+                      Include Google Search (SerpAPI)
                     </Label>
                   </div>
                 </div>

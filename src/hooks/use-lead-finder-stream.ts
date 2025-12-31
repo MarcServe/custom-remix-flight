@@ -69,6 +69,7 @@ interface SearchParams {
   provider?: 'lovable' | 'openai' | 'perplexity';
   model?: string;
   enrichWithPerplexity?: boolean;
+  useSerpApi?: boolean;
 }
 
 export const useLeadFinderStream = () => {
