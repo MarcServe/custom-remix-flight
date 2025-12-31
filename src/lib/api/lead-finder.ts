@@ -44,8 +44,11 @@ export interface Lead {
   dataCompleteness?: number;
   enrichmentTier?: 'basic' | 'deep';
   contactCount?: number;
+  // Match intelligence fields
+  matchReason?: string;
+  matchSignals?: string[];
   // SerpAPI-specific fields
-  source?: 'exa' | 'serpapi' | 'google_maps';
+  source?: 'exa' | 'serpapi' | 'google_maps' | 'apify';
   googleRating?: number;
   googleReviewCount?: number;
   address?: string;

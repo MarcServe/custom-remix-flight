@@ -28,6 +28,9 @@ interface Lead {
   enrichmentTier?: 'basic' | 'deep';
   contactCount?: number;
   source?: 'exa' | 'serpapi' | 'google_maps' | 'apify';
+  // Match intelligence fields
+  matchReason?: string;
+  matchSignals?: string[];
   _justUpdated?: boolean; // Internal flag for UI animations
 }
 
