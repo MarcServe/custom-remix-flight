@@ -830,6 +830,148 @@ async function scrapeWebsiteForContacts(websiteUrl: string): Promise<ScrapedWebs
 
 // ============= END PHASE 1: Website Scraping Helpers =============
 
+// ============= PHASE 2: Progressive Website Scraping with Streaming =============
+
+async function scrapeWebsitesProgressively(
+  leads: any[],
+  sendEvent: (data: any) => Promise<void>,
+  supabase: any,
+  searchId: string
+) {
+  // Only scrape leads that have a website URL
+  const leadsWithWebsites = leads.filter(lead => lead.website);
+  
+  if (leadsWithWebsites.length === 0) {
+    console.log('No leads with websites to scrape');
+    return;
+  }
+  
+  console.log(`Starting website scraping for ${leadsWithWebsites.length} leads`);
+  
+  await sendEvent({
+    type: 'website-scraping',
+    status: 'started',
+    message: `Scraping ${leadsWithWebsites.length} company websites for contact info...`,
+    totalLeads: leadsWithWebsites.length,
+    scrapedCount: 0
+  });
+  
+  let scrapedCount = 0;
+  let successCount = 0;
+  
+  for (const lead of leadsWithWebsites) {
+    try {
+      // Send progress update
+      await sendEvent({
+        type: 'website-scraping',
+        status: 'scraping',
+        leadName: lead.name,
+        message: `Scraping ${lead.name} website (${scrapedCount + 1}/${leadsWithWebsites.length})...`,
+        totalLeads: leadsWithWebsites.length,
+        scrapedCount
+      });
+      
+      // Scrape the website
+      const scrapedData = await scrapeWebsiteForContacts(lead.website);
+      
+      if (scrapedData) {
+        let dataUpdated = false;
+        
+        // Merge scraped email (only if not already set)
+        if (!lead.generalEmail && scrapedData.bestEmail) {
+          lead.generalEmail = scrapedData.bestEmail;
+          dataUpdated = true;
+          console.log(`${lead.name}: Added email ${scrapedData.bestEmail}`);
+        }
+        
+        // Merge scraped phone (only if not already set)
+        if (!lead.companyPhone && scrapedData.bestPhone) {
+          lead.companyPhone = scrapedData.bestPhone;
+          dataUpdated = true;
+          console.log(`${lead.name}: Added phone ${scrapedData.bestPhone}`);
+        }
+        
+        // Merge social profiles (add missing ones)
+        if (scrapedData.socialProfiles && Object.keys(scrapedData.socialProfiles).length > 0) {
+          const existingSocials = lead.socialProfiles || {};
+          const mergedSocials = { ...existingSocials };
+          
+          for (const [platform, url] of Object.entries(scrapedData.socialProfiles)) {
+            if (!mergedSocials[platform] && url) {
+              mergedSocials[platform] = url;
+              dataUpdated = true;
+              console.log(`${lead.name}: Added ${platform} - ${url}`);
+            }
+          }
+          
+          lead.socialProfiles = mergedSocials;
+        }
+        
+        if (dataUpdated) {
+          successCount++;
+          
+          // Recalculate quality score with new data
+          // Email adds +10, phone adds +15, each social adds +3
+          let bonusScore = 0;
+          if (scrapedData.bestEmail && !lead.generalEmail) bonusScore += 10;
+          if (scrapedData.bestPhone && !lead.companyPhone) bonusScore += 15;
+          const newSocialsCount = Object.keys(scrapedData.socialProfiles || {}).length;
+          bonusScore += newSocialsCount * 3;
+          
+          lead.qualityScore = calculateFinalQualityScore(lead);
+          lead.dataCompleteness = calculateDataCompleteness(lead);
+          lead.wasScraped = true;
+          
+          // Update lead in database
+          await supabase
+            .from('lead_finder_leads')
+            .update({
+              company_data: lead,
+              enrichment_status: 'scraped'
+            })
+            .eq('search_id', searchId)
+            .eq('company_data->>name', lead.name);
+          
+          // Stream the updated lead to client
+          await sendEvent({
+            type: 'lead-update',
+            lead: lead,
+            updateType: 'website-scraping',
+            scrapedData: {
+              emailsFound: scrapedData.emails.length,
+              phonesFound: scrapedData.phones.length,
+              socialsFound: Object.keys(scrapedData.socialProfiles).length
+            }
+          });
+        }
+      }
+      
+      scrapedCount++;
+      
+      // Small delay between scrapes to be polite to servers
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+    } catch (error) {
+      console.error(`Error scraping website for ${lead.name}:`, error);
+      scrapedCount++;
+    }
+  }
+  
+  // Send completion event
+  await sendEvent({
+    type: 'website-scraping',
+    status: 'completed',
+    message: `Website scraping complete. Found contact info for ${successCount}/${leadsWithWebsites.length} companies.`,
+    totalLeads: leadsWithWebsites.length,
+    scrapedCount,
+    successCount
+  });
+  
+  console.log(`Website scraping complete: ${successCount}/${leadsWithWebsites.length} leads updated`);
+}
+
+// ============= END PHASE 2: Progressive Website Scraping =============
+
 // SerpAPI search function for Google Search and Google Maps results
 async function searchWithSerpAPI(
   query: string,
