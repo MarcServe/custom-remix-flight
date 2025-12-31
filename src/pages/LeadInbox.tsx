@@ -39,6 +39,9 @@ import { QualityScoreBadge } from "@/components/lead-finder/QualityScoreBadge";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { LeadAnalyticsDashboard } from "@/components/lead-inbox/LeadAnalyticsDashboard";
 import { PersonaManager } from "@/components/lead-inbox/PersonaManager";
+import { LeadCard } from "@/components/lead-inbox/LeadCard";
+import { EmptyState } from "@/components/lead-inbox/EmptyState";
+import { StatsHeader } from "@/components/lead-inbox/StatsHeader";
 
 type LeadStatus = 'pending' | 'approved' | 'rejected' | 'auto_approved';
 
@@ -383,15 +386,30 @@ export default function LeadInbox() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Inbox className="h-8 w-8" />
-          Lead Inbox
-        </h1>
-        <p className="text-muted-foreground">
-          Review and approve leads discovered automatically by AI
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5">
+              <Inbox className="h-7 w-7 text-primary" />
+            </div>
+            Lead Inbox
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Review and approve leads discovered automatically by AI
+          </p>
+        </div>
+        {settings?.enabled && (
+          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-200 self-start">
+            <Zap className="h-3 w-3 mr-1" />
+            Discovery Active
+          </Badge>
+        )}
       </div>
+
+      {/* Stats Overview */}
+      {statusCounts && statusCounts.all > 0 && (
+        <StatsHeader counts={statusCounts} />
+      )}
 
       <Tabs defaultValue="inbox" className="space-y-6">
         <TabsList>
@@ -494,10 +512,10 @@ export default function LeadInbox() {
           )}
 
           {/* Leads List */}
-          <Card>
+          <Card className="border-0 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Discovered Leads</CardTitle>
+                <CardTitle className="text-lg font-semibold">Discovered Leads</CardTitle>
                 {(leads?.length || 0) > 0 && (
                   <div className="flex items-center gap-2">
                     <Checkbox 
@@ -511,100 +529,37 @@ export default function LeadInbox() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <div className="flex flex-col items-center justify-center py-16">
+                  <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+                  <p className="text-muted-foreground">Loading leads...</p>
                 </div>
               ) : !leads || leads.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Inbox className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p className="font-medium">No leads in this category</p>
-                  <p className="text-sm mt-1">Enable autonomous discovery in settings to start finding leads automatically.</p>
-                </div>
+                <EmptyState 
+                  type={activeTab} 
+                  onGoToSettings={() => {
+                    const tabsElement = document.querySelector('[data-state="active"][value="inbox"]');
+                    // Simple navigation - user can click Settings tab
+                  }}
+                />
               ) : (
-                <ScrollArea className="h-[500px]">
+                <ScrollArea className="h-[600px] pr-4">
                   <div className="space-y-3">
-                    {leads.map((lead) => {
-                      const companyData = (lead.company_data || {}) as Record<string, any>;
-                      return (
-                        <div 
-                          key={lead.id}
-                          className="flex items-start gap-3 p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                          onClick={() => handleViewLead(lead)}
-                        >
-                          <Checkbox 
-                            checked={selectedLeads.has(lead.id)}
-                            onCheckedChange={() => toggleLeadSelection(lead.id)}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                              <span className="font-medium truncate">{lead.company_name}</span>
-                              <QualityScoreBadge score={lead.quality_score || 0} />
-                              <Badge variant={
-                                lead.status === 'approved' || lead.status === 'auto_approved' ? 'default' :
-                                lead.status === 'rejected' ? 'destructive' : 'secondary'
-                              }>
-                                {lead.status === 'auto_approved' ? 'Auto' : lead.status}
-                              </Badge>
-                            </div>
-                            
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              {lead.industry && <span>{lead.industry}</span>}
-                              {lead.geography && <span>• {lead.geography}</span>}
-                              {lead.company_size && <span>• {lead.company_size}</span>}
-                            </div>
-
-                            <div className="flex items-center gap-3 mt-2 text-sm">
-                              {lead.company_website && (
-                                <span className="flex items-center gap-1 text-muted-foreground">
-                                  <Globe className="h-3 w-3" />
-                                  {new URL(lead.company_website.startsWith('http') ? lead.company_website : `https://${lead.company_website}`).hostname}
-                                </span>
-                              )}
-                              {companyData.generalEmail && (
-                                <span className="flex items-center gap-1 text-muted-foreground">
-                                  <Mail className="h-3 w-3" />
-                                  Email
-                                </span>
-                              )}
-                              {(lead.contacts as any[])?.length > 0 && (
-                                <span className="flex items-center gap-1 text-muted-foreground">
-                                  <Users className="h-3 w-3" />
-                                  {(lead.contacts as any[]).length} contacts
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {lead.status === 'pending' && (
-                            <div className="flex items-center gap-1 shrink-0">
-                              <Button 
-                                size="sm" 
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  approveLeadMutation.mutate([lead.id]);
-                                }}
-                              >
-                                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  rejectLeadMutation.mutate([lead.id]);
-                                }}
-                              >
-                                <XCircle className="h-4 w-4 text-red-600" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {leads.map((lead) => (
+                      <LeadCard
+                        key={lead.id}
+                        lead={{
+                          ...lead,
+                          company_data: (lead.company_data || {}) as Record<string, any>,
+                          contacts: lead.contacts as any[] | null,
+                        }}
+                        isSelected={selectedLeads.has(lead.id)}
+                        onSelect={() => toggleLeadSelection(lead.id)}
+                        onView={() => handleViewLead(lead)}
+                        onApprove={() => approveLeadMutation.mutate([lead.id])}
+                        onReject={() => rejectLeadMutation.mutate([lead.id])}
+                        isPending={approveLeadMutation.isPending || rejectLeadMutation.isPending}
+                      />
+                    ))}
                   </div>
                 </ScrollArea>
               )}
