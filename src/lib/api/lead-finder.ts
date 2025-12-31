@@ -67,6 +67,7 @@ export interface LeadFinderRequest {
   model?: string;
   enrichWithPerplexity?: boolean;
   useSerpApi?: boolean;
+  useApify?: boolean;
 }
 
 export interface LeadFinderResponse {

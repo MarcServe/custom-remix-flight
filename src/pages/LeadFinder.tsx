@@ -41,6 +41,7 @@ export default function LeadFinder() {
   const [dryRun, setDryRun] = useState(true);
   const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(true);
   const [useSerpApi, setUseSerpApi] = useState(false);
+  const [useApify, setUseApify] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedCompanyIndices, setSelectedCompanyIndices] = useState<Set<number>>(new Set());
@@ -57,7 +58,7 @@ export default function LeadFinder() {
   const [mustHaveLinkedIn, setMustHaveLinkedIn] = useState(false);
   const [mustHaveNews, setMustHaveNews] = useState(false);
   const [mustHaveFunding, setMustHaveFunding] = useState(false);
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'exa' | 'serpapi' | 'google_maps'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'exa' | 'serpapi' | 'google_maps' | 'apify'>('all');
 
   // Sorting state
   const [sortBy, setSortBy] = useState<'quality' | 'completeness' | 'alphabetical' | 'employees'>('quality');
@@ -119,7 +120,8 @@ export default function LeadFinder() {
       provider: providerConfig.provider,
       model: providerConfig.model,
       enrichWithPerplexity,
-      useSerpApi
+      useSerpApi,
+      useApify
     });
   };
   const handleCancelSearch = () => {
@@ -798,6 +800,14 @@ export default function LeadFinder() {
                     <Label htmlFor="useSerpApi" className="text-xs font-normal cursor-pointer flex items-center gap-1">
                       <Globe className="h-3 w-3 text-blue-500" />
                       Include Google Search (SerpAPI)
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="useApify" checked={useApify} onCheckedChange={checked => setUseApify(checked as boolean)} />
+                    <Label htmlFor="useApify" className="text-xs font-normal cursor-pointer flex items-center gap-1">
+                      <Search className="h-3 w-3 text-teal-500" />
+                      Include Apify (extra sources)
                     </Label>
                   </div>
                 </div>

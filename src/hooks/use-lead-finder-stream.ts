@@ -74,6 +74,7 @@ interface SearchParams {
   model?: string;
   enrichWithPerplexity?: boolean;
   useSerpApi?: boolean;
+  useApify?: boolean;
 }
 
 export const useLeadFinderStream = () => {
