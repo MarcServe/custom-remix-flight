@@ -558,13 +558,95 @@ async function findContactsProgressively(
   console.log(`Contact finding complete for batch ${batchNumber}`);
 }
 
+// SerpAPI search function for Google Search and Google Maps results
+async function searchWithSerpAPI(
+  query: string,
+  geography: string,
+  industry: string,
+  traceId: string
+): Promise<any[]> {
+  const SERPAPI_API_KEY = Deno.env.get("SERPAPI_API_KEY");
+  if (!SERPAPI_API_KEY) {
+    console.log("SERPAPI_API_KEY not configured, skipping SerpAPI search");
+    return [];
+  }
+
+  const results: any[] = [];
+
+  try {
+    // Google Search for companies
+    const searchQuery = `${industry} companies ${geography} ${query}`;
+    const googleSearchUrl = new URL("https://serpapi.com/search.json");
+    googleSearchUrl.searchParams.set("api_key", SERPAPI_API_KEY);
+    googleSearchUrl.searchParams.set("engine", "google");
+    googleSearchUrl.searchParams.set("q", searchQuery);
+    googleSearchUrl.searchParams.set("num", "20");
+
+    const googleResponse = await fetch(googleSearchUrl.toString());
+    if (googleResponse.ok) {
+      const googleData = await googleResponse.json();
+      const organicResults = googleData.organic_results || [];
+      
+      for (const result of organicResults) {
+        if (result.title && result.link) {
+          results.push({
+            url: result.link,
+            title: result.title,
+            text: result.snippet || '',
+            source: 'serpapi',
+          });
+        }
+      }
+      console.log(`SerpAPI Google Search found ${organicResults.length} results`);
+    }
+
+    // Google Maps/Places for local businesses
+    const mapsQuery = `${industry} ${geography}`;
+    const mapsUrl = new URL("https://serpapi.com/search.json");
+    mapsUrl.searchParams.set("api_key", SERPAPI_API_KEY);
+    mapsUrl.searchParams.set("engine", "google_maps");
+    mapsUrl.searchParams.set("q", mapsQuery);
+    mapsUrl.searchParams.set("type", "search");
+
+    const mapsResponse = await fetch(mapsUrl.toString());
+    if (mapsResponse.ok) {
+      const mapsData = await mapsResponse.json();
+      const localResults = mapsData.local_results || [];
+      
+      for (const place of localResults) {
+        if (place.title) {
+          results.push({
+            url: place.website || place.link,
+            title: place.title,
+            text: place.description || place.type || '',
+            source: 'google_maps',
+            // Google Maps specific data
+            address: place.address,
+            phone: place.phone,
+            rating: place.rating,
+            reviews: place.reviews,
+            hours: place.hours,
+            place_id: place.place_id,
+            gps_coordinates: place.gps_coordinates,
+          });
+        }
+      }
+      console.log(`SerpAPI Google Maps found ${localResults.length} results`);
+    }
+  } catch (error) {
+    console.error("SerpAPI search error:", error);
+  }
+
+  return results;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText } = await req.json();
-  console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText });
+  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi } = await req.json();
+  console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi });
 
   // Initialize Supabase with authenticated user
   const authHeader = req.headers.get('Authorization')!;
@@ -626,7 +708,7 @@ Deno.serve(async (req) => {
           .from('lead_finder_searches')
           .insert({
             user_id: user.id,
-            search_params: { size, geography, industry, provider, model, enrichWithPerplexity, customSearchText },
+            search_params: { size, geography, industry, provider, model, enrichWithPerplexity, customSearchText, useSerpApi },
             status: 'running',
             progress: 5,
             current_status: 'Initializing search...'
@@ -647,11 +729,12 @@ Deno.serve(async (req) => {
       const EXA_API_KEY = Deno.env.get("EXA_API_KEY");
       if (!EXA_API_KEY) throw new Error("Missing EXA_API_KEY");
 
-      // PHASE 1: Exa Search
-      await sendEvent({ type: 'status', message: 'Searching with Exa AI...', progress: 10 });
+      // PHASE 1: Search with Exa AI and optionally SerpAPI in parallel
+      const searchSources = useSerpApi ? 'Exa AI + SerpAPI (Google)' : 'Exa AI';
+      await sendEvent({ type: 'status', message: `Searching with ${searchSources}...`, progress: 10 });
       await supabase
         .from('lead_finder_searches')
-        .update({ progress: 10, current_status: 'Searching with Exa AI...' })
+        .update({ progress: 10, current_status: `Searching with ${searchSources}...` })
         .eq('id', currentSearchId);
       
       const exaSpan = createSpan(trace, 'exa-search');
@@ -690,15 +773,43 @@ Deno.serve(async (req) => {
         }).then(r => r.ok ? r.json() : { results: [] }).catch(() => ({ results: [] }))
       );
 
-      const exaResponses = await Promise.all(exaPromises);
+      // Run Exa and SerpAPI searches in parallel
+      const searchPromises: Promise<any>[] = [Promise.all(exaPromises)];
+      
+      if (useSerpApi) {
+        searchPromises.push(searchWithSerpAPI(customContext, geography, industryContext, trace.id));
+      }
+
+      const searchResults = await Promise.all(searchPromises);
+      
+      // Process Exa results
+      const exaResponses = searchResults[0] as any[];
       let allResults: any[] = [];
-      exaResponses.forEach(r => { if (r.results) allResults.push(...r.results); });
+      exaResponses.forEach(r => { 
+        if (r.results) {
+          // Mark Exa results with source
+          const markedResults = r.results.map((result: any) => ({ ...result, source: 'exa' }));
+          allResults.push(...markedResults);
+        }
+      });
+
+      // Process SerpAPI results if enabled
+      let serpApiResultCount = 0;
+      let googleMapsResultCount = 0;
+      if (useSerpApi && searchResults[1]) {
+        const serpResults = searchResults[1] as any[];
+        serpApiResultCount = serpResults.filter(r => r.source === 'serpapi').length;
+        googleMapsResultCount = serpResults.filter(r => r.source === 'google_maps').length;
+        allResults.push(...serpResults);
+        console.log(`SerpAPI added ${serpApiResultCount} Google Search + ${googleMapsResultCount} Google Maps results`);
+      }
 
       const deduplicatedResults = deduplicateResults(allResults);
-      console.log(`Found ${deduplicatedResults.length} unique companies`);
-      await endSpan(exaSpan, { totalResults: allResults.length, uniqueResults: deduplicatedResults.length });
+      const exaCount = deduplicatedResults.filter((r: any) => r.source === 'exa' || !r.source).length;
+      console.log(`Found ${deduplicatedResults.length} unique companies (Exa: ${exaCount}, SerpAPI: ${serpApiResultCount}, Maps: ${googleMapsResultCount})`);
+      await endSpan(exaSpan, { totalResults: allResults.length, uniqueResults: deduplicatedResults.length, serpApiResults: serpApiResultCount, googleMapsResults: googleMapsResultCount });
 
-      await sendEvent({ type: 'status', message: `Found ${deduplicatedResults.length} companies. Processing...`, progress: 20 });
+      await sendEvent({ type: 'status', message: `Found ${deduplicatedResults.length} companies. Processing...`, progress: 20, sources: { exa: exaCount, serpapi: serpApiResultCount, googleMaps: googleMapsResultCount } });
       await supabase
         .from('lead_finder_searches')
         .update({ progress: 20, current_status: `Found ${deduplicatedResults.length} companies. Processing...` })
@@ -727,6 +838,7 @@ CRITICAL INSTRUCTIONS:
 1. Extract ALL companies found, even if data is incomplete
 2. Deduplicate by company name
 3. Extract as much information as possible from the provided content
+4. PRESERVE the "source" field from input data (exa, serpapi, or google_maps)
 
 REQUIRED FIELDS (must attempt to extract):
 - name: Company name
@@ -736,6 +848,7 @@ REQUIRED FIELDS (must attempt to extract):
 - size: "${size}"
 - geography: "${geography}"
 - linkedinUrl: LinkedIn company profile URL
+- source: PRESERVE from input data - one of "exa", "serpapi", or "google_maps"
 
 HIGHLY VALUABLE FIELDS (extract if available in content):
 - foundingYear: Year company was founded
@@ -746,7 +859,7 @@ HIGHLY VALUABLE FIELDS (extract if available in content):
 - products: Main products or services offered
 - recentNews: Recent company news, launches, or announcements
 - technologies: Tech stack or technologies used (as array)
-- companyPhone: Main company phone number
+- companyPhone: Main company phone number (or use phone from Google Maps data if available)
 - generalEmail: General contact email
 - keyExecutives: Array of key executives with name and title
 - socialProfiles: IMPORTANT - Extract ALL social media URLs as object with these 6 platforms:
@@ -757,6 +870,14 @@ HIGHLY VALUABLE FIELDS (extract if available in content):
   * youtube: YouTube channel URL (youtube.com/...)
   * tiktok: TikTok profile URL (tiktok.com/@...)
   Search website footer, about page, contact page for social icons and links.
+
+GOOGLE MAPS SPECIFIC FIELDS (preserve if source is google_maps):
+- address: Business address from Google Maps
+- googleRating: Rating out of 5 from Google
+- googleReviewCount: Number of Google reviews
+- googleMapsUrl: Direct Google Maps URL
+- placeId: Google Place ID
+- businessHours: Operating hours
 
 DATA QUALITY TIPS:
 - For descriptions, aim for 100+ characters when content allows
