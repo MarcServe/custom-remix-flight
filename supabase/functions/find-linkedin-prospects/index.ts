@@ -77,7 +77,7 @@ Return ONLY the JSON array:`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        provider: 'lovable',
+        provider: 'openai',
         model: 'google/gemini-2.5-flash',
         messages: [
           {
