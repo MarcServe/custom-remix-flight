@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -312,7 +312,7 @@ serve(async (req) => {
     let sentiment = 'neutral';
     let aiAnalysis = {};
 
-    if (LOVABLE_API_KEY) {
+    if (OPENAI_API_KEY) {
       try {
         const analysisPrompt = `Analyze this email response and provide:
 1. Sentiment: positive, negative, neutral, interested, not_interested, or requesting_info
@@ -327,14 +327,14 @@ Body: ${bodyText}
 
 Return a JSON object with: sentiment, keyPoints (array), questionsAsked (array), intent (string)`;
 
-        const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'google/gemini-2.5-flash',
+            model: 'gpt-4o-mini',
             messages: [
               { 
                 role: 'system', 

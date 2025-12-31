@@ -15,9 +15,9 @@ serve(async (req) => {
   try {
     const requestBody = await req.json();
     
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY not configured. Please add it in Supabase Edge Function Secrets.');
     }
 
     // Initialize Supabase client with service role for profile fetching
@@ -171,14 +171,16 @@ FORBIDDEN PATTERNS (never use these):
 Return as JSON: {"subject": "Streamlining Sales with AI", "body": "actual email content here"}`;
     }
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    console.log('Calling OpenAI API...');
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -213,8 +215,16 @@ Return as JSON: {"subject": "Streamlining Sales with AI", "body": "actual email 
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('AI Gateway error:', response.status, errorText);
-      throw new Error(`AI Gateway error: ${response.status}`);
+      console.error('OpenAI API error:', response.status, errorText);
+      
+      if (response.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again later.');
+      }
+      if (response.status === 401 || response.status === 402) {
+        throw new Error('OpenAI API key invalid or billing issue.');
+      }
+      
+      throw new Error(`OpenAI API error: ${response.status}`);
     }
 
     const data = await response.json();
