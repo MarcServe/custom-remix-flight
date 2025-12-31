@@ -1482,18 +1482,40 @@ ${JSON.stringify(batch, null, 2)}`;
       // PHASE 2 & 3: Start background enrichment and contact finding
       const backgroundPromise = (async () => {
         try {
-          // Step 1: Enrichment (only if enabled)
+          // Step 0: Website Scraping (NEW - extract emails, phones, socials directly from websites)
+          const leadsWithWebsites = leads.filter(l => l.website);
+          if (leadsWithWebsites.length > 0) {
+            await sendEvent({
+              type: 'website-scraping',
+              status: 'started',
+              message: `Scraping ${leadsWithWebsites.length} company websites for contact info...`,
+              progress: 82
+            });
+            await supabase
+              .from('lead_finder_searches')
+              .update({ progress: 82, current_status: `Scraping ${leadsWithWebsites.length} company websites...` })
+              .eq('id', currentSearchId);
+
+            await scrapeWebsitesProgressively(
+              leads,
+              sendEvent,
+              supabase,
+              currentSearchId
+            );
+          }
+
+          // Step 1: Enrichment with Perplexity (only if enabled)
           if (enrichWithPerplexity && leads.length > 0) {
             const enrichmentLeads = leads.filter(l => l.qualityScore >= 25);
             if (enrichmentLeads.length > 0) {
               await sendEvent({
                 type: 'enrichment-status',
                 message: `Starting enrichment for ${enrichmentLeads.length} companies...`,
-                progress: 85
+                progress: 88
               });
               await supabase
                 .from('lead_finder_searches')
-                .update({ progress: 85, current_status: `Enriching ${enrichmentLeads.length} companies...` })
+                .update({ progress: 88, current_status: `Enriching ${enrichmentLeads.length} companies...` })
                 .eq('id', currentSearchId);
 
               await enrichBatchProgressively(
