@@ -379,6 +379,126 @@ export type Database = {
         }
         Relationships: []
       }
+      autonomous_discovery_settings: {
+        Row: {
+          auto_approve_threshold: number | null
+          created_at: string
+          custom_search_query: string | null
+          discovery_frequency: string
+          enabled: boolean
+          enrich_with_perplexity: boolean
+          id: string
+          last_run_at: string | null
+          max_leads_per_run: number
+          next_run_at: string | null
+          target_company_sizes: string[] | null
+          target_geographies: string[] | null
+          target_industries: string[] | null
+          updated_at: string
+          use_serp_api: boolean
+          user_id: string
+        }
+        Insert: {
+          auto_approve_threshold?: number | null
+          created_at?: string
+          custom_search_query?: string | null
+          discovery_frequency?: string
+          enabled?: boolean
+          enrich_with_perplexity?: boolean
+          id?: string
+          last_run_at?: string | null
+          max_leads_per_run?: number
+          next_run_at?: string | null
+          target_company_sizes?: string[] | null
+          target_geographies?: string[] | null
+          target_industries?: string[] | null
+          updated_at?: string
+          use_serp_api?: boolean
+          user_id: string
+        }
+        Update: {
+          auto_approve_threshold?: number | null
+          created_at?: string
+          custom_search_query?: string | null
+          discovery_frequency?: string
+          enabled?: boolean
+          enrich_with_perplexity?: boolean
+          id?: string
+          last_run_at?: string | null
+          max_leads_per_run?: number
+          next_run_at?: string | null
+          target_company_sizes?: string[] | null
+          target_geographies?: string[] | null
+          target_industries?: string[] | null
+          updated_at?: string
+          use_serp_api?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
+      autonomous_leads: {
+        Row: {
+          company_data: Json
+          company_id: string | null
+          company_name: string
+          company_size: string | null
+          company_website: string | null
+          contacts: Json | null
+          created_at: string
+          discovery_run_id: string | null
+          enrichment_data: Json | null
+          geography: string | null
+          id: string
+          industry: string | null
+          quality_score: number | null
+          reviewed_at: string | null
+          source: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_data?: Json
+          company_id?: string | null
+          company_name: string
+          company_size?: string | null
+          company_website?: string | null
+          contacts?: Json | null
+          created_at?: string
+          discovery_run_id?: string | null
+          enrichment_data?: Json | null
+          geography?: string | null
+          id?: string
+          industry?: string | null
+          quality_score?: number | null
+          reviewed_at?: string | null
+          source?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_data?: Json
+          company_id?: string | null
+          company_name?: string
+          company_size?: string | null
+          company_website?: string | null
+          contacts?: Json | null
+          created_at?: string
+          discovery_run_id?: string | null
+          enrichment_data?: Json | null
+          geography?: string | null
+          id?: string
+          industry?: string | null
+          quality_score?: number | null
+          reviewed_at?: string | null
+          source?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       business_profiles: {
         Row: {
           ai_max_tokens: number | null
