@@ -79,6 +79,7 @@ interface Company {
     facebook?: string;
     instagram?: string;
     youtube?: string;
+    tiktok?: string;
   };
   social_profiles?: { // Database format
     linkedin?: string;
@@ -86,6 +87,7 @@ interface Company {
     facebook?: string;
     instagram?: string;
     youtube?: string;
+    tiktok?: string;
   };
   keyExecutives?: Array<{
     name: string;
@@ -181,7 +183,15 @@ export function CompanyDetailsDialog({
     employeeCount: company.employeeCount || company.employee_count,
     companyPhone: company.companyPhone || company.company_phone,
     generalEmail: company.generalEmail || company.general_email,
-    socialProfiles: company.socialProfiles || company.social_profiles,
+    // Consolidate LinkedIn into socialProfiles and merge all social profiles
+    socialProfiles: {
+      linkedin: company.linkedinUrl || company.linkedin_url || company.socialProfiles?.linkedin || company.social_profiles?.linkedin,
+      twitter: company.socialProfiles?.twitter || company.social_profiles?.twitter,
+      facebook: company.socialProfiles?.facebook || company.social_profiles?.facebook,
+      instagram: company.socialProfiles?.instagram || company.social_profiles?.instagram,
+      youtube: company.socialProfiles?.youtube || company.social_profiles?.youtube,
+      tiktok: company.socialProfiles?.tiktok || company.social_profiles?.tiktok,
+    },
     keyExecutives: company.keyExecutives || company.key_executives,
     revenue: company.revenue || (company.enrichment_data as any)?.revenue,
     foundingYear: company.foundingYear || company.founding_year || (company.enrichment_data as any)?.foundingYear,
@@ -878,6 +888,13 @@ export function CompanyDetailsDialog({
                         <Button variant="outline" size="sm" asChild>
                           <a href={normalizedCompany.socialProfiles.youtube} target="_blank" rel="noopener noreferrer">
                             YouTube
+                          </a>
+                        </Button>
+                      )}
+                      {normalizedCompany.socialProfiles.tiktok && (
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={normalizedCompany.socialProfiles.tiktok} target="_blank" rel="noopener noreferrer">
+                            TikTok
                           </a>
                         </Button>
                       )}

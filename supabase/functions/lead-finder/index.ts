@@ -142,7 +142,7 @@ async function enrichBatch(leads: any[], supabaseUrl: string, supabaseAnonKey: s
           model: 'sonar-small',
           messages: [
             { role: 'system', content: 'Return only valid JSON, no markdown.' },
-            { role: 'user', content: `Quick facts about ${lead.name}${lead.website ? ` (${lead.website})` : ''}: Return JSON with: website, description, employeeCount, generalEmail` },
+            { role: 'user', content: `Quick facts about ${lead.name}${lead.website ? ` (${lead.website})` : ''}: Return JSON with: website, description, employeeCount, generalEmail, socialProfiles (object with linkedin, twitter, facebook, instagram, youtube, tiktok URLs - check website footer and about page)` },
           ],
           temperature: 0.2,
           traceId,
@@ -160,6 +160,10 @@ async function enrichBatch(leads: any[], supabaseUrl: string, supabaseAnonKey: s
             lead.description = enrichedData.description || lead.description;
             lead.employeeCount = enrichedData.employeeCount || lead.employeeCount;
             lead.generalEmail = enrichedData.generalEmail || lead.generalEmail;
+            // Merge social profiles from basic enrichment
+            if (enrichedData.socialProfiles) {
+              lead.socialProfiles = { ...lead.socialProfiles, ...enrichedData.socialProfiles };
+            }
             lead.enrichmentTier = 'basic';
           }
         } catch {}
@@ -179,7 +183,7 @@ async function enrichBatch(leads: any[], supabaseUrl: string, supabaseAnonKey: s
           model: 'sonar',
           messages: [
             { role: 'system', content: 'Return only valid JSON, no markdown.' },
-            { role: 'user', content: `Detailed research on ${lead.name}: Return JSON with: description, products, recentNews, fundingInfo, employeeCount, companyPhone, generalEmail, socialProfiles, keyExecutives, technologies` },
+            { role: 'user', content: `Detailed research on ${lead.name}${lead.website ? ` (${lead.website})` : ''}: Return JSON with: description, products, recentNews, fundingInfo, employeeCount, companyPhone, generalEmail, keyExecutives, technologies, and socialProfiles object containing ALL social media URLs (linkedin, twitter/x.com, facebook, instagram, youtube, tiktok) - search the company website footer, contact page, and about page for these links` },
           ],
           temperature: 0.2,
           traceId,
@@ -247,7 +251,7 @@ async function enrichBatchProgressively(
           model: 'sonar-small',
           messages: [
             { role: 'system', content: 'Return only valid JSON with company information, no markdown or explanations.' },
-            { role: 'user', content: `Quick research on ${lead.name}${lead.website ? ` (${lead.website})` : ''}. Return JSON with: website, description (100+ chars), employeeCount, foundingYear, revenue, generalEmail, companyPhone` },
+            { role: 'user', content: `Quick research on ${lead.name}${lead.website ? ` (${lead.website})` : ''}. Return JSON with: website, description (100+ chars), employeeCount, foundingYear, revenue, generalEmail, companyPhone, socialProfiles (object with linkedin, twitter, facebook, instagram, youtube, tiktok URLs - check website footer and about page for social links)` },
           ],
           temperature: 0.2,
           traceId,
@@ -268,6 +272,10 @@ async function enrichBatchProgressively(
             lead.revenue = enrichedData.revenue || lead.revenue;
             lead.generalEmail = enrichedData.generalEmail || lead.generalEmail;
             lead.companyPhone = enrichedData.companyPhone || lead.companyPhone;
+            // Merge social profiles from basic enrichment
+            if (enrichedData.socialProfiles) {
+              lead.socialProfiles = { ...lead.socialProfiles, ...enrichedData.socialProfiles };
+            }
             lead.enrichmentTier = 'basic';
             lead.wasEnriched = true;
           }
@@ -339,7 +347,14 @@ Extract ALL available information and return as JSON with these fields:
 - revenue: Annual revenue or revenue range
 - companyPhone: Main contact phone number
 - generalEmail: General inquiry email address
-- socialProfiles: Object with linkedin, twitter, facebook, instagram, youtube URLs
+- socialProfiles: Object with ALL 6 social media URLs - IMPORTANT, search thoroughly:
+  * linkedin: Company LinkedIn page (linkedin.com/company/...)
+  * twitter: X/Twitter profile (twitter.com/... or x.com/...)
+  * facebook: Facebook business page (facebook.com/...)
+  * instagram: Instagram profile (instagram.com/...)
+  * youtube: YouTube channel (youtube.com/...)
+  * tiktok: TikTok profile (tiktok.com/@...)
+  Check company website footer, about page, contact page, and press releases for social links.
 - keyExecutives: Array of executives with {name, title} for C-suite and VPs
 - technologies: Array of key technologies, platforms, or tools the company uses or builds
 
@@ -734,7 +749,14 @@ HIGHLY VALUABLE FIELDS (extract if available in content):
 - companyPhone: Main company phone number
 - generalEmail: General contact email
 - keyExecutives: Array of key executives with name and title
-- socialProfiles: Object with linkedin, twitter, facebook, instagram, youtube URLs
+- socialProfiles: IMPORTANT - Extract ALL social media URLs as object with these 6 platforms:
+  * linkedin: Company LinkedIn page URL (linkedin.com/company/...)
+  * twitter: Twitter/X profile URL (twitter.com/... or x.com/...)
+  * facebook: Facebook page URL (facebook.com/...)
+  * instagram: Instagram profile URL (instagram.com/...)
+  * youtube: YouTube channel URL (youtube.com/...)
+  * tiktok: TikTok profile URL (tiktok.com/@...)
+  Search website footer, about page, contact page for social icons and links.
 
 DATA QUALITY TIPS:
 - For descriptions, aim for 100+ characters when content allows
