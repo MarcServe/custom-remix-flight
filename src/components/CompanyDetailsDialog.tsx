@@ -104,6 +104,10 @@ interface Company {
   dataCompleteness?: number; // Lead finder format
   enrichmentStatus?: string; // Lead finder format
   contactStatus?: string; // Lead finder format
+  // Match intelligence (Lead finder format)
+  matchReason?: string;
+  matchSignals?: string[];
+  source?: 'exa' | 'serpapi' | 'google_maps' | 'apify';
   // AI Analysis
   temperature?: 'hot' | 'warm' | 'cold';
   suggested_actions?: Array<{
@@ -710,6 +714,40 @@ export function CompanyDetailsDialog({
                 )}
               </div>
             </div>
+
+            {/* Why This Company Was Chosen - Match Intelligence */}
+            {(company.matchReason || (company.matchSignals && company.matchSignals.length > 0)) && (
+              <>
+                <Separator />
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center">
+                      <Sparkles className="h-4 w-4 text-emerald-600" />
+                    </div>
+                    <h3 className="text-sm font-semibold">Why This Company?</h3>
+                    <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                      <Search className="h-3 w-3 mr-1" />
+                      Match Intelligence
+                    </Badge>
+                  </div>
+                  {company.matchReason && (
+                    <p className="text-sm text-muted-foreground leading-relaxed pl-10">
+                      {company.matchReason}
+                    </p>
+                  )}
+                  {company.matchSignals && company.matchSignals.length > 0 && (
+                    <div className="pl-10 space-y-1.5">
+                      {company.matchSignals.map((signal, idx) => (
+                        <div key={idx} className="flex items-start gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                          <span className="text-foreground">{signal}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* AI Suggested Actions */}
             {company.suggested_actions && company.suggested_actions.length > 0 && (

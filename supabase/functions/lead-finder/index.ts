@@ -850,6 +850,10 @@ REQUIRED FIELDS (must attempt to extract):
 - linkedinUrl: LinkedIn company profile URL
 - source: PRESERVE from input data - one of "exa", "serpapi", or "google_maps"
 
+MATCH INTELLIGENCE (REQUIRED - explain why each company was chosen):
+- matchReason: 1-3 sentences explaining WHY this company matches the search criteria. Reference specific evidence from the content that indicates a match for industry "${industryContext}", geography "${geography}"${customSearchText ? `, and requirements "${customSearchText}"` : ''}. Be specific and cite evidence.
+- matchSignals: Array of 2-5 short bullet points (strings) highlighting key matching indicators. Examples: "Based in ${geography}", "Provides ${industryContext} services", "Matches company size ${size}"${customSearchText ? `, "Aligns with: ${customSearchText}"` : ''}
+
 HIGHLY VALUABLE FIELDS (extract if available in content):
 - foundingYear: Year company was founded
 - revenue: Annual revenue or revenue range
@@ -885,6 +889,7 @@ DATA QUALITY TIPS:
 - Parse funding information from crunchbase or news mentions
 - Identify executives from "leadership", "team", "about" sections
 - Extract technologies from job postings or company descriptions
+- For matchReason, always cite specific evidence from the source content
 
 Return ONLY a valid JSON array with no markdown formatting:
 ${JSON.stringify(batch, null, 2)}`;
