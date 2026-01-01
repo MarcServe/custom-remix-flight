@@ -33,7 +33,8 @@ import {
   Send,
   Webhook,
   BarChart3,
-  Target
+  Target,
+  Play
 } from "lucide-react";
 import { QualityScoreBadge } from "@/components/lead-finder/QualityScoreBadge";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
@@ -130,6 +131,29 @@ export default function LeadInbox() {
     },
     onError: (error: any) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Manual discovery trigger mutation
+  const runDiscoveryMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('autonomous-lead-discovery', {
+        body: { userId: user?.id, forceRun: true },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['autonomous-leads'] });
+      queryClient.invalidateQueries({ queryKey: ['autonomous-leads-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['autonomous-discovery-settings'] });
+      toast({ 
+        title: 'Discovery complete!', 
+        description: `Found ${data?.leadsDiscovered || 0} new leads.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Discovery failed', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -571,13 +595,29 @@ export default function LeadInbox() {
         <TabsContent value="settings" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5" />
-                Autonomous Discovery Settings
-              </CardTitle>
-              <CardDescription>
-                Configure how the AI automatically discovers leads for you
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="h-5 w-5" />
+                    Autonomous Discovery Settings
+                  </CardTitle>
+                  <CardDescription>
+                    Configure how the AI automatically discovers leads for you
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={() => runDiscoveryMutation.mutate()}
+                  disabled={runDiscoveryMutation.isPending || !settings?.enabled}
+                  className="gap-2"
+                >
+                  {runDiscoveryMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                  Run Discovery Now
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Enable Toggle */}
