@@ -9,9 +9,24 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+interface Persona {
+  id: string;
+  name: string;
+  target_industries: string[] | null;
+  target_geographies: string[] | null;
+  target_company_sizes: string[] | null;
+  target_keywords: string[] | null;
+  custom_search_query: string | null;
+  exclude_industries: string[] | null;
+  exclude_keywords: string[] | null;
+  auto_enroll_sequence_id: string | null;
+  is_active: boolean;
+}
+
 /**
- * Autonomous Lead Discovery - Daily cron job
+ * Autonomous Lead Discovery - Daily cron job or manual trigger
  * Discovers leads for users with enabled autonomous discovery settings
+ * Now supports persona-based targeting
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -22,12 +37,38 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+  // Check if this is a manual trigger for a specific user
+  let manualUserId: string | null = null;
+  let forceRun = false;
+  
+  try {
+    const body = await req.json().catch(() => ({}));
+    manualUserId = body.userId || null;
+    forceRun = body.forceRun || false;
+    
+    if (manualUserId) {
+      console.log(`[autonomous-lead-discovery] Manual trigger for user: ${manualUserId}`);
+    }
+  } catch {
+    // Not a manual trigger, continue with cron behavior
+  }
+
   try {
     // Get all users with enabled autonomous discovery
-    const { data: settings, error: settingsError } = await supabase
+    let settingsQuery = supabase
       .from('autonomous_discovery_settings')
       .select('*')
       .eq('enabled', true);
+    
+    // If manual trigger, filter to specific user
+    if (manualUserId) {
+      settingsQuery = supabase
+        .from('autonomous_discovery_settings')
+        .select('*')
+        .eq('user_id', manualUserId);
+    }
+
+    const { data: settings, error: settingsError } = await settingsQuery;
 
     if (settingsError) {
       console.error('[autonomous-lead-discovery] Error fetching settings:', settingsError);
@@ -50,11 +91,13 @@ Deno.serve(async (req) => {
 
     for (const setting of settings) {
       try {
-        // Check if it's time to run based on frequency
-        const shouldRun = shouldRunDiscovery(setting);
-        if (!shouldRun) {
-          console.log(`[autonomous-lead-discovery] Skipping user ${setting.user_id} - not scheduled to run yet`);
-          continue;
+        // Check if it's time to run based on frequency (skip for manual triggers with forceRun)
+        if (!forceRun && !manualUserId) {
+          const shouldRun = shouldRunDiscovery(setting);
+          if (!shouldRun) {
+            console.log(`[autonomous-lead-discovery] Skipping user ${setting.user_id} - not scheduled to run yet`);
+            continue;
+          }
         }
 
         console.log(`[autonomous-lead-discovery] Processing user ${setting.user_id}`);
@@ -66,175 +109,66 @@ Deno.serve(async (req) => {
           .eq('user_id', setting.user_id)
           .single();
 
-        // Build search query from settings
-        const searchQuery = buildSearchQuery(setting, businessProfile);
-        
+        // Get active personas for this user
+        const { data: personas, error: personasError } = await supabase
+          .from('discovery_personas')
+          .select('*')
+          .eq('user_id', setting.user_id)
+          .eq('is_active', true)
+          .order('priority', { ascending: false });
+
+        if (personasError) {
+          console.error(`[autonomous-lead-discovery] Error fetching personas for user ${setting.user_id}:`, personasError);
+        }
+
+        const activePersonas = (personas || []) as Persona[];
+        console.log(`[autonomous-lead-discovery] Found ${activePersonas.length} active personas for user ${setting.user_id}`);
+
         // Generate discovery run ID
         const discoveryRunId = crypto.randomUUID();
 
-        // Call lead-finder function to discover leads
-        const leadFinderResponse = await fetch(`${SUPABASE_URL}/functions/v1/lead-finder`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            size: setting.target_company_sizes?.[0] || 'any',
-            geography: setting.target_geographies?.[0] || 'any',
-            industry: setting.target_industries?.[0] || 'any',
-            customSearchText: searchQuery,
-            dryRun: true, // We'll handle saving ourselves
-            provider: 'openai',
-            model: 'gpt-4o-mini',
-            enrichWithPerplexity: setting.enrich_with_perplexity,
-            useSerpApi: setting.use_serp_api,
-            maxResults: setting.max_leads_per_run || 10,
-            autonomousMode: true, // Flag for internal use
-          }),
-        });
-
-        if (!leadFinderResponse.ok) {
-          const errorText = await leadFinderResponse.text();
-          console.error(`[autonomous-lead-discovery] Lead finder error for user ${setting.user_id}:`, errorText);
-          continue;
-        }
-
-        // Parse the streaming response
-        const leads = await parseStreamingResponse(leadFinderResponse);
-
-        if (!leads || leads.length === 0) {
-          console.log(`[autonomous-lead-discovery] No leads found for user ${setting.user_id}`);
-          continue;
-        }
-
-        console.log(`[autonomous-lead-discovery] Found ${leads.length} leads for user ${setting.user_id}`);
-
-        // Get existing companies to avoid duplicates
-        const { data: existingCompanies } = await supabase
-          .from('companies')
-          .select('name, website')
-          .eq('user_id', setting.user_id);
-
-        const existingNames = new Set((existingCompanies || []).map(c => c.name?.toLowerCase()));
-        const existingWebsites = new Set((existingCompanies || []).map(c => c.website?.toLowerCase()).filter(Boolean));
-
-        // Also check existing autonomous leads
-        const { data: existingAutonomousLeads } = await supabase
-          .from('autonomous_leads')
-          .select('company_name, company_website')
-          .eq('user_id', setting.user_id)
-          .in('status', ['pending', 'approved', 'auto_approved']);
-
-        const existingAutoNames = new Set((existingAutonomousLeads || []).map(l => l.company_name?.toLowerCase()));
-        const existingAutoWebsites = new Set((existingAutonomousLeads || []).map(l => l.company_website?.toLowerCase()).filter(Boolean));
-
-        // Filter out duplicates and insert new leads
-        const newLeads = leads.filter((lead: any) => {
-          const nameLower = lead.name?.toLowerCase();
-          const websiteLower = lead.website?.toLowerCase();
-          
-          if (existingNames.has(nameLower) || existingAutoNames.has(nameLower)) return false;
-          if (websiteLower && (existingWebsites.has(websiteLower) || existingAutoWebsites.has(websiteLower))) return false;
-          
-          return true;
-        });
-
-        if (newLeads.length === 0) {
-          console.log(`[autonomous-lead-discovery] All leads already exist for user ${setting.user_id}`);
-          continue;
-        }
-
-        // Insert autonomous leads
-        const autonomousLeadsToInsert = newLeads.map((lead: any) => {
-          const status = setting.auto_approve_threshold && lead.qualityScore >= setting.auto_approve_threshold 
-            ? 'auto_approved' 
-            : 'pending';
-
-          return {
-            user_id: setting.user_id,
-            discovery_run_id: discoveryRunId,
-            status,
-            quality_score: lead.qualityScore || 0,
-            company_data: lead,
-            company_name: lead.name,
-            company_website: lead.website,
-            industry: lead.industry,
-            geography: lead.geography,
-            company_size: lead.size,
-            contacts: lead.contacts || [],
-            enrichment_data: lead.enrichment_data || null,
-            source: lead.source || 'exa',
-          };
-        });
-
-        const { error: insertError } = await supabase
-          .from('autonomous_leads')
-          .insert(autonomousLeadsToInsert);
-
-        if (insertError) {
-          console.error(`[autonomous-lead-discovery] Error inserting leads for user ${setting.user_id}:`, insertError);
-          continue;
-        }
-
-        leadsDiscovered += newLeads.length;
-
-        // Auto-approve leads that meet threshold and save to companies
-        const autoApprovedLeads = autonomousLeadsToInsert.filter(l => l.status === 'auto_approved');
-        if (autoApprovedLeads.length > 0) {
-          console.log(`[autonomous-lead-discovery] Auto-approving ${autoApprovedLeads.length} leads for user ${setting.user_id}`);
-          
-          for (const lead of autoApprovedLeads) {
-            const companyId = await saveLeadToCompanies(supabase, lead, setting.user_id);
+        // If user has personas, run discovery for each persona
+        if (activePersonas.length > 0) {
+          for (const persona of activePersonas) {
+            console.log(`[autonomous-lead-discovery] Processing persona: ${persona.name} (${persona.id})`);
             
-            // Auto-enroll in sequence if enabled
-            if (setting.auto_enroll_enabled && setting.auto_enroll_sequence_id && companyId) {
-              await enrollInSequence(supabase, companyId, setting.auto_enroll_sequence_id);
-            }
-
-            // Track feedback for AI learning
-            await trackAutoApprovalFeedback(supabase, setting.user_id, lead);
-          }
-
-          // Send webhook notification for high-quality auto-approved leads
-          if (setting.webhook_enabled && setting.webhook_url) {
-            const highQualityLeads = autoApprovedLeads.filter(
-              l => l.quality_score >= (setting.notify_min_quality_score || 70)
+            const personaLeads = await discoverLeadsForPersona(
+              supabase,
+              setting,
+              persona,
+              businessProfile,
+              discoveryRunId
             );
             
-            if (highQualityLeads.length > 0 && setting.notify_on_auto_approve) {
-              await sendWebhookNotification(setting.webhook_url, {
-                type: 'auto_approved_leads',
-                count: highQualityLeads.length,
-                leads: highQualityLeads.map(l => ({
-                  name: l.company_name,
-                  website: l.company_website,
-                  industry: l.industry,
-                  qualityScore: l.quality_score,
-                })),
-              });
+            leadsDiscovered += personaLeads;
+            
+            // Update persona metrics
+            if (personaLeads > 0) {
+              await supabase
+                .from('discovery_personas')
+                .update({
+                  total_leads_found: (persona as any).total_leads_found + personaLeads,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', persona.id);
             }
           }
-        }
-
-        // Send webhook for all new pending leads if webhook enabled
-        const pendingLeads = autonomousLeadsToInsert.filter(l => l.status === 'pending');
-        if (setting.webhook_enabled && setting.webhook_url && pendingLeads.length > 0) {
-          const notifiableLeads = pendingLeads.filter(
-            l => l.quality_score >= (setting.notify_min_quality_score || 70)
-          );
+        } else {
+          // Fall back to main settings-based discovery (legacy behavior)
+          console.log(`[autonomous-lead-discovery] No active personas, using main settings for user ${setting.user_id}`);
           
-          if (notifiableLeads.length > 0) {
-            await sendWebhookNotification(setting.webhook_url, {
-              type: 'new_leads_pending_review',
-              count: notifiableLeads.length,
-              leads: notifiableLeads.map(l => ({
-                name: l.company_name,
-                website: l.company_website,
-                industry: l.industry,
-                qualityScore: l.quality_score,
-              })),
-            });
+          const searchQuery = buildSearchQuery(setting, businessProfile);
+          const leads = await runLeadFinder(supabase, setting, searchQuery, null);
+          
+          if (leads && leads.length > 0) {
+            const savedLeads = await saveDiscoveredLeads(
+              supabase,
+              leads,
+              setting,
+              null, // No persona
+              discoveryRunId
+            );
+            leadsDiscovered += savedLeads;
           }
         }
 
@@ -275,6 +209,295 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+/**
+ * Discover leads for a specific persona
+ */
+async function discoverLeadsForPersona(
+  supabase: any,
+  setting: any,
+  persona: Persona,
+  businessProfile: any,
+  discoveryRunId: string
+): Promise<number> {
+  // Build search query from persona
+  const searchQuery = buildPersonaSearchQuery(persona, businessProfile);
+  
+  console.log(`[autonomous-lead-discovery] Persona "${persona.name}" search query: ${searchQuery}`);
+  
+  // Run lead finder with persona-specific criteria
+  const leads = await runLeadFinder(supabase, setting, searchQuery, persona);
+  
+  if (!leads || leads.length === 0) {
+    console.log(`[autonomous-lead-discovery] No leads found for persona: ${persona.name}`);
+    return 0;
+  }
+  
+  // Filter out excluded industries/keywords
+  const filteredLeads = leads.filter((lead: any) => {
+    // Check excluded industries
+    if (persona.exclude_industries?.length) {
+      const leadIndustry = lead.industry?.toLowerCase() || '';
+      for (const excluded of persona.exclude_industries) {
+        if (leadIndustry.includes(excluded.toLowerCase())) {
+          return false;
+        }
+      }
+    }
+    
+    // Check excluded keywords
+    if (persona.exclude_keywords?.length) {
+      const leadText = `${lead.name} ${lead.description || ''} ${lead.industry || ''}`.toLowerCase();
+      for (const excluded of persona.exclude_keywords) {
+        if (leadText.includes(excluded.toLowerCase())) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  });
+  
+  console.log(`[autonomous-lead-discovery] Filtered to ${filteredLeads.length} leads after exclusions`);
+  
+  // Save leads with persona reference
+  const savedCount = await saveDiscoveredLeads(
+    supabase,
+    filteredLeads,
+    setting,
+    persona,
+    discoveryRunId
+  );
+  
+  return savedCount;
+}
+
+/**
+ * Build search query from persona targeting criteria
+ */
+function buildPersonaSearchQuery(persona: Persona, businessProfile: any): string {
+  // If persona has custom search query, use it
+  if (persona.custom_search_query) {
+    return persona.custom_search_query;
+  }
+
+  const parts: string[] = [];
+
+  // Add persona keywords
+  if (persona.target_keywords?.length) {
+    parts.push(persona.target_keywords.join(' OR '));
+  }
+
+  // Add target industries
+  if (persona.target_industries?.length) {
+    parts.push(`in industries: ${persona.target_industries.join(', ')}`);
+  }
+
+  // Add target geographies
+  if (persona.target_geographies?.length) {
+    parts.push(`located in: ${persona.target_geographies.join(', ')}`);
+  }
+
+  // Add company sizes
+  if (persona.target_company_sizes?.length) {
+    parts.push(`company sizes: ${persona.target_company_sizes.join(', ')}`);
+  }
+
+  // Add business context if available
+  if (businessProfile?.target_audience) {
+    parts.push(`companies that match: ${businessProfile.target_audience}`);
+  }
+
+  return parts.length > 0 ? parts.join(' | ') : 'B2B companies with growth potential';
+}
+
+/**
+ * Run lead finder with given search criteria
+ */
+async function runLeadFinder(
+  supabase: any,
+  setting: any,
+  searchQuery: string,
+  persona: Persona | null
+): Promise<any[]> {
+  const leadFinderResponse = await fetch(`${SUPABASE_URL}/functions/v1/lead-finder`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      size: persona?.target_company_sizes?.[0] || setting.target_company_sizes?.[0] || 'any',
+      geography: persona?.target_geographies?.[0] || setting.target_geographies?.[0] || 'any',
+      industry: persona?.target_industries?.[0] || setting.target_industries?.[0] || 'any',
+      customSearchText: searchQuery,
+      dryRun: true,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      enrichWithPerplexity: setting.enrich_with_perplexity,
+      useSerpApi: setting.use_serp_api,
+      maxResults: setting.max_leads_per_run || 10,
+      autonomousMode: true,
+    }),
+  });
+
+  if (!leadFinderResponse.ok) {
+    const errorText = await leadFinderResponse.text();
+    console.error(`[autonomous-lead-discovery] Lead finder error:`, errorText);
+    return [];
+  }
+
+  return await parseStreamingResponse(leadFinderResponse);
+}
+
+/**
+ * Save discovered leads to database
+ */
+async function saveDiscoveredLeads(
+  supabase: any,
+  leads: any[],
+  setting: any,
+  persona: Persona | null,
+  discoveryRunId: string
+): Promise<number> {
+  const userId = setting.user_id;
+  
+  // Get existing companies to avoid duplicates
+  const { data: existingCompanies } = await supabase
+    .from('companies')
+    .select('name, website')
+    .eq('user_id', userId);
+
+  const existingNames = new Set((existingCompanies || []).map((c: any) => c.name?.toLowerCase()));
+  const existingWebsites = new Set((existingCompanies || []).map((c: any) => c.website?.toLowerCase()).filter(Boolean));
+
+  // Also check existing autonomous leads
+  const { data: existingAutonomousLeads } = await supabase
+    .from('autonomous_leads')
+    .select('company_name, company_website')
+    .eq('user_id', userId)
+    .in('status', ['pending', 'approved', 'auto_approved']);
+
+  const existingAutoNames = new Set((existingAutonomousLeads || []).map((l: any) => l.company_name?.toLowerCase()));
+  const existingAutoWebsites = new Set((existingAutonomousLeads || []).map((l: any) => l.company_website?.toLowerCase()).filter(Boolean));
+
+  // Filter out duplicates
+  const newLeads = leads.filter((lead: any) => {
+    const nameLower = lead.name?.toLowerCase();
+    const websiteLower = lead.website?.toLowerCase();
+    
+    if (existingNames.has(nameLower) || existingAutoNames.has(nameLower)) return false;
+    if (websiteLower && (existingWebsites.has(websiteLower) || existingAutoWebsites.has(websiteLower))) return false;
+    
+    return true;
+  });
+
+  if (newLeads.length === 0) {
+    console.log(`[autonomous-lead-discovery] All leads already exist for user ${userId}`);
+    return 0;
+  }
+
+  // Insert autonomous leads
+  const autonomousLeadsToInsert = newLeads.map((lead: any) => {
+    const status = setting.auto_approve_threshold && lead.qualityScore >= setting.auto_approve_threshold 
+      ? 'auto_approved' 
+      : 'pending';
+
+    return {
+      user_id: userId,
+      discovery_run_id: discoveryRunId,
+      persona_id: persona?.id || null, // Link to persona
+      status,
+      quality_score: lead.qualityScore || 0,
+      company_data: lead,
+      company_name: lead.name,
+      company_website: lead.website,
+      industry: lead.industry,
+      geography: lead.geography,
+      company_size: lead.size,
+      contacts: lead.contacts || [],
+      enrichment_data: lead.enrichment_data || null,
+      source: lead.source || 'exa',
+    };
+  });
+
+  const { error: insertError } = await supabase
+    .from('autonomous_leads')
+    .insert(autonomousLeadsToInsert);
+
+  if (insertError) {
+    console.error(`[autonomous-lead-discovery] Error inserting leads:`, insertError);
+    return 0;
+  }
+
+  console.log(`[autonomous-lead-discovery] Inserted ${newLeads.length} leads for user ${userId}`);
+
+  // Auto-approve leads that meet threshold and save to companies
+  const autoApprovedLeads = autonomousLeadsToInsert.filter(l => l.status === 'auto_approved');
+  if (autoApprovedLeads.length > 0) {
+    console.log(`[autonomous-lead-discovery] Auto-approving ${autoApprovedLeads.length} leads`);
+    
+    for (const lead of autoApprovedLeads) {
+      const companyId = await saveLeadToCompanies(supabase, lead, userId);
+      
+      // Determine which sequence to use (persona-specific or global)
+      const sequenceId = persona?.auto_enroll_sequence_id || 
+                         (setting.auto_enroll_enabled ? setting.auto_enroll_sequence_id : null);
+      
+      if (sequenceId && companyId) {
+        await enrollInSequence(supabase, companyId, sequenceId);
+      }
+
+      // Track feedback for AI learning
+      await trackAutoApprovalFeedback(supabase, userId, lead, persona);
+    }
+
+    // Send webhook notification for high-quality auto-approved leads
+    if (setting.webhook_enabled && setting.webhook_url) {
+      const highQualityLeads = autoApprovedLeads.filter(
+        l => l.quality_score >= (setting.notify_min_quality_score || 70)
+      );
+      
+      if (highQualityLeads.length > 0 && setting.notify_on_auto_approve) {
+        await sendWebhookNotification(setting.webhook_url, {
+          type: 'auto_approved_leads',
+          persona: persona?.name || 'Default',
+          count: highQualityLeads.length,
+          leads: highQualityLeads.map(l => ({
+            name: l.company_name,
+            website: l.company_website,
+            industry: l.industry,
+            qualityScore: l.quality_score,
+          })),
+        });
+      }
+    }
+  }
+
+  // Send webhook for pending leads if webhook enabled
+  const pendingLeads = autonomousLeadsToInsert.filter(l => l.status === 'pending');
+  if (setting.webhook_enabled && setting.webhook_url && pendingLeads.length > 0) {
+    const notifiableLeads = pendingLeads.filter(
+      l => l.quality_score >= (setting.notify_min_quality_score || 70)
+    );
+    
+    if (notifiableLeads.length > 0) {
+      await sendWebhookNotification(setting.webhook_url, {
+        type: 'new_leads_pending_review',
+        persona: persona?.name || 'Default',
+        count: notifiableLeads.length,
+        leads: notifiableLeads.map(l => ({
+          name: l.company_name,
+          website: l.company_website,
+          industry: l.industry,
+          qualityScore: l.quality_score,
+        })),
+      });
+    }
+  }
+
+  return newLeads.length;
+}
 
 function shouldRunDiscovery(setting: any): boolean {
   const now = new Date();
@@ -478,7 +701,12 @@ async function enrollInSequence(supabase: any, companyId: string, sequenceId: st
   }
 }
 
-async function trackAutoApprovalFeedback(supabase: any, userId: string, lead: any): Promise<void> {
+async function trackAutoApprovalFeedback(
+  supabase: any, 
+  userId: string, 
+  lead: any,
+  persona: Persona | null
+): Promise<void> {
   try {
     // Insert feedback analytics
     await supabase.from('lead_feedback_analytics').insert({
@@ -492,7 +720,7 @@ async function trackAutoApprovalFeedback(supabase: any, userId: string, lead: an
       time_to_decision_seconds: 0, // Auto-approved immediately
     });
 
-    // Update learned preferences
+    // Update learned preferences via RPC
     await supabase.rpc('update_discovery_learning', {
       p_user_id: userId,
       p_action: 'auto_approved',
@@ -500,6 +728,18 @@ async function trackAutoApprovalFeedback(supabase: any, userId: string, lead: an
       p_geography: lead.geography,
       p_company_size: lead.company_size,
     });
+    
+    // Update persona metrics if applicable
+    if (persona) {
+      await supabase
+        .from('discovery_personas')
+        .update({
+          total_approved: (persona as any).total_approved + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', persona.id);
+    }
+
   } catch (error) {
     console.error('[autonomous-lead-discovery] Error tracking feedback:', error);
   }
@@ -507,75 +747,57 @@ async function trackAutoApprovalFeedback(supabase: any, userId: string, lead: an
 
 async function sendWebhookNotification(webhookUrl: string, payload: any): Promise<void> {
   try {
-    // Detect webhook type and format accordingly
+    // Detect webhook type based on URL
     const isSlack = webhookUrl.includes('hooks.slack.com');
     const isDiscord = webhookUrl.includes('discord.com/api/webhooks');
 
-    let body: any;
+    let formattedPayload: any;
 
     if (isSlack) {
-      // Slack format
-      const leadsText = payload.leads.map((l: any) => 
-        `• *${l.name}* (${l.industry || 'Unknown'}) - Quality: ${l.qualityScore}%`
-      ).join('\n');
-
-      body = {
-        text: `🎯 LeadGenie: ${payload.count} new ${payload.type === 'auto_approved_leads' ? 'auto-approved' : 'pending'} leads`,
+      formattedPayload = {
+        text: `🎯 Lead Genie: ${payload.type === 'auto_approved_leads' ? 'Auto-approved' : 'New'} leads discovered!`,
         blocks: [
           {
             type: 'header',
             text: {
               type: 'plain_text',
-              text: `🎯 ${payload.count} New Leads Discovered`,
-              emoji: true,
+              text: `🎯 ${payload.count} ${payload.type === 'auto_approved_leads' ? 'Auto-approved' : 'Pending'} Leads`,
             },
           },
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: leadsText,
+              text: `*Persona:* ${payload.persona || 'Default'}\n` + 
+                    payload.leads.map((l: any) => 
+                      `• *${l.name}* (${l.industry || 'Unknown'}) - Score: ${l.qualityScore}`
+                    ).join('\n'),
             },
           },
         ],
       };
     } else if (isDiscord) {
-      // Discord format
-      const leadsText = payload.leads.map((l: any) => 
-        `• **${l.name}** (${l.industry || 'Unknown'}) - Quality: ${l.qualityScore}%`
-      ).join('\n');
-
-      body = {
-        content: `🎯 **LeadGenie: ${payload.count} new ${payload.type === 'auto_approved_leads' ? 'auto-approved' : 'pending'} leads**`,
-        embeds: [
-          {
-            title: 'New Leads Discovered',
-            description: leadsText,
-            color: payload.type === 'auto_approved_leads' ? 0x22c55e : 0x3b82f6,
-          },
-        ],
+      formattedPayload = {
+        embeds: [{
+          title: `🎯 ${payload.count} ${payload.type === 'auto_approved_leads' ? 'Auto-approved' : 'Pending'} Leads`,
+          description: `**Persona:** ${payload.persona || 'Default'}\n\n` +
+                       payload.leads.map((l: any) => 
+                         `• **${l.name}** (${l.industry || 'Unknown'}) - Score: ${l.qualityScore}`
+                       ).join('\n'),
+          color: payload.type === 'auto_approved_leads' ? 0x22c55e : 0x3b82f6,
+        }],
       };
     } else {
-      // Generic webhook
-      body = {
-        event: payload.type,
-        count: payload.count,
-        leads: payload.leads,
-        timestamp: new Date().toISOString(),
-      };
+      formattedPayload = payload;
     }
 
-    const response = await fetch(webhookUrl, {
+    await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(formattedPayload),
     });
 
-    if (!response.ok) {
-      console.error('[autonomous-lead-discovery] Webhook failed:', response.status, await response.text());
-    } else {
-      console.log('[autonomous-lead-discovery] Webhook notification sent successfully');
-    }
+    console.log('[autonomous-lead-discovery] Webhook notification sent');
   } catch (error) {
     console.error('[autonomous-lead-discovery] Error sending webhook:', error);
   }
