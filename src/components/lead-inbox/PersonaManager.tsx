@@ -369,14 +369,14 @@ export function PersonaManager() {
                   <div className="space-y-2">
                     <Label>Auto-enroll in Sequence</Label>
                     <Select
-                      value={formData.auto_enroll_sequence_id}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, auto_enroll_sequence_id: value }))}
+                      value={formData.auto_enroll_sequence_id || "none"}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, auto_enroll_sequence_id: value === "none" ? "" : value }))}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="None (manual approval)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                         {sequences?.map((seq) => (
                           <SelectItem key={seq.id} value={seq.id}>{seq.name}</SelectItem>
                         ))}
