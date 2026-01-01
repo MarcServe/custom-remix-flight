@@ -137,7 +137,6 @@ export function CompanyDetailsDialog({
   currentIndex,
   onNavigate,
 }: CompanyDetailsDialogProps) {
-  const [isEnriching, setIsEnriching] = useState(false);
   const [isExtractingEmail, setIsExtractingEmail] = useState(false);
   const [generateSequenceDialogOpen, setGenerateSequenceDialogOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
@@ -155,6 +154,12 @@ export function CompanyDetailsDialog({
   const { data: eventsData } = useCompanyEvents(company?.id || '');
   const deleteEventMutation = useDeleteEvent();
   const queryClient = useQueryClient();
+
+  // Reset extracted email when company changes
+  useEffect(() => {
+    setExtractedEmail(null);
+    setIsExtractingEmail(false);
+  }, [company?.id]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -214,7 +219,6 @@ export function CompanyDetailsDialog({
 
   const hasContacts = normalizedCompany.contacts && normalizedCompany.contacts.length > 0;
   const hasBeenSaved = !!company.id;
-  const showFindProspectsButton = !hasContacts && !isSearching && hasBeenSaved && normalizedCompany.linkedinUrl;
   
   const showNavigation = allCompanies && currentIndex !== undefined && onNavigate;
   const canGoPrev = showNavigation && currentIndex > 0;
@@ -453,53 +457,6 @@ export function CompanyDetailsDialog({
     }
   };
 
-  const handleFindProspects = async () => {
-    if (!normalizedCompany.linkedinUrl) {
-      toast({
-        title: "LinkedIn URL required",
-        description: "This company needs a LinkedIn URL to find prospects.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsEnriching(true);
-    toast({
-      title: "Finding prospects",
-      description: `Searching for contacts at ${company.name}...`,
-    });
-
-    try {
-      const { supabase } = await import("@/integrations/supabase/client");
-      const { data, error } = await supabase.functions.invoke('find-linkedin-prospects', {
-        body: {
-          companyId: company.id,
-          linkedinUrl: company.linkedinUrl,
-          companyName: company.name,
-        }
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: `Found ${data.inserted} prospects with contact details`,
-      });
-
-      // Close and reopen dialog to refresh data
-      onOpenChange(false);
-      setTimeout(() => onOpenChange(true), 100);
-    } catch (error) {
-      console.error("Find prospects error:", error);
-      toast({
-        title: "Error finding prospects",
-        description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive",
-      });
-    } finally {
-      setIsEnriching(false);
-    }
-  };
 
   const handleExtractEmail = async () => {
     if (!company.website) {
@@ -1207,17 +1164,6 @@ export function CompanyDetailsDialog({
                       Save to CRM
                     </>
                   )}
-                </Button>
-              )}
-              {showFindProspectsButton && (
-                <Button 
-                  variant="default" 
-                  size="sm" 
-                  onClick={handleFindProspects}
-                  disabled={isEnriching}
-                >
-                  <Search className="h-3.5 w-3.5 mr-2" />
-                  {isEnriching ? "Finding..." : "Find Prospects"}
                 </Button>
               )}
               {/* Extract Email Button - show for saved companies with website but no email */}
