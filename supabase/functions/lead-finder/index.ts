@@ -1158,24 +1158,42 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify } = await req.json();
-  console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify });
+  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify, autonomousMode } = await req.json();
+  console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify, autonomousMode });
 
-  // Initialize Supabase with authenticated user
+  // Initialize Supabase
   const authHeader = req.headers.get('Authorization')!;
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } }
-  });
-
-  // Get authenticated user
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+  const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  
+  // Check if this is a server-to-server call with service role key (autonomous mode)
+  const isServiceRoleCall = authHeader?.includes(supabaseServiceRoleKey);
+  
+  let supabase;
+  let user: { id: string } | null = null;
+  
+  if (isServiceRoleCall && autonomousMode) {
+    // Server-to-server call from autonomous-lead-discovery - use service role client
+    console.log("Lead Finder: Autonomous mode with service role key");
+    supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+    // In autonomous mode, we don't need a user - leads will be processed differently
+    user = { id: 'autonomous-discovery' };
+  } else {
+    // Normal user call - authenticate via JWT
+    supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
     });
+
+    // Get authenticated user
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    if (authError || !authUser) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    user = authUser;
   }
 
   // Create SSE stream
@@ -1195,48 +1213,55 @@ Deno.serve(async (req) => {
   (async () => {
     let currentSearchId = searchId;
     let searchRecord: any = null;
+    const isAutonomous = autonomousMode === true;
 
     try {
       await sendEvent({ type: 'status', message: 'Initializing search...', progress: 5 });
 
-      // Create or resume search record
-      if (currentSearchId) {
-        // Try to resume existing search
-        const { data: existing } = await supabase
-          .from('lead_finder_searches')
-          .select('*')
-          .eq('id', currentSearchId)
-          .eq('user_id', user.id)
-          .single();
-        
-        if (existing && existing.status !== 'complete') {
-          searchRecord = existing;
-          console.log('Resuming search:', currentSearchId);
+      // Skip search record creation/resumption for autonomous mode (no real user)
+      if (!isAutonomous) {
+        // Create or resume search record
+        if (currentSearchId) {
+          // Try to resume existing search
+          const { data: existing } = await supabase
+            .from('lead_finder_searches')
+            .select('*')
+            .eq('id', currentSearchId)
+            .eq('user_id', user!.id)
+            .single();
+          
+          if (existing && existing.status !== 'complete') {
+            searchRecord = existing;
+            console.log('Resuming search:', currentSearchId);
+          }
         }
+
+        // Create new search if not resuming
+        if (!searchRecord) {
+          const { data: newSearch, error: searchError } = await supabase
+            .from('lead_finder_searches')
+            .insert({
+              user_id: user!.id,
+              search_params: { size, geography, industry, provider, model, enrichWithPerplexity, customSearchText, useSerpApi, useApify },
+              status: 'running',
+              progress: 5,
+              current_status: 'Initializing search...'
+            })
+            .select()
+            .single();
+
+          if (searchError) throw searchError;
+          searchRecord = newSearch;
+          currentSearchId = newSearch.id;
+          console.log('Created new search:', currentSearchId);
+        }
+
+        // Send search ID to frontend
+        await sendEvent({ type: 'search-created', searchId: currentSearchId });
+      } else {
+        console.log('Autonomous mode: Skipping search record creation');
+        currentSearchId = `autonomous-${crypto.randomUUID()}`;
       }
-
-      // Create new search if not resuming
-      if (!searchRecord) {
-        const { data: newSearch, error: searchError } = await supabase
-          .from('lead_finder_searches')
-          .insert({
-            user_id: user.id,
-            search_params: { size, geography, industry, provider, model, enrichWithPerplexity, customSearchText, useSerpApi, useApify },
-            status: 'running',
-            progress: 5,
-            current_status: 'Initializing search...'
-          })
-          .select()
-          .single();
-
-        if (searchError) throw searchError;
-        searchRecord = newSearch;
-        currentSearchId = newSearch.id;
-        console.log('Created new search:', currentSearchId);
-      }
-
-      // Send search ID to frontend
-      await sendEvent({ type: 'search-created', searchId: currentSearchId });
 
       const trace = createTrace('lead-finder', undefined, { size, geography, industry, customSearchText, searchId: currentSearchId });
       const EXA_API_KEY = Deno.env.get("EXA_API_KEY");

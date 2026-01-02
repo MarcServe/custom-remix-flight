@@ -598,8 +598,26 @@ async function parseStreamingResponse(response: Response): Promise<any[]> {
         if (line.startsWith('data: ')) {
           try {
             const data = JSON.parse(line.slice(6));
+            
+            // Handle individual lead events
             if (data.type === 'lead' && data.lead) {
               leads.push(data.lead);
+            }
+            
+            // Handle batch events (array of leads)
+            if (data.type === 'batch' && data.leads && Array.isArray(data.leads)) {
+              leads.push(...data.leads);
+            }
+            
+            // Handle lead-update events (enriched/updated leads)
+            if (data.type === 'lead-update' && data.lead) {
+              // Update existing lead or add new one
+              const existingIndex = leads.findIndex(l => l.name === data.lead.name);
+              if (existingIndex >= 0) {
+                leads[existingIndex] = data.lead;
+              } else {
+                leads.push(data.lead);
+              }
             }
           } catch {
             // Skip invalid JSON lines
@@ -611,6 +629,7 @@ async function parseStreamingResponse(response: Response): Promise<any[]> {
     console.error('[autonomous-lead-discovery] Error parsing stream:', error);
   }
 
+  console.log(`[autonomous-lead-discovery] Parsed ${leads.length} leads from stream`);
   return leads;
 }
 
