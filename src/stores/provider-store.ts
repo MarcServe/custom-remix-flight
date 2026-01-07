@@ -2,15 +2,14 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 interface ProviderStore {
-  defaultProvider: 'lovable' | 'openai' | 'perplexity';
+  defaultProvider: 'openai' | 'perplexity';
   defaultModels: {
-    lovable: string;
     openai: string;
     perplexity: string;
   };
   
-  setDefaultProvider: (provider: 'lovable' | 'openai' | 'perplexity') => void;
-  setDefaultModel: (provider: 'lovable' | 'openai' | 'perplexity', model: string) => void;
+  setDefaultProvider: (provider: 'openai' | 'perplexity') => void;
+  setDefaultModel: (provider: 'openai' | 'perplexity', model: string) => void;
 }
 
 export const useProviderStore = create<ProviderStore>()(
@@ -18,7 +17,6 @@ export const useProviderStore = create<ProviderStore>()(
     (set) => ({
       defaultProvider: 'openai',
       defaultModels: {
-        lovable: 'google/gemini-2.5-flash',
         openai: 'gpt-4o-mini',
         perplexity: 'sonar',
       },

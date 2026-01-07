@@ -1457,7 +1457,7 @@ ${JSON.stringify(batch, null, 2)}`;
 
       let allLeads: any[] = [];
       let totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 };
-      let extractionProvider = provider || 'lovable';
+      let extractionProvider = provider || 'openai';
       let extractionModel = model || 'unknown';
       const backgroundTasks: Promise<void>[] = []; // Track background enrichment tasks
 
@@ -1476,7 +1476,7 @@ ${JSON.stringify(batch, null, 2)}`;
             method: 'POST',
             headers: { 'Authorization': `Bearer ${supabaseAnonKey}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              provider: provider || 'lovable',
+              provider: provider || 'openai',
               model,
               messages: [
                 { role: 'system', content: 'Return only valid JSON arrays, no markdown.' },

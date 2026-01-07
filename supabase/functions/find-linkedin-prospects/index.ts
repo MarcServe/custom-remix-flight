@@ -78,7 +78,7 @@ Return ONLY the JSON array:`;
       },
       body: JSON.stringify({
         provider: 'openai',
-        model: 'google/gemini-2.5-flash',
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',

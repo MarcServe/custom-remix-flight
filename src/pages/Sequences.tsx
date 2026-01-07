@@ -317,9 +317,8 @@ export default function Sequences() {
                   <Label htmlFor="seq-provider" className="text-sm font-medium">AI Provider</Label>
                   <Select
                     value={providerConfig.provider}
-                    onValueChange={(value: 'lovable' | 'openai' | 'perplexity') => {
+                    onValueChange={(value: 'openai' | 'perplexity') => {
                       const defaultModels: Record<string, string> = {
-                        lovable: 'google/gemini-2.5-flash',
                         openai: 'gpt-4o-mini',
                         perplexity: 'sonar',
                       };
@@ -333,12 +332,6 @@ export default function Sequences() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="lovable">
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="h-4 w-4" />
-                          <span>Lovable AI (Gemini)</span>
-                        </div>
-                      </SelectItem>
                       <SelectItem value="openai">
                         <div className="flex items-center gap-2">
                           <Sparkles className="h-4 w-4" />
@@ -365,13 +358,6 @@ export default function Sequences() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {providerConfig.provider === 'lovable' && (
-                        <>
-                          <SelectItem value="google/gemini-2.5-flash">Gemini 2.5 Flash (Fast)</SelectItem>
-                          <SelectItem value="google/gemini-2.5-pro">Gemini 2.5 Pro (Powerful)</SelectItem>
-                          <SelectItem value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Fastest)</SelectItem>
-                        </>
-                      )}
                       {providerConfig.provider === 'openai' && (
                         <>
                           <SelectItem value="gpt-4o-mini">GPT-4o Mini (Efficient)</SelectItem>
