@@ -3,10 +3,10 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Zap, TrendingUp } from 'lucide-react';
+import { Sparkles, TrendingUp } from 'lucide-react';
 
 export interface ProviderConfig {
-  provider: 'lovable' | 'openai' | 'perplexity';
+  provider: 'openai' | 'perplexity';
   model?: string;
 }
 
@@ -17,11 +17,6 @@ interface ProviderSelectorProps {
 }
 
 const MODELS: Record<string, Array<{ value: string; label: string; description: string }>> = {
-  lovable: [
-    { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: 'Fast & balanced' },
-    { value: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Most powerful' },
-    { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', description: 'Fastest & cheapest' },
-  ],
   openai: [
     { value: 'gpt-4o-mini', label: 'GPT-4o Mini', description: 'Fast & efficient' },
     { value: 'gpt-4o', label: 'GPT-4o', description: 'Most capable' },
@@ -33,15 +28,14 @@ const MODELS: Record<string, Array<{ value: string; label: string; description: 
 };
 
 export function ProviderSelector({ value, onChange, showCost = false }: ProviderSelectorProps) {
-  const currentModels = MODELS[value.provider];
-  const getDefaultModel = (provider: 'lovable' | 'openai' | 'perplexity') => {
-    if (provider === 'lovable') return 'google/gemini-2.5-flash';
+  const currentModels = MODELS[value.provider] || MODELS.openai;
+  const getDefaultModel = (provider: 'openai' | 'perplexity') => {
     if (provider === 'perplexity') return 'sonar';
     return 'gpt-4o-mini';
   };
   const defaultModel = getDefaultModel(value.provider);
 
-  const handleProviderChange = (newProvider: 'lovable' | 'openai' | 'perplexity') => {
+  const handleProviderChange = (newProvider: 'openai' | 'perplexity') => {
     onChange({
       provider: newProvider,
       model: MODELS[newProvider][0].value,
@@ -74,22 +68,6 @@ export function ProviderSelector({ value, onChange, showCost = false }: Provider
             onValueChange={handleProviderChange}
             className="grid grid-cols-1 gap-3"
           >
-            <div className="flex items-center space-x-3 rounded-lg border p-4 cursor-pointer hover:bg-accent/50 transition-colors">
-              <RadioGroupItem value="lovable" id="lovable" />
-              <Label htmlFor="lovable" className="flex-1 cursor-pointer">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-semibold">Lovable AI</div>
-                    <div className="text-sm text-muted-foreground">Google Gemini models</div>
-                  </div>
-                  <Badge variant="secondary" className="ml-2">
-                    <Zap className="h-3 w-3 mr-1" />
-                    Fast
-                  </Badge>
-                </div>
-              </Label>
-            </div>
-
             <div className="flex items-center space-x-3 rounded-lg border p-4 cursor-pointer hover:bg-accent/50 transition-colors">
               <RadioGroupItem value="openai" id="openai" />
               <Label htmlFor="openai" className="flex-1 cursor-pointer">
@@ -152,9 +130,7 @@ export function ProviderSelector({ value, onChange, showCost = false }: Provider
           <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
             <p className="font-medium mb-1">Cost Estimate</p>
             <p className="text-xs">
-              {value.provider === 'lovable'
-                ? 'Lovable AI credits will be used for this request'
-                : value.provider === 'perplexity'
+              {value.provider === 'perplexity'
                 ? 'Perplexity API costs will apply (includes real-time search)'
                 : 'OpenAI API costs will apply based on usage'}
             </p>

@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 interface AIProviderRequest {
-  provider?: 'lovable' | 'openai' | 'perplexity';
+  provider?: 'openai' | 'perplexity';
   model?: string;
   messages: Array<{ role: string; content: string }>;
   tools?: any[];
@@ -290,21 +290,25 @@ serve(async (req) => {
   try {
     const requestBody: AIProviderRequest = await req.json();
     
-    // Default to OpenAI (ignore AI_PROVIDER env to avoid Lovable credits usage)
-    const provider = (requestBody.provider || 'openai') as 'lovable' | 'openai' | 'perplexity';
+    // Always use OpenAI by default, redirect any 'lovable' requests to OpenAI
+    let provider: string = requestBody.provider || 'openai';
+    if (provider === 'lovable') {
+      console.log('Redirecting lovable provider request to openai');
+      provider = 'openai';
+    }
 
     console.log(`AI Provider request - provider: ${provider}, model: ${requestBody.model}`);
 
     let result: AIProviderResponse;
 
-    if (provider === 'lovable') {
-      result = await handleLovableAI(requestBody);
-    } else if (provider === 'openai') {
+    if (provider === 'openai') {
       result = await handleOpenAI(requestBody);
     } else if (provider === 'perplexity') {
       result = await handlePerplexity(requestBody);
     } else {
-      throw new Error(`Unsupported provider: ${provider}`);
+      // Fallback to OpenAI for any unknown provider
+      console.log(`Unknown provider ${provider}, falling back to openai`);
+      result = await handleOpenAI(requestBody);
     }
 
     return new Response(JSON.stringify(result), {

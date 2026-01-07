@@ -84,7 +84,7 @@ Return ONLY the JSON array.`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        provider: provider || 'lovable',
+        provider: provider || 'openai',
         model: model,
         messages: [
           {
