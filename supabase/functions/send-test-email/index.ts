@@ -430,7 +430,85 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
     // Send via configured provider
     let messageId;
     
-    if (emailProvider === 'sendgrid' && SENDGRID_API_KEY) {
+    if (emailProvider === 'gmail_direct' || emailProvider === 'gmail') {
+      // Send via Gmail Direct API
+      if (!connection) {
+        throw new Error('Gmail connection not found. Please reconnect your Gmail account.');
+      }
+
+      const metadata = connection.metadata as any;
+      let accessToken = metadata?.access_token;
+      const expiresAt = metadata?.expires_at;
+
+      // Check if token is expired and refresh if needed
+      if (expiresAt && new Date(expiresAt) <= new Date()) {
+        console.log('Gmail access token expired, refreshing...');
+        
+        const refreshResponse = await supabase.functions.invoke('gmail-oauth-refresh', {
+          body: { connection_id: connection.id }
+        });
+
+        if (refreshResponse.error || !refreshResponse.data?.access_token) {
+          throw new Error('Failed to refresh Gmail token. Please reconnect your Gmail account.');
+        }
+
+        accessToken = refreshResponse.data.access_token;
+      }
+
+      if (!accessToken) {
+        throw new Error('Gmail access token not found. Please reconnect your Gmail account.');
+      }
+
+      const fromEmail = connection.from_email || userProfile?.email || user.email;
+      
+      // Build Gmail API message with HTML
+      const boundary = '===============' + Math.random().toString().substr(2) + '==';
+      const emailLines = [
+        `From: ${fromEmail}`,
+        `To: ${testEmail}`,
+        `Subject: [TEST] ${personalizedSubject2}`,
+        'MIME-Version: 1.0',
+        `Content-Type: multipart/alternative; boundary="${boundary}"`,
+        '',
+        `--${boundary}`,
+        'Content-Type: text/plain; charset=utf-8',
+        '',
+        personalizedBody2 + signatureText,
+        `--${boundary}`,
+        'Content-Type: text/html; charset=utf-8',
+        '',
+        bodyHtml,
+        `--${boundary}--`
+      ];
+
+      const emailMessage = emailLines.join('\r\n');
+      const encodedMessage = btoa(emailMessage)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      // Send via Gmail API
+      const gmailResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          raw: encodedMessage
+        }),
+      });
+
+      if (!gmailResponse.ok) {
+        const errorData = await gmailResponse.text();
+        console.error('Gmail API error:', errorData);
+        throw new Error(`Failed to send via Gmail: ${errorData}`);
+      }
+
+      const gmailData = await gmailResponse.json();
+      messageId = gmailData.id || 'gmail-sent';
+      console.log('Test email sent via Gmail Direct:', messageId);
+    } else if (emailProvider === 'sendgrid' && SENDGRID_API_KEY) {
       const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
