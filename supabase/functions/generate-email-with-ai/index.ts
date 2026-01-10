@@ -7,6 +7,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/**
+ * Clean and validate API key - removes any non-ASCII characters
+ */
+function cleanApiKey(key: string | undefined): string | null {
+  if (!key) return null;
+  // Trim whitespace and remove any non-ASCII characters
+  const cleaned = key.trim().replace(/[^\x00-\x7F]/g, '');
+  return cleaned.length > 10 ? cleaned : null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -15,9 +25,10 @@ serve(async (req) => {
   try {
     const requestBody = await req.json();
     
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    const rawKey = Deno.env.get('OPENAI_API_KEY');
+    const OPENAI_API_KEY = cleanApiKey(rawKey);
     if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY not configured. Please add it in Supabase Edge Function Secrets.');
+      throw new Error('OPENAI_API_KEY not configured or invalid. Please add it in Supabase Edge Function Secrets.');
     }
 
     // Initialize Supabase client with service role for profile fetching
