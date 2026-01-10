@@ -7,9 +7,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/**
+ * Clean API key - removes any non-ASCII characters that cause ByteString errors
+ */
+function cleanApiKey(key: string | undefined): string | null {
+  if (!key) return null;
+  return key.trim().replace(/[^\x00-\x7F]/g, '');
+}
+
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const OPENAI_API_KEY = cleanApiKey(Deno.env.get('OPENAI_API_KEY'));
 
 // Regex patterns for email extraction
 const EMAIL_PATTERNS = [

@@ -6,6 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/**
+ * Clean API key - removes any non-ASCII characters that cause ByteString errors
+ */
+function cleanApiKey(key: string | undefined): string | null {
+  if (!key) return null;
+  return key.trim().replace(/[^\x00-\x7F]/g, '');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -45,9 +53,10 @@ serve(async (req) => {
       throw new Error('No companies found');
     }
 
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY not configured. Please add it in Supabase Edge Function Secrets.');
+    const rawKey = Deno.env.get('OPENAI_API_KEY');
+    const OPENAI_API_KEY = cleanApiKey(rawKey);
+    if (!OPENAI_API_KEY || !OPENAI_API_KEY.startsWith('sk-')) {
+      throw new Error('OPENAI_API_KEY not configured or invalid. Please add it in Supabase Edge Function Secrets.');
     }
 
     // Prepare company data for AI analysis
