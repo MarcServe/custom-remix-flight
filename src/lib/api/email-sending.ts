@@ -63,7 +63,7 @@ export const emailSendingApi = {
    * Check if user has any configured email providers
    */
   async hasConfiguredProviders(): Promise<boolean> {
-    const { data } = await this.getProviders();
+    const { data } = await emailSendingApi.getProviders();
     return (data?.length || 0) > 0;
   },
 
@@ -71,7 +71,7 @@ export const emailSendingApi = {
    * Get the optimal provider based on tracking capabilities
    */
   async getOptimalProvider(): Promise<{ data: ProviderCapabilities | null; error: Error | null }> {
-    const { data: providers, error } = await this.getProviders();
+    const { data: providers, error } = await emailSendingApi.getProviders();
     
     if (error) return { data: null, error };
     if (!providers || providers.length === 0) {
@@ -84,7 +84,7 @@ export const emailSendingApi = {
     // Priority: Providers with tracking > Resend/SendGrid > Gmail/Outlook > Others
     const optimal = 
       providers.find(p => p.tracking_enabled && ['resend', 'sendgrid'].includes(p.provider)) ||
-      providers.find(p => p.tracking_enabled && ['gmail', 'outlook'].includes(p.provider)) ||
+      providers.find(p => p.tracking_enabled && ['gmail', 'gmail_direct', 'outlook'].includes(p.provider)) ||
       providers.find(p => p.tracking_enabled) ||
       providers[0];
 
@@ -103,7 +103,7 @@ export const emailSendingApi = {
     const warnings: string[] = [];
     const errors: string[] = [];
 
-    const { data: provider, error } = await this.getOptimalProvider();
+    const { data: provider, error } = await emailSendingApi.getOptimalProvider();
 
     if (error || !provider) {
       errors.push('No email provider configured');
@@ -142,7 +142,7 @@ export const emailSendingApi = {
    * Send a single email using optimal provider
    */
   async sendEmail(request: SendEmailRequest) {
-    const validation = await this.validateProviderSetup();
+    const validation = await emailSendingApi.validateProviderSetup();
     
     if (!validation.valid) {
       return {
@@ -165,7 +165,7 @@ export const emailSendingApi = {
    * Send bulk emails using optimal provider
    */
   async sendBulkEmails(request: BulkEmailRequest) {
-    const validation = await this.validateProviderSetup();
+    const validation = await emailSendingApi.validateProviderSetup();
     
     if (!validation.valid) {
       return {
@@ -188,7 +188,7 @@ export const emailSendingApi = {
    * Send sequence email with automatic provider selection
    */
   async sendSequenceEmail(companySequenceId: string, stepNumber: number) {
-    const validation = await this.validateProviderSetup();
+    const validation = await emailSendingApi.validateProviderSetup();
     
     if (!validation.valid) {
       return {
@@ -214,7 +214,7 @@ export const emailSendingApi = {
    * Send all sequence emails with automatic provider selection
    */
   async sendSequenceEmails(companySequenceId: string, startFromStep = 0) {
-    const validation = await this.validateProviderSetup();
+    const validation = await emailSendingApi.validateProviderSetup();
     
     if (!validation.valid) {
       return {
