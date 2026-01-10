@@ -526,12 +526,14 @@ export default function Profile() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="gmail_direct">Gmail (OAuth)</SelectItem>
+                    <SelectItem value="smtp">SMTP</SelectItem>
                     <SelectItem value="resend">Resend</SelectItem>
                     <SelectItem value="sendgrid">SendGrid</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Choose which service to use for sending emails from the CRM
+                  Choose which service to use for sending emails from the CRM (set up in Email Providers).
                 </p>
               </div>
 
