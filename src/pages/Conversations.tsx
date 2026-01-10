@@ -47,12 +47,12 @@ interface CompanySequence {
   auto_respond_enabled: boolean;
   companies: {
     name: string;
-  };
+  } | null;
   email_sequences: {
     name: string;
     goal?: string;
     auto_respond: boolean;
-  };
+  } | null;
 }
 
 interface Conversation {
@@ -211,13 +211,19 @@ export default function Conversations() {
 
         if (!seqError && sequences) {
           sequences.forEach((seq) => {
+            // Skip sequences with deleted companies or email sequences
+            if (!seq.companies || !seq.email_sequences) {
+              console.warn(`Skipping sequence ${seq.id} - missing company or email sequence data`);
+              return;
+            }
+            
             const latestThread = threadsData?.find(t => t.company_sequence_id === seq.id);
             allConversations.push({
               id: seq.id,
               type: 'sequence',
-              title: seq.companies.name,
-              subtitle: seq.email_sequences.name,
-              goal: seq.email_sequences.goal,
+              title: seq.companies?.name || 'Unknown Company',
+              subtitle: seq.email_sequences?.name || 'Deleted Sequence',
+              goal: seq.email_sequences?.goal,
               latest_activity: latestThread?.received_at || seq.updated_at,
               sequenceData: seq,
             });
