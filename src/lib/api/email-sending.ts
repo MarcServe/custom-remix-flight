@@ -152,7 +152,17 @@ export const emailSendingApi = {
       };
     }
 
-    const result = await apiClient.callFunction('send-crm-email', request);
+    // Transform client request to edge function format
+    const edgeFunctionRequest = {
+      toEmail: request.to,
+      toName: request.to.split('@')[0], // Use email prefix as fallback name
+      subject: request.subject,
+      body: request.body,
+      companyId: request.companySequenceId, // Edge function uses companyId
+      contactId: request.contactId,
+    };
+
+    const result = await apiClient.callFunction('send-crm-email', edgeFunctionRequest);
     
     return {
       ...result,
