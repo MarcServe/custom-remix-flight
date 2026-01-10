@@ -493,8 +493,8 @@ export default function UnifiedCampaigns() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {sequenceCampaigns.map((sequence) => {
-                    const totalSteps = sequence.email_sequences.steps?.length || 0;
+              {sequenceCampaigns.map((sequence) => {
+                    const totalSteps = sequence.email_sequences?.steps?.length || 0;
                     const sentEmails = sequence.email_activities?.length || 0;
                     const repliedEmails = sequence.email_activities?.filter(a => a.replied_at).length || 0;
                     const openedEmails = sequence.email_activities?.filter(a => a.opened_at).length || 0;
@@ -507,9 +507,9 @@ export default function UnifiedCampaigns() {
                               <Building2 className="h-5 w-5 text-white" />
                             </div>
                             <div>
-                              <h4 className="font-semibold">{sequence.companies.name}</h4>
+                              <h4 className="font-semibold">{sequence.companies?.name || 'Unknown company'}</h4>
                               <p className="text-sm text-muted-foreground">
-                                {sequence.email_sequences.name}
+                                {sequence.email_sequences?.name || 'Sequence deleted'}
                               </p>
                             </div>
                           </div>
