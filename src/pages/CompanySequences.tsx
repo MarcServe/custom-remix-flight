@@ -63,7 +63,7 @@ interface CompanySequence {
     name: string;
     steps: any[];
     auto_respond: boolean;
-  };
+  } | null;
   email_activities: Array<{
     id: string;
     step_number: number;
@@ -347,7 +347,7 @@ export default function CompanySequences() {
           ) : (
             filteredSequences?.map(sequence => {
               const engagement = calculateEngagement(sequence.email_activities || []);
-              const totalSteps = sequence.email_sequences.steps?.length || 0;
+              const totalSteps = sequence.email_sequences?.steps?.length || 0;
               const progress = totalSteps > 0 ? Math.round((sequence.current_step / totalSteps) * 100) : 0;
 
               return (
@@ -386,7 +386,7 @@ export default function CompanySequences() {
                             <Eye className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </h3>
                           <p className="text-sm text-muted-foreground mb-2">
-                            {sequence.email_sequences.name}
+                            {sequence.email_sequences?.name || 'Sequence deleted'}
                           </p>
                           <div className="flex flex-wrap gap-2">
                             <Badge 
