@@ -8,7 +8,7 @@ import { ConnectEmailDialog } from "@/components/integrations/ConnectEmailDialog
 import { VerifiedEmailDialog } from "@/components/integrations/VerifiedEmailDialog";
 import { nangoClient } from "@/lib/integrations/nango";
 import { toast } from "sonner";
-import { Mail, AlertTriangle, Info, Webhook, ArrowRight, CheckCircle2, Copy } from "lucide-react";
+import { Mail, AlertTriangle, Info, Webhook, ArrowRight, CheckCircle2, Copy, RefreshCw, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -105,6 +105,7 @@ export default function EmailProviders() {
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [verifiedEmailDialogOpen, setVerifiedEmailDialogOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'gmail_direct' | 'outlook' | 'smtp'>('gmail');
+  const [isSyncingReplies, setIsSyncingReplies] = useState(false);
   const [selectedApiProvider, setSelectedApiProvider] = useState<'resend' | 'sendgrid'>('resend');
 
   // Handle OAuth callback from redirect
@@ -517,41 +518,111 @@ export default function EmailProviders() {
                 </div>
               )}
 
-              {/* Gmail/Outlook OAuth */}
-              {connections.some(c => ['gmail', 'outlook'].includes(c.provider) && c.status === 'active') && (
-                <div className="p-4 rounded-lg border-2 bg-card space-y-3">
+              {/* Gmail Direct OAuth */}
+              {connections.some(c => ['gmail', 'gmail_direct'].includes(c.provider) && c.status === 'active') && (
+                <div className="p-4 rounded-lg border-2 border-primary/30 bg-card space-y-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-2xl">📧</span>
-                      <h5 className="font-semibold">Gmail / Outlook OAuth</h5>
+                      <img src="https://www.google.com/favicon.ico" alt="Gmail" className="w-6 h-6" />
+                      <h5 className="font-semibold">Gmail Reply Sync</h5>
                     </div>
-                    <Badge variant="outline" className="bg-success/10 text-success">
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Auto-Configured
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="bg-success/10 text-success">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Connected
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isSyncingReplies}
+                        onClick={async () => {
+                          setIsSyncingReplies(true);
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            if (!session) {
+                              toast.error('Please sign in first');
+                              return;
+                            }
+
+                            const { data, error } = await supabase.functions.invoke('gmail-sync-replies', {});
+                            
+                            if (error) throw error;
+                            
+                            toast.success(`Synced ${data?.repliesFound || 0} new replies from Gmail`, {
+                              description: 'Check your sequences for updates'
+                            });
+                            
+                            queryClient.invalidateQueries({ queryKey: ['email-activities'] });
+                            queryClient.invalidateQueries({ queryKey: ['company-sequences'] });
+                          } catch (error: any) {
+                            console.error('Sync error:', error);
+                            toast.error('Failed to sync replies', {
+                              description: error.message || 'Please try again'
+                            });
+                          } finally {
+                            setIsSyncingReplies(false);
+                          }
+                        }}
+                      >
+                        {isSyncingReplies ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            Syncing...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-1" />
+                            Sync Now
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                   <Separator />
                   <Alert className="border-success/20 bg-success/5">
                     <CheckCircle2 className="h-4 w-4 text-success" />
                     <AlertDescription className="text-sm">
-                      <strong>Good news!</strong> Reply tracking for OAuth providers (Gmail/Outlook) is automatically enabled. 
-                      The system periodically checks your inbox for new responses and updates the dashboard in real-time.
+                      <strong>Gmail Connected!</strong> Your replies will appear both in Gmail and in the app. 
+                      Use "Sync Now" to manually fetch new replies, or they'll be synced automatically.
                     </AlertDescription>
                   </Alert>
                   <div className="text-sm text-muted-foreground space-y-1">
                     <p className="flex items-center gap-2">
                       <ArrowRight className="h-4 w-4" />
-                      Replies are detected within 5 minutes
+                      Replies sync from Gmail to your CRM
                     </p>
                     <p className="flex items-center gap-2">
                       <ArrowRight className="h-4 w-4" />
-                      Email threads are automatically tracked
+                      Email threads are tracked across both platforms
                     </p>
                     <p className="flex items-center gap-2">
                       <ArrowRight className="h-4 w-4" />
                       Auto-responses can be configured per sequence
                     </p>
                   </div>
+                </div>
+              )}
+
+              {/* Outlook OAuth */}
+              {connections.some(c => c.provider === 'outlook' && c.status === 'active') && (
+                <div className="p-4 rounded-lg border-2 bg-card space-y-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">📧</span>
+                      <h5 className="font-semibold">Outlook OAuth</h5>
+                    </div>
+                    <Badge variant="outline" className="bg-success/10 text-success">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Connected
+                    </Badge>
+                  </div>
+                  <Separator />
+                  <Alert className="border-yellow-500/20 bg-yellow-500/5">
+                    <Info className="h-4 w-4 text-yellow-500" />
+                    <AlertDescription className="text-sm">
+                      Outlook reply sync coming soon. For now, replies via webhook are tracked.
+                    </AlertDescription>
+                  </Alert>
                 </div>
               )}
             </div>
