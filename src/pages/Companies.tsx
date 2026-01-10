@@ -4,10 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone } from "lucide-react";
+import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload } from "lucide-react";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
 import { ProspectAnalyzer, TemperatureBadge } from "@/components/ProspectAnalyzer";
+import { ApifyCSVUploader } from "@/components/ApifyCSVUploader";
 import type { Company } from "@/lib/api/companies";
 
 export default function Companies() {
@@ -15,6 +16,7 @@ export default function Companies() {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [csvUploaderOpen, setCsvUploaderOpen] = useState(false);
   const [emailRecipient, setEmailRecipient] = useState<{
     email: string;
     name: string;
@@ -103,6 +105,10 @@ export default function Companies() {
             {companies?.length || 0} companies in your CRM
           </p>
         </div>
+        <Button onClick={() => setCsvUploaderOpen(true)} variant="outline">
+          <Upload className="h-4 w-4 mr-2" />
+          Import CSV
+        </Button>
       </div>
 
       {companies && companies.length > 0 && (
@@ -260,6 +266,11 @@ export default function Companies() {
           contactId={emailRecipient.contactId}
         />
       )}
+
+      <ApifyCSVUploader
+        open={csvUploaderOpen}
+        onOpenChange={setCsvUploaderOpen}
+      />
     </div>
   );
 }
