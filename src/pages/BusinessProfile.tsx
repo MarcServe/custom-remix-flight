@@ -20,7 +20,7 @@ export default function BusinessProfile() {
     target_audience: "",
     value_proposition: "",
     tone_preference: "professional",
-    email_provider: "resend" as "resend" | "sendgrid",
+    email_provider: "resend" as "resend" | "sendgrid" | "gmail_direct",
   });
 
   useEffect(() => {
@@ -50,7 +50,7 @@ export default function BusinessProfile() {
           target_audience: data.target_audience || "",
           value_proposition: data.value_proposition || "",
           tone_preference: data.tone_preference || "professional",
-          email_provider: (data.email_provider === 'sendgrid' ? 'sendgrid' : 'resend') as "resend" | "sendgrid",
+          email_provider: (data.email_provider || 'resend') as "resend" | "sendgrid" | "gmail_direct",
         });
       }
     } catch (error) {
@@ -206,18 +206,25 @@ export default function BusinessProfile() {
             <Label htmlFor="email_provider">Email Provider</Label>
             <Select
               value={profile.email_provider}
-              onValueChange={(value: "resend" | "sendgrid") => setProfile({ ...profile, email_provider: value })}
+              onValueChange={(value: "resend" | "sendgrid" | "gmail_direct") => setProfile({ ...profile, email_provider: value })}
             >
               <SelectTrigger id="email_provider">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="gmail_direct">
+                  <div className="flex items-center gap-2">
+                    <img src="https://www.google.com/favicon.ico" alt="Gmail" className="w-4 h-4" />
+                    Gmail (OAuth) - Recommended
+                  </div>
+                </SelectItem>
                 <SelectItem value="resend">Resend</SelectItem>
                 <SelectItem value="sendgrid">SendGrid</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Choose which provider to use for sending emails. Make sure you've added the API key for your selected provider.
+              Gmail is recommended for conversations - replies appear in both your inbox and this app.
+              Make sure you've connected Gmail in Email Providers first.
             </p>
           </div>
 
