@@ -6,6 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/**
+ * Clean API key - removes any non-ASCII characters that cause ByteString errors
+ */
+function cleanApiKey(key: string | undefined): string | null {
+  if (!key) return null;
+  return key.trim().replace(/[^\x00-\x7F]/g, '');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -13,10 +21,11 @@ serve(async (req) => {
 
   try {
     const { messages, extractedParams = {} } = await req.json();
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    const rawKey = Deno.env.get("OPENAI_API_KEY");
+    const OPENAI_API_KEY = cleanApiKey(rawKey);
     
-    if (!OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is not configured. Please add it in Supabase Edge Function Secrets.");
+    if (!OPENAI_API_KEY || !OPENAI_API_KEY.startsWith('sk-')) {
+      throw new Error("OPENAI_API_KEY is not configured or invalid. Please add it in Supabase Edge Function Secrets.");
     }
 
     console.log('Starting sequence chat with messages:', messages.length);

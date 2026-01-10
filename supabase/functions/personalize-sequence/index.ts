@@ -3,7 +3,16 @@ import { corsHeaders } from '../_shared/cors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
+
+/**
+ * Clean API key - removes any non-ASCII characters that cause ByteString errors
+ */
+function cleanApiKey(key: string | undefined): string | null {
+  if (!key) return null;
+  return key.trim().replace(/[^\x00-\x7F]/g, '');
+}
+
+const OPENAI_API_KEY = cleanApiKey(Deno.env.get('OPENAI_API_KEY'));
 
 interface PersonalizeRequest {
   sequenceId: string;
@@ -19,8 +28,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY not configured. Please add it in Supabase Edge Function Secrets.');
+    if (!OPENAI_API_KEY || !OPENAI_API_KEY.startsWith('sk-')) {
+      throw new Error('OPENAI_API_KEY not configured or invalid. Please add it in Supabase Edge Function Secrets.');
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);

@@ -2,7 +2,15 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+/**
+ * Clean API key - removes any non-ASCII characters that cause ByteString errors
+ */
+function cleanApiKey(key: string | undefined): string | null {
+  if (!key) return null;
+  return key.trim().replace(/[^\x00-\x7F]/g, '');
+}
+
+const OPENAI_API_KEY = cleanApiKey(Deno.env.get('OPENAI_API_KEY'));
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
