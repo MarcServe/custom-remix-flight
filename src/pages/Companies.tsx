@@ -10,6 +10,7 @@ import { SendEmailDialog } from "@/components/SendEmailDialog";
 import { ProspectAnalyzer, TemperatureBadge } from "@/components/ProspectAnalyzer";
 import { ApifyCSVUploader } from "@/components/ApifyCSVUploader";
 import { ApifyScraperDialog } from "@/components/ApifyScraperDialog";
+import { CampaignFitAnalyzer } from "@/components/CampaignFitAnalyzer";
 import { TagBadges } from "@/components/ui/tag-input";
 import { useCompanyTags } from "@/hooks/use-company-tags";
 import {
@@ -256,6 +257,7 @@ export default function Companies() {
               </div>
             </PopoverContent>
           </Popover>
+          <CampaignFitAnalyzer />
           <Button onClick={() => setCsvUploaderOpen(true)} variant="outline">
             <Upload className="h-4 w-4 mr-2" />
             Import CSV
