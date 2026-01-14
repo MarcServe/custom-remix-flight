@@ -638,21 +638,45 @@ export default function LeadInbox() {
               <Separator />
 
               {/* Frequency */}
-              <div className="space-y-2">
-                <Label>Discovery Frequency</Label>
-                <Select
-                  value={localSettings?.discovery_frequency || 'daily'}
-                  onValueChange={(value) => handleSettingsChange('discovery_frequency', value)}
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="twice_weekly">Twice a week</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Discovery Frequency</Label>
+                  <Select
+                    value={localSettings?.discovery_frequency || 'daily'}
+                    onValueChange={(value) => handleSettingsChange('discovery_frequency', value)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="twice_weekly">Twice a week</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Preferred Delivery Time (UTC)</Label>
+                  <Select
+                    value={String(localSettings?.preferred_discovery_hour ?? 9)}
+                    onValueChange={(value) => handleSettingsChange('preferred_discovery_hour', parseInt(value))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="6">6:00 AM (Early Morning)</SelectItem>
+                      <SelectItem value="9">9:00 AM (Morning)</SelectItem>
+                      <SelectItem value="12">12:00 PM (Midday)</SelectItem>
+                      <SelectItem value="15">3:00 PM (Afternoon)</SelectItem>
+                      <SelectItem value="18">6:00 PM (Evening)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    When you want fresh leads delivered to your inbox
+                  </p>
+                </div>
               </div>
 
               {/* Max Leads */}
@@ -891,18 +915,32 @@ export default function LeadInbox() {
               </Button>
 
               {/* Status Info */}
-              {settings && (
-                <div className="mt-6 p-4 bg-muted rounded-lg">
-                  <h4 className="font-medium mb-2 flex items-center gap-2">
-                    <Zap className="h-4 w-4" />
-                    Discovery Status
-                  </h4>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    <p>Last run: {settings.last_run_at ? new Date(settings.last_run_at).toLocaleString() : 'Never'}</p>
-                    <p>Next scheduled: {settings.next_run_at ? new Date(settings.next_run_at).toLocaleString() : 'Not scheduled'}</p>
+              <div className="mt-6 p-4 bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20">
+                <h4 className="font-medium mb-3 flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-primary" />
+                  Automated Discovery Status
+                </h4>
+                <div className="text-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Automation:</span>
+                    <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-200">
+                      <Clock className="h-3 w-3 mr-1" />
+                      Daily at {localSettings?.preferred_discovery_hour ?? 9}:00 UTC
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Last run:</span>
+                    <span className="font-medium">{settings?.last_run_at ? new Date(settings.last_run_at).toLocaleString() : 'Never'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Next scheduled:</span>
+                    <span className="font-medium">{settings?.next_run_at ? new Date(settings.next_run_at).toLocaleString() : 'Tomorrow at ' + (localSettings?.preferred_discovery_hour ?? 9) + ':00 UTC'}</span>
                   </div>
                 </div>
-              )}
+                <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-primary/10">
+                  💡 Fresh leads are discovered automatically every morning while you sleep!
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

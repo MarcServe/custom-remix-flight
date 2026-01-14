@@ -402,6 +402,7 @@ export type Database = {
           next_run_at: string | null
           notify_min_quality_score: number | null
           notify_on_auto_approve: boolean | null
+          preferred_discovery_hour: number | null
           target_company_sizes: string[] | null
           target_geographies: string[] | null
           target_industries: string[] | null
@@ -435,6 +436,7 @@ export type Database = {
           next_run_at?: string | null
           notify_min_quality_score?: number | null
           notify_on_auto_approve?: boolean | null
+          preferred_discovery_hour?: number | null
           target_company_sizes?: string[] | null
           target_geographies?: string[] | null
           target_industries?: string[] | null
@@ -468,6 +470,7 @@ export type Database = {
           next_run_at?: string | null
           notify_min_quality_score?: number | null
           notify_on_auto_approve?: boolean | null
+          preferred_discovery_hour?: number | null
           target_company_sizes?: string[] | null
           target_geographies?: string[] | null
           target_industries?: string[] | null
