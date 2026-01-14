@@ -169,6 +169,42 @@ export type Database = {
         }
         Relationships: []
       }
+      auto_approval_rules: {
+        Row: {
+          conditions: Json
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          priority: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          conditions?: Json
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          priority?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          conditions?: Json
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          priority?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       auto_response_analytics: {
         Row: {
           ai_model: string
@@ -395,12 +431,14 @@ export type Database = {
           created_at: string
           custom_search_query: string | null
           daily_lead_target: number | null
+          discord_webhook_url: string | null
           discovery_frequency: string
           enabled: boolean
           enrich_with_perplexity: boolean
           exa_quality_weight: number | null
           feedback_learning_enabled: boolean | null
           full_auto_mode: boolean | null
+          hot_lead_threshold: number | null
           id: string
           last_run_at: string | null
           learned_company_sizes: string[] | null
@@ -411,8 +449,11 @@ export type Database = {
           next_run_at: string | null
           notify_min_quality_score: number | null
           notify_on_auto_approve: boolean | null
+          notify_on_discovery_complete: boolean | null
+          notify_on_hot_leads: boolean | null
           preferred_discovery_hour: number | null
           serpapi_quality_weight: number | null
+          slack_webhook_url: string | null
           target_company_sizes: string[] | null
           target_geographies: string[] | null
           target_industries: string[] | null
@@ -440,12 +481,14 @@ export type Database = {
           created_at?: string
           custom_search_query?: string | null
           daily_lead_target?: number | null
+          discord_webhook_url?: string | null
           discovery_frequency?: string
           enabled?: boolean
           enrich_with_perplexity?: boolean
           exa_quality_weight?: number | null
           feedback_learning_enabled?: boolean | null
           full_auto_mode?: boolean | null
+          hot_lead_threshold?: number | null
           id?: string
           last_run_at?: string | null
           learned_company_sizes?: string[] | null
@@ -456,8 +499,11 @@ export type Database = {
           next_run_at?: string | null
           notify_min_quality_score?: number | null
           notify_on_auto_approve?: boolean | null
+          notify_on_discovery_complete?: boolean | null
+          notify_on_hot_leads?: boolean | null
           preferred_discovery_hour?: number | null
           serpapi_quality_weight?: number | null
+          slack_webhook_url?: string | null
           target_company_sizes?: string[] | null
           target_geographies?: string[] | null
           target_industries?: string[] | null
@@ -485,12 +531,14 @@ export type Database = {
           created_at?: string
           custom_search_query?: string | null
           daily_lead_target?: number | null
+          discord_webhook_url?: string | null
           discovery_frequency?: string
           enabled?: boolean
           enrich_with_perplexity?: boolean
           exa_quality_weight?: number | null
           feedback_learning_enabled?: boolean | null
           full_auto_mode?: boolean | null
+          hot_lead_threshold?: number | null
           id?: string
           last_run_at?: string | null
           learned_company_sizes?: string[] | null
@@ -501,8 +549,11 @@ export type Database = {
           next_run_at?: string | null
           notify_min_quality_score?: number | null
           notify_on_auto_approve?: boolean | null
+          notify_on_discovery_complete?: boolean | null
+          notify_on_hot_leads?: boolean | null
           preferred_discovery_hour?: number | null
           serpapi_quality_weight?: number | null
+          slack_webhook_url?: string | null
           target_company_sizes?: string[] | null
           target_geographies?: string[] | null
           target_industries?: string[] | null
@@ -519,6 +570,8 @@ export type Database = {
       }
       autonomous_leads: {
         Row: {
+          approval_confidence: number | null
+          approval_reason: string | null
           campaign_id: string | null
           company_data: Json
           company_id: string | null
@@ -532,6 +585,7 @@ export type Database = {
           geography: string | null
           id: string
           industry: string | null
+          matched_rules: string[] | null
           persona_id: string | null
           quality_score: number | null
           reviewed_at: string | null
@@ -543,6 +597,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          approval_confidence?: number | null
+          approval_reason?: string | null
           campaign_id?: string | null
           company_data?: Json
           company_id?: string | null
@@ -556,6 +612,7 @@ export type Database = {
           geography?: string | null
           id?: string
           industry?: string | null
+          matched_rules?: string[] | null
           persona_id?: string | null
           quality_score?: number | null
           reviewed_at?: string | null
@@ -567,6 +624,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          approval_confidence?: number | null
+          approval_reason?: string | null
           campaign_id?: string | null
           company_data?: Json
           company_id?: string | null
@@ -580,6 +639,7 @@ export type Database = {
           geography?: string | null
           id?: string
           industry?: string | null
+          matched_rules?: string[] | null
           persona_id?: string | null
           quality_score?: number | null
           reviewed_at?: string | null
@@ -1333,6 +1393,7 @@ export type Database = {
       }
       discovery_personas: {
         Row: {
+          auto_approve_threshold: number | null
           auto_enroll_sequence_id: string | null
           call_to_action: string | null
           conversion_rate: number | null
@@ -1364,6 +1425,7 @@ export type Database = {
           value_proposition: string | null
         }
         Insert: {
+          auto_approve_threshold?: number | null
           auto_enroll_sequence_id?: string | null
           call_to_action?: string | null
           conversion_rate?: number | null
@@ -1395,6 +1457,7 @@ export type Database = {
           value_proposition?: string | null
         }
         Update: {
+          auto_approve_threshold?: number | null
           auto_enroll_sequence_id?: string | null
           call_to_action?: string | null
           conversion_rate?: number | null

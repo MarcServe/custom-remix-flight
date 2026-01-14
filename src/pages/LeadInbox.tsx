@@ -485,6 +485,27 @@ export default function LeadInbox() {
             </Tabs>
 
             <div className="flex items-center gap-2">
+              {/* Bulk Approve Above Threshold */}
+              {activeTab === 'pending' && leads && leads.length > 0 && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    const threshold = settings?.auto_approve_threshold || 70;
+                    const leadsAboveThreshold = leads.filter(l => (l.quality_score || 0) >= threshold);
+                    if (leadsAboveThreshold.length > 0) {
+                      approveLeadMutation.mutate(leadsAboveThreshold.map(l => l.id));
+                    } else {
+                      toast({ title: 'No leads above threshold', description: `No leads with quality score ≥ ${threshold}` });
+                    }
+                  }}
+                  disabled={approveLeadMutation.isPending}
+                  className="gap-1 text-green-600 border-green-200 hover:bg-green-50"
+                >
+                  <Zap className="h-4 w-4" />
+                  Approve All ≥{settings?.auto_approve_threshold || 70}
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => refetchLeads()}>
                 <RefreshCw className="h-4 w-4 mr-1" />
                 Refresh
@@ -937,57 +958,65 @@ export default function LeadInbox() {
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Webhook className="h-4 w-4" />
-                  <Label className="font-medium">Webhook Notifications</Label>
+                  <Label className="font-medium">Notifications</Label>
                 </div>
                 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="slack_webhook_url">Slack Webhook URL</Label>
+                    <Input
+                      id="slack_webhook_url"
+                      placeholder="https://hooks.slack.com/services/..."
+                      value={localSettings?.slack_webhook_url || ''}
+                      onChange={(e) => handleSettingsChange('slack_webhook_url', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="discord_webhook_url">Discord Webhook URL</Label>
+                    <Input
+                      id="discord_webhook_url"
+                      placeholder="https://discord.com/api/webhooks/..."
+                      value={localSettings?.discord_webhook_url || ''}
+                      onChange={(e) => handleSettingsChange('discord_webhook_url', e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label htmlFor="webhook_enabled" className="text-sm">Send webhook notifications</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Get notified via Slack, Discord, or custom webhook
-                    </p>
+                    <Label htmlFor="notify_on_discovery_complete" className="text-sm">Notify on discovery complete</Label>
+                    <p className="text-xs text-muted-foreground">Get notified when lead discovery finishes</p>
                   </div>
                   <Switch
-                    id="webhook_enabled"
-                    checked={localSettings?.webhook_enabled || false}
-                    onCheckedChange={(checked) => handleSettingsChange('webhook_enabled', checked)}
+                    id="notify_on_discovery_complete"
+                    checked={localSettings?.notify_on_discovery_complete ?? true}
+                    onCheckedChange={(checked) => handleSettingsChange('notify_on_discovery_complete', checked)}
                   />
                 </div>
 
-                {localSettings?.webhook_enabled && (
-                  <div className="space-y-3 pl-4 border-l-2 border-muted">
-                    <div className="space-y-2">
-                      <Label htmlFor="webhook_url">Webhook URL</Label>
-                      <Input
-                        id="webhook_url"
-                        placeholder="https://hooks.slack.com/... or Discord webhook URL"
-                        value={localSettings?.webhook_url || ''}
-                        onChange={(e) => handleSettingsChange('webhook_url', e.target.value)}
-                      />
-                    </div>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="notify_on_hot_leads" className="text-sm">Alert for hot leads</Label>
+                    <p className="text-xs text-muted-foreground">Instant notification for high-quality leads</p>
+                  </div>
+                  <Switch
+                    id="notify_on_hot_leads"
+                    checked={localSettings?.notify_on_hot_leads ?? true}
+                    onCheckedChange={(checked) => handleSettingsChange('notify_on_hot_leads', checked)}
+                  />
+                </div>
 
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="notify_on_auto_approve"
-                        checked={localSettings?.notify_on_auto_approve ?? true}
-                        onCheckedChange={(checked) => handleSettingsChange('notify_on_auto_approve', checked)}
-                      />
-                      <Label htmlFor="notify_on_auto_approve" className="text-sm">
-                        Notify on auto-approved leads
-                      </Label>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Minimum quality score for notifications: {localSettings?.notify_min_quality_score || 70}</Label>
-                      <Slider
-                        value={[localSettings?.notify_min_quality_score || 70]}
-                        onValueChange={([value]) => handleSettingsChange('notify_min_quality_score', value)}
-                        min={0}
-                        max={100}
-                        step={10}
-                        className="w-64"
-                      />
-                    </div>
+                {localSettings?.notify_on_hot_leads && (
+                  <div className="space-y-2 pl-4 border-l-2 border-muted">
+                    <Label>Hot lead threshold: {localSettings?.hot_lead_threshold || 80}</Label>
+                    <Slider
+                      value={[localSettings?.hot_lead_threshold || 80]}
+                      onValueChange={([value]) => handleSettingsChange('hot_lead_threshold', value)}
+                      min={50}
+                      max={95}
+                      step={5}
+                      className="w-64"
+                    />
                   </div>
                 )}
               </div>
