@@ -23,7 +23,10 @@ import {
   Globe2,
   Users,
   Tag,
-  XCircle
+  XCircle,
+  Mail,
+  Megaphone,
+  Briefcase
 } from "lucide-react";
 
 interface Persona {
@@ -44,7 +47,21 @@ interface Persona {
   total_approved: number;
   total_rejected: number;
   conversion_rate: number;
+  // Email marketing fields
+  product_focus: string | null;
+  value_proposition: string | null;
+  email_tone: string | null;
+  talking_points: string[] | null;
+  call_to_action: string | null;
+  email_signature_override: string | null;
 }
+
+const EMAIL_TONES = [
+  { value: 'professional', label: 'Professional' },
+  { value: 'casual', label: 'Casual & Friendly' },
+  { value: 'technical', label: 'Technical' },
+  { value: 'persuasive', label: 'Persuasive' },
+];
 
 const COMPANY_SIZES = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1001-5000', '5000+'];
 
@@ -66,6 +83,13 @@ export function PersonaManager() {
     exclude_keywords: '',
     auto_enroll_sequence_id: '',
     custom_search_query: '',
+    // Email marketing fields
+    product_focus: '',
+    value_proposition: '',
+    email_tone: 'professional',
+    talking_points: '',
+    call_to_action: '',
+    email_signature_override: '',
   });
 
   // Fetch personas
@@ -114,6 +138,13 @@ export function PersonaManager() {
         exclude_keywords: data.exclude_keywords ? data.exclude_keywords.split(',').map(s => s.trim()).filter(Boolean) : null,
         auto_enroll_sequence_id: data.auto_enroll_sequence_id || null,
         custom_search_query: data.custom_search_query || null,
+        // Email marketing fields
+        product_focus: data.product_focus || null,
+        value_proposition: data.value_proposition || null,
+        email_tone: data.email_tone || null,
+        talking_points: data.talking_points ? data.talking_points.split(',').map(s => s.trim()).filter(Boolean) : null,
+        call_to_action: data.call_to_action || null,
+        email_signature_override: data.email_signature_override || null,
       };
 
       if (data.id) {
@@ -181,6 +212,12 @@ export function PersonaManager() {
       exclude_keywords: '',
       auto_enroll_sequence_id: '',
       custom_search_query: '',
+      product_focus: '',
+      value_proposition: '',
+      email_tone: 'professional',
+      talking_points: '',
+      call_to_action: '',
+      email_signature_override: '',
     });
     setEditingPersona(null);
   };
@@ -198,6 +235,12 @@ export function PersonaManager() {
       exclude_keywords: persona.exclude_keywords?.join(', ') || '',
       auto_enroll_sequence_id: persona.auto_enroll_sequence_id || '',
       custom_search_query: persona.custom_search_query || '',
+      product_focus: persona.product_focus || '',
+      value_proposition: persona.value_proposition || '',
+      email_tone: persona.email_tone || 'professional',
+      talking_points: persona.talking_points?.join(', ') || '',
+      call_to_action: persona.call_to_action || '',
+      email_signature_override: persona.email_signature_override || '',
     });
     setDialogOpen(true);
   };
@@ -392,6 +435,93 @@ export function PersonaManager() {
                       value={formData.custom_search_query}
                       onChange={(e) => setFormData(prev => ({ ...prev, custom_search_query: e.target.value }))}
                       rows={2}
+                    />
+                  </div>
+                </div>
+
+                {/* Email Marketing */}
+                <div className="space-y-4 border-t pt-4">
+                  <h4 className="font-medium flex items-center gap-2 text-primary">
+                    <Megaphone className="h-4 w-4" />
+                    Email Marketing
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Define product/service messaging for this persona. This will be used when generating AI emails.
+                  </p>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="product_focus">
+                      <Briefcase className="h-4 w-4 inline mr-1" />
+                      Product/Service Focus
+                    </Label>
+                    <Input
+                      id="product_focus"
+                      placeholder="e.g., Lead Genie AI Assistant, Enterprise CRM Suite"
+                      value={formData.product_focus}
+                      onChange={(e) => setFormData(prev => ({ ...prev, product_focus: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="value_proposition">Value Proposition</Label>
+                    <Textarea
+                      id="value_proposition"
+                      placeholder="Key benefits in 1-2 sentences (e.g., Increase sales productivity by 10x with AI-powered lead qualification)"
+                      value={formData.value_proposition}
+                      onChange={(e) => setFormData(prev => ({ ...prev, value_proposition: e.target.value }))}
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>
+                      <Mail className="h-4 w-4 inline mr-1" />
+                      Email Tone
+                    </Label>
+                    <Select
+                      value={formData.email_tone}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, email_tone: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select tone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EMAIL_TONES.map(tone => (
+                          <SelectItem key={tone.value} value={tone.value}>{tone.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="talking_points">Key Talking Points (comma-separated)</Label>
+                    <Textarea
+                      id="talking_points"
+                      placeholder="e.g., AI-powered automation, CRM integration, team collaboration, real-time analytics"
+                      value={formData.talking_points}
+                      onChange={(e) => setFormData(prev => ({ ...prev, talking_points: e.target.value }))}
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="call_to_action">Call to Action</Label>
+                    <Input
+                      id="call_to_action"
+                      placeholder="e.g., Book a 15-minute demo, Start your free trial, Schedule a consultation"
+                      value={formData.call_to_action}
+                      onChange={(e) => setFormData(prev => ({ ...prev, call_to_action: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email_signature_override">Signature Override (Optional)</Label>
+                    <Textarea
+                      id="email_signature_override"
+                      placeholder="Leave empty to use your default signature, or enter a custom signature for this persona"
+                      value={formData.email_signature_override}
+                      onChange={(e) => setFormData(prev => ({ ...prev, email_signature_override: e.target.value }))}
+                      rows={3}
                     />
                   </div>
                 </div>

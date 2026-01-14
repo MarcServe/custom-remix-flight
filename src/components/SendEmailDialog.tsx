@@ -14,6 +14,7 @@ import { Loader2, Send, Sparkles, Code, Eye, Bot } from "lucide-react";
 import { RichTextEditor } from "./email/RichTextEditor";
 import { EmailTemplateSelector, EMAIL_TEMPLATES, type EmailTemplate } from "./email/EmailTemplateSelector";
 import { FileAttachmentSelector } from "./email/FileAttachmentSelector";
+import { PersonaSelector, type MarketingPersona } from "./email/PersonaSelector";
 
 interface SendEmailDialogProps {
   open: boolean;
@@ -42,6 +43,8 @@ export function SendEmailDialog({
   const [attachments, setAttachments] = useState<any[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
+  const [selectedPersona, setSelectedPersona] = useState<MarketingPersona | null>(null);
   const { toast } = useToast();
 
   const { data: connections } = useQuery({
@@ -90,6 +93,14 @@ export function SendEmailDialog({
     }
   }, [template, recipientName, companyId]);
 
+  const handlePersonaChange = (persona: MarketingPersona | null, personaContext: string) => {
+    setSelectedPersonaId(persona?.id || null);
+    setSelectedPersona(persona);
+    if (personaContext) {
+      setContext(personaContext);
+    }
+  };
+
   const handleGenerateWithAI = async () => {
     setIsGenerating(true);
     try {
@@ -100,6 +111,14 @@ export function SendEmailDialog({
           companyId,
           contactId,
           context: context.trim() || undefined,
+          persona: selectedPersona ? {
+            product_focus: selectedPersona.product_focus,
+            value_proposition: selectedPersona.value_proposition,
+            email_tone: selectedPersona.email_tone,
+            talking_points: selectedPersona.talking_points,
+            call_to_action: selectedPersona.call_to_action,
+            email_signature_override: selectedPersona.email_signature_override,
+          } : undefined,
         },
       });
 
@@ -306,8 +325,14 @@ export function SendEmailDialog({
               />
             </div>
 
+            <PersonaSelector
+              value={selectedPersonaId}
+              onChange={handlePersonaChange}
+              disabled={isSending || isGenerating}
+            />
+
             <div className="space-y-2">
-              <Label htmlFor="context">AI Context (Optional)</Label>
+              <Label htmlFor="context">AI Context {selectedPersona ? '(auto-filled from persona)' : '(Optional)'}</Label>
               <Textarea
                 id="context"
                 placeholder="Add any context or instructions to guide the AI (e.g., mention a recent conversation, specific pain points, upcoming event...)"

@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { PersonaSelector, type MarketingPersona } from "./email/PersonaSelector";
 
 interface BulkEmailDialogProps {
   open: boolean;
@@ -38,6 +39,8 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople }: 
   const [testEmailDialogOpen, setTestEmailDialogOpen] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
+  const [selectedPersona, setSelectedPersona] = useState<MarketingPersona | null>(null);
 
   // Fetch email connections
   const { data: connections } = useQuery({
@@ -66,6 +69,14 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople }: 
     setBody(body + `{{${variable}}}`);
   };
 
+  const handlePersonaChange = (persona: MarketingPersona | null, personaContext: string) => {
+    setSelectedPersonaId(persona?.id || null);
+    setSelectedPersona(persona);
+    if (personaContext) {
+      setAiContext(personaContext);
+    }
+  };
+
   const handleGenerateWithAI = async () => {
     if (selectedPeople.length === 0) {
       toast({
@@ -86,6 +97,14 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople }: 
           recipientEmail: firstPerson.email,
           companyId: firstPerson.company_id,
           context: aiContext || undefined,
+          persona: selectedPersona ? {
+            product_focus: selectedPersona.product_focus,
+            value_proposition: selectedPersona.value_proposition,
+            email_tone: selectedPersona.email_tone,
+            talking_points: selectedPersona.talking_points,
+            call_to_action: selectedPersona.call_to_action,
+            email_signature_override: selectedPersona.email_signature_override,
+          } : undefined,
         },
       });
 
@@ -351,8 +370,14 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople }: 
               </CollapsibleTrigger>
               
               <CollapsibleContent className="space-y-3 mt-4">
+                <PersonaSelector
+                  value={selectedPersonaId}
+                  onChange={handlePersonaChange}
+                  disabled={generatingAi}
+                />
+
                 <div className="space-y-2">
-                  <Label htmlFor="ai_context">Additional Context (Optional)</Label>
+                  <Label htmlFor="ai_context">Additional Context {selectedPersona ? '(auto-filled from persona)' : '(Optional)'}</Label>
                   <Textarea
                     id="ai_context"
                     value={aiContext}
@@ -361,7 +386,9 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople }: 
                     className="min-h-[80px] bg-background"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Provide additional context to help AI personalize the email
+                    {selectedPersona 
+                      ? `Using "${selectedPersona.name}" persona marketing context` 
+                      : 'Provide additional context to help AI personalize the email'}
                   </p>
                 </div>
                 
