@@ -381,17 +381,26 @@ export type Database = {
       }
       autonomous_discovery_settings: {
         Row: {
+          apify_max_results: number | null
+          apify_quality_weight: number | null
+          apify_search_radius: number | null
           auto_approve_threshold: number | null
+          auto_create_campaign: boolean | null
           auto_enroll_enabled: boolean | null
           auto_enroll_sequence_id: string | null
           avoid_industries: string[] | null
           avoid_keywords: string[] | null
+          campaign_send_time: string | null
+          campaign_template_id: string | null
           created_at: string
           custom_search_query: string | null
+          daily_lead_target: number | null
           discovery_frequency: string
           enabled: boolean
           enrich_with_perplexity: boolean
+          exa_quality_weight: number | null
           feedback_learning_enabled: boolean | null
+          full_auto_mode: boolean | null
           id: string
           last_run_at: string | null
           learned_company_sizes: string[] | null
@@ -403,29 +412,40 @@ export type Database = {
           notify_min_quality_score: number | null
           notify_on_auto_approve: boolean | null
           preferred_discovery_hour: number | null
+          serpapi_quality_weight: number | null
           target_company_sizes: string[] | null
           target_geographies: string[] | null
           target_industries: string[] | null
           total_approved: number | null
           total_rejected: number | null
           updated_at: string
+          use_apify: boolean | null
           use_serp_api: boolean
           user_id: string
           webhook_enabled: boolean | null
           webhook_url: string | null
         }
         Insert: {
+          apify_max_results?: number | null
+          apify_quality_weight?: number | null
+          apify_search_radius?: number | null
           auto_approve_threshold?: number | null
+          auto_create_campaign?: boolean | null
           auto_enroll_enabled?: boolean | null
           auto_enroll_sequence_id?: string | null
           avoid_industries?: string[] | null
           avoid_keywords?: string[] | null
+          campaign_send_time?: string | null
+          campaign_template_id?: string | null
           created_at?: string
           custom_search_query?: string | null
+          daily_lead_target?: number | null
           discovery_frequency?: string
           enabled?: boolean
           enrich_with_perplexity?: boolean
+          exa_quality_weight?: number | null
           feedback_learning_enabled?: boolean | null
+          full_auto_mode?: boolean | null
           id?: string
           last_run_at?: string | null
           learned_company_sizes?: string[] | null
@@ -437,29 +457,40 @@ export type Database = {
           notify_min_quality_score?: number | null
           notify_on_auto_approve?: boolean | null
           preferred_discovery_hour?: number | null
+          serpapi_quality_weight?: number | null
           target_company_sizes?: string[] | null
           target_geographies?: string[] | null
           target_industries?: string[] | null
           total_approved?: number | null
           total_rejected?: number | null
           updated_at?: string
+          use_apify?: boolean | null
           use_serp_api?: boolean
           user_id: string
           webhook_enabled?: boolean | null
           webhook_url?: string | null
         }
         Update: {
+          apify_max_results?: number | null
+          apify_quality_weight?: number | null
+          apify_search_radius?: number | null
           auto_approve_threshold?: number | null
+          auto_create_campaign?: boolean | null
           auto_enroll_enabled?: boolean | null
           auto_enroll_sequence_id?: string | null
           avoid_industries?: string[] | null
           avoid_keywords?: string[] | null
+          campaign_send_time?: string | null
+          campaign_template_id?: string | null
           created_at?: string
           custom_search_query?: string | null
+          daily_lead_target?: number | null
           discovery_frequency?: string
           enabled?: boolean
           enrich_with_perplexity?: boolean
+          exa_quality_weight?: number | null
           feedback_learning_enabled?: boolean | null
+          full_auto_mode?: boolean | null
           id?: string
           last_run_at?: string | null
           learned_company_sizes?: string[] | null
@@ -471,12 +502,14 @@ export type Database = {
           notify_min_quality_score?: number | null
           notify_on_auto_approve?: boolean | null
           preferred_discovery_hour?: number | null
+          serpapi_quality_weight?: number | null
           target_company_sizes?: string[] | null
           target_geographies?: string[] | null
           target_industries?: string[] | null
           total_approved?: number | null
           total_rejected?: number | null
           updated_at?: string
+          use_apify?: boolean | null
           use_serp_api?: boolean
           user_id?: string
           webhook_enabled?: boolean | null
@@ -486,6 +519,7 @@ export type Database = {
       }
       autonomous_leads: {
         Row: {
+          campaign_id: string | null
           company_data: Json
           company_id: string | null
           company_name: string
@@ -502,11 +536,14 @@ export type Database = {
           quality_score: number | null
           reviewed_at: string | null
           source: string | null
+          source_breakdown: Json | null
+          sources_used: string[] | null
           status: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          campaign_id?: string | null
           company_data?: Json
           company_id?: string | null
           company_name: string
@@ -523,11 +560,14 @@ export type Database = {
           quality_score?: number | null
           reviewed_at?: string | null
           source?: string | null
+          source_breakdown?: Json | null
+          sources_used?: string[] | null
           status?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          campaign_id?: string | null
           company_data?: Json
           company_id?: string | null
           company_name?: string
@@ -544,6 +584,8 @@ export type Database = {
           quality_score?: number | null
           reviewed_at?: string | null
           source?: string | null
+          source_breakdown?: Json | null
+          sources_used?: string[] | null
           status?: string
           updated_at?: string
           user_id?: string
