@@ -227,6 +227,27 @@ Deno.serve(async (req) => {
           await sendSummaryWebhook(setting.webhook_url, userStats);
         }
 
+        // Send discovery summary email
+        if (userStats.totalLeads > 0) {
+          try {
+            await fetch(`${SUPABASE_URL}/functions/v1/send-discovery-summary`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                userId: setting.user_id,
+                discoveryRunId,
+                stats: userStats,
+              }),
+            });
+            console.log(`[super-discovery] Summary email sent for user ${setting.user_id}`);
+          } catch (emailError) {
+            console.error(`[super-discovery] Failed to send summary email:`, emailError);
+          }
+        }
+
       } catch (userError) {
         console.error(`[super-discovery] Error processing user ${setting.user_id}:`, userError);
       }
