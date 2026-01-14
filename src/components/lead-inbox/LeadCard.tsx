@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { QualityScoreBadge } from "@/components/lead-finder/QualityScoreBadge";
 import { 
   Building2, 
@@ -12,7 +13,8 @@ import {
   MapPin,
   Briefcase,
   ExternalLink,
-  Sparkles
+  Sparkles,
+  Info
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +31,10 @@ interface LeadCardProps {
     contacts: any[] | null;
     company_data: Record<string, any>;
     created_at: string;
+    approval_reason?: string | null;
+    approval_confidence?: number | null;
+    matched_rules?: string[] | null;
+    sources_used?: string[] | null;
   };
   isSelected: boolean;
   onSelect: () => void;
@@ -132,6 +138,48 @@ export function LeadCard({
             <Badge variant="outline" className={cn("capitalize text-xs", getStatusColor(lead.status))}>
               {lead.status === 'auto_approved' ? '⚡ Auto' : lead.status}
             </Badge>
+            {/* Approval Reason Tooltip */}
+            {lead.status === 'auto_approved' && lead.approval_reason && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 text-[10px] cursor-help">
+                      <Info className="h-3 w-3" />
+                      Why auto?
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <div className="space-y-1">
+                      <p className="font-medium text-xs">{lead.approval_reason}</p>
+                      {lead.matched_rules && lead.matched_rules.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {lead.matched_rules.map((rule, idx) => (
+                            <Badge key={idx} variant="secondary" className="text-[10px]">
+                              ✓ {rule}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      {lead.approval_confidence && (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Confidence: {lead.approval_confidence}%
+                        </p>
+                      )}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {/* Source badges */}
+            {lead.sources_used && lead.sources_used.length > 0 && (
+              <div className="flex gap-1">
+                {lead.sources_used.slice(0, 2).map((source, idx) => (
+                  <Badge key={idx} variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                    {source === 'apify' ? '📍' : source === 'serpapi' ? '🔍' : '🌐'} {source}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

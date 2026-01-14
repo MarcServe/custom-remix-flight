@@ -8,9 +8,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, Phone, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy, StopCircle, X, AlertCircle, Clock, Linkedin, Facebook, Twitter, Instagram, Youtube } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, Phone, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy, StopCircle, X, AlertCircle, Clock, Linkedin, Facebook, Twitter, Instagram, Youtube, MapPin, FileSpreadsheet } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { GoogleMapsScraper } from "@/components/lead-finder/GoogleMapsScraper";
+import { ImportCSVPanel } from "@/components/lead-finder/ImportCSVPanel";
 import { exportCompaniesToCSV } from "@/lib/utils/export";
 import { ContactsList } from "@/components/lead-finder/ContactsList";
 import { LeadCardSkeleton } from "@/components/lead-finder/LeadCardSkeleton";
@@ -620,8 +623,8 @@ export default function LeadFinder() {
               <Search className="h-3.5 w-3.5 md:h-4 md:w-4 text-primary" />
             </div>
             <div>
-              <h1 className="text-base md:text-lg font-semibold tracking-tight">AI Lead Finder</h1>
-              <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Intelligent company discovery</p>
+              <h1 className="text-base md:text-lg font-semibold tracking-tight">Lead Command Center</h1>
+              <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">AI Search • Google Maps • CSV Import</p>
             </div>
           </div>
           
@@ -640,8 +643,27 @@ export default function LeadFinder() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+      {/* Main Content with Tabs */}
+      <Tabs defaultValue="ai-search" className="flex-1 flex flex-col overflow-hidden">
+        <div className="border-b px-4 md:px-6 bg-background/50">
+          <TabsList className="h-10">
+            <TabsTrigger value="ai-search" className="gap-2 text-xs">
+              <Sparkles className="h-3.5 w-3.5" />
+              AI Search
+            </TabsTrigger>
+            <TabsTrigger value="google-maps" className="gap-2 text-xs">
+              <MapPin className="h-3.5 w-3.5" />
+              Google Maps
+            </TabsTrigger>
+            <TabsTrigger value="import-csv" className="gap-2 text-xs">
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              Import CSV
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        {/* AI Search Tab */}
+        <TabsContent value="ai-search" className="flex-1 flex flex-col md:flex-row overflow-hidden mt-0 data-[state=inactive]:hidden">
         {/* Left Panel - Search Config */}
         <div className="w-full md:w-80 border-b md:border-b-0 md:border-r bg-card/30 backdrop-blur supports-[backdrop-filter]:bg-card/30 flex flex-col overflow-y-auto max-h-[50vh] md:max-h-none">
           <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
@@ -1296,7 +1318,34 @@ export default function LeadFinder() {
               </div>
             </div>}
         </div>
-      </div>
+        </TabsContent>
+
+        {/* Google Maps Scraper Tab */}
+        <TabsContent value="google-maps" className="flex-1 overflow-auto mt-0 p-6">
+          <div className="max-w-2xl mx-auto">
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold mb-2">Google Maps Scraper</h2>
+              <p className="text-sm text-muted-foreground">
+                Scrape local businesses from Google Maps with phone numbers, emails, and addresses
+              </p>
+            </div>
+            <GoogleMapsScraper />
+          </div>
+        </TabsContent>
+
+        {/* Import CSV Tab */}
+        <TabsContent value="import-csv" className="flex-1 overflow-auto mt-0 p-6">
+          <div className="max-w-2xl mx-auto">
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold mb-2">Import from CSV</h2>
+              <p className="text-sm text-muted-foreground">
+                Upload CSV files from various sources including Apify exports and LinkedIn
+              </p>
+            </div>
+            <ImportCSVPanel />
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <CompanyDetailsDialog company={selectedCompany} open={dialogOpen} onOpenChange={setDialogOpen} isSearching={isLoading} allCompanies={filteredAndSortedResults?.leads || []} currentIndex={currentCompanyIndex} onNavigate={handleNavigateCompany} />
     </div>;
