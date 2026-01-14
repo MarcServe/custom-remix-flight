@@ -4,11 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2 } from "lucide-react";
+import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles } from "lucide-react";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
 import { ProspectAnalyzer, TemperatureBadge } from "@/components/ProspectAnalyzer";
 import { ApifyCSVUploader } from "@/components/ApifyCSVUploader";
+import { ApifyScraperDialog } from "@/components/ApifyScraperDialog";
 import { TagBadges } from "@/components/ui/tag-input";
 import { useCompanyTags } from "@/hooks/use-company-tags";
 import {
@@ -38,6 +39,7 @@ export default function Companies() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [csvUploaderOpen, setCsvUploaderOpen] = useState(false);
+  const [scraperDialogOpen, setScraperDialogOpen] = useState(false);
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<Set<string>>(new Set());
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
@@ -257,6 +259,10 @@ export default function Companies() {
           <Button onClick={() => setCsvUploaderOpen(true)} variant="outline">
             <Upload className="h-4 w-4 mr-2" />
             Import CSV
+          </Button>
+          <Button onClick={() => setScraperDialogOpen(true)} className="gap-2">
+            <Sparkles className="h-4 w-4" />
+            Scrape Google
           </Button>
         </div>
       </div>
@@ -500,6 +506,11 @@ export default function Companies() {
       <ApifyCSVUploader
         open={csvUploaderOpen}
         onOpenChange={setCsvUploaderOpen}
+      />
+
+      <ApifyScraperDialog
+        open={scraperDialogOpen}
+        onOpenChange={setScraperDialogOpen}
       />
 
       {/* Bulk Delete Confirmation Dialog */}
