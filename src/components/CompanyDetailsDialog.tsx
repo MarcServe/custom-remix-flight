@@ -22,6 +22,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { SuggestedActions } from "@/components/ProspectAnalyzer";
 import { TagInput } from "@/components/ui/tag-input";
 import { useCompanyTags } from "@/hooks/use-company-tags";
+import { AddContactToCompanyDialog } from "@/components/AddContactToCompanyDialog";
+import { UserPlus } from "lucide-react";
 
 interface Contact {
   id?: string;
@@ -146,6 +148,7 @@ export function CompanyDetailsDialog({
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [addContactDialogOpen, setAddContactDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [extractedEmail, setExtractedEmail] = useState<string | null>(null);
   const [emailRecipient, setEmailRecipient] = useState<{
@@ -1012,174 +1015,195 @@ export function CompanyDetailsDialog({
             )}
 
             {/* Team Contacts Section */}
-            {company.contacts && company.contacts.length > 0 && (
+            {((company.contacts && company.contacts.length > 0) || hasBeenSaved) && (
               <>
                 <Separator />
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-                      <Users className="h-4 w-4 text-cyan-500" />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+                        <Users className="h-4 w-4 text-cyan-500" />
+                      </div>
+                      <h3 className="text-sm font-semibold">
+                        Team Contacts {company.contacts && company.contacts.length > 0 ? `(${company.contacts.length})` : ''}
+                      </h3>
+                      {isSearching && (
+                        <Badge variant="outline" className="text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
+                          <Database className="h-3 w-3 mr-1" />
+                          GetProspect
+                        </Badge>
+                      )}
                     </div>
-                    <h3 className="text-sm font-semibold">Team Contacts ({company.contacts.length})</h3>
-                    {isSearching && (
-                      <Badge variant="outline" className="text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
-                        <Database className="h-3 w-3 mr-1" />
-                        GetProspect
-                      </Badge>
+                    {hasBeenSaved && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setAddContactDialogOpen(true)}
+                        className="h-7 text-xs"
+                      >
+                        <UserPlus className="h-3.5 w-3.5 mr-1" />
+                        Add Contact
+                      </Button>
                     )}
                   </div>
                   
                   <div className="space-y-3 pl-10">
-                    {company.contacts.map((contact, idx) => {
-                      const emailConfidence = contact.emailConfidence || contact.email_confidence;
-                      const contactLinkedIn = contact.linkedinUrl || contact.linkedin_url;
-                      
-                      return (
-                        <div key={idx} className="p-4 rounded-lg border bg-card/50 hover:bg-card/70 transition-colors space-y-3">
-                          {/* Header with name and badges */}
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-medium text-sm">{contact.name}</span>
+                    {company.contacts && company.contacts.length > 0 ? (
+                      company.contacts.map((contact, idx) => {
+                        const emailConfidence = contact.emailConfidence || contact.email_confidence;
+                        const contactLinkedIn = contact.linkedinUrl || contact.linkedin_url;
+                        
+                        return (
+                          <div key={idx} className="p-4 rounded-lg border bg-card/50 hover:bg-card/70 transition-colors space-y-3">
+                            {/* Header with name and badges */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-sm">{contact.name}</span>
+                                  
+                                  {/* Verification Badge */}
+                                  {contact.emailVerified && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger>
+                                          <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
+                                            <Shield className="h-3 w-3 mr-1" />
+                                            Verified
+                                          </Badge>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>Email address has been verified</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                  
+                                  {/* Email Confidence Score */}
+                                  {emailConfidence && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger>
+                                          <Badge 
+                                            variant="outline" 
+                                            className={`text-xs ${
+                                              emailConfidence >= 90 
+                                                ? 'bg-green-500/10 text-green-600 border-green-500/20' 
+                                                : emailConfidence >= 70 
+                                                ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20'
+                                                : 'bg-orange-500/10 text-orange-600 border-orange-500/20'
+                                            }`}
+                                          >
+                                            <TrendingUp className="h-3 w-3 mr-1" />
+                                            {emailConfidence}% confidence
+                                          </Badge>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>Email accuracy confidence score</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                  
+                                  {/* Primary Contact Badge */}
+                                  {contact === company.primaryContact && (
+                                    <Badge className="text-xs bg-primary/10 text-primary border-primary/20">
+                                      Primary
+                                    </Badge>
+                                  )}
+                                </div>
                                 
-                                {/* Verification Badge */}
-                                {contact.emailVerified && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger>
-                                        <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
-                                          <Shield className="h-3 w-3 mr-1" />
-                                          Verified
-                                        </Badge>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Email address has been verified</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
-                                
-                                {/* Email Confidence Score */}
-                                {emailConfidence && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger>
-                                        <Badge 
-                                          variant="outline" 
-                                          className={`text-xs ${
-                                            emailConfidence >= 90 
-                                              ? 'bg-green-500/10 text-green-600 border-green-500/20' 
-                                              : emailConfidence >= 70 
-                                              ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20'
-                                              : 'bg-orange-500/10 text-orange-600 border-orange-500/20'
-                                          }`}
-                                        >
-                                          <TrendingUp className="h-3 w-3 mr-1" />
-                                          {emailConfidence}% confidence
-                                        </Badge>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Email accuracy confidence score</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
-                                
-                                {/* Primary Contact Badge */}
-                                {contact === company.primaryContact && (
-                                  <Badge className="text-xs bg-primary/10 text-primary border-primary/20">
-                                    Primary
-                                  </Badge>
+                                {/* Title and Department */}
+                                {contact.title && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {contact.title}
+                                    {contact.department && ` • ${contact.department}`}
+                                  </p>
                                 )}
                               </div>
                               
-                              {/* Title and Department */}
-                              {contact.title && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {contact.title}
-                                  {contact.department && ` • ${contact.department}`}
-                                </p>
-                              )}
-                            </div>
-                            
-                            {/* Action Button */}
-                            {contact.email && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSendEmailToContact(contact);
-                                }}
-                              >
-                                <Mail className="h-4 w-4 mr-1" />
-                                Send
-                              </Button>
-                            )}
-                          </div>
-                          
-                          {/* Contact Details */}
-                          <div className="space-y-2">
-                            {/* Email with Copy Button */}
-                            {contact.email && (
-                              <div className="flex items-center gap-2 group">
-                                <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                                <a 
-                                  href={`mailto:${contact.email}`}
-                                  className="text-xs text-primary hover:underline font-mono flex-1 min-w-0 truncate"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {contact.email}
-                                </a>
+                              {/* Action Button */}
+                              {contact.email && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleCopyEmail(contact.email!, contact.name);
+                                    handleSendEmailToContact(contact);
                                   }}
-                                  title="Copy email"
                                 >
-                                  <Copy className="h-3 w-3" />
+                                  <Mail className="h-4 w-4 mr-1" />
+                                  Send
                                 </Button>
-                              </div>
-                            )}
+                              )}
+                            </div>
                             
-                            {/* Phone */}
-                            {contact.phone && (
-                              <div className="flex items-center gap-2">
-                                <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                                <a 
-                                  href={`tel:${contact.phone}`}
-                                  className="text-xs text-primary hover:underline"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {contact.phone}
-                                </a>
-                              </div>
-                            )}
-                            
-                            {/* LinkedIn Profile */}
-                            {contactLinkedIn && (
-                              <div className="flex items-center gap-2">
-                                <Linkedin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                                <a 
-                                  href={contactLinkedIn}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  View LinkedIn Profile
-                                  <ExternalLink className="h-3 w-3" />
-                                </a>
-                              </div>
-                            )}
+                            {/* Contact Details */}
+                            <div className="space-y-2">
+                              {/* Email with Copy Button */}
+                              {contact.email && (
+                                <div className="flex items-center gap-2 group">
+                                  <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                  <a 
+                                    href={`mailto:${contact.email}`}
+                                    className="text-xs text-primary hover:underline font-mono flex-1 min-w-0 truncate"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {contact.email}
+                                  </a>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleCopyEmail(contact.email!, contact.name);
+                                    }}
+                                    title="Copy email"
+                                  >
+                                    <Copy className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              )}
+                              
+                              {/* Phone */}
+                              {contact.phone && (
+                                <div className="flex items-center gap-2">
+                                  <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                  <a 
+                                    href={`tel:${contact.phone}`}
+                                    className="text-xs text-primary hover:underline"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {contact.phone}
+                                  </a>
+                                </div>
+                              )}
+                              
+                              {/* LinkedIn Profile */}
+                              {contactLinkedIn && (
+                                <div className="flex items-center gap-2">
+                                  <Linkedin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                  <a 
+                                    href={contactLinkedIn}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    View LinkedIn Profile
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    ) : hasBeenSaved ? (
+                      <div className="text-sm text-muted-foreground italic">
+                        No contacts yet. Add decision makers and key contacts to this company.
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </>
@@ -1367,6 +1391,15 @@ export function CompanyDetailsDialog({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {hasBeenSaved && (
+        <AddContactToCompanyDialog
+          open={addContactDialogOpen}
+          onOpenChange={setAddContactDialogOpen}
+          companyId={company.id}
+          companyName={company.name}
+        />
+      )}
     </>
   );
 }
