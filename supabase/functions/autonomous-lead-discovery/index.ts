@@ -100,11 +100,34 @@ Deno.serve(async (req) => {
 
     console.log(`[super-discovery] Found ${settings.length} users with enabled discovery`);
 
+    // Get current UTC hour for filtering by preferred_discovery_hour
+    const currentUtcHour = new Date().getUTCHours();
+    console.log(`[super-discovery] Current UTC hour: ${currentUtcHour}`);
+
+    // Filter settings to only users whose preferred hour matches current hour
+    // (skip filtering for manual triggers)
+    const settingsToProcess = manualUserId || forceRun
+      ? settings
+      : settings.filter((s: any) => {
+          const preferredHour = s.preferred_discovery_hour ?? 9; // Default to 9 AM UTC
+          return preferredHour === currentUtcHour;
+        });
+
+    console.log(`[super-discovery] Users scheduled for this hour: ${settingsToProcess.length} of ${settings.length}`);
+
+    if (settingsToProcess.length === 0) {
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: `No users scheduled for hour ${currentUtcHour} UTC`,
+        processed: 0 
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     let processedCount = 0;
     let totalLeadsDiscovered = 0;
     const allStats: DiscoveryStats[] = [];
 
-    for (const setting of settings) {
+    for (const setting of settingsToProcess) {
       try {
         // Check if it's time to run based on frequency (skip for manual triggers with forceRun)
         if (!forceRun && !manualUserId) {
@@ -210,7 +233,7 @@ Deno.serve(async (req) => {
         allStats.push(userStats);
 
         // Update last_run_at and next_run_at
-        const nextRunAt = calculateNextRun(setting.discovery_frequency);
+        const nextRunAt = calculateNextRun(setting.discovery_frequency, setting.preferred_discovery_hour ?? 9);
         await supabase
           .from('autonomous_discovery_settings')
           .update({ 
@@ -1061,14 +1084,27 @@ function shouldRunDiscovery(setting: any): boolean {
   }
 }
 
-function calculateNextRun(frequency: string): Date {
+function calculateNextRun(frequency: string, preferredHour: number = 9): Date {
   const now = new Date();
+  const next = new Date(now);
+  
+  // Set to the user's preferred hour
+  next.setUTCHours(preferredHour, 0, 0, 0);
+  
+  // Calculate days to add based on frequency
+  let daysToAdd = 1; // Default for daily
   switch (frequency) {
-    case 'daily': return new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    case 'twice_weekly': return new Date(now.getTime() + 84 * 60 * 60 * 1000);
-    case 'weekly': return new Date(now.getTime() + 168 * 60 * 60 * 1000);
-    default: return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    case 'daily': daysToAdd = 1; break;
+    case 'twice_weekly': daysToAdd = 3; break; // ~3.5 days
+    case 'weekly': daysToAdd = 7; break;
   }
+  
+  // If we've already passed that hour today, move to next occurrence
+  if (next <= now) {
+    next.setDate(next.getDate() + daysToAdd);
+  }
+  
+  return next;
 }
 
 function buildSearchQuery(setting: any, businessProfile: any): string {
