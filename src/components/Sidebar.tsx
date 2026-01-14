@@ -31,61 +31,72 @@ type NavigationItem = {
 };
 
 const navigation: NavigationItem[] = [
+  // CORE
   { name: "Dashboard", href: "/", icon: BarChart3 },
   { name: "Companies", href: "/companies", icon: Building2 },
-  { name: "Deals", href: "/deals", icon: DollarSign },
   { name: "People", href: "/people", icon: Users },
-  { name: "Events", href: "/events", icon: Calendar },
-  { name: "Invoices", href: "/invoices", icon: FileText },
-  { name: "Lead Finder", href: "/lead-finder", icon: Sparkles },
-  { name: "Lead Inbox", href: "/lead-inbox", icon: Inbox },
+  { name: "Deals", href: "/deals", icon: DollarSign },
   { name: "Pipeline", href: "/pipeline", icon: TrendingUp },
+  
+  // LEAD GENERATION
   { 
-    name: "Sequences", 
-    href: "#sequences", 
-    icon: Mail,
+    name: "Lead Generation", 
+    href: "#leads", 
+    icon: Search,
     children: [
-      { name: "All Sequences", href: "/sequences", icon: Mail },
-      { name: "Auto-Responses", href: "/auto-responses", icon: Sparkles },
-      { name: "Active Campaigns", href: "/company-sequences", icon: TrendingUp },
+      { name: "Lead Finder", href: "/lead-finder", icon: Sparkles },
+      { name: "Lead Inbox", href: "/lead-inbox", icon: Inbox },
     ]
   },
+  
+  // OUTREACH
   { 
-    name: "Campaigns", 
-    href: "#campaigns", 
+    name: "Outreach", 
+    href: "#outreach", 
     icon: Send,
     children: [
-      { name: "Overview", href: "/campaigns", icon: Briefcase },
-      { name: "All Campaigns", href: "/all-campaigns", icon: Activity },
+      { name: "Sequences", href: "/sequences", icon: Mail },
+      { name: "Active Campaigns", href: "/company-sequences", icon: Activity },
+      { name: "Campaigns", href: "/campaigns", icon: Briefcase },
     ]
   },
+  
+  // CONVERSATIONS
   { name: "Conversations", href: "/conversations", icon: MessageSquare },
+  { name: "Auto-Responses", href: "/auto-responses", icon: Sparkles },
+  
+  // ORGANIZATION
+  { 
+    name: "Organization", 
+    href: "#organization", 
+    icon: FolderOpen,
+    children: [
+      { name: "Events", href: "/events", icon: Calendar },
+      { name: "Invoices", href: "/invoices", icon: FileText },
+      { name: "Files", href: "/files", icon: FolderOpen },
+    ]
+  },
+  
+  // COLLABORATION
   { 
     name: "Collaboration", 
     href: "#collaboration", 
     icon: Users,
     children: [
       { name: "Teams", href: "/teams", icon: Users },
-      { name: "Shared Inbox", href: "/shared-inbox", icon: Mail },
-      { name: "Files", href: "/files", icon: FolderOpen },
+      { name: "Shared Inbox", href: "/shared-inbox", icon: Inbox },
     ]
   },
-  { 
-    name: "Email Settings", 
-    href: "#email-settings", 
-    icon: Plug2,
-    children: [
-      { name: "Email Providers", href: "/integrations/email-providers", icon: Send },
-    ]
-  },
+  
+  // SETTINGS
   { 
     name: "Settings", 
     href: "#settings", 
     icon: Settings,
     children: [
+      { name: "Email Providers", href: "/integrations/email-providers", icon: Send },
+      { name: "Business Profile", href: "/business-profile", icon: Building2 },
       { name: "Subscription", href: "/subscription", icon: CreditCard },
-      { name: "Automation Rules", href: "/automation-rules", icon: Zap },
-      { name: "A/B Testing", href: "/ab-testing", icon: Activity },
     ]
   },
 ];
