@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Building2, Users, DollarSign, TrendingUp, Sparkles, Search, Mail, BarChart3, ArrowUpRight, Calendar as CalendarIcon, Clock } from "lucide-react";
-import { useEffect } from "react";
+import { Building2, Users, DollarSign, TrendingUp, Sparkles, Search, Mail, BarChart3, ArrowUpRight, Calendar as CalendarIcon, Clock, LayoutDashboard, Gauge } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,8 +14,23 @@ import { LiveEngagementTracker } from "@/components/dashboard/LiveEngagementTrac
 import { useNavigate } from "react-router-dom";
 import { useEvents } from "@/hooks/use-events";
 import { format, isToday, isTomorrow, isFuture } from "date-fns";
+import { cn } from "@/lib/utils";
+
+type DashboardMode = 'simple' | 'advanced';
+
 export default function Dashboard() {
   const navigate = useNavigate();
+  
+  // Dashboard mode toggle - persisted to localStorage
+  const [dashboardMode, setDashboardMode] = useState<DashboardMode>(() => {
+    const stored = localStorage.getItem('dashboardMode');
+    return (stored === 'simple' || stored === 'advanced') ? stored : 'simple';
+  });
+
+  const toggleDashboardMode = (mode: DashboardMode) => {
+    setDashboardMode(mode);
+    localStorage.setItem('dashboardMode', mode);
+  };
 
   // Real-time subscription for auto-response notifications
   useEffect(() => {
@@ -168,12 +183,44 @@ export default function Dashboard() {
                 Live
               </Badge>
             </div>
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent mb-2">
-              Sales Dashboard
-            </h1>
-            <p className="text-muted-foreground text-sm md:text-base lg:text-lg">
-              Your real-time sales performance overview
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent mb-2">
+                  Sales Dashboard
+                </h1>
+                <p className="text-muted-foreground text-sm md:text-base lg:text-lg">
+                  Your real-time sales performance overview
+                </p>
+              </div>
+              
+              {/* Dashboard Mode Toggle */}
+              <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 backdrop-blur-sm border">
+                <Button
+                  variant={dashboardMode === 'simple' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => toggleDashboardMode('simple')}
+                  className={cn(
+                    "gap-2 transition-all",
+                    dashboardMode === 'simple' && "shadow-md"
+                  )}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Simple
+                </Button>
+                <Button
+                  variant={dashboardMode === 'advanced' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => toggleDashboardMode('advanced')}
+                  className={cn(
+                    "gap-2 transition-all",
+                    dashboardMode === 'advanced' && "shadow-md"
+                  )}
+                >
+                  <Gauge className="h-4 w-4" />
+                  Advanced
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -367,58 +414,68 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          {/* Live Engagement Tracker */}
-          <div className="lg:col-span-2">
-            <LiveEngagementTracker />
-          </div>
-
-          {/* Email Activity Widget */}
-          <div className="lg:col-span-2">
-            <EmailActivityWidget />
-          </div>
-
-          {/* Automation Metrics - Spans full width */}
-          <div className="lg:col-span-4">
-            <AutomationMetrics />
-          </div>
-
-          {/* Auto-Response Analytics - Spans full width */}
-          <div className="lg:col-span-4">
-            <AutoResponseAnalytics />
-          </div>
-
-          {/* Recent Activity Feed - Spans full width */}
-          
-
-          {/* Recent Companies - Moved below activity */}
-          <Card className="lg:col-span-4 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50 hover:shadow-primary/10 hover:shadow-xl">
-            <div className="p-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-primary" />
-                  Recent Activity
-                </h3>
-                <Button variant="ghost" size="sm" onClick={() => navigate("/companies")}>
-                  View all
-                  <ArrowUpRight className="h-3 w-3 ml-1" />
-                </Button>
+          {/* Advanced Mode Widgets */}
+          {dashboardMode === 'advanced' && (
+            <>
+              {/* Live Engagement Tracker */}
+              <div className="lg:col-span-2">
+                <LiveEngagementTracker />
               </div>
-              <div className="grid gap-2 md:gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {recentCompanies?.slice(0, 3).map((company, i) => <div key={i} className="flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-xl border-2 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/20 transition-all bg-gradient-to-br from-card to-primary/5 cursor-pointer group" onClick={() => navigate("/companies")}>
-                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm group-hover:scale-110 group-hover:rotate-6 transition-all shrink-0">
-                      <Building2 className="h-4 w-4 md:h-5 md:w-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-xs md:text-sm truncate">{company.name}</p>
-                      <p className="text-[10px] md:text-xs text-muted-foreground truncate">{company.industry}</p>
-                      <Badge variant="secondary" className="text-xs mt-1">
-                        {company.status}
-                      </Badge>
-                    </div>
-                  </div>)}
+
+              {/* Email Activity Widget */}
+              <div className="lg:col-span-2">
+                <EmailActivityWidget />
               </div>
-            </div>
-          </Card>
+
+              {/* Automation Metrics - Spans full width */}
+              <div className="lg:col-span-4">
+                <AutomationMetrics />
+              </div>
+
+              {/* Auto-Response Analytics - Spans full width */}
+              <div className="lg:col-span-4">
+                <AutoResponseAnalytics />
+              </div>
+            </>
+          )}
+
+          {/* Recent Activity Feed - Only in Advanced Mode */}
+          {dashboardMode === 'advanced' && (
+            <Card className="lg:col-span-4 border-2 hover:border-primary/50 transition-all shadow-lg bg-gradient-to-br from-card to-card/50 hover:shadow-primary/10 hover:shadow-xl">
+              <div className="p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    Recent Activity
+                  </h3>
+                  <Button variant="ghost" size="sm" onClick={() => navigate("/companies")}>
+                    View all
+                    <ArrowUpRight className="h-3 w-3 ml-1" />
+                  </Button>
+                </div>
+                <div className="grid gap-2 md:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {recentCompanies?.slice(0, 3).map((company, i) => (
+                    <div 
+                      key={i} 
+                      className="flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-xl border-2 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/20 transition-all bg-gradient-to-br from-card to-primary/5 cursor-pointer group" 
+                      onClick={() => navigate("/companies")}
+                    >
+                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gradient-primary flex items-center justify-center shadow-sm group-hover:scale-110 group-hover:rotate-6 transition-all shrink-0">
+                        <Building2 className="h-4 w-4 md:h-5 md:w-5 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-xs md:text-sm truncate">{company.name}</p>
+                        <p className="text-[10px] md:text-xs text-muted-foreground truncate">{company.industry}</p>
+                        <Badge variant="secondary" className="text-xs mt-1">
+                          {company.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>;
