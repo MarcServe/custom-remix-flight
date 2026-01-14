@@ -457,6 +457,7 @@ export type Database = {
           target_company_sizes: string[] | null
           target_geographies: string[] | null
           target_industries: string[] | null
+          timezone: string | null
           total_approved: number | null
           total_rejected: number | null
           updated_at: string
@@ -507,6 +508,7 @@ export type Database = {
           target_company_sizes?: string[] | null
           target_geographies?: string[] | null
           target_industries?: string[] | null
+          timezone?: string | null
           total_approved?: number | null
           total_rejected?: number | null
           updated_at?: string
@@ -557,6 +559,7 @@ export type Database = {
           target_company_sizes?: string[] | null
           target_geographies?: string[] | null
           target_industries?: string[] | null
+          timezone?: string | null
           total_approved?: number | null
           total_rejected?: number | null
           updated_at?: string

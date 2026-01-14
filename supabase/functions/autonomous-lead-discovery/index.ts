@@ -100,18 +100,39 @@ Deno.serve(async (req) => {
 
     console.log(`[super-discovery] Found ${settings.length} users with enabled discovery`);
 
-    // Get current UTC hour for filtering by preferred_discovery_hour
-    const currentUtcHour = new Date().getUTCHours();
+    // Get current UTC time
+    const now = new Date();
+    const currentUtcHour = now.getUTCHours();
     console.log(`[super-discovery] Current UTC hour: ${currentUtcHour}`);
 
-    // Filter settings to only users whose preferred hour matches current hour
+    // Helper function to check if it's the user's preferred local hour
+    const isUserPreferredHour = (setting: any): boolean => {
+      const preferredLocalHour = setting.preferred_discovery_hour ?? 9;
+      const timezone = setting.timezone || 'America/New_York';
+      
+      try {
+        // Get the current hour in the user's timezone
+        const userLocalHour = parseInt(
+          new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric',
+            hour12: false,
+            timeZone: timezone,
+          }).format(now)
+        );
+        
+        console.log(`[super-discovery] User ${setting.user_id}: local hour ${userLocalHour} in ${timezone}, preferred ${preferredLocalHour}`);
+        return userLocalHour === preferredLocalHour;
+      } catch (error) {
+        console.error(`[super-discovery] Invalid timezone ${timezone}, falling back to UTC`);
+        return currentUtcHour === preferredLocalHour;
+      }
+    };
+
+    // Filter settings to only users whose preferred local hour matches current time
     // (skip filtering for manual triggers)
     const settingsToProcess = manualUserId || forceRun
       ? settings
-      : settings.filter((s: any) => {
-          const preferredHour = s.preferred_discovery_hour ?? 9; // Default to 9 AM UTC
-          return preferredHour === currentUtcHour;
-        });
+      : settings.filter((s: any) => isUserPreferredHour(s));
 
     console.log(`[super-discovery] Users scheduled for this hour: ${settingsToProcess.length} of ${settings.length}`);
 

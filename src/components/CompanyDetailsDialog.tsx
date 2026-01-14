@@ -1398,6 +1398,14 @@ export function CompanyDetailsDialog({
           onOpenChange={setAddContactDialogOpen}
           companyId={company.id}
           companyName={company.name}
+          company={{
+            id: company.id,
+            name: company.name,
+            website: normalizedCompany.website,
+            general_email: normalizedCompany.generalEmail,
+            company_phone: normalizedCompany.companyPhone,
+            linkedin_url: normalizedCompany.linkedinUrl,
+          }}
         />
       )}
     </>
