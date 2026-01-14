@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { 
   parseCSV, 
   autoDetectMappings, 
+  inferFieldFromValues,
   COMPANY_FIELDS, 
   CONTACT_FIELDS,
   ColumnMapping,
@@ -23,6 +24,7 @@ import {
   extractDomain,
   normalizeCompanyName
 } from '@/lib/utils/csv-parser';
+import { useNavigate } from 'react-router-dom';
 
 interface ApifyCSVUploaderProps {
   open: boolean;
@@ -32,13 +34,16 @@ interface ApifyCSVUploaderProps {
 type ImportStep = 'upload' | 'mapping' | 'preview' | 'importing' | 'complete';
 
 export function ApifyCSVUploader({ open, onOpenChange }: ApifyCSVUploaderProps) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<ImportStep>('upload');
   const [csvData, setCsvData] = useState<ParsedCSV | null>(null);
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
   const [unmappedColumns, setUnmappedColumns] = useState<string[]>([]);
+  const [suggestedMappings, setSuggestedMappings] = useState<Map<string, { field: string; table: 'company' | 'contact'; confidence: number }>>(new Map());
   const [importProgress, setImportProgress] = useState(0);
   const [importStats, setImportStats] = useState({ companies: 0, contacts: 0, skipped: 0 });
+  const [importedCompanyIds, setImportedCompanyIds] = useState<string[]>([]);
   const [dragActive, setDragActive] = useState(false);
 
   const handleFileSelect = useCallback((file: File) => {
@@ -59,13 +64,25 @@ export function ApifyCSVUploader({ open, onOpenChange }: ApifyCSVUploaderProps) 
 
       setCsvData(parsed);
       
-      // Auto-detect mappings
+      // Auto-detect mappings with enhanced Apify patterns
       const detected = autoDetectMappings(parsed.headers);
       setMappings(detected);
       
-      // Find unmapped columns
+      // Find unmapped columns and try to infer from values
       const mappedColumns = detected.map(m => m.csvColumn);
-      setUnmappedColumns(parsed.headers.filter(h => !mappedColumns.includes(h)));
+      const unmapped = parsed.headers.filter(h => !mappedColumns.includes(h));
+      setUnmappedColumns(unmapped);
+      
+      // Infer field types from sample values for unmapped columns
+      const suggestions = new Map<string, { field: string; table: 'company' | 'contact'; confidence: number }>();
+      unmapped.forEach(col => {
+        const sampleValues = parsed.rows.slice(0, 10).map(r => r[col]);
+        const inference = inferFieldFromValues(col, sampleValues);
+        if (inference && inference.confidence > 0.7) {
+          suggestions.set(col, inference);
+        }
+      });
+      setSuggestedMappings(suggestions);
       
       setStep('mapping');
       toast.success(`Loaded ${parsed.rows.length} rows from CSV`);
@@ -483,7 +500,7 @@ export function ApifyCSVUploader({ open, onOpenChange }: ApifyCSVUploaderProps) 
                 <Check className="h-8 w-8 text-green-500" />
               </div>
               <h3 className="text-xl font-semibold mb-4">Import Complete!</h3>
-              <div className="flex justify-center gap-4">
+              <div className="flex justify-center gap-4 mb-6">
                 <Badge variant="secondary" className="text-base px-4 py-2">
                   <Building2 className="h-4 w-4 mr-2" />
                   {importStats.companies} Companies
@@ -499,6 +516,19 @@ export function ApifyCSVUploader({ open, onOpenChange }: ApifyCSVUploaderProps) 
                   </Badge>
                 )}
               </div>
+              {importStats.companies > 0 && (
+                <div className="flex justify-center gap-3">
+                  <Button variant="outline" onClick={handleClose}>
+                    Close
+                  </Button>
+                  <Button onClick={() => {
+                    handleClose();
+                    navigate('/campaigns');
+                  }}>
+                    Create Email Campaign
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
