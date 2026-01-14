@@ -108,7 +108,7 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label>Frequency</Label>
               <Select
@@ -127,7 +127,7 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
             </div>
 
             <div className="space-y-2">
-              <Label>Discovery Time (UTC)</Label>
+              <Label>Discovery Time</Label>
               <Select
                 value={String(localSettings?.preferred_discovery_hour || 9)}
                 onValueChange={(value) => handleChange('preferred_discovery_hour', parseInt(value))}
@@ -136,15 +136,62 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.from({ length: 24 }, (_, i) => (
-                    <SelectItem key={i} value={String(i)}>
-                      {String(i).padStart(2, '0')}:00 UTC
-                    </SelectItem>
-                  ))}
+                  {Array.from({ length: 24 }, (_, i) => {
+                    const hour12 = i === 0 ? 12 : i > 12 ? i - 12 : i;
+                    const ampm = i < 12 ? 'AM' : 'PM';
+                    return (
+                      <SelectItem key={i} value={String(i)}>
+                        {hour12}:00 {ampm}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Timezone</Label>
+              <Select
+                value={localSettings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}
+                onValueChange={(value) => handleChange('timezone', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {[
+                    'America/New_York',
+                    'America/Chicago',
+                    'America/Denver',
+                    'America/Los_Angeles',
+                    'America/Anchorage',
+                    'Pacific/Honolulu',
+                    'Europe/London',
+                    'Europe/Paris',
+                    'Europe/Berlin',
+                    'Europe/Moscow',
+                    'Asia/Dubai',
+                    'Asia/Kolkata',
+                    'Asia/Singapore',
+                    'Asia/Tokyo',
+                    'Asia/Shanghai',
+                    'Australia/Sydney',
+                    'Pacific/Auckland',
+                    'Africa/Lagos',
+                    'Africa/Cairo',
+                    'Africa/Johannesburg',
+                  ].map((tz) => {
+                    const label = tz.replace(/_/g, ' ').split('/').pop() || tz;
+                    return (
+                      <SelectItem key={tz} value={tz}>
+                        {label}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Discovery runs at this hour based on your frequency setting
+                Discovery runs at selected time in your timezone
               </p>
             </div>
           </div>

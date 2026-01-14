@@ -8,11 +8,21 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 
+interface Company {
+  id: string;
+  name: string;
+  website?: string | null;
+  general_email?: string | null;
+  company_phone?: string | null;
+  linkedin_url?: string | null;
+}
+
 interface AddContactToCompanyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   companyId: string;
   companyName: string;
+  company?: Company | null;
   onSuccess?: () => void;
 }
 
@@ -21,9 +31,28 @@ export function AddContactToCompanyDialog({
   onOpenChange,
   companyId,
   companyName,
+  company,
   onSuccess,
 }: AddContactToCompanyDialogProps) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Extract domain from company website for email placeholder
+  const getEmailDomain = () => {
+    if (company?.website) {
+      try {
+        const url = new URL(company.website.startsWith('http') ? company.website : `https://${company.website}`);
+        return url.hostname.replace('www.', '');
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  };
+  
+  const emailDomain = getEmailDomain();
+  
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -32,8 +61,6 @@ export function AddContactToCompanyDialog({
     department: "",
     linkedin_url: "",
   });
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,7 +166,7 @@ export function AddContactToCompanyDialog({
               type="email"
               value={formData.email}
               onChange={(e) => handleChange("email", e.target.value)}
-              placeholder="john@company.com"
+              placeholder={emailDomain ? `firstname@${emailDomain}` : "john@company.com"}
             />
           </div>
 
