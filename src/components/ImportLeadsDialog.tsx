@@ -48,9 +48,9 @@ export function ImportLeadsDialog({ open, onOpenChange }: ImportLeadsDialogProps
 
       const existingEmails = new Set(peopleEmails?.map(p => p.email?.toLowerCase()) || []);
       
-      // Filter out contacts that are already in people
+      // Filter to contacts with emails that are NOT already in people
       return (contactsData as Contact[] || []).filter(
-        contact => !contact.email || !existingEmails.has(contact.email.toLowerCase())
+        contact => contact.email && !existingEmails.has(contact.email.toLowerCase())
       );
     },
     enabled: open,
