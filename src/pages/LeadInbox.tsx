@@ -694,30 +694,73 @@ export default function LeadInbox() {
 
               <Separator />
 
-              {/* Search Options */}
+              {/* Discovery Sources */}
               <div className="space-y-4">
-                <Label className="font-medium">Search Options</Label>
+                <Label className="font-medium">Discovery Sources</Label>
+                <p className="text-xs text-muted-foreground">Enable multiple sources for maximum lead coverage</p>
                 
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="enrich_with_perplexity"
-                    checked={localSettings?.enrich_with_perplexity ?? true}
-                    onCheckedChange={(checked) => handleSettingsChange('enrich_with_perplexity', checked)}
-                  />
-                  <Label htmlFor="enrich_with_perplexity" className="text-sm">
-                    Enrich leads with Perplexity AI
-                  </Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="enrich_with_perplexity"
+                      checked={localSettings?.enrich_with_perplexity ?? true}
+                      onCheckedChange={(checked) => handleSettingsChange('enrich_with_perplexity', checked)}
+                    />
+                    <Label htmlFor="enrich_with_perplexity" className="text-sm">
+                      Enrich with Perplexity AI
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="use_serp_api"
+                      checked={localSettings?.use_serp_api ?? true}
+                      onCheckedChange={(checked) => handleSettingsChange('use_serp_api', checked)}
+                    />
+                    <Label htmlFor="use_serp_api" className="text-sm">
+                      Google Search (SerpAPI)
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="use_apify"
+                      checked={localSettings?.use_apify ?? true}
+                      onCheckedChange={(checked) => handleSettingsChange('use_apify', checked)}
+                    />
+                    <Label htmlFor="use_apify" className="text-sm">
+                      Google Maps (Apify) - up to 300 local leads
+                    </Label>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="use_serp_api"
-                    checked={localSettings?.use_serp_api || false}
-                    onCheckedChange={(checked) => handleSettingsChange('use_serp_api', checked)}
+                {localSettings?.use_apify && (
+                  <div className="pl-4 border-l-2 border-muted space-y-2">
+                    <Label>Apify max results: {localSettings?.apify_max_results || 100}</Label>
+                    <Slider
+                      value={[localSettings?.apify_max_results || 100]}
+                      onValueChange={([value]) => handleSettingsChange('apify_max_results', value)}
+                      min={20}
+                      max={300}
+                      step={20}
+                      className="w-64"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label>Daily lead target: {localSettings?.daily_lead_target || 50}</Label>
+                  <Slider
+                    value={[localSettings?.daily_lead_target || 50]}
+                    onValueChange={([value]) => handleSettingsChange('daily_lead_target', value)}
+                    min={10}
+                    max={200}
+                    step={10}
+                    className="w-64"
                   />
-                  <Label htmlFor="use_serp_api" className="text-sm">
-                    Include Google Search results (SerpAPI)
-                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Target total leads across all sources per discovery run
+                  </p>
                 </div>
               </div>
 
@@ -780,6 +823,66 @@ export default function LeadInbox() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Auto Campaign Creation */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  <Label className="font-medium">Auto Campaign Creation</Label>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="auto_create_campaign" className="text-sm">Create campaigns from auto-approved leads</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically create email campaign drafts from high-quality leads
+                    </p>
+                  </div>
+                  <Switch
+                    id="auto_create_campaign"
+                    checked={localSettings?.auto_create_campaign || false}
+                    onCheckedChange={(checked) => handleSettingsChange('auto_create_campaign', checked)}
+                  />
+                </div>
+
+                {localSettings?.auto_create_campaign && (
+                  <div className="space-y-3 pl-4 border-l-2 border-muted">
+                    <div className="space-y-2">
+                      <Label>Campaign send time (UTC)</Label>
+                      <Select
+                        value={localSettings?.campaign_send_time || '10:00'}
+                        onValueChange={(value) => handleSettingsChange('campaign_send_time', value)}
+                      >
+                        <SelectTrigger className="w-48">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="09:00">9:00 AM</SelectItem>
+                          <SelectItem value="10:00">10:00 AM</SelectItem>
+                          <SelectItem value="11:00">11:00 AM</SelectItem>
+                          <SelectItem value="14:00">2:00 PM</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="full_auto_mode" className="text-sm">Full auto mode</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Send campaigns automatically without review
+                        </p>
+                      </div>
+                      <Switch
+                        id="full_auto_mode"
+                        checked={localSettings?.full_auto_mode || false}
+                        onCheckedChange={(checked) => handleSettingsChange('full_auto_mode', checked)}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
