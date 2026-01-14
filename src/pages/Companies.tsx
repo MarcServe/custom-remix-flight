@@ -4,11 +4,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload } from "lucide-react";
+import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X } from "lucide-react";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
 import { ProspectAnalyzer, TemperatureBadge } from "@/components/ProspectAnalyzer";
 import { ApifyCSVUploader } from "@/components/ApifyCSVUploader";
+import { TagBadges } from "@/components/ui/tag-input";
+import { useCompanyTags } from "@/hooks/use-company-tags";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Company } from "@/lib/api/companies";
 
 export default function Companies() {
@@ -17,12 +26,15 @@ export default function Companies() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [csvUploaderOpen, setCsvUploaderOpen] = useState(false);
+  const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
   const [emailRecipient, setEmailRecipient] = useState<{
     email: string;
     name: string;
     companyId?: string;
     contactId?: string;
   } | null>(null);
+
+  const { existingTags } = useCompanyTags();
 
   const { data: companies, isLoading } = useQuery({
     queryKey: ["companies-full"],
@@ -45,6 +57,7 @@ export default function Companies() {
           socialProfiles: company.social_profiles as any,
           keyExecutives: company.key_executives as any,
           techStack: company.tech_stack,
+          tags: company.tags || [],
           // Extract from enrichment_data JSONB if it exists
           products: enrichmentData?.products,
           recentNews: company.recent_news || enrichmentData?.recentNews,
@@ -57,6 +70,25 @@ export default function Companies() {
       });
     },
   });
+
+  // Filter companies by selected tags
+  const filteredCompanies = companies?.filter(company => {
+    if (selectedTagFilters.length === 0) return true;
+    const companyTags = company.tags || [];
+    return selectedTagFilters.every(tag => companyTags.includes(tag));
+  });
+
+  const handleTagFilterClick = (tag: string) => {
+    setSelectedTagFilters(prev => 
+      prev.includes(tag) 
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    );
+  };
+
+  const clearTagFilters = () => {
+    setSelectedTagFilters([]);
+  };
 
   const handleCompanyClick = (company: Company, index: number) => {
     setSelectedCompany(company);
@@ -102,30 +134,107 @@ export default function Companies() {
         <div>
           <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Companies</h1>
           <p className="text-muted-foreground mt-1 md:mt-2 text-sm md:text-base">
-            {companies?.length || 0} companies in your CRM
+            {filteredCompanies?.length || 0} of {companies?.length || 0} companies
+            {selectedTagFilters.length > 0 && " (filtered)"}
           </p>
         </div>
-        <Button onClick={() => setCsvUploaderOpen(true)} variant="outline">
-          <Upload className="h-4 w-4 mr-2" />
-          Import CSV
-        </Button>
+        <div className="flex gap-2">
+          {/* Tag Filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="h-4 w-4" />
+                Filter by Tags
+                {selectedTagFilters.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">
+                    {selectedTagFilters.length}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64" align="end">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium text-sm">Filter by Tags</h4>
+                  {selectedTagFilters.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={clearTagFilters}
+                    >
+                      Clear all
+                    </Button>
+                  )}
+                </div>
+                <ScrollArea className="h-48">
+                  <div className="space-y-2">
+                    {existingTags?.map((tag) => (
+                      <div key={tag} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`filter-${tag}`}
+                          checked={selectedTagFilters.includes(tag)}
+                          onCheckedChange={() => handleTagFilterClick(tag)}
+                        />
+                        <label
+                          htmlFor={`filter-${tag}`}
+                          className="text-sm cursor-pointer flex-1"
+                        >
+                          {tag}
+                        </label>
+                      </div>
+                    ))}
+                    {(!existingTags || existingTags.length === 0) && (
+                      <p className="text-sm text-muted-foreground">
+                        No tags yet. Add tags to companies to filter them.
+                      </p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Button onClick={() => setCsvUploaderOpen(true)} variant="outline">
+            <Upload className="h-4 w-4 mr-2" />
+            Import CSV
+          </Button>
+        </div>
       </div>
 
-      {companies && companies.length > 0 && (
+      {/* Active Tag Filters */}
+      {selectedTagFilters.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-4 md:px-0">
+          <span className="text-sm text-muted-foreground">Filtering by:</span>
+          {selectedTagFilters.map((tag) => (
+            <Badge
+              key={tag}
+              variant="secondary"
+              className="gap-1 cursor-pointer"
+              onClick={() => handleTagFilterClick(tag)}
+            >
+              {tag}
+              <X className="h-3 w-3" />
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {filteredCompanies && filteredCompanies.length > 0 && (
         <div className="px-4 md:px-0">
           <ProspectAnalyzer 
-            companies={companies} 
+            companies={filteredCompanies} 
             onAnalysisComplete={() => queryClient.invalidateQueries({ queryKey: ["companies-full"] })}
           />
         </div>
       )}
 
       <div className="space-y-3 px-4 md:px-0 max-h-[calc(100vh-12rem)] overflow-y-auto">
-        {companies?.map((company, index) => {
+        {filteredCompanies?.map((company, index) => {
           const contactCount = company.contacts?.length || 0;
           const dealCount = company.deals?.length || 0;
           const hasEmail = company.general_email || company.contacts?.[0]?.email;
           const isEnriched = company.enrichment_status === 'completed';
+          const companyTags = company.tags || [];
 
           return (
             <Card 
@@ -164,6 +273,16 @@ export default function Companies() {
                         </>
                       )}
                     </div>
+                    {/* Tags display */}
+                    {companyTags.length > 0 && (
+                      <div className="mt-2">
+                        <TagBadges 
+                          tags={companyTags} 
+                          maxDisplay={4}
+                          onClick={handleTagFilterClick}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardHeader>

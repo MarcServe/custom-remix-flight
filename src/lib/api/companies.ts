@@ -43,6 +43,8 @@ export interface Company {
   enrichment_status?: string;
   enrichment_confidence?: string;
   enrichment_error?: string;
+  // Tags for categorization
+  tags?: string[];
   // AI Analysis
   temperature?: 'hot' | 'warm' | 'cold';
   suggested_actions?: Array<{
@@ -63,6 +65,7 @@ export interface CompanyFilters {
   industry?: string;
   size?: string;
   geography?: string;
+  tags?: string[];
 }
 
 /**

@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus, Database, Loader2, Phone, TrendingUp, Award, CheckCircle2, XCircle, Circle, Copy, Linkedin, Shield } from "lucide-react";
+import { Building2, Globe, ExternalLink, Users, MapPin, Sparkles, Package, Newspaper, DollarSign, Mail, Search, Wand2, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, Plus, Database, Loader2, Phone, TrendingUp, Award, CheckCircle2, XCircle, Circle, Copy, Linkedin, Shield, Tag } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { GenerateSequenceForCompanyDialog } from "@/components/sequences/GenerateSequenceForCompanyDialog";
@@ -20,6 +20,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SuggestedActions } from "@/components/ProspectAnalyzer";
+import { TagInput } from "@/components/ui/tag-input";
+import { useCompanyTags } from "@/hooks/use-company-tags";
 
 interface Contact {
   id?: string;
@@ -116,6 +118,8 @@ interface Company {
     reason: string;
   }>;
   last_analyzed_at?: string;
+  // Tags
+  tags?: string[];
 }
 
 interface CompanyDetailsDialogProps {
@@ -154,12 +158,23 @@ export function CompanyDetailsDialog({
   const { data: eventsData } = useCompanyEvents(company?.id || '');
   const deleteEventMutation = useDeleteEvent();
   const queryClient = useQueryClient();
+  const { allSuggestions, updateCompanyTags, isUpdating: isUpdatingTags } = useCompanyTags();
+  const [localTags, setLocalTags] = useState<string[]>([]);
 
-  // Reset extracted email when company changes
+  // Reset extracted email and sync tags when company changes
   useEffect(() => {
     setExtractedEmail(null);
     setIsExtractingEmail(false);
-  }, [company?.id]);
+    setLocalTags(company?.tags || []);
+  }, [company?.id, company?.tags]);
+
+  // Handle tag changes - auto-save when tags are modified
+  const handleTagsChange = (newTags: string[]) => {
+    setLocalTags(newTags);
+    if (company?.id && !isSearching) {
+      updateCompanyTags({ companyId: company.id, tags: newTags });
+    }
+  };
 
   // Keyboard navigation
   useEffect(() => {
@@ -732,6 +747,33 @@ export function CompanyDetailsDialog({
                 )}
               </div>
             </div>
+
+            {/* Tags Section */}
+            {!isSearching && (
+              <>
+                <Separator />
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                      <Tag className="h-4 w-4 text-orange-500" />
+                    </div>
+                    <h3 className="text-sm font-semibold">Tags</h3>
+                    {isUpdatingTags && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                  </div>
+                  <div className="pl-10">
+                    <TagInput
+                      tags={localTags}
+                      onTagsChange={handleTagsChange}
+                      suggestions={allSuggestions}
+                      placeholder="Add tags to categorize..."
+                    />
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Add tags like sector, industry, product type to organize your companies
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Why This Company Was Chosen - Match Intelligence */}
             {(company.matchReason || (company.matchSignals && company.matchSignals.length > 0)) && (
