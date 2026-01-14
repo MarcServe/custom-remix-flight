@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X } from "lucide-react";
+import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2 } from "lucide-react";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
 import { ProspectAnalyzer, TemperatureBadge } from "@/components/ProspectAnalyzer";
@@ -18,15 +18,29 @@ import {
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 import type { Company } from "@/lib/api/companies";
 
 export default function Companies() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [csvUploaderOpen, setCsvUploaderOpen] = useState(false);
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [emailRecipient, setEmailRecipient] = useState<{
     email: string;
     name: string;
@@ -35,6 +49,52 @@ export default function Companies() {
   } | null>(null);
 
   const { existingTags } = useCompanyTags();
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (companyIds: string[]) => {
+      const { error } = await supabase
+        .from('companies')
+        .delete()
+        .in('id', companyIds);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['companies-full'] });
+      queryClient.invalidateQueries({ queryKey: ['company-existing-tags'] });
+      setSelectedCompanyIds(new Set());
+      setBulkDeleteDialogOpen(false);
+      toast({ title: 'Success', description: `Deleted ${selectedCompanyIds.size} companies` });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const toggleCompanySelection = (companyId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedCompanyIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(companyId)) {
+        newSet.delete(companyId);
+      } else {
+        newSet.add(companyId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedCompanyIds.size === (filteredCompanies?.length || 0)) {
+      setSelectedCompanyIds(new Set());
+    } else {
+      setSelectedCompanyIds(new Set((filteredCompanies || []).map(c => c.id)));
+    }
+  };
+
+  const handleBulkDelete = () => {
+    bulkDeleteMutation.mutate(Array.from(selectedCompanyIds));
+  };
 
   const { data: companies, isLoading } = useQuery({
     queryKey: ["companies-full"],
@@ -228,22 +288,73 @@ export default function Companies() {
         </div>
       )}
 
-      <div className="space-y-3 px-4 md:px-0 max-h-[calc(100vh-12rem)] overflow-y-auto">
+      {/* Bulk Actions Bar */}
+      {selectedCompanyIds.size > 0 && (
+        <div className="sticky top-0 z-10 mx-4 md:mx-0">
+          <Card className="border-primary/50 bg-primary/5">
+            <CardContent className="flex items-center justify-between py-3 px-4">
+              <span className="text-sm font-medium">
+                {selectedCompanyIds.size} compan{selectedCompanyIds.size !== 1 ? 'ies' : 'y'} selected
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedCompanyIds(new Set())}
+                >
+                  Clear Selection
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteDialogOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete Selected
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Select All Header */}
+      {filteredCompanies && filteredCompanies.length > 0 && (
+        <div className="flex items-center gap-3 px-4 md:px-0">
+          <Checkbox
+            checked={selectedCompanyIds.size === filteredCompanies.length && filteredCompanies.length > 0}
+            onCheckedChange={toggleSelectAll}
+          />
+          <span className="text-sm text-muted-foreground">
+            {selectedCompanyIds.size === filteredCompanies.length ? 'Deselect all' : 'Select all'}
+          </span>
+        </div>
+      )}
+
+      <div className="space-y-3 px-4 md:px-0 max-h-[calc(100vh-16rem)] overflow-y-auto">
         {filteredCompanies?.map((company, index) => {
           const contactCount = company.contacts?.length || 0;
           const dealCount = company.deals?.length || 0;
           const hasEmail = company.general_email || company.contacts?.[0]?.email;
           const isEnriched = company.enrichment_status === 'completed';
           const companyTags = company.tags || [];
+          const isSelected = selectedCompanyIds.has(company.id);
 
           return (
             <Card 
               key={company.id} 
-              className="transition-all hover:shadow-lg border bg-card/50 backdrop-blur-sm cursor-pointer"
+              className={`transition-all hover:shadow-lg border bg-card/50 backdrop-blur-sm cursor-pointer ${isSelected ? 'ring-2 ring-primary border-primary' : ''}`}
               onClick={() => handleCompanyClick(company, index)}
             >
               <CardHeader className="pb-2 md:pb-3">
                 <div className="flex items-start gap-3 md:gap-4">
+                  {/* Checkbox for selection */}
+                  <div 
+                    className="flex items-center pt-1"
+                    onClick={(e) => toggleCompanySelection(company.id, e)}
+                  >
+                    <Checkbox checked={isSelected} />
+                  </div>
                   <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center flex-shrink-0">
                     <Building2 className="h-5 w-5 md:h-6 md:w-6 text-primary" />
                   </div>
@@ -390,6 +501,38 @@ export default function Companies() {
         open={csvUploaderOpen}
         onOpenChange={setCsvUploaderOpen}
       />
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedCompanyIds.size} companies?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the selected companies and all associated data including contacts, deals, and events. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete {selectedCompanyIds.size} Companies
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
