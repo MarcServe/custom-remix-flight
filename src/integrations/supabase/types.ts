@@ -803,6 +803,7 @@ export type Database = {
           social_profiles: Json | null
           status: string | null
           suggested_actions: Json | null
+          tags: string[] | null
           tech_stack: string[] | null
           temperature: string | null
           updated_at: string | null
@@ -840,6 +841,7 @@ export type Database = {
           social_profiles?: Json | null
           status?: string | null
           suggested_actions?: Json | null
+          tags?: string[] | null
           tech_stack?: string[] | null
           temperature?: string | null
           updated_at?: string | null
@@ -877,6 +879,7 @@ export type Database = {
           social_profiles?: Json | null
           status?: string | null
           suggested_actions?: Json | null
+          tags?: string[] | null
           tech_stack?: string[] | null
           temperature?: string | null
           updated_at?: string | null
@@ -950,6 +953,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      company_tag_presets: {
+        Row: {
+          category: string | null
+          color: string | null
+          created_at: string | null
+          id: string
+          name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          color?: string | null
+          created_at?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          color?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       contacts: {
         Row: {
