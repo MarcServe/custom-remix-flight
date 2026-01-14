@@ -1292,10 +1292,13 @@ export type Database = {
       discovery_personas: {
         Row: {
           auto_enroll_sequence_id: string | null
+          call_to_action: string | null
           conversion_rate: number | null
           created_at: string
           custom_search_query: string | null
           description: string | null
+          email_signature_override: string | null
+          email_tone: string | null
           exclude_industries: string[] | null
           exclude_keywords: string[] | null
           id: string
@@ -1305,6 +1308,8 @@ export type Database = {
           learned_industries: string[] | null
           name: string
           priority: number | null
+          product_focus: string | null
+          talking_points: string[] | null
           target_company_sizes: string[] | null
           target_geographies: string[] | null
           target_industries: string[] | null
@@ -1314,13 +1319,17 @@ export type Database = {
           total_rejected: number | null
           updated_at: string
           user_id: string
+          value_proposition: string | null
         }
         Insert: {
           auto_enroll_sequence_id?: string | null
+          call_to_action?: string | null
           conversion_rate?: number | null
           created_at?: string
           custom_search_query?: string | null
           description?: string | null
+          email_signature_override?: string | null
+          email_tone?: string | null
           exclude_industries?: string[] | null
           exclude_keywords?: string[] | null
           id?: string
@@ -1330,6 +1339,8 @@ export type Database = {
           learned_industries?: string[] | null
           name: string
           priority?: number | null
+          product_focus?: string | null
+          talking_points?: string[] | null
           target_company_sizes?: string[] | null
           target_geographies?: string[] | null
           target_industries?: string[] | null
@@ -1339,13 +1350,17 @@ export type Database = {
           total_rejected?: number | null
           updated_at?: string
           user_id: string
+          value_proposition?: string | null
         }
         Update: {
           auto_enroll_sequence_id?: string | null
+          call_to_action?: string | null
           conversion_rate?: number | null
           created_at?: string
           custom_search_query?: string | null
           description?: string | null
+          email_signature_override?: string | null
+          email_tone?: string | null
           exclude_industries?: string[] | null
           exclude_keywords?: string[] | null
           id?: string
@@ -1355,6 +1370,8 @@ export type Database = {
           learned_industries?: string[] | null
           name?: string
           priority?: number | null
+          product_focus?: string | null
+          talking_points?: string[] | null
           target_company_sizes?: string[] | null
           target_geographies?: string[] | null
           target_industries?: string[] | null
@@ -1364,6 +1381,7 @@ export type Database = {
           total_rejected?: number | null
           updated_at?: string
           user_id?: string
+          value_proposition?: string | null
         }
         Relationships: []
       }

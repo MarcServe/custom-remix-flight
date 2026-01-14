@@ -150,27 +150,43 @@ CRITICAL: Use the EXACT signature provided above. Do not modify it or add placeh
 Return the response as JSON with 'subject' and 'body' fields.`;
     } else {
       // This is a personal/sales email request
-      const { recipientName, companyName, context } = requestBody;
-      console.log('Processing personal email for:', recipientName);
+      const { recipientName, companyName, context, persona } = requestBody;
+      console.log('Processing personal email for:', recipientName, 'with persona:', persona?.product_focus);
       
+      // Build persona-specific instructions if provided
+      let personaInstructions = '';
+      if (persona) {
+        personaInstructions = `
+MARKETING PERSONA CONTEXT:
+${persona.product_focus ? `- Product/Service: ${persona.product_focus}` : ''}
+${persona.value_proposition ? `- Value Proposition: ${persona.value_proposition}` : ''}
+${persona.talking_points?.length ? `- Key Talking Points: ${persona.talking_points.join(', ')}` : ''}
+${persona.call_to_action ? `- Call to Action: ${persona.call_to_action}` : ''}
+${persona.email_tone ? `- Tone: Write in a ${persona.email_tone} tone` : ''}
+
+Use this marketing context to craft the email. Focus on the product/service mentioned and highlight the value proposition. Naturally incorporate the key talking points. End with the specified call to action instead of a generic request.
+`;
+      }
+
       systemPrompt = `You are an expert sales email writer. Write complete, ready-to-send emails with REAL CONTENT ONLY. NEVER use brackets, placeholders, or instructions in the output. Replace any missing information with professional, general language.`;
 
       userPrompt = `Write a complete professional outreach email to ${recipientName}${companyName ? ` at ${companyName}` : ''}.
 
 You are: ${senderName}${senderTitle ? `, ${senderTitle}` : ''}${senderCompany ? ` from ${senderCompany}` : ''}
 
-${context ? `CONTEXT: ${context}\n` : ''}
+${personaInstructions}
+${context ? `ADDITIONAL CONTEXT: ${context}\n` : ''}
 
 STRICT RULES - NO EXCEPTIONS:
 1. NEVER write [brackets] or (placeholders) anywhere in the email
 2. If company name is missing, use general terms like "your team" or "your organization"
 3. Write ACTUAL content, not instructions like "mention their work" - just write the actual content
-4. Make the email about AI solutions that streamline sales processes and increase efficiency
-5. Be specific about benefits: lead qualification, automated outreach, CRM integration
-6. End with: "Would you be open to a brief 15-minute call next week to discuss this further?"
+${persona?.product_focus ? `4. Focus on ${persona.product_focus} and its benefits` : '4. Make the email about AI solutions that streamline sales processes and increase efficiency'}
+${persona?.talking_points?.length ? `5. Naturally incorporate these points: ${persona.talking_points.join(', ')}` : '5. Be specific about benefits: lead qualification, automated outreach, CRM integration'}
+${persona?.call_to_action ? `6. End with this call to action: ${persona.call_to_action}` : '6. End with: "Would you be open to a brief 15-minute call next week to discuss this further?"'}
 7. Close with this EXACT signature:
 
-${emailSignature}
+${persona?.email_signature_override || emailSignature}
 
 FORBIDDEN PATTERNS (never use these):
 - [Your Company Name]
@@ -179,7 +195,7 @@ FORBIDDEN PATTERNS (never use these):
 - (e.g., your team's recent success)
 - any text in brackets or parentheses with instructions
 
-Return as JSON: {"subject": "Streamlining Sales with AI", "body": "actual email content here"}`;
+Return as JSON: {"subject": "${persona?.product_focus ? `Regarding ${persona.product_focus.slice(0, 30)}` : 'Streamlining Sales with AI'}", "body": "actual email content here"}`;
     }
 
     console.log('Calling OpenAI API...');
