@@ -127,7 +127,7 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
             </div>
 
             <div className="space-y-2">
-              <Label>Preferred Hour (UTC)</Label>
+              <Label>Discovery Time (UTC)</Label>
               <Select
                 value={String(localSettings?.preferred_discovery_hour || 9)}
                 onValueChange={(value) => handleChange('preferred_discovery_hour', parseInt(value))}
@@ -143,6 +143,9 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Discovery runs at this hour based on your frequency setting
+              </p>
             </div>
           </div>
 
