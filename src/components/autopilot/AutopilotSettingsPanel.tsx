@@ -444,11 +444,28 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Master webhook toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Enable Webhook Notifications</Label>
+              <p className="text-xs text-muted-foreground">
+                Master switch for all Slack/Discord alerts
+              </p>
+            </div>
+            <Switch
+              checked={localSettings?.webhook_enabled || false}
+              onCheckedChange={(checked) => handleChange('webhook_enabled', checked)}
+            />
+          </div>
+
+          <Separator />
+
           <div className="flex items-center justify-between">
             <Label>Notify on Discovery Complete</Label>
             <Switch
               checked={localSettings?.notify_on_discovery_complete || false}
               onCheckedChange={(checked) => handleChange('notify_on_discovery_complete', checked)}
+              disabled={!localSettings?.webhook_enabled}
             />
           </div>
 
@@ -457,7 +474,35 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
             <Switch
               checked={localSettings?.notify_on_hot_leads || false}
               onCheckedChange={(checked) => handleChange('notify_on_hot_leads', checked)}
+              disabled={!localSettings?.webhook_enabled}
             />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <Label>Alert on Auto-Approved Leads</Label>
+            <Switch
+              checked={localSettings?.notify_on_auto_approve || false}
+              onCheckedChange={(checked) => handleChange('notify_on_auto_approve', checked)}
+              disabled={!localSettings?.webhook_enabled}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Min Quality for Alerts</Label>
+              <Badge variant="secondary">{localSettings?.notify_min_quality_score || 70}%</Badge>
+            </div>
+            <Slider
+              value={[localSettings?.notify_min_quality_score || 70]}
+              onValueChange={([value]) => handleChange('notify_min_quality_score', value)}
+              min={50}
+              max={100}
+              step={5}
+              disabled={!localSettings?.webhook_enabled}
+            />
+            <p className="text-xs text-muted-foreground">
+              Only notify for leads with quality above this threshold
+            </p>
           </div>
 
           <Separator />
@@ -471,6 +516,7 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
               placeholder="https://hooks.slack.com/services/..."
               value={localSettings?.slack_webhook_url || ''}
               onChange={(e) => handleChange('slack_webhook_url', e.target.value)}
+              disabled={!localSettings?.webhook_enabled}
             />
           </div>
 
@@ -483,6 +529,7 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
               placeholder="https://discord.com/api/webhooks/..."
               value={localSettings?.discord_webhook_url || ''}
               onChange={(e) => handleChange('discord_webhook_url', e.target.value)}
+              disabled={!localSettings?.webhook_enabled}
             />
           </div>
         </CardContent>
