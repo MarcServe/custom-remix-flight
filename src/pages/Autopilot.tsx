@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,6 +29,10 @@ import { AutopilotSettingsPanel } from "@/components/autopilot/AutopilotSettings
 import { AutopilotPersonasQuickView } from "@/components/autopilot/AutopilotPersonasQuickView";
 import { AutopilotPrerequisites } from "@/components/autopilot/AutopilotPrerequisites";
 import { AutopilotAnalyticsPreview } from "@/components/autopilot/AutopilotAnalyticsPreview";
+
+// Lazy load embedded components to avoid circular dependencies
+const PersonaManager = lazy(() => import("@/components/lead-inbox/PersonaManager").then(m => ({ default: m.PersonaManager })));
+const LeadAnalyticsDashboard = lazy(() => import("@/components/lead-inbox/LeadAnalyticsDashboard").then(m => ({ default: m.LeadAnalyticsDashboard })));
 
 export default function Autopilot() {
   const { user } = useAuth();
@@ -320,28 +324,20 @@ export default function Autopilot() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Import the full PersonaManager from LeadInbox */}
-              <PersonaManagerEmbed />
+              <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>}>
+                <PersonaManager />
+              </Suspense>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="analytics">
-          <AnalyticsDashboardEmbed />
+          <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>}>
+            <LeadAnalyticsDashboard />
+          </Suspense>
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-// Embedded components that import from existing
-function PersonaManagerEmbed() {
-  // Dynamically import to avoid circular deps
-  const { PersonaManager } = require("@/components/lead-inbox/PersonaManager");
-  return <PersonaManager />;
-}
-
-function AnalyticsDashboardEmbed() {
-  const { LeadAnalyticsDashboard } = require("@/components/lead-inbox/LeadAnalyticsDashboard");
-  return <LeadAnalyticsDashboard />;
-}
