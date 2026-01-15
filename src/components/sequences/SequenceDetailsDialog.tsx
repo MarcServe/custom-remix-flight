@@ -15,10 +15,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mail, Layers, Clock, Calendar, Copy, TrendingUp, Edit2, Save, X } from "lucide-react";
+import { Mail, Layers, Clock, Calendar, Copy, TrendingUp, Edit2, Save, X, Sparkles, RefreshCw, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useUpdateSequence } from "@/hooks/use-sequences";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface SequenceStep {
   subject: string;
@@ -55,9 +57,19 @@ export function SequenceDetailsDialog({
   sequence,
 }: SequenceDetailsDialogProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [editMode, setEditMode] = useState(false);
   const [editedSteps, setEditedSteps] = useState<SequenceStep[]>([]);
+  const [editingInstructions, setEditingInstructions] = useState(false);
+  const [customInstructions, setCustomInstructions] = useState(sequence.custom_instructions || '');
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const updateSequence = useUpdateSequence();
+
+  // Reset instructions state when sequence changes
+  useMemo(() => {
+    setCustomInstructions(sequence.custom_instructions || '');
+    setEditingInstructions(false);
+  }, [sequence.id, sequence.custom_instructions]);
 
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text);
@@ -113,6 +125,72 @@ export function SequenceDetailsDialog({
         description: "Failed to update sequence",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleSaveInstructions = async () => {
+    try {
+      await updateSequence.mutateAsync({
+        id: sequence.id,
+        updates: { custom_instructions: customInstructions },
+      });
+      setEditingInstructions(false);
+      toast({
+        title: "Success",
+        description: "Custom instructions saved",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save instructions",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRegenerateSequence = async () => {
+    setIsRegenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-sequence', {
+        body: {
+          size: sequence.segment_filters?.size || 'Any',
+          geography: sequence.segment_filters?.geography || 'Any',
+          industry: sequence.segment_filters?.industry || 'Any',
+          customInstructions: customInstructions,
+          steps: steps.length || 4,
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.sequence) {
+        // Update the sequence with the new steps
+        await updateSequence.mutateAsync({
+          id: sequence.id,
+          updates: { 
+            steps: data.sequence,
+            custom_instructions: customInstructions,
+          },
+        });
+        
+        // Invalidate queries to refresh data
+        queryClient.invalidateQueries({ queryKey: ['sequences'] });
+        
+        toast({
+          title: "Sequence Regenerated!",
+          description: `Updated ${data.sequence.length} email steps with new instructions`,
+        });
+        setEditingInstructions(false);
+      }
+    } catch (error) {
+      console.error('Error regenerating sequence:', error);
+      toast({
+        title: "Error",
+        description: "Failed to regenerate sequence",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -207,17 +285,80 @@ export function SequenceDetailsDialog({
               )}
             </div>
 
-            {/* Custom Instructions */}
-            {sequence.custom_instructions && (
-              <Card className="bg-muted/50">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Custom Instructions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">{sequence.custom_instructions}</p>
-                </CardContent>
-              </Card>
-            )}
+            {/* Custom Instructions - Always show with edit capability */}
+            <Card className="bg-muted/50 border-dashed">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Custom Instructions
+                  </CardTitle>
+                  {!editingInstructions ? (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setEditingInstructions(true)}
+                    >
+                      <Edit2 className="h-3 w-3 mr-1" />
+                      Edit
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => {
+                          setEditingInstructions(false);
+                          setCustomInstructions(sequence.custom_instructions || '');
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleSaveInstructions}
+                        disabled={updateSequence.isPending}
+                      >
+                        <Save className="h-3 w-3 mr-1" />
+                        Save
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        onClick={handleRegenerateSequence}
+                        disabled={isRegenerating}
+                      >
+                        {isRegenerating ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3 w-3 mr-1" />
+                        )}
+                        Regenerate
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {editingInstructions ? (
+                  <div className="space-y-2">
+                    <Textarea
+                      value={customInstructions}
+                      onChange={(e) => setCustomInstructions(e.target.value)}
+                      placeholder="e.g., Focus on ROI and cost savings, mention our 30-day free trial, use specific industry terminology..."
+                      className="min-h-[100px]"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Edit instructions and click "Save" to update, or "Regenerate" to create new email content with these instructions.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {sequence.custom_instructions || 'No custom instructions set. Click Edit to add instructions for this sequence.'}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
             <Separator />
 
