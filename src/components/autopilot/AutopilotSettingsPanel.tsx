@@ -195,6 +195,32 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
             </div>
           </div>
 
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Overnight Preparation</Label>
+              <p className="text-xs text-muted-foreground">
+                Run discovery 6 hours early for fully enriched, better-scored leads
+              </p>
+            </div>
+            <Switch
+              checked={(localSettings?.pre_discovery_hours || 0) > 0}
+              onCheckedChange={(checked) => handleChange('pre_discovery_hours', checked ? 6 : 0)}
+            />
+          </div>
+          {(localSettings?.pre_discovery_hours || 0) > 0 && (
+            <p className="text-xs text-green-600 dark:text-green-400 pl-4 border-l-2 border-green-500">
+              ✓ Discovery will start at {(() => {
+                const deliveryHour = localSettings?.preferred_discovery_hour || 9;
+                const startHour = (deliveryHour - 6 + 24) % 24;
+                const hour12 = startHour === 0 ? 12 : startHour > 12 ? startHour - 12 : startHour;
+                const ampm = startHour < 12 ? 'AM' : 'PM';
+                return `${hour12}:00 ${ampm}`;
+              })()} and enrich ALL leads with Perplexity
+            </p>
+          )}
+
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label>Max Leads Per Run</Label>
@@ -305,6 +331,27 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
               onCheckedChange={(checked) => handleChange('enrich_with_perplexity', checked)}
             />
           </div>
+          
+          {localSettings?.enrich_with_perplexity && (
+            <div className="pl-4 border-l-2 border-muted space-y-3">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm">Max Leads to Enrich</Label>
+                  <Badge variant="secondary">{localSettings?.max_perplexity_enriched || 20}</Badge>
+                </div>
+                <Slider
+                  value={[localSettings?.max_perplexity_enriched || 20]}
+                  onValueChange={([value]) => handleChange('max_perplexity_enriched', value)}
+                  min={10}
+                  max={50}
+                  step={5}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Higher values = better quality scores but more API usage
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -446,11 +446,13 @@ export type Database = {
           learned_industries: string[] | null
           learned_keywords: string[] | null
           max_leads_per_run: number
+          max_perplexity_enriched: number | null
           next_run_at: string | null
           notify_min_quality_score: number | null
           notify_on_auto_approve: boolean | null
           notify_on_discovery_complete: boolean | null
           notify_on_hot_leads: boolean | null
+          pre_discovery_hours: number | null
           preferred_discovery_hour: number | null
           serpapi_quality_weight: number | null
           slack_webhook_url: string | null
@@ -497,11 +499,13 @@ export type Database = {
           learned_industries?: string[] | null
           learned_keywords?: string[] | null
           max_leads_per_run?: number
+          max_perplexity_enriched?: number | null
           next_run_at?: string | null
           notify_min_quality_score?: number | null
           notify_on_auto_approve?: boolean | null
           notify_on_discovery_complete?: boolean | null
           notify_on_hot_leads?: boolean | null
+          pre_discovery_hours?: number | null
           preferred_discovery_hour?: number | null
           serpapi_quality_weight?: number | null
           slack_webhook_url?: string | null
@@ -548,11 +552,13 @@ export type Database = {
           learned_industries?: string[] | null
           learned_keywords?: string[] | null
           max_leads_per_run?: number
+          max_perplexity_enriched?: number | null
           next_run_at?: string | null
           notify_min_quality_score?: number | null
           notify_on_auto_approve?: boolean | null
           notify_on_discovery_complete?: boolean | null
           notify_on_hot_leads?: boolean | null
+          pre_discovery_hours?: number | null
           preferred_discovery_hour?: number | null
           serpapi_quality_weight?: number | null
           slack_webhook_url?: string | null

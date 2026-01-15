@@ -105,10 +105,14 @@ Deno.serve(async (req) => {
     const currentUtcHour = now.getUTCHours();
     console.log(`[super-discovery] Current UTC hour: ${currentUtcHour}`);
 
-    // Helper function to check if it's the user's preferred local hour
+    // Helper function to check if it's the user's preferred local hour (or overnight preparation time)
     const isUserPreferredHour = (setting: any): boolean => {
       const preferredLocalHour = setting.preferred_discovery_hour ?? 9;
+      const preBakeHours = setting.pre_discovery_hours || 0;
       const timezone = setting.timezone || 'America/New_York';
+      
+      // Calculate the hour when discovery should START (before delivery time for overnight mode)
+      const discoveryStartHour = (preferredLocalHour - preBakeHours + 24) % 24;
       
       try {
         // Get the current hour in the user's timezone
@@ -120,11 +124,13 @@ Deno.serve(async (req) => {
           }).format(now)
         );
         
-        console.log(`[super-discovery] User ${setting.user_id}: local hour ${userLocalHour} in ${timezone}, preferred ${preferredLocalHour}`);
-        return userLocalHour === preferredLocalHour;
+        const isOvernightMode = preBakeHours > 0;
+        console.log(`[super-discovery] User ${setting.user_id}: local hour ${userLocalHour} in ${timezone}, ` +
+          `preferred ${preferredLocalHour}${isOvernightMode ? ` (overnight mode: start at ${discoveryStartHour})` : ''}`);
+        return userLocalHour === discoveryStartHour;
       } catch (error) {
         console.error(`[super-discovery] Invalid timezone ${timezone}, falling back to UTC`);
-        return currentUtcHour === preferredLocalHour;
+        return currentUtcHour === discoveryStartHour;
       }
     };
 
@@ -676,14 +682,19 @@ function filterLeadsByPersona(leads: any[], persona: Persona | null): any[] {
  * Enrich leads with Perplexity (batch, top quality only)
  */
 async function enrichLeadsWithPerplexity(leads: any[], setting: any): Promise<any[]> {
+  // Use configurable limit - default 20, or enrich ALL leads in overnight mode
+  const isOvernightMode = (setting.pre_discovery_hours || 0) > 0;
+  const baseLimit = setting.max_perplexity_enriched || 20;
+  const maxToEnrich = isOvernightMode ? (setting.max_leads_per_run || 50) : baseLimit;
+  
   // Only enrich top leads to save API calls
   const topLeads = leads
     .sort((a, b) => (b.qualityScore || 0) - (a.qualityScore || 0))
-    .slice(0, 10);
+    .slice(0, maxToEnrich);
   
   const otherLeads = leads.filter(l => !topLeads.includes(l));
   
-  console.log(`[super-discovery] Enriching top ${topLeads.length} leads with Perplexity`);
+  console.log(`[super-discovery] Enriching top ${topLeads.length} leads with Perplexity${isOvernightMode ? ' (overnight mode: full enrichment)' : ''}`);
   
   // Enrich in parallel batches
   const enrichPromises = topLeads.map(async (lead) => {
