@@ -266,9 +266,17 @@ Deno.serve(async (req) => {
         processedCount++;
         console.log(`[super-discovery] Completed processing for user ${setting.user_id}. Stats:`, JSON.stringify(userStats));
 
-        // Send summary webhook notification
-        if (setting.webhook_enabled && setting.webhook_url && userStats.totalLeads > 0) {
-          await sendSummaryWebhook(setting.webhook_url, userStats);
+        // Send summary webhook notification - use slack/discord webhooks or legacy webhook_url
+        const summaryWebhookUrl = setting.slack_webhook_url || setting.discord_webhook_url || setting.webhook_url;
+        if (setting.webhook_enabled && summaryWebhookUrl && userStats.totalLeads > 0) {
+          if (setting.notify_on_discovery_complete) {
+            await sendSummaryWebhook(summaryWebhookUrl, userStats);
+          }
+        }
+
+        // Send hot lead alerts for high-quality leads
+        if (setting.notify_on_hot_leads && summaryWebhookUrl && userStats.autoApproved > 0) {
+          await sendHotLeadAlerts(supabase, setting, discoveryRunId, summaryWebhookUrl);
         }
 
         // Send discovery summary email
@@ -846,13 +854,14 @@ async function saveDiscoveredLeads(
     }
 
     // Send webhook notification for high-quality auto-approved leads
-    if (setting.webhook_enabled && setting.webhook_url) {
+    const webhookUrl = setting.slack_webhook_url || setting.discord_webhook_url || setting.webhook_url;
+    if (setting.webhook_enabled && webhookUrl) {
       const highQualityLeads = autoApprovedLeads.filter(
         l => l.quality_score >= (setting.notify_min_quality_score || 70)
       );
       
       if (highQualityLeads.length > 0 && setting.notify_on_auto_approve) {
-        await sendWebhookNotification(setting.webhook_url, {
+        await sendWebhookNotification(webhookUrl, {
           type: 'auto_approved_leads',
           persona: persona?.name || 'Default',
           count: highQualityLeads.length,
@@ -870,13 +879,14 @@ async function saveDiscoveredLeads(
 
   // Send webhook for pending leads if webhook enabled
   const pendingLeads = autonomousLeadsToInsert.filter(l => l.status === 'pending');
-  if (setting.webhook_enabled && setting.webhook_url && pendingLeads.length > 0) {
+  const pendingWebhookUrl = setting.slack_webhook_url || setting.discord_webhook_url || setting.webhook_url;
+  if (setting.webhook_enabled && pendingWebhookUrl && pendingLeads.length > 0) {
     const notifiableLeads = pendingLeads.filter(
       l => l.quality_score >= (setting.notify_min_quality_score || 70)
     );
     
     if (notifiableLeads.length > 0) {
-      await sendWebhookNotification(setting.webhook_url, {
+      await sendWebhookNotification(pendingWebhookUrl, {
         type: 'new_leads_pending_review',
         persona: persona?.name || 'Default',
         count: notifiableLeads.length,
@@ -1023,6 +1033,78 @@ function calculateCampaignSendTime(setting: any): string {
   }
   
   return sendDate.toISOString();
+}
+
+/**
+ * Send hot lead alerts for leads exceeding the threshold
+ */
+async function sendHotLeadAlerts(
+  supabase: any,
+  setting: any,
+  discoveryRunId: string,
+  webhookUrl: string
+): Promise<void> {
+  try {
+    const hotLeadThreshold = setting.hot_lead_threshold || 85;
+    
+    // Get hot leads from this run
+    const { data: hotLeads } = await supabase
+      .from('autonomous_leads')
+      .select('company_name, company_website, industry, quality_score, sources_used')
+      .eq('discovery_run_id', discoveryRunId)
+      .gte('quality_score', hotLeadThreshold)
+      .order('quality_score', { ascending: false })
+      .limit(10);
+
+    if (!hotLeads || hotLeads.length === 0) return;
+
+    const isSlack = webhookUrl.includes('hooks.slack.com');
+    const isDiscord = webhookUrl.includes('discord.com/api/webhooks');
+
+    let payload: any;
+
+    if (isSlack) {
+      payload = {
+        text: `🔥 Hot Leads Alert!`,
+        blocks: [
+          { type: 'header', text: { type: 'plain_text', text: `🔥 ${hotLeads.length} Hot Leads Discovered!` } },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*Quality Score ≥ ${hotLeadThreshold}%*\n\n` +
+                hotLeads.map((l: any) => 
+                  `• *${l.company_name}* (${l.industry || 'Unknown'}) - *${l.quality_score}%*`
+                ).join('\n'),
+            },
+          },
+        ],
+      };
+    } else if (isDiscord) {
+      payload = {
+        embeds: [{
+          title: `🔥 ${hotLeads.length} Hot Leads Discovered!`,
+          description: `**Quality Score ≥ ${hotLeadThreshold}%**\n\n` +
+            hotLeads.map((l: any) => 
+              `• **${l.company_name}** (${l.industry || 'Unknown'}) - **${l.quality_score}%**`
+            ).join('\n'),
+          color: 0xf97316, // Orange for hot leads
+        }],
+      };
+    } else {
+      payload = { event: 'hot_leads', threshold: hotLeadThreshold, leads: hotLeads };
+    }
+
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    
+    console.log(`[super-discovery] Hot lead alert sent for ${hotLeads.length} leads`);
+  } catch (error) {
+    console.error('[super-discovery] Error sending hot lead alert:', error);
+  }
 }
 
 /**
