@@ -49,7 +49,6 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
       const { data, error } = await supabase
         .from('email_sequences')
         .select('id, name')
-        .eq('created_by', user?.id)
         .order('name');
       if (error) throw error;
       return data || [];

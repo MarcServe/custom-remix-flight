@@ -42,7 +42,7 @@ export function AutopilotPrerequisites() {
     enabled: !!user?.id,
   });
 
-  // Check email provider
+  // Check email provider - use limit(1) since user may have multiple active connections
   const { data: emailProvider } = useQuery({
     queryKey: ['email-provider-check'],
     queryFn: async () => {
@@ -51,10 +51,10 @@ export function AutopilotPrerequisites() {
         .select('id, status')
         .eq('user_id', user?.id)
         .eq('status', 'active')
-        .maybeSingle();
+        .limit(1);
       
       if (error) throw error;
-      return data;
+      return data && data.length > 0 ? data[0] : null;
     },
     enabled: !!user?.id,
   });
@@ -74,14 +74,14 @@ export function AutopilotPrerequisites() {
     enabled: !!user?.id,
   });
 
-  // Check sequences
+  // Check sequences - don't filter by created_by since sequences may have null creator
   const { data: sequences } = useQuery({
     queryKey: ['sequences-check'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('email_sequences')
         .select('id')
-        .eq('created_by', user?.id);
+        .limit(1);
       
       if (error) throw error;
       return data || [];
