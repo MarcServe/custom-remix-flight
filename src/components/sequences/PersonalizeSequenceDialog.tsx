@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { useSequences } from "@/hooks/use-sequences";
 import { usePersonalizeSequence } from "@/hooks/use-company-sequences";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, Send } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2, Sparkles, Send, Mail, AlertTriangle } from "lucide-react";
 
 interface PersonalizeSequenceDialogProps {
   open: boolean;
@@ -18,6 +20,14 @@ interface PersonalizeSequenceDialogProps {
   contactId?: string;
   defaultSendImmediately?: boolean;
   defaultSequenceId?: string;
+}
+
+interface EmailConnection {
+  id: string;
+  provider: string;
+  from_email: string | null;
+  status: string;
+  tracking_enabled: boolean | null;
 }
 
 export function PersonalizeSequenceDialog({
@@ -32,12 +42,46 @@ export function PersonalizeSequenceDialog({
   const [selectedSequenceId, setSelectedSequenceId] = useState<string>(defaultSequenceId || "");
   const [tone, setTone] = useState<'professional' | 'casual' | 'technical'>('professional');
   const [sendImmediately, setSendImmediately] = useState(defaultSendImmediately);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string>("");
 
   const { data: sequencesData, isLoading: isLoadingSequences } = useSequences();
   const personalizeSequence = usePersonalizeSequence();
   const { toast } = useToast();
 
   const sequences = sequencesData?.data || [];
+
+  // Fetch available email connections
+  const { data: emailConnections, isLoading: isLoadingConnections } = useQuery({
+    queryKey: ['email-connections-for-sending'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      
+      const { data: connections, error } = await supabase
+        .from('crm_connections')
+        .select('id, provider, from_email, status, tracking_enabled')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .in('provider', ['gmail', 'gmail_direct', 'sendgrid', 'resend', 'smtp']);
+      
+      if (error) {
+        console.error('Error fetching email connections:', error);
+        return [];
+      }
+      
+      return (connections || []) as EmailConnection[];
+    },
+    enabled: open,
+  });
+
+  // Auto-select first connection when loaded
+  useEffect(() => {
+    if (emailConnections && emailConnections.length > 0 && !selectedConnectionId) {
+      // Prefer connections with tracking enabled
+      const withTracking = emailConnections.find(c => c.tracking_enabled);
+      setSelectedConnectionId(withTracking?.id || emailConnections[0].id);
+    }
+  }, [emailConnections, selectedConnectionId]);
 
   // Sync with props when dialog opens
   useEffect(() => {
@@ -48,6 +92,19 @@ export function PersonalizeSequenceDialog({
       setSendImmediately(defaultSendImmediately);
     }
   }, [open, defaultSequenceId, defaultSendImmediately]);
+
+  const selectedConnection = emailConnections?.find(c => c.id === selectedConnectionId);
+
+  const getProviderLabel = (provider: string) => {
+    switch (provider) {
+      case 'gmail_direct': return 'Gmail OAuth';
+      case 'gmail': return 'Gmail (Nango)';
+      case 'sendgrid': return 'SendGrid';
+      case 'resend': return 'Resend';
+      case 'smtp': return 'SMTP';
+      default: return provider;
+    }
+  };
 
   const handlePersonalize = async () => {
     if (!selectedSequenceId) return;
@@ -65,15 +122,31 @@ export function PersonalizeSequenceDialog({
         const contactName = (result.data as any).contact?.name || 'contact';
         const timestamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
-        // If send immediately is enabled, send the first email and activate the sequence
+        // If send immediately is enabled, set status to active first, then send the first email
         if (sendImmediately && companySequenceId) {
           try {
-            // Send the first email
+            // Update status to active FIRST (fix race condition)
+            await supabase
+              .from('company_sequences')
+              .update({ status: 'active' })
+              .eq('id', companySequenceId);
+
+            // Send the first email with selected connection
             const { error: sendError } = await supabase.functions.invoke('send-sequence-email', {
-              body: { companySequenceId, stepNumber: 0 }
+              body: { 
+                companySequenceId, 
+                stepNumber: 0,
+                connectionId: selectedConnectionId || undefined 
+              }
             });
 
             if (sendError) {
+              // Revert to draft if sending failed
+              await supabase
+                .from('company_sequences')
+                .update({ status: 'draft' })
+                .eq('id', companySequenceId);
+
               console.error('Error sending first email:', sendError);
               toast({
                 title: 'Sequence Created',
@@ -81,15 +154,9 @@ export function PersonalizeSequenceDialog({
                 variant: 'destructive',
               });
             } else {
-              // Update status to active
-              await supabase
-                .from('company_sequences')
-                .update({ status: 'active' })
-                .eq('id', companySequenceId);
-
               toast({
                 title: 'Sequence Sent!',
-                description: `First email sent to ${companyName} (${contactName}). Campaign is now active.`,
+                description: `First email sent to ${companyName} (${contactName}) via ${selectedConnection ? getProviderLabel(selectedConnection.provider) : 'default provider'}. Campaign is now active.`,
               });
             }
           } catch (sendError) {
@@ -111,10 +178,13 @@ export function PersonalizeSequenceDialog({
       setSelectedSequenceId("");
       setTone('professional');
       setSendImmediately(false);
+      setSelectedConnectionId("");
     } catch (error) {
       console.error('Error personalizing sequence:', error);
     }
   };
+
+  const hasConnections = emailConnections && emailConnections.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,6 +200,54 @@ export function PersonalizeSequenceDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Email Provider Selector */}
+          <div className="space-y-2">
+            <Label htmlFor="email-provider" className="flex items-center gap-2">
+              <Mail className="h-4 w-4" />
+              Send From
+            </Label>
+            {isLoadingConnections ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading email accounts...
+              </div>
+            ) : !hasConnections ? (
+              <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <span>No email accounts connected. Please connect an email provider in Integrations.</span>
+              </div>
+            ) : (
+              <Select value={selectedConnectionId} onValueChange={setSelectedConnectionId}>
+                <SelectTrigger id="email-provider">
+                  <SelectValue placeholder="Select email account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {emailConnections.map((connection) => (
+                    <SelectItem key={connection.id} value={connection.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{connection.from_email || 'No email set'}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {getProviderLabel(connection.provider)}
+                        </Badge>
+                        {connection.tracking_enabled && (
+                          <Badge variant="secondary" className="text-xs">
+                            Tracking
+                          </Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {selectedConnection && (
+              <p className="text-xs text-muted-foreground">
+                Emails will be sent from <strong>{selectedConnection.from_email}</strong> via {getProviderLabel(selectedConnection.provider)}
+                {selectedConnection.tracking_enabled ? ' with open/click tracking' : ' (no tracking)'}
+              </p>
+            )}
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="sequence">Select Sequence Template</Label>
             <Select value={selectedSequenceId} onValueChange={setSelectedSequenceId}>
@@ -178,7 +296,7 @@ export function PersonalizeSequenceDialog({
           </Button>
           <Button
             onClick={handlePersonalize}
-            disabled={!selectedSequenceId || personalizeSequence.isPending}
+            disabled={!selectedSequenceId || personalizeSequence.isPending || (sendImmediately && !hasConnections)}
           >
             {personalizeSequence.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
