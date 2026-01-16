@@ -21,6 +21,8 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization');
     let businessContext = '';
     
+    let userId: string | null = null;
+    
     if (authHeader) {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -30,6 +32,8 @@ Deno.serve(async (req) => {
       const { data: { user }, error: userError } = await supabase.auth.getUser(token);
       
       if (!userError && user) {
+        userId = user.id;
+        
         const { data: profile } = await supabase
           .from('business_profiles')
           .select('*')
@@ -160,6 +164,7 @@ Return ONLY the JSON array.`;
         langfuse_trace_id: aiResult.traceId,
         custom_instructions: customInstructions,
         auto_respond: autoRespond,
+        created_by: userId,
       })
       .select()
       .single();
