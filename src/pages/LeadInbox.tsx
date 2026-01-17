@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,9 @@ import {
   Webhook,
   BarChart3,
   Target,
-  Play
+  Play,
+  Calendar,
+  Filter
 } from "lucide-react";
 import { QualityScoreBadge } from "@/components/lead-finder/QualityScoreBadge";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
@@ -43,8 +45,19 @@ import { PersonaManager } from "@/components/lead-inbox/PersonaManager";
 import { LeadCard } from "@/components/lead-inbox/LeadCard";
 import { EmptyState } from "@/components/lead-inbox/EmptyState";
 import { StatsHeader } from "@/components/lead-inbox/StatsHeader";
+import { DiscoveryBatchHeader } from "@/components/lead-inbox/DiscoveryBatchHeader";
+import { startOfDay, subDays, isAfter, format } from "date-fns";
 
 type LeadStatus = 'pending' | 'approved' | 'rejected' | 'auto_approved';
+type DateFilter = 'today' | 'last7days' | 'last30days' | 'all';
+
+interface LeadBatch {
+  date: string;
+  leads: any[];
+  avgQualityScore: number;
+  sourceBreakdown: Record<string, number>;
+  statusBreakdown: Record<string, number>;
+}
 
 export default function LeadInbox() {
   const { user } = useAuth();
@@ -55,7 +68,8 @@ export default function LeadInbox() {
   const [activeTab, setActiveTab] = useState<LeadStatus | 'all'>('pending');
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-
+  const [dateFilter, setDateFilter] = useState<DateFilter>('today');
+  const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set(['today']));
   // Fetch autonomous discovery settings
   const { data: settings, isLoading: settingsLoading } = useQuery({
     queryKey: ['autonomous-discovery-settings'],
@@ -92,6 +106,83 @@ export default function LeadInbox() {
     },
     enabled: !!user?.id,
   });
+
+  // Filter leads by date and group into batches
+  const { filteredLeads, leadBatches } = useMemo(() => {
+    if (!leads) return { filteredLeads: [], leadBatches: [] };
+
+    // Apply date filter
+    const now = new Date();
+    const todayStart = startOfDay(now);
+    const last7DaysStart = subDays(todayStart, 7);
+    const last30DaysStart = subDays(todayStart, 30);
+
+    let filtered = leads;
+    if (dateFilter === 'today') {
+      filtered = leads.filter(l => isAfter(new Date(l.created_at), todayStart));
+    } else if (dateFilter === 'last7days') {
+      filtered = leads.filter(l => isAfter(new Date(l.created_at), last7DaysStart));
+    } else if (dateFilter === 'last30days') {
+      filtered = leads.filter(l => isAfter(new Date(l.created_at), last30DaysStart));
+    }
+
+    // Group leads by date (day)
+    const batchMap = new Map<string, any[]>();
+    filtered.forEach(lead => {
+      const dateKey = format(new Date(lead.created_at), 'yyyy-MM-dd');
+      if (!batchMap.has(dateKey)) {
+        batchMap.set(dateKey, []);
+      }
+      batchMap.get(dateKey)!.push(lead);
+    });
+
+    // Convert to batch objects with stats
+    const batches: LeadBatch[] = Array.from(batchMap.entries()).map(([dateKey, batchLeads]) => {
+      // Calculate avg quality score
+      const totalScore = batchLeads.reduce((sum, l) => sum + (l.quality_score || 0), 0);
+      const avgQualityScore = Math.round(totalScore / batchLeads.length);
+
+      // Calculate source breakdown
+      const sourceBreakdown: Record<string, number> = {};
+      batchLeads.forEach(l => {
+        const sources = l.sources_used || [l.source || 'unknown'];
+        sources.forEach((src: string) => {
+          sourceBreakdown[src] = (sourceBreakdown[src] || 0) + 1;
+        });
+      });
+
+      // Calculate status breakdown
+      const statusBreakdown: Record<string, number> = { pending: 0, approved: 0, auto_approved: 0, rejected: 0 };
+      batchLeads.forEach(l => {
+        statusBreakdown[l.status] = (statusBreakdown[l.status] || 0) + 1;
+      });
+
+      return {
+        date: dateKey,
+        leads: batchLeads,
+        avgQualityScore,
+        sourceBreakdown,
+        statusBreakdown,
+      };
+    });
+
+    // Sort batches by date descending
+    batches.sort((a, b) => b.date.localeCompare(a.date));
+
+    return { filteredLeads: filtered, leadBatches: batches };
+  }, [leads, dateFilter]);
+
+  const toggleBatchExpanded = (dateKey: string) => {
+    setExpandedBatches(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(dateKey)) {
+        newSet.delete(dateKey);
+      } else {
+        newSet.add(dateKey);
+      }
+      return newSet;
+    });
+  };
 
   // Count leads by status
   const { data: statusCounts } = useQuery({
@@ -485,14 +576,28 @@ export default function LeadInbox() {
             </Tabs>
 
             <div className="flex items-center gap-2">
+              {/* Date Filter */}
+              <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter)}>
+                <SelectTrigger className="w-[140px] h-8">
+                  <Calendar className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="last7days">Last 7 days</SelectItem>
+                  <SelectItem value="last30days">Last 30 days</SelectItem>
+                  <SelectItem value="all">All time</SelectItem>
+                </SelectContent>
+              </Select>
+
               {/* Bulk Approve Above Threshold */}
-              {activeTab === 'pending' && leads && leads.length > 0 && (
+              {activeTab === 'pending' && filteredLeads && filteredLeads.length > 0 && (
                 <Button 
                   variant="outline" 
                   size="sm"
                   onClick={() => {
                     const threshold = settings?.auto_approve_threshold || 70;
-                    const leadsAboveThreshold = leads.filter(l => (l.quality_score || 0) >= threshold);
+                    const leadsAboveThreshold = filteredLeads.filter(l => (l.quality_score || 0) >= threshold);
                     if (leadsAboveThreshold.length > 0) {
                       approveLeadMutation.mutate(leadsAboveThreshold.map(l => l.id));
                     } else {
@@ -560,12 +665,25 @@ export default function LeadInbox() {
           <Card className="border-0 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg font-semibold">Discovered Leads</CardTitle>
-                {(leads?.length || 0) > 0 && (
+                <div className="flex items-center gap-3">
+                  <CardTitle className="text-lg font-semibold">Discovered Leads</CardTitle>
+                  {filteredLeads.length !== (leads?.length || 0) && (
+                    <Badge variant="secondary" className="text-xs">
+                      Showing {filteredLeads.length} of {leads?.length || 0}
+                    </Badge>
+                  )}
+                </div>
+                {filteredLeads.length > 0 && (
                   <div className="flex items-center gap-2">
                     <Checkbox 
-                      checked={selectedLeads.size === leads?.length && leads.length > 0}
-                      onCheckedChange={toggleSelectAll}
+                      checked={selectedLeads.size === filteredLeads.length && filteredLeads.length > 0}
+                      onCheckedChange={() => {
+                        if (selectedLeads.size === filteredLeads.length) {
+                          setSelectedLeads(new Set());
+                        } else {
+                          setSelectedLeads(new Set(filteredLeads.map(l => l.id)));
+                        }
+                      }}
                     />
                     <span className="text-sm text-muted-foreground">Select all</span>
                   </div>
@@ -578,33 +696,70 @@ export default function LeadInbox() {
                   <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
                   <p className="text-muted-foreground">Loading leads...</p>
                 </div>
-              ) : !leads || leads.length === 0 ? (
-                <EmptyState 
-                  type={activeTab} 
-                  onGoToSettings={() => {
-                    const tabsElement = document.querySelector('[data-state="active"][value="inbox"]');
-                    // Simple navigation - user can click Settings tab
-                  }}
-                />
+              ) : filteredLeads.length === 0 ? (
+                dateFilter !== 'all' && (leads?.length || 0) > 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <Filter className="h-10 w-10 text-muted-foreground/50 mb-4" />
+                    <p className="text-muted-foreground font-medium">No leads for this time period</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Try selecting a different date range or view "All time"
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      onClick={() => setDateFilter('all')}
+                    >
+                      View all leads
+                    </Button>
+                  </div>
+                ) : (
+                  <EmptyState 
+                    type={activeTab} 
+                    onGoToSettings={() => {
+                      const tabsElement = document.querySelector('[data-state="active"][value="inbox"]');
+                      // Simple navigation - user can click Settings tab
+                    }}
+                  />
+                )
               ) : (
                 <ScrollArea className="h-[600px] pr-4">
-                  <div className="space-y-3">
-                    {leads.map((lead) => (
-                      <LeadCard
-                        key={lead.id}
-                        lead={{
-                          ...lead,
-                          company_data: (lead.company_data || {}) as Record<string, any>,
-                          contacts: lead.contacts as any[] | null,
-                        }}
-                        isSelected={selectedLeads.has(lead.id)}
-                        onSelect={() => toggleLeadSelection(lead.id)}
-                        onView={() => handleViewLead(lead)}
-                        onApprove={() => approveLeadMutation.mutate([lead.id])}
-                        onReject={() => rejectLeadMutation.mutate([lead.id])}
-                        isPending={approveLeadMutation.isPending || rejectLeadMutation.isPending}
-                      />
-                    ))}
+                  <div className="space-y-2">
+                    {leadBatches.map((batch) => {
+                      const isToday = new Date().toDateString() === new Date(batch.date).toDateString();
+                      const batchKey = isToday ? 'today' : batch.date;
+                      const isExpanded = expandedBatches.has(batchKey) || expandedBatches.has(batch.date);
+                      
+                      return (
+                        <DiscoveryBatchHeader
+                          key={batch.date}
+                          batchDate={batch.leads[0]?.created_at || batch.date}
+                          leadCount={batch.leads.length}
+                          avgQualityScore={batch.avgQualityScore}
+                          sourceBreakdown={batch.sourceBreakdown}
+                          statusBreakdown={batch.statusBreakdown}
+                          isExpanded={isExpanded}
+                          onToggle={() => toggleBatchExpanded(batchKey)}
+                        >
+                          {batch.leads.map((lead) => (
+                            <LeadCard
+                              key={lead.id}
+                              lead={{
+                                ...lead,
+                                company_data: (lead.company_data || {}) as Record<string, any>,
+                                contacts: lead.contacts as any[] | null,
+                              }}
+                              isSelected={selectedLeads.has(lead.id)}
+                              onSelect={() => toggleLeadSelection(lead.id)}
+                              onView={() => handleViewLead(lead)}
+                              onApprove={() => approveLeadMutation.mutate([lead.id])}
+                              onReject={() => rejectLeadMutation.mutate([lead.id])}
+                              isPending={approveLeadMutation.isPending || rejectLeadMutation.isPending}
+                            />
+                          ))}
+                        </DiscoveryBatchHeader>
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               )}
