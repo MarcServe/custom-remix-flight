@@ -7,6 +7,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Resend inbound email for receiving replies
+const RESEND_INBOUND_EMAIL = 'leadgenie@eldapgraaa.resend.app';
+
 interface EmailRequest {
   toEmail: string;
   toName: string;
@@ -23,6 +26,7 @@ interface EmailRequest {
   invoiceHtml?: string; // Invoice/Quotation HTML to attach
   invoiceNumber?: string; // Invoice/Quotation number
   attachInvoice?: boolean; // Whether to attach the invoice
+  useInboundReplyTo?: boolean; // Use Resend inbound email as Reply-To for tracking replies
   attachments?: Array<{ // File attachments
     id?: string;
     file_name: string;
@@ -60,7 +64,7 @@ serve(async (req) => {
     }
 
     const emailRequest: EmailRequest = await req.json();
-    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, attachments = [] } = emailRequest;
+    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, useInboundReplyTo = false, attachments = [] } = emailRequest;
     
     // Fetch user profile for signature and business email
     const { data: userProfile } = await supabaseClient
@@ -111,7 +115,7 @@ serve(async (req) => {
       throw new Error('Missing required fields: toEmail, subject, body');
     }
 
-    console.log(`Sending email to ${toEmail} from user ${user.email} using ${sender}`);
+    console.log(`Sending email to ${toEmail} from user ${user.email} using ${sender}${useInboundReplyTo ? ' (with inbound reply-to tracking)' : ''}`);
 
     // Fetch and prepare attachments if any
     const attachmentData: Array<{ filename: string; content: string; type: string }> = [];
@@ -304,7 +308,7 @@ serve(async (req) => {
           subject,
           text: emailBodyText,
           html: wrappedHtml,
-          reply_to: fromEmail, // Enable replies to this address
+          reply_to: useInboundReplyTo ? RESEND_INBOUND_EMAIL : fromEmail, // Use inbound email for reply tracking if enabled
           headers: {
             'X-Entity-Ref-ID': threadId, // Custom header for tracking
           },
@@ -442,7 +446,7 @@ serve(async (req) => {
         subject,
         text: emailBodyText,
         html: wrapEmailContent(emailBodyHtml, senderName, fromEmail),
-        reply_to: fromEmail, // Enable replies
+        reply_to: useInboundReplyTo ? RESEND_INBOUND_EMAIL : fromEmail, // Use inbound email for reply tracking if enabled
         headers: {
           'X-Entity-Ref-ID': threadId, // Custom header for tracking
         },
