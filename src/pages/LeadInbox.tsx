@@ -75,6 +75,8 @@ export default function LeadInbox() {
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set(['today']));
   const [groupBy, setGroupBy] = useState<GroupBy>('date');
   const [personaFilter, setPersonaFilter] = useState<string>('all');
+  const [isExtractingEmails, setIsExtractingEmails] = useState(false);
+  const [extractionProgress, setExtractionProgress] = useState<{ current: number; total: number; companyName: string } | null>(null);
   // Fetch autonomous discovery settings
   const { data: settings, isLoading: settingsLoading } = useQuery({
     queryKey: ['autonomous-discovery-settings'],
@@ -566,6 +568,93 @@ export default function LeadInbox() {
     });
   };
 
+  // Bulk email extraction handler
+  const handleBulkExtractEmails = async (leadIds: string[]) => {
+    if (leadIds.length === 0) {
+      toast({ title: 'No leads to extract', description: 'All leads already have emails or no website.', variant: 'destructive' });
+      return;
+    }
+
+    setIsExtractingEmails(true);
+    setExtractionProgress({ current: 0, total: leadIds.length, companyName: '' });
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bulk-extract-emails`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ leadIds }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to start extraction');
+      }
+
+      // Handle SSE stream
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let successCount = 0;
+      let failedCount = 0;
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const text = decoder.decode(value);
+          const lines = text.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const event = JSON.parse(line.slice(6));
+                
+                if (event.type === 'progress') {
+                  setExtractionProgress({
+                    current: event.current,
+                    total: event.total,
+                    companyName: event.companyName,
+                  });
+                } else if (event.type === 'extracted') {
+                  successCount++;
+                } else if (event.type === 'failed') {
+                  failedCount++;
+                } else if (event.type === 'complete') {
+                  toast({
+                    title: 'Email extraction complete',
+                    description: `Extracted ${event.success} emails, ${event.failed} failed out of ${event.total} leads.`,
+                  });
+                }
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+          }
+        }
+      }
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ['autonomous-leads'] });
+    } catch (error) {
+      toast({
+        title: 'Extraction failed',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExtractingEmails(false);
+      setExtractionProgress(null);
+    }
+  };
+
   const handleViewLead = (lead: any) => {
     const companyData = (lead.company_data || {}) as Record<string, any>;
     setSelectedLead({
@@ -800,6 +889,40 @@ export default function LeadInbox() {
             </Card>
           )}
 
+          {/* Email Extraction Progress */}
+          {isExtractingEmails && extractionProgress && (
+            <Card className="border-blue-200 bg-blue-50/50">
+              <CardContent className="py-4">
+                <div className="flex items-center gap-4">
+                  <div className="p-2 rounded-full bg-blue-100">
+                    <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-blue-900">
+                        Extracting emails... {extractionProgress.current}/{extractionProgress.total}
+                      </span>
+                      <span className="text-xs text-blue-600">
+                        {Math.round((extractionProgress.current / extractionProgress.total) * 100)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-blue-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${(extractionProgress.current / extractionProgress.total) * 100}%` }}
+                      />
+                    </div>
+                    {extractionProgress.companyName && (
+                      <p className="text-xs text-blue-700 mt-1.5">
+                        Current: {extractionProgress.companyName}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Leads List */}
           <Card className="border-0 shadow-sm">
             <CardHeader className="pb-3">
@@ -876,6 +999,17 @@ export default function LeadInbox() {
                       const approvedLeadIds = batch.leads.filter(l => l.status === 'approved' || l.status === 'auto_approved').map(l => l.id);
                       const allLeadIds = batch.leads.map(l => l.id);
                       
+                      // Find leads without email but with website
+                      const leadsWithoutEmail = batch.leads.filter(l => {
+                        const companyData = (l.company_data || {}) as Record<string, any>;
+                        const hasWebsite = l.company_website && 
+                          !l.company_website.includes('no-website') && 
+                          l.company_website.trim() !== '';
+                        const hasEmail = companyData.generalEmail && companyData.generalEmail.trim() !== '';
+                        return hasWebsite && !hasEmail;
+                      });
+                      const leadIdsWithoutEmail = leadsWithoutEmail.map(l => l.id);
+                      
                       return (
                         <DiscoveryBatchHeader
                           key={batchKey}
@@ -897,7 +1031,11 @@ export default function LeadInbox() {
                           onDeleteAll={(ids) => deleteLeadMutation.mutate(ids)}
                           onEnrollInSequence={handleBatchEnrollInSequence}
                           onCreateCampaign={handleBatchCreateCampaign}
+                          onExtractEmails={handleBulkExtractEmails}
+                          leadsWithoutEmailCount={leadsWithoutEmail.length}
+                          leadIdsWithoutEmail={leadIdsWithoutEmail}
                           isActionsLoading={approveLeadMutation.isPending || rejectLeadMutation.isPending || deleteLeadMutation.isPending}
+                          isExtractingEmails={isExtractingEmails}
                         >
                           {batch.leads.map((lead) => (
                             <LeadCard

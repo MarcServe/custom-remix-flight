@@ -98,3 +98,6 @@ verify_jwt = false  # Called by cron job
 
 [functions.extract-website-email]
 verify_jwt = true
+
+[functions.bulk-extract-emails]
+verify_jwt = true

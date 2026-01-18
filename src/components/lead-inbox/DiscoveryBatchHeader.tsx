@@ -24,7 +24,11 @@ interface DiscoveryBatchHeaderProps {
   onDeleteAll?: (leadIds: string[]) => void;
   onEnrollInSequence?: (leadIds: string[], sequenceId: string) => void;
   onCreateCampaign?: (leadIds: string[]) => void;
+  onExtractEmails?: (leadIds: string[]) => void;
+  leadsWithoutEmailCount?: number;
+  leadIdsWithoutEmail?: string[];
   isActionsLoading?: boolean;
+  isExtractingEmails?: boolean;
   // Persona display
   personaName?: string;
   personaId?: string;
@@ -48,7 +52,11 @@ export function DiscoveryBatchHeader({
   onDeleteAll,
   onEnrollInSequence,
   onCreateCampaign,
+  onExtractEmails,
+  leadsWithoutEmailCount = 0,
+  leadIdsWithoutEmail = [],
   isActionsLoading,
+  isExtractingEmails,
   personaName,
 }: DiscoveryBatchHeaderProps) {
   const batchDateTime = new Date(batchDate);
@@ -174,7 +182,11 @@ export function DiscoveryBatchHeader({
               onDeleteAll={onDeleteAll}
               onEnrollInSequence={onEnrollInSequence || (() => {})}
               onCreateCampaign={onCreateCampaign || (() => {})}
+              onExtractEmails={onExtractEmails}
+              leadsWithoutEmailCount={leadsWithoutEmailCount}
+              leadIdsWithoutEmail={leadIdsWithoutEmail}
               isLoading={isActionsLoading}
+              isExtractingEmails={isExtractingEmails}
             />
           )}
         </div>
