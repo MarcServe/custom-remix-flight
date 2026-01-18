@@ -55,30 +55,30 @@ export function StatsHeader({ counts }: StatsHeaderProps) {
     : 0;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
       {stats.map((stat) => (
-        <Card key={stat.label} className="p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className={cn("p-2 rounded-lg", stat.bgColor)}>
-              <stat.icon className={cn("h-5 w-5", stat.color)} />
+        <Card key={stat.label} className="p-2.5 sm:p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className={cn("p-1.5 sm:p-2 rounded-lg shrink-0", stat.bgColor)}>
+              <stat.icon className={cn("h-4 w-4 sm:h-5 sm:w-5", stat.color)} />
             </div>
-            <div>
-              <p className="text-2xl font-bold">{stat.value}</p>
-              <p className="text-xs text-muted-foreground">{stat.label}</p>
+            <div className="min-w-0">
+              <p className="text-xl sm:text-2xl font-bold">{stat.value}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{stat.label}</p>
             </div>
           </div>
         </Card>
       ))}
       
       {/* Approval Rate Card */}
-      <Card className="p-4 hover:shadow-md transition-shadow bg-gradient-to-br from-primary/5 to-primary/10">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/20">
-            <TrendingUp className="h-5 w-5 text-primary" />
+      <Card className="p-2.5 sm:p-4 hover:shadow-md transition-shadow bg-gradient-to-br from-primary/5 to-primary/10 col-span-2 sm:col-span-1">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="p-1.5 sm:p-2 rounded-lg bg-primary/20 shrink-0">
+            <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
           </div>
-          <div>
-            <p className="text-2xl font-bold">{approvalRate}%</p>
-            <p className="text-xs text-muted-foreground">Approval Rate</p>
+          <div className="min-w-0">
+            <p className="text-xl sm:text-2xl font-bold">{approvalRate}%</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">Approval Rate</p>
           </div>
         </div>
       </Card>

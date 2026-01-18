@@ -61,7 +61,8 @@ const App = () => (
                   <ProtectedRoute>
                     <div className="flex h-screen overflow-hidden">
                       <Sidebar />
-                      <main className="flex-1 overflow-auto bg-gradient-to-br from-background to-muted/20 p-4 pt-16 md:p-6 lg:p-8">
+                      <main className="flex-1 overflow-auto bg-gradient-to-br from-background to-muted/20 p-4 pt-16 lg:pt-6 lg:p-6 xl:p-8 min-w-0">
+                        <div className="max-w-full">
                         <Routes>
                           <Route path="/" element={<Dashboard />} />
                           <Route path="/companies" element={<Companies />} />
@@ -90,6 +91,7 @@ const App = () => (
                           <Route path="/subscription" element={<Subscription />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
+                        </div>
                       </main>
                     </div>
                   </ProtectedRoute>

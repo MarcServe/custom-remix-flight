@@ -691,22 +691,22 @@ export default function LeadInbox() {
   const isLoading = leadsLoading || settingsLoading;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5">
-              <Inbox className="h-7 w-7 text-primary" />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 shrink-0">
+              <Inbox className="h-5 w-5 sm:h-7 sm:w-7 text-primary" />
             </div>
-            Lead Inbox
+            <span className="truncate">Lead Inbox</span>
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-sm sm:text-base text-muted-foreground mt-1 hidden sm:block">
             Review and approve leads discovered automatically by AI
           </p>
         </div>
         {settings?.enabled && (
-          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-200 self-start">
+          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-200 self-start shrink-0">
             <Zap className="h-3 w-3 mr-1" />
             Discovery Active
           </Badge>
@@ -718,60 +718,62 @@ export default function LeadInbox() {
         <StatsHeader counts={statusCounts} />
       )}
 
-      <Tabs defaultValue="inbox" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="inbox" className="gap-2">
-            <Inbox className="h-4 w-4" />
-            Inbox
+      <Tabs defaultValue="inbox" className="space-y-4 sm:space-y-6">
+        <TabsList className="w-full sm:w-auto flex-wrap h-auto gap-1 p-1">
+          <TabsTrigger value="inbox" className="gap-1.5 text-xs sm:text-sm">
+            <Inbox className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="hidden xs:inline">Inbox</span>
             {(statusCounts?.pending || 0) > 0 && (
-              <Badge variant="secondary" className="ml-1">{statusCounts?.pending}</Badge>
+              <Badge variant="secondary" className="ml-0.5 sm:ml-1 text-[10px] sm:text-xs px-1 sm:px-1.5">{statusCounts?.pending}</Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="analytics" className="gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Analytics
+          <TabsTrigger value="analytics" className="gap-1.5 text-xs sm:text-sm">
+            <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="hidden xs:inline">Analytics</span>
           </TabsTrigger>
-          <TabsTrigger value="personas" className="gap-2">
-            <Target className="h-4 w-4" />
-            Personas
+          <TabsTrigger value="personas" className="gap-1.5 text-xs sm:text-sm">
+            <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="hidden xs:inline">Personas</span>
           </TabsTrigger>
-          <TabsTrigger value="settings" className="gap-2">
-            <Settings className="h-4 w-4" />
-            Settings
+          <TabsTrigger value="settings" className="gap-1.5 text-xs sm:text-sm">
+            <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="hidden xs:inline">Settings</span>
           </TabsTrigger>
         </TabsList>
 
         {/* Inbox Tab */}
         <TabsContent value="inbox" className="space-y-4">
           {/* Status Filter Tabs */}
-          <div className="flex items-center justify-between">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-              <TabsList>
-                <TabsTrigger value="pending" className="gap-1">
-                  <Clock className="h-3 w-3" />
-                  Pending ({statusCounts?.pending || 0})
-                </TabsTrigger>
-                <TabsTrigger value="approved" className="gap-1">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Approved ({statusCounts?.approved || 0})
-                </TabsTrigger>
-                <TabsTrigger value="auto_approved" className="gap-1">
-                  <Zap className="h-3 w-3" />
-                  Auto ({statusCounts?.auto_approved || 0})
-                </TabsTrigger>
-                <TabsTrigger value="rejected" className="gap-1">
-                  <XCircle className="h-3 w-3" />
-                  Rejected ({statusCounts?.rejected || 0})
-                </TabsTrigger>
-                <TabsTrigger value="all">All ({statusCounts?.all || 0})</TabsTrigger>
-              </TabsList>
-            </Tabs>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+                <TabsList className="h-auto p-1 inline-flex">
+                  <TabsTrigger value="pending" className="gap-1 text-xs sm:text-sm px-2 sm:px-3">
+                    <Clock className="h-3 w-3" />
+                    <span className="hidden sm:inline">Pending</span> ({statusCounts?.pending || 0})
+                  </TabsTrigger>
+                  <TabsTrigger value="approved" className="gap-1 text-xs sm:text-sm px-2 sm:px-3">
+                    <CheckCircle2 className="h-3 w-3" />
+                    <span className="hidden sm:inline">Approved</span> ({statusCounts?.approved || 0})
+                  </TabsTrigger>
+                  <TabsTrigger value="auto_approved" className="gap-1 text-xs sm:text-sm px-2 sm:px-3">
+                    <Zap className="h-3 w-3" />
+                    <span className="hidden sm:inline">Auto</span> ({statusCounts?.auto_approved || 0})
+                  </TabsTrigger>
+                  <TabsTrigger value="rejected" className="gap-1 text-xs sm:text-sm px-2 sm:px-3">
+                    <XCircle className="h-3 w-3" />
+                    <span className="hidden sm:inline">Rejected</span> ({statusCounts?.rejected || 0})
+                  </TabsTrigger>
+                  <TabsTrigger value="all" className="text-xs sm:text-sm px-2 sm:px-3">All ({statusCounts?.all || 0})</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {/* Persona Filter */}
               <Select value={personaFilter} onValueChange={setPersonaFilter}>
-                <SelectTrigger className="w-[160px] h-8">
-                  <Target className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                <SelectTrigger className="w-[130px] sm:w-[160px] h-8 text-xs sm:text-sm">
+                  <Target className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1 text-muted-foreground shrink-0" />
                   <SelectValue placeholder="All Personas" />
                 </SelectTrigger>
                 <SelectContent>
@@ -784,8 +786,8 @@ export default function LeadInbox() {
 
               {/* Date Filter */}
               <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter)}>
-                <SelectTrigger className="w-[140px] h-8">
-                  <Calendar className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                <SelectTrigger className="w-[110px] sm:w-[140px] h-8 text-xs sm:text-sm">
+                  <Calendar className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1 text-muted-foreground shrink-0" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -796,8 +798,8 @@ export default function LeadInbox() {
                 </SelectContent>
               </Select>
 
-              {/* Grouping Toggle */}
-              <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
+              {/* Grouping Toggle - Hidden on small screens */}
+              <div className="hidden md:flex items-center gap-1 bg-muted rounded-md p-0.5">
                 <Button
                   variant={groupBy === 'date' ? 'secondary' : 'ghost'}
                   size="sm"
@@ -818,7 +820,7 @@ export default function LeadInbox() {
                 </Button>
               </div>
 
-              {/* Bulk Approve Above Threshold */}
+              {/* Bulk Approve Above Threshold - Hidden on mobile */}
               {activeTab === 'pending' && filteredLeads && filteredLeads.length > 0 && (
                 <Button 
                   variant="outline" 
@@ -833,15 +835,15 @@ export default function LeadInbox() {
                     }
                   }}
                   disabled={approveLeadMutation.isPending}
-                  className="gap-1 text-green-600 border-green-200 hover:bg-green-50"
+                  className="gap-1 text-green-600 border-green-200 hover:bg-green-50 hidden sm:flex text-xs"
                 >
-                  <Zap className="h-4 w-4" />
-                  Approve All ≥{settings?.auto_approve_threshold || 70}
+                  <Zap className="h-3.5 w-3.5" />
+                  <span className="hidden lg:inline">Approve All</span> ≥{settings?.auto_approve_threshold || 70}
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => refetchLeads()}>
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Refresh
+              <Button variant="outline" size="sm" onClick={() => refetchLeads()} className="h-8 px-2 sm:px-3">
+                <RefreshCw className="h-3.5 w-3.5 sm:mr-1" />
+                <span className="hidden sm:inline text-xs">Refresh</span>
               </Button>
             </div>
           </div>
