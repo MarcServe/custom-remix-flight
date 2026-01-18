@@ -35,6 +35,7 @@ interface LeadCardProps {
     approval_confidence?: number | null;
     matched_rules?: string[] | null;
     sources_used?: string[] | null;
+    persona_id?: string | null;
   };
   isSelected: boolean;
   onSelect: () => void;
@@ -42,6 +43,7 @@ interface LeadCardProps {
   onApprove?: () => void;
   onReject?: () => void;
   isPending?: boolean;
+  personaName?: string;
 }
 
 export function LeadCard({ 
@@ -51,7 +53,8 @@ export function LeadCard({
   onView, 
   onApprove, 
   onReject,
-  isPending 
+  isPending,
+  personaName
 }: LeadCardProps) {
   const companyData = lead.company_data || {};
   const contacts = lead.contacts || [];
@@ -169,6 +172,13 @@ export function LeadCard({
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+            )}
+            {/* Persona badge */}
+            {personaName && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-purple-500/10 text-purple-600 border-purple-200">
+                <Users className="h-2.5 w-2.5 mr-0.5" />
+                {personaName}
+              </Badge>
             )}
             {/* Source badges */}
             {lead.sources_used && lead.sources_used.length > 0 && (
