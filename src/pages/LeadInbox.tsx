@@ -50,6 +50,7 @@ import { startOfDay, subDays, isAfter, format } from "date-fns";
 
 type LeadStatus = 'pending' | 'approved' | 'rejected' | 'auto_approved';
 type DateFilter = 'today' | 'last7days' | 'last30days' | 'all';
+type GroupBy = 'date' | 'persona';
 
 interface LeadBatch {
   date: string;
@@ -57,6 +58,8 @@ interface LeadBatch {
   avgQualityScore: number;
   sourceBreakdown: Record<string, number>;
   statusBreakdown: Record<string, number>;
+  personaId?: string;
+  personaName?: string;
 }
 
 export default function LeadInbox() {
@@ -70,6 +73,8 @@ export default function LeadInbox() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<DateFilter>('today');
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set(['today']));
+  const [groupBy, setGroupBy] = useState<GroupBy>('date');
+  const [personaFilter, setPersonaFilter] = useState<string>('all');
   // Fetch autonomous discovery settings
   const { data: settings, isLoading: settingsLoading } = useQuery({
     queryKey: ['autonomous-discovery-settings'],
@@ -107,7 +112,29 @@ export default function LeadInbox() {
     enabled: !!user?.id,
   });
 
-  // Filter leads by date and group into batches
+  // Fetch personas for filtering and display
+  const { data: personas } = useQuery({
+    queryKey: ['discovery-personas'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('discovery_personas')
+        .select('id, name, is_active')
+        .eq('user_id', user?.id)
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  // Create persona lookup map
+  const personaMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (personas || []).forEach(p => map.set(p.id, p.name));
+    return map;
+  }, [personas]);
+
+  // Filter leads by date/persona and group into batches
   const { filteredLeads, leadBatches } = useMemo(() => {
     if (!leads) return { filteredLeads: [], leadBatches: [] };
 
@@ -126,18 +153,36 @@ export default function LeadInbox() {
       filtered = leads.filter(l => isAfter(new Date(l.created_at), last30DaysStart));
     }
 
-    // Group leads by date (day)
+    // Apply persona filter
+    if (personaFilter !== 'all') {
+      filtered = filtered.filter(l => l.persona_id === personaFilter);
+    }
+
+    // Group leads based on groupBy selection
     const batchMap = new Map<string, any[]>();
-    filtered.forEach(lead => {
-      const dateKey = format(new Date(lead.created_at), 'yyyy-MM-dd');
-      if (!batchMap.has(dateKey)) {
-        batchMap.set(dateKey, []);
-      }
-      batchMap.get(dateKey)!.push(lead);
-    });
+    
+    if (groupBy === 'persona') {
+      // Group by persona
+      filtered.forEach(lead => {
+        const key = lead.persona_id || 'no-persona';
+        if (!batchMap.has(key)) {
+          batchMap.set(key, []);
+        }
+        batchMap.get(key)!.push(lead);
+      });
+    } else {
+      // Group by date (day)
+      filtered.forEach(lead => {
+        const dateKey = format(new Date(lead.created_at), 'yyyy-MM-dd');
+        if (!batchMap.has(dateKey)) {
+          batchMap.set(dateKey, []);
+        }
+        batchMap.get(dateKey)!.push(lead);
+      });
+    }
 
     // Convert to batch objects with stats
-    const batches: LeadBatch[] = Array.from(batchMap.entries()).map(([dateKey, batchLeads]) => {
+    const batches: LeadBatch[] = Array.from(batchMap.entries()).map(([key, batchLeads]) => {
       // Calculate avg quality score
       const totalScore = batchLeads.reduce((sum, l) => sum + (l.quality_score || 0), 0);
       const avgQualityScore = Math.round(totalScore / batchLeads.length);
@@ -157,20 +202,31 @@ export default function LeadInbox() {
         statusBreakdown[l.status] = (statusBreakdown[l.status] || 0) + 1;
       });
 
+      // Get persona info for the batch
+      const personaId = groupBy === 'persona' ? (key === 'no-persona' ? undefined : key) : batchLeads[0]?.persona_id;
+      const personaName = personaId ? personaMap.get(personaId) : undefined;
+
       return {
-        date: dateKey,
+        date: groupBy === 'date' ? key : (batchLeads[0]?.created_at || key),
         leads: batchLeads,
         avgQualityScore,
         sourceBreakdown,
         statusBreakdown,
+        personaId,
+        personaName,
       };
     });
 
-    // Sort batches by date descending
-    batches.sort((a, b) => b.date.localeCompare(a.date));
+    // Sort batches
+    if (groupBy === 'date') {
+      batches.sort((a, b) => b.date.localeCompare(a.date));
+    } else {
+      // Sort by lead count for persona grouping
+      batches.sort((a, b) => b.leads.length - a.leads.length);
+    }
 
     return { filteredLeads: filtered, leadBatches: batches };
-  }, [leads, dateFilter]);
+  }, [leads, dateFilter, personaFilter, groupBy, personaMap]);
 
   const toggleBatchExpanded = (dateKey: string) => {
     setExpandedBatches(prev => {
@@ -463,6 +519,53 @@ export default function LeadInbox() {
     }
   };
 
+  // Batch enroll in sequence handler
+  const handleBatchEnrollInSequence = async (leadIds: string[], sequenceId: string) => {
+    // First get the approved leads that have company_ids
+    const { data: leadsToEnroll } = await supabase
+      .from('autonomous_leads')
+      .select('company_id')
+      .in('id', leadIds)
+      .not('company_id', 'is', null);
+
+    if (!leadsToEnroll || leadsToEnroll.length === 0) {
+      toast({ title: 'No approved leads', description: 'Please approve leads first before enrolling them in a sequence.', variant: 'destructive' });
+      return;
+    }
+
+    const companyIds = leadsToEnroll.map(l => l.company_id).filter(Boolean);
+    
+    for (const companyId of companyIds) {
+      await enrollInSequence(companyId as string, sequenceId);
+    }
+
+    toast({ 
+      title: 'Enrolled in sequence', 
+      description: `${companyIds.length} companies enrolled in the selected sequence.`
+    });
+  };
+
+  // Batch create campaign handler
+  const handleBatchCreateCampaign = async (leadIds: string[]) => {
+    // Get approved leads with company data
+    const { data: leadsForCampaign } = await supabase
+      .from('autonomous_leads')
+      .select('*')
+      .in('id', leadIds)
+      .not('company_id', 'is', null);
+
+    if (!leadsForCampaign || leadsForCampaign.length === 0) {
+      toast({ title: 'No approved leads', description: 'Please approve leads first before creating a campaign.', variant: 'destructive' });
+      return;
+    }
+
+    // Navigate to campaigns with state (you could also create a draft campaign directly)
+    toast({ 
+      title: 'Campaign ready', 
+      description: `${leadsForCampaign.length} leads ready for campaign. Go to Campaigns to create a new campaign.`
+    });
+  };
+
   const handleViewLead = (lead: any) => {
     const companyData = (lead.company_data || {}) as Record<string, any>;
     setSelectedLead({
@@ -576,6 +679,20 @@ export default function LeadInbox() {
             </Tabs>
 
             <div className="flex items-center gap-2">
+              {/* Persona Filter */}
+              <Select value={personaFilter} onValueChange={setPersonaFilter}>
+                <SelectTrigger className="w-[160px] h-8">
+                  <Target className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                  <SelectValue placeholder="All Personas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Personas</SelectItem>
+                  {(personas || []).map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               {/* Date Filter */}
               <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter)}>
                 <SelectTrigger className="w-[140px] h-8">
@@ -589,6 +706,28 @@ export default function LeadInbox() {
                   <SelectItem value="all">All time</SelectItem>
                 </SelectContent>
               </Select>
+
+              {/* Grouping Toggle */}
+              <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
+                <Button
+                  variant={groupBy === 'date' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setGroupBy('date')}
+                >
+                  <Calendar className="h-3 w-3 mr-1" />
+                  Date
+                </Button>
+                <Button
+                  variant={groupBy === 'persona' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setGroupBy('persona')}
+                >
+                  <Target className="h-3 w-3 mr-1" />
+                  Persona
+                </Button>
+              </div>
 
               {/* Bulk Approve Above Threshold */}
               {activeTab === 'pending' && filteredLeads && filteredLeads.length > 0 && (
@@ -726,13 +865,20 @@ export default function LeadInbox() {
                 <ScrollArea className="h-[600px] pr-4">
                   <div className="space-y-2">
                     {leadBatches.map((batch) => {
-                      const isToday = new Date().toDateString() === new Date(batch.date).toDateString();
-                      const batchKey = isToday ? 'today' : batch.date;
-                      const isExpanded = expandedBatches.has(batchKey) || expandedBatches.has(batch.date);
+                      const isToday = groupBy === 'date' && new Date().toDateString() === new Date(batch.date).toDateString();
+                      const batchKey = groupBy === 'persona' 
+                        ? (batch.personaId || 'no-persona') 
+                        : (isToday ? 'today' : batch.date);
+                      const isExpanded = expandedBatches.has(batchKey) || expandedBatches.has(batch.date) || expandedBatches.has(batch.personaId || '');
+                      
+                      // Separate leads by status for batch actions
+                      const pendingLeadIds = batch.leads.filter(l => l.status === 'pending').map(l => l.id);
+                      const approvedLeadIds = batch.leads.filter(l => l.status === 'approved' || l.status === 'auto_approved').map(l => l.id);
+                      const allLeadIds = batch.leads.map(l => l.id);
                       
                       return (
                         <DiscoveryBatchHeader
-                          key={batch.date}
+                          key={batchKey}
                           batchDate={batch.leads[0]?.created_at || batch.date}
                           leadCount={batch.leads.length}
                           avgQualityScore={batch.avgQualityScore}
@@ -740,6 +886,18 @@ export default function LeadInbox() {
                           statusBreakdown={batch.statusBreakdown}
                           isExpanded={isExpanded}
                           onToggle={() => toggleBatchExpanded(batchKey)}
+                          personaName={batch.personaName}
+                          personaId={batch.personaId}
+                          batchLeadIds={allLeadIds}
+                          pendingLeadIds={pendingLeadIds}
+                          approvedLeadIds={approvedLeadIds}
+                          sequences={sequences || []}
+                          onApproveAll={(ids) => approveLeadMutation.mutate(ids)}
+                          onRejectAll={(ids) => rejectLeadMutation.mutate(ids)}
+                          onDeleteAll={(ids) => deleteLeadMutation.mutate(ids)}
+                          onEnrollInSequence={handleBatchEnrollInSequence}
+                          onCreateCampaign={handleBatchCreateCampaign}
+                          isActionsLoading={approveLeadMutation.isPending || rejectLeadMutation.isPending || deleteLeadMutation.isPending}
                         >
                           {batch.leads.map((lead) => (
                             <LeadCard
@@ -755,6 +913,7 @@ export default function LeadInbox() {
                               onApprove={() => approveLeadMutation.mutate([lead.id])}
                               onReject={() => rejectLeadMutation.mutate([lead.id])}
                               isPending={approveLeadMutation.isPending || rejectLeadMutation.isPending}
+                              personaName={personaMap.get(lead.persona_id)}
                             />
                           ))}
                         </DiscoveryBatchHeader>
