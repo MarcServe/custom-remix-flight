@@ -18,7 +18,8 @@ import {
   Zap, 
   Trash2,
   Loader2,
-  ListPlus
+  ListPlus,
+  AtSign
 } from "lucide-react";
 
 interface BatchActionsDropdownProps {
@@ -34,7 +35,11 @@ interface BatchActionsDropdownProps {
   onDeleteAll: (leadIds: string[]) => void;
   onEnrollInSequence: (leadIds: string[], sequenceId: string) => void;
   onCreateCampaign: (leadIds: string[]) => void;
+  onExtractEmails?: (leadIds: string[]) => void;
+  leadsWithoutEmailCount?: number;
+  leadIdsWithoutEmail?: string[];
   isLoading?: boolean;
+  isExtractingEmails?: boolean;
 }
 
 export function BatchActionsDropdown({
@@ -50,7 +55,11 @@ export function BatchActionsDropdown({
   onDeleteAll,
   onEnrollInSequence,
   onCreateCampaign,
+  onExtractEmails,
+  leadsWithoutEmailCount = 0,
+  leadIdsWithoutEmail = [],
   isLoading,
+  isExtractingEmails,
 }: BatchActionsDropdownProps) {
   const [open, setOpen] = useState(false);
 
@@ -62,9 +71,9 @@ export function BatchActionsDropdown({
           size="sm" 
           className="h-8 w-8 p-0 hover:bg-accent"
           onClick={(e) => e.stopPropagation()}
-          disabled={isLoading}
+          disabled={isLoading || isExtractingEmails}
         >
-          {isLoading ? (
+          {isLoading || isExtractingEmails ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <MoreHorizontal className="h-4 w-4" />
@@ -94,6 +103,24 @@ export function BatchActionsDropdown({
             >
               <XCircle className="h-4 w-4 mr-2" />
               Reject All Pending ({pendingCount})
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
+
+        {/* Extract Emails Action */}
+        {leadsWithoutEmailCount > 0 && onExtractEmails && (
+          <>
+            <DropdownMenuItem 
+              onClick={() => {
+                onExtractEmails(leadIdsWithoutEmail);
+                setOpen(false);
+              }}
+              className="cursor-pointer"
+              disabled={isExtractingEmails}
+            >
+              <AtSign className="h-4 w-4 mr-2" />
+              Extract Emails ({leadsWithoutEmailCount} without email)
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
