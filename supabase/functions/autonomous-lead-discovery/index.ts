@@ -679,47 +679,112 @@ function filterLeadsByPersona(leads: any[], persona: Persona | null): any[] {
 }
 
 /**
- * Enrich leads with Perplexity (batch, top quality only)
+ * Enrich leads with Perplexity (batch, prioritizing Apify leads which have minimal data)
  */
 async function enrichLeadsWithPerplexity(leads: any[], setting: any): Promise<any[]> {
-  // Use configurable limit - default 20, or enrich ALL leads in overnight mode
+  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
+  if (!PERPLEXITY_API_KEY) {
+    console.log('[super-discovery] No Perplexity API key, skipping enrichment');
+    return leads;
+  }
+
   const isOvernightMode = (setting.pre_discovery_hours || 0) > 0;
   const baseLimit = setting.max_perplexity_enriched || 20;
   const maxToEnrich = isOvernightMode ? (setting.max_leads_per_run || 50) : baseLimit;
   
-  // Only enrich top leads to save API calls
-  const topLeads = leads
+  // Always enrich ALL Apify leads - they have minimal data and need deep enrichment
+  const apifyLeads = leads.filter(l => l.source === 'apify' || l.source === 'google_maps');
+  const otherLeads = leads.filter(l => l.source !== 'apify' && l.source !== 'google_maps');
+  
+  // For non-Apify leads, only enrich top N by quality score
+  const topOtherLeads = otherLeads
     .sort((a, b) => (b.qualityScore || 0) - (a.qualityScore || 0))
-    .slice(0, maxToEnrich);
+    .slice(0, Math.max(0, maxToEnrich - apifyLeads.length));
   
-  const otherLeads = leads.filter(l => !topLeads.includes(l));
+  const remainingOtherLeads = otherLeads.filter(l => !topOtherLeads.includes(l));
   
-  console.log(`[super-discovery] Enriching top ${topLeads.length} leads with Perplexity${isOvernightMode ? ' (overnight mode: full enrichment)' : ''}`);
+  // Combine: ALL Apify leads + top other leads
+  const leadsToEnrich = [...apifyLeads, ...topOtherLeads];
   
-  // Enrich in parallel batches
-  const enrichPromises = topLeads.map(async (lead) => {
-    try {
-      const enriched = await enrichSingleLead(lead);
-      return { ...lead, ...enriched };
-    } catch (error) {
-      console.error(`[super-discovery] Failed to enrich ${lead.name}:`, error);
-      return lead;
+  console.log(`[super-discovery] Enriching ${leadsToEnrich.length} leads with Perplexity (${apifyLeads.length} Apify + ${topOtherLeads.length} other)${isOvernightMode ? ' (overnight mode)' : ''}`);
+  
+  // Enrich in parallel batches (limit concurrency to avoid rate limits)
+  const BATCH_SIZE = 5;
+  const enrichedLeads: any[] = [];
+  
+  for (let i = 0; i < leadsToEnrich.length; i += BATCH_SIZE) {
+    const batch = leadsToEnrich.slice(i, i + BATCH_SIZE);
+    const enrichPromises = batch.map(async (lead) => {
+      try {
+        const enriched = await enrichSingleLeadStructured(lead);
+        return { ...lead, ...enriched, wasEnriched: true, enrichmentTier: 'deep' };
+      } catch (error) {
+        console.error(`[super-discovery] Failed to enrich ${lead.name}:`, error);
+        return lead;
+      }
+    });
+    
+    const batchResults = await Promise.all(enrichPromises);
+    enrichedLeads.push(...batchResults);
+    
+    // Small delay between batches to avoid rate limits
+    if (i + BATCH_SIZE < leadsToEnrich.length) {
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
-  });
+  }
   
-  const enrichedTopLeads = await Promise.all(enrichPromises);
-  
-  return [...enrichedTopLeads, ...otherLeads];
+  return [...enrichedLeads, ...remainingOtherLeads];
 }
 
 /**
- * Enrich a single lead with Perplexity
+ * Enrich a single lead with Perplexity - extracts STRUCTURED data including:
+ * - Company description, products, technologies
+ * - Social profiles (LinkedIn, Twitter, Facebook, Instagram, YouTube, TikTok)
+ * - Key executives/team contacts
+ * - Contact info (phone, email)
+ * - Suggested tags for categorization
  */
-async function enrichSingleLead(lead: any): Promise<any> {
+async function enrichSingleLeadStructured(lead: any): Promise<any> {
   const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
   if (!PERPLEXITY_API_KEY) return {};
   
   try {
+    const companyIdentifier = lead.website 
+      ? `${lead.name} (${lead.website})`
+      : lead.name;
+    
+    const structuredPrompt = `Research the company "${companyIdentifier}" and return ONLY a valid JSON object with the following structure. Do not include any text before or after the JSON.
+
+{
+  "description": "Detailed company description (200+ characters). What they do, their mission, main business.",
+  "products": "Main products or services offered, separated by commas",
+  "recentNews": "Any recent news, funding, or announcements from 2024-2025. Say 'No recent news found' if none.",
+  "fundingInfo": "Funding stage, amount raised, or investors if known. Say 'Not available' if unknown.",
+  "employeeCount": 0,
+  "companyPhone": "Main phone number or null",
+  "generalEmail": "General contact email or null",
+  "suggestedTags": ["industry tag", "category tag", "specialty tag"],
+  "socialProfiles": {
+    "linkedin": "LinkedIn company URL or null",
+    "twitter": "Twitter/X URL or null",
+    "facebook": "Facebook URL or null",
+    "instagram": "Instagram URL or null",
+    "youtube": "YouTube channel URL or null",
+    "tiktok": "TikTok URL or null"
+  },
+  "keyExecutives": [
+    {"name": "Full Name", "title": "Job Title", "email": null, "linkedin": null}
+  ],
+  "technologies": "Key technologies used, separated by commas"
+}
+
+Important: 
+- Return ONLY valid JSON, no markdown code blocks
+- Use null for unknown fields, not empty strings
+- Include 3-5 relevant industry/category tags in suggestedTags
+- Find at least 2-3 key executives if possible (CEO, Founder, etc.)
+- Search thoroughly for social media profiles`;
+
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: {
@@ -728,28 +793,141 @@ async function enrichSingleLead(lead: any): Promise<any> {
       },
       body: JSON.stringify({
         model: 'sonar',
-        messages: [{
-          role: 'user',
-          content: `Provide brief company information for "${lead.name}"${lead.website ? ` (${lead.website})` : ''}. Include: 1) What they do, 2) Company size estimate, 3) Key decision makers if available. Be concise.`
-        }],
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a business research assistant. Return only valid JSON, no explanations or markdown. Search thoroughly for company information.'
+          },
+          {
+            role: 'user',
+            content: structuredPrompt
+          }
+        ],
       }),
     });
     
-    if (!response.ok) return {};
+    if (!response.ok) {
+      console.error(`[super-discovery] Perplexity API error for ${lead.name}: ${response.status}`);
+      return {};
+    }
     
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    const content = data.choices?.[0]?.message?.content || '';
     
+    // Parse the JSON response
+    let parsed: any = {};
+    try {
+      // Clean up potential markdown code blocks
+      let jsonStr = content.trim();
+      if (jsonStr.startsWith('```json')) {
+        jsonStr = jsonStr.slice(7);
+      } else if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.slice(3);
+      }
+      if (jsonStr.endsWith('```')) {
+        jsonStr = jsonStr.slice(0, -3);
+      }
+      jsonStr = jsonStr.trim();
+      
+      parsed = JSON.parse(jsonStr);
+    } catch (parseError) {
+      console.error(`[super-discovery] Failed to parse Perplexity JSON for ${lead.name}:`, parseError);
+      // Fall back to storing raw content
+      return {
+        enrichment_data: {
+          perplexity_summary: content,
+          enriched_at: new Date().toISOString(),
+          citations: data.citations,
+          parseError: true,
+        },
+      };
+    }
+    
+    // Return structured enrichment data
     return {
+      // Merge into lead root for compatibility
+      description: parsed.description || lead.description,
+      products: parsed.products || lead.products,
+      recentNews: parsed.recentNews || lead.recentNews,
+      fundingInfo: parsed.fundingInfo || lead.fundingInfo,
+      employeeCount: parsed.employeeCount || lead.employeeCount,
+      companyPhone: parsed.companyPhone || lead.companyPhone,
+      generalEmail: parsed.generalEmail || lead.generalEmail,
+      technologies: parsed.technologies,
+      suggestedTags: parsed.suggestedTags || [],
+      
+      // Social profiles - merge with existing
+      socialProfiles: {
+        ...(lead.socialProfiles || {}),
+        ...cleanSocialProfiles(parsed.socialProfiles || {}),
+      },
+      
+      // Key executives as contacts
+      keyExecutives: parsed.keyExecutives || [],
+      contacts: mergeContacts(lead.contacts, parsed.keyExecutives),
+      
+      // Store full enrichment data
       enrichment_data: {
-        perplexity_summary: content,
+        ...parsed,
+        perplexity_summary: parsed.description,
         enriched_at: new Date().toISOString(),
         citations: data.citations,
+        model: 'sonar',
       },
     };
-  } catch {
+  } catch (error) {
+    console.error(`[super-discovery] Error enriching ${lead.name}:`, error);
     return {};
   }
+}
+
+/**
+ * Clean and validate social profile URLs
+ */
+function cleanSocialProfiles(profiles: any): any {
+  const cleaned: any = {};
+  const platforms = ['linkedin', 'twitter', 'facebook', 'instagram', 'youtube', 'tiktok'];
+  
+  for (const platform of platforms) {
+    const url = profiles[platform];
+    if (url && typeof url === 'string' && url.startsWith('http')) {
+      cleaned[platform] = url;
+    }
+  }
+  
+  return cleaned;
+}
+
+/**
+ * Merge existing contacts with new key executives
+ */
+function mergeContacts(existingContacts: any[], keyExecutives: any[]): any[] {
+  const contacts = [...(existingContacts || [])];
+  
+  if (!keyExecutives || !Array.isArray(keyExecutives)) {
+    return contacts;
+  }
+  
+  for (const exec of keyExecutives) {
+    if (!exec.name) continue;
+    
+    // Check if contact already exists
+    const exists = contacts.some(c => 
+      c.name?.toLowerCase() === exec.name?.toLowerCase()
+    );
+    
+    if (!exists) {
+      contacts.push({
+        name: exec.name,
+        title: exec.title,
+        email: exec.email || null,
+        linkedinUrl: exec.linkedin || null,
+        department: 'Executive',
+      });
+    }
+  }
+  
+  return contacts;
 }
 
 /**
@@ -809,13 +987,38 @@ async function saveDiscoveredLeads(
     if (status === 'auto_approved') result.autoApproved++;
     else result.pending++;
 
+    // Build comprehensive company_data with all enrichment fields
+    const companyData = {
+      ...lead,
+      // Ensure social profiles are included
+      socialProfiles: lead.socialProfiles || {},
+      // Ensure key executives are included
+      keyExecutives: lead.keyExecutives || [],
+      // Ensure contacts are merged
+      contacts: lead.contacts || [],
+      // Include suggested tags for auto-tagging
+      suggestedTags: lead.suggestedTags || [],
+      // Include products and technologies
+      products: lead.products,
+      technologies: lead.technologies,
+      // Include funding and news
+      recentNews: lead.recentNews,
+      fundingInfo: lead.fundingInfo,
+      // Contact info
+      companyPhone: lead.companyPhone,
+      generalEmail: lead.generalEmail,
+      // Enrichment metadata
+      wasEnriched: lead.wasEnriched || false,
+      enrichmentTier: lead.enrichmentTier || 'basic',
+    };
+
     return {
       user_id: userId,
       discovery_run_id: discoveryRunId,
       persona_id: persona?.id || null,
       status,
       quality_score: lead.qualityScore || 0,
-      company_data: lead,
+      company_data: companyData,
       company_name: lead.name,
       company_website: lead.website,
       industry: lead.industry,
@@ -1290,6 +1493,23 @@ async function saveLeadToCompanies(supabase: any, lead: any, userId: string): Pr
   try {
     const companyData = lead.company_data || {};
     
+    // Build enrichment data with all structured fields
+    const enrichmentData = {
+      ...(lead.enrichment_data || {}),
+      products: companyData.products,
+      technologies: companyData.technologies,
+      recentNews: companyData.recentNews,
+      fundingInfo: companyData.fundingInfo,
+      suggestedTags: companyData.suggestedTags,
+      wasEnriched: companyData.wasEnriched,
+      enrichmentTier: companyData.enrichmentTier,
+    };
+    
+    // Extract LinkedIn URL from social profiles if not set directly
+    const linkedinUrl = companyData.linkedinUrl || 
+      companyData.socialProfiles?.linkedin || 
+      null;
+    
     const { data: company, error } = await supabase
       .from('companies')
       .insert({
@@ -1300,14 +1520,21 @@ async function saveLeadToCompanies(supabase: any, lead: any, userId: string): Pr
         industry: lead.industry,
         size: lead.company_size,
         geography: lead.geography,
-        linkedin_url: companyData.linkedinUrl,
+        linkedin_url: linkedinUrl,
         company_phone: companyData.companyPhone,
         general_email: companyData.generalEmail,
-        social_profiles: companyData.socialProfiles,
-        key_executives: companyData.keyExecutives,
+        social_profiles: companyData.socialProfiles || {},
+        key_executives: companyData.keyExecutives || [],
         employee_count: companyData.employeeCount,
-        enrichment_data: lead.enrichment_data,
-        enrichment_status: lead.enrichment_data ? 'completed' : 'pending',
+        recent_news: companyData.recentNews,
+        enrichment_data: enrichmentData,
+        enrichment_status: companyData.wasEnriched ? 'completed' : 'pending',
+        enrichment_provider: companyData.wasEnriched ? 'perplexity' : null,
+        enriched_at: companyData.wasEnriched ? new Date().toISOString() : null,
+        // Extract tech stack from technologies string
+        tech_stack: companyData.technologies 
+          ? companyData.technologies.split(',').map((t: string) => t.trim()).filter(Boolean)
+          : [],
       })
       .select('id')
       .single();
@@ -1317,6 +1544,7 @@ async function saveLeadToCompanies(supabase: any, lead: any, userId: string): Pr
       return null;
     }
 
+    // Update autonomous lead with company_id
     await supabase
       .from('autonomous_leads')
       .update({ company_id: company.id, reviewed_at: new Date().toISOString() })
@@ -1324,19 +1552,29 @@ async function saveLeadToCompanies(supabase: any, lead: any, userId: string): Pr
       .eq('company_name', lead.company_name)
       .eq('status', 'auto_approved');
 
-    const contacts = lead.contacts || [];
+    // Save contacts including key executives merged in
+    const contacts = lead.contacts || companyData.contacts || [];
     if (contacts.length > 0 && company.id) {
-      const contactsToInsert = contacts.map((c: any) => ({
+      const contactsToInsert = contacts.map((c: any, idx: number) => ({
         company_id: company.id,
         name: c.name,
-        email: c.email,
-        email_verified: c.emailVerified,
-        linkedin_url: c.linkedinUrl,
+        email: c.email || null,
+        email_verified: c.emailVerified || false,
+        linkedin_url: c.linkedinUrl || c.linkedin || null,
         title: c.title,
-        department: c.department,
-        phone: c.phone,
+        department: c.department || 'Executive',
+        phone: c.phone || null,
+        is_primary_contact: idx === 0, // First contact is primary
       }));
+      
       await supabase.from('contacts').insert(contactsToInsert);
+      console.log(`[super-discovery] Added ${contactsToInsert.length} contacts for company ${lead.company_name}`);
+    }
+
+    // Auto-apply suggested tags
+    const suggestedTags = companyData.suggestedTags || [];
+    if (suggestedTags.length > 0 && company.id) {
+      await applySuggestedTags(supabase, userId, company.id, suggestedTags);
     }
 
     return company.id;
@@ -1344,6 +1582,101 @@ async function saveLeadToCompanies(supabase: any, lead: any, userId: string): Pr
     console.error('[super-discovery] Error in saveLeadToCompanies:', error);
     return null;
   }
+}
+
+/**
+ * Apply suggested tags to a company, creating new tags if they don't exist
+ */
+async function applySuggestedTags(
+  supabase: any, 
+  userId: string, 
+  companyId: string, 
+  tags: string[]
+): Promise<void> {
+  try {
+    for (const tagName of tags) {
+      if (!tagName || typeof tagName !== 'string') continue;
+      
+      const normalizedTag = tagName.trim().toLowerCase();
+      if (!normalizedTag) continue;
+      
+      // Check if tag preset exists
+      const { data: existingTag } = await supabase
+        .from('company_tag_presets')
+        .select('id')
+        .eq('user_id', userId)
+        .ilike('name', normalizedTag)
+        .maybeSingle();
+      
+      let tagId: string;
+      
+      if (existingTag) {
+        tagId = existingTag.id;
+      } else {
+        // Create new tag preset
+        const { data: newTag, error: createError } = await supabase
+          .from('company_tag_presets')
+          .insert({
+            user_id: userId,
+            name: tagName.trim(),
+            category: 'ai-suggested',
+            color: getTagColor(tagName),
+          })
+          .select('id')
+          .single();
+        
+        if (createError || !newTag) {
+          console.error(`[super-discovery] Failed to create tag "${tagName}":`, createError);
+          continue;
+        }
+        tagId = newTag.id;
+      }
+      
+      // Add tag to company's tags array
+      const { data: company } = await supabase
+        .from('companies')
+        .select('tags')
+        .eq('id', companyId)
+        .single();
+      
+      const currentTags = company?.tags || [];
+      if (!currentTags.includes(tagName.trim())) {
+        await supabase
+          .from('companies')
+          .update({ tags: [...currentTags, tagName.trim()] })
+          .eq('id', companyId);
+      }
+    }
+    
+    console.log(`[super-discovery] Applied ${tags.length} suggested tags to company`);
+  } catch (error) {
+    console.error('[super-discovery] Error applying suggested tags:', error);
+  }
+}
+
+/**
+ * Generate a color for a tag based on its name
+ */
+function getTagColor(tagName: string): string {
+  const colors = [
+    '#3b82f6', // blue
+    '#22c55e', // green
+    '#f97316', // orange
+    '#8b5cf6', // purple
+    '#ec4899', // pink
+    '#14b8a6', // teal
+    '#f59e0b', // amber
+    '#6366f1', // indigo
+  ];
+  
+  // Simple hash to pick a consistent color
+  let hash = 0;
+  for (let i = 0; i < tagName.length; i++) {
+    hash = ((hash << 5) - hash) + tagName.charCodeAt(i);
+    hash = hash & hash;
+  }
+  
+  return colors[Math.abs(hash) % colors.length];
 }
 
 async function enrollInSequence(supabase: any, companyId: string, sequenceId: string): Promise<void> {
