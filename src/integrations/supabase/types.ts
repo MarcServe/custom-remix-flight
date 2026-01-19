@@ -424,6 +424,7 @@ export type Database = {
           auto_create_campaign: boolean | null
           auto_enroll_enabled: boolean | null
           auto_enroll_sequence_id: string | null
+          auto_extract_emails: boolean | null
           avoid_industries: string[] | null
           avoid_keywords: string[] | null
           campaign_send_time: string | null
@@ -477,6 +478,7 @@ export type Database = {
           auto_create_campaign?: boolean | null
           auto_enroll_enabled?: boolean | null
           auto_enroll_sequence_id?: string | null
+          auto_extract_emails?: boolean | null
           avoid_industries?: string[] | null
           avoid_keywords?: string[] | null
           campaign_send_time?: string | null
@@ -530,6 +532,7 @@ export type Database = {
           auto_create_campaign?: boolean | null
           auto_enroll_enabled?: boolean | null
           auto_enroll_sequence_id?: string | null
+          auto_extract_emails?: boolean | null
           avoid_industries?: string[] | null
           avoid_keywords?: string[] | null
           campaign_send_time?: string | null

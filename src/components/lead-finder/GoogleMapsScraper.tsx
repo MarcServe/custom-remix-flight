@@ -207,12 +207,13 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
 
     setIsSendingToInbox(true);
     let sent = 0;
+    const insertedIds: string[] = [];
 
     const leadsToSend = scrapedLeads.filter((_, i) => selectedLeads.has(i));
 
     for (const lead of leadsToSend) {
       try {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('autonomous_leads')
           .insert({
             user_id: user?.id,
@@ -230,17 +231,75 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
               googleRating: lead.rating,
               googleReviewCount: lead.reviews,
             },
-          });
+          })
+          .select('id')
+          .single();
 
-        if (!error) sent++;
+        if (!error && data) {
+          sent++;
+          insertedIds.push(data.id);
+        }
       } catch (err) {
         console.error('Send to inbox error:', err);
       }
     }
 
+    // Enrich the leads with Perplexity after insertion
+    if (insertedIds.length > 0) {
+      toast.success(`Sent ${sent} leads to inbox. Starting enrichment...`);
+      
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(
+          `https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/enrich-autonomous-leads`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session?.access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ leadIds: insertedIds, mode: 'deep' }),
+          }
+        );
+
+        if (response.ok && response.body) {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let enrichedCount = 0;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const text = decoder.decode(value);
+            const lines = text.split('\n');
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const event = JSON.parse(line.slice(6));
+                  if (event.type === 'enriched') {
+                    enrichedCount++;
+                  } else if (event.type === 'complete') {
+                    toast.success(`Enriched ${event.success} of ${event.total} leads with AI research`);
+                  }
+                } catch (e) {
+                  // Ignore parse errors
+                }
+              }
+            }
+          }
+        }
+      } catch (enrichError) {
+        console.error('Enrichment error:', enrichError);
+        toast.info('Leads saved. Enrichment will happen in background.');
+      }
+    } else {
+      toast.success(`Sent ${sent} leads to inbox for review`);
+    }
+
     queryClient.invalidateQueries({ queryKey: ['autonomous-leads'] });
     setIsSendingToInbox(false);
-    toast.success(`Sent ${sent} leads to inbox for review`);
     
     // Reset
     setStep('config');

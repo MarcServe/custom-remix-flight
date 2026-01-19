@@ -243,7 +243,7 @@ serve(async (req) => {
   console.log('[bulk-extract-emails] Starting bulk email extraction');
 
   try {
-    const { leadIds } = await req.json();
+    const { leadIds, createContact = true } = await req.json();
 
     if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
       return new Response(
@@ -342,6 +342,45 @@ serve(async (req) => {
                     updated_at: new Date().toISOString(),
                   })
                   .eq('id', lead.company_id);
+
+                // Create contact if createContact flag is true
+                if (createContact) {
+                  // Check if primary contact already exists
+                  const { data: existingPrimary } = await supabase
+                    .from('contacts')
+                    .select('id')
+                    .eq('company_id', lead.company_id)
+                    .eq('is_primary_contact', true)
+                    .maybeSingle();
+
+                  // Get company name for the contact
+                  const { data: company } = await supabase
+                    .from('companies')
+                    .select('name')
+                    .eq('id', lead.company_id)
+                    .single();
+
+                  // Create or update contact
+                  const { error: contactError } = await supabase
+                    .from('contacts')
+                    .upsert({
+                      company_id: lead.company_id,
+                      name: company?.name ? `${company.name} Contact` : 'General Contact',
+                      email: email,
+                      email_verified: true,
+                      is_primary_contact: !existingPrimary,
+                      title: 'General Inquiry',
+                    }, {
+                      onConflict: 'company_id,email',
+                      ignoreDuplicates: false,
+                    });
+
+                  if (contactError) {
+                    console.log(`[bulk-extract] Note: Could not create contact for ${lead.company_name}:`, contactError.message);
+                  } else {
+                    console.log(`[bulk-extract] Created contact for ${lead.company_name}`);
+                  }
+                }
               }
 
               successCount++;
@@ -351,6 +390,7 @@ serve(async (req) => {
                 companyName: lead.company_name,
                 email,
                 method,
+                contactCreated: createContact && !!lead.company_id,
               });
             } else {
               failedCount++;
