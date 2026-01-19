@@ -1052,8 +1052,39 @@ async function saveDiscoveredLeads(
   if (autoApprovedLeads.length > 0) {
     console.log(`[super-discovery] Auto-approving ${autoApprovedLeads.length} leads`);
     
+    // Collect lead IDs that need email extraction
+    const leadsNeedingEmail: string[] = [];
+    
     for (const lead of autoApprovedLeads) {
       const companyId = await saveLeadToCompanies(supabase, lead, userId);
+      
+      // Update autonomous_lead with company_id
+      if (companyId) {
+        await supabase
+          .from('autonomous_leads')
+          .update({ company_id: companyId })
+          .eq('user_id', userId)
+          .eq('company_name', lead.company_name);
+        
+        // Check if email extraction is needed
+        const companyData = lead.company_data || {};
+        const hasEmail = companyData.generalEmail || companyData.general_email;
+        const hasWebsite = lead.company_website && !lead.company_website.includes('no-website');
+        
+        if (!hasEmail && hasWebsite && setting.auto_extract_emails) {
+          // Get the autonomous_lead id for this lead
+          const { data: alead } = await supabase
+            .from('autonomous_leads')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('company_name', lead.company_name)
+            .maybeSingle();
+          
+          if (alead?.id) {
+            leadsNeedingEmail.push(alead.id);
+          }
+        }
+      }
       
       // Determine which sequence to use (persona-specific or global)
       const sequenceId = persona?.auto_enroll_sequence_id || 
@@ -1065,6 +1096,28 @@ async function saveDiscoveredLeads(
 
       // Track feedback for AI learning
       await trackAutoApprovalFeedback(supabase, userId, lead, persona);
+    }
+    
+    // Auto-extract emails if enabled and there are leads needing emails
+    if (setting.auto_extract_emails && leadsNeedingEmail.length > 0) {
+      console.log(`[super-discovery] Auto-extracting emails for ${leadsNeedingEmail.length} leads`);
+      try {
+        // Call bulk-extract-emails with createContact=true
+        await fetch(`${SUPABASE_URL}/functions/v1/bulk-extract-emails`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            leadIds: leadsNeedingEmail.slice(0, 20), // Limit to 20 to avoid timeout
+            createContact: true 
+          }),
+        });
+        console.log(`[super-discovery] Email extraction triggered for ${Math.min(leadsNeedingEmail.length, 20)} leads`);
+      } catch (extractError) {
+        console.error('[super-discovery] Email extraction error:', extractError);
+      }
     }
 
     // Send webhook notification for high-quality auto-approved leads

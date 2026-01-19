@@ -36,7 +36,8 @@ import {
   Target,
   Play,
   Calendar,
-  Filter
+  Filter,
+  AtSign
 } from "lucide-react";
 import { QualityScoreBadge } from "@/components/lead-finder/QualityScoreBadge";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
@@ -841,6 +842,38 @@ export default function LeadInbox() {
                   <span className="hidden lg:inline">Approve All</span> ≥{settings?.auto_approve_threshold || 70}
                 </Button>
               )}
+              
+              {/* Extract All Missing Emails Button */}
+              {filteredLeads && filteredLeads.length > 0 && (() => {
+                const leadsNeedingEmail = filteredLeads.filter(l => {
+                  const companyData = (l.company_data || {}) as Record<string, any>;
+                  const hasWebsite = l.company_website && 
+                    !l.company_website.includes('no-website') && 
+                    l.company_website.trim() !== '';
+                  const hasEmail = companyData.generalEmail || 
+                    companyData.general_email || 
+                    companyData.email;
+                  return hasWebsite && !hasEmail;
+                });
+                
+                return leadsNeedingEmail.length > 0 ? (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => handleBulkExtractEmails(leadsNeedingEmail.map(l => l.id))}
+                    disabled={isExtractingEmails}
+                    className="gap-1 text-blue-600 border-blue-200 hover:bg-blue-50 hidden sm:flex text-xs"
+                  >
+                    {isExtractingEmails ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <AtSign className="h-3.5 w-3.5" />
+                    )}
+                    <span className="hidden lg:inline">Extract Emails</span> ({leadsNeedingEmail.length})
+                  </Button>
+                ) : null;
+              })()}
+              
               <Button variant="outline" size="sm" onClick={() => refetchLeads()} className="h-8 px-2 sm:px-3">
                 <RefreshCw className="h-3.5 w-3.5 sm:mr-1" />
                 <span className="hidden sm:inline text-xs">Refresh</span>
@@ -1255,6 +1288,30 @@ export default function LeadInbox() {
                 <p className="text-xs text-muted-foreground">
                   Set to 0 to disable auto-approval
                 </p>
+              </div>
+
+              <Separator />
+
+              {/* Auto-Extract Emails */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <AtSign className="h-4 w-4" />
+                  <Label className="font-medium">Auto Email Extraction</Label>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="auto_extract_emails" className="text-sm">Auto-extract emails for auto-approved leads</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically find contact emails for high-quality leads during discovery
+                    </p>
+                  </div>
+                  <Switch
+                    id="auto_extract_emails"
+                    checked={localSettings?.auto_extract_emails || false}
+                    onCheckedChange={(checked) => handleSettingsChange('auto_extract_emails', checked)}
+                  />
+                </div>
               </div>
 
               <Separator />
