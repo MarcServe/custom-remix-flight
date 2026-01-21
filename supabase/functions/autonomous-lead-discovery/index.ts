@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
     // Get current UTC time
     const now = new Date();
     const currentUtcHour = now.getUTCHours();
-    console.log(`[super-discovery] Current UTC hour: ${currentUtcHour}`);
+    console.log(`[super-discovery] Current UTC hour: ${currentUtcHour}, timestamp: ${now.toISOString()}`);
 
     // Helper function to check if it's the user's preferred local hour (or overnight preparation time)
     const isUserPreferredHour = (setting: any): boolean => {
@@ -134,18 +134,50 @@ Deno.serve(async (req) => {
       }
     };
 
+    // Helper function to check if a missed run should be caught up
+    const shouldCatchUpMissedRun = (setting: any): boolean => {
+      const lastRun = setting.last_run_at ? new Date(setting.last_run_at) : null;
+      const nextRun = setting.next_run_at ? new Date(setting.next_run_at) : null;
+      
+      // If next_run_at is in the past by more than 1 hour, we missed a run
+      if (nextRun && nextRun < now) {
+        const missedByHours = (now.getTime() - nextRun.getTime()) / (1000 * 60 * 60);
+        
+        // Catch up if we missed by less than 24 hours (don't catch up very old missed runs)
+        if (missedByHours > 1 && missedByHours < 24) {
+          console.log(`[super-discovery] User ${setting.user_id}: Missed run detected! next_run_at was ${nextRun.toISOString()}, catching up...`);
+          return true;
+        }
+        
+        // If missed by more than 24 hours, log and reset next_run_at
+        if (missedByHours >= 24) {
+          console.log(`[super-discovery] User ${setting.user_id}: next_run_at is very old (${missedByHours.toFixed(1)}h ago), will run now to reset schedule`);
+          return true;
+        }
+      }
+      
+      // If no last run, should run
+      if (!lastRun) {
+        console.log(`[super-discovery] User ${setting.user_id}: No previous run, should run now`);
+        return true;
+      }
+      
+      return false;
+    };
+
     // Filter settings to only users whose preferred local hour matches current time
+    // OR who have a missed run that needs catching up
     // (skip filtering for manual triggers)
     const settingsToProcess = manualUserId || forceRun
       ? settings
-      : settings.filter((s: any) => isUserPreferredHour(s));
+      : settings.filter((s: any) => isUserPreferredHour(s) || shouldCatchUpMissedRun(s));
 
-    console.log(`[super-discovery] Users scheduled for this hour: ${settingsToProcess.length} of ${settings.length}`);
+    console.log(`[super-discovery] Users to process: ${settingsToProcess.length} of ${settings.length} (scheduled + catch-up)`);
 
     if (settingsToProcess.length === 0) {
       return new Response(JSON.stringify({ 
         success: true, 
-        message: `No users scheduled for hour ${currentUtcHour} UTC`,
+        message: `No users scheduled for hour ${currentUtcHour} UTC (checked ${settings.length} users)`,
         processed: 0 
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
