@@ -424,6 +424,7 @@ export type Database = {
           auto_create_campaign: boolean | null
           auto_enroll_enabled: boolean | null
           auto_enroll_sequence_id: string | null
+          auto_extract_all_emails: boolean | null
           auto_extract_emails: boolean | null
           avoid_industries: string[] | null
           avoid_keywords: string[] | null
@@ -432,6 +433,7 @@ export type Database = {
           created_at: string
           custom_search_query: string | null
           daily_lead_target: number | null
+          deep_enrichment_mode: boolean | null
           discord_webhook_url: string | null
           discovery_frequency: string
           enabled: boolean
@@ -478,6 +480,7 @@ export type Database = {
           auto_create_campaign?: boolean | null
           auto_enroll_enabled?: boolean | null
           auto_enroll_sequence_id?: string | null
+          auto_extract_all_emails?: boolean | null
           auto_extract_emails?: boolean | null
           avoid_industries?: string[] | null
           avoid_keywords?: string[] | null
@@ -486,6 +489,7 @@ export type Database = {
           created_at?: string
           custom_search_query?: string | null
           daily_lead_target?: number | null
+          deep_enrichment_mode?: boolean | null
           discord_webhook_url?: string | null
           discovery_frequency?: string
           enabled?: boolean
@@ -532,6 +536,7 @@ export type Database = {
           auto_create_campaign?: boolean | null
           auto_enroll_enabled?: boolean | null
           auto_enroll_sequence_id?: string | null
+          auto_extract_all_emails?: boolean | null
           auto_extract_emails?: boolean | null
           avoid_industries?: string[] | null
           avoid_keywords?: string[] | null
@@ -540,6 +545,7 @@ export type Database = {
           created_at?: string
           custom_search_query?: string | null
           daily_lead_target?: number | null
+          deep_enrichment_mode?: boolean | null
           discord_webhook_url?: string | null
           discovery_frequency?: string
           enabled?: boolean
@@ -1501,6 +1507,89 @@ export type Database = {
           value_proposition?: string | null
         }
         Relationships: []
+      }
+      discovery_runs: {
+        Row: {
+          campaigns_created: number | null
+          completed_at: string | null
+          contacts_created: number | null
+          created_at: string
+          discovery_run_id: string
+          emails_extracted: number | null
+          error_message: string | null
+          errors: Json | null
+          id: string
+          leads_auto_approved: number | null
+          leads_enriched: number | null
+          leads_pending: number | null
+          persona_id: string | null
+          persona_name: string | null
+          sequences_enrolled: number | null
+          settings_snapshot: Json | null
+          source_breakdown: Json | null
+          started_at: string
+          status: string
+          total_leads_found: number | null
+          trigger_type: string | null
+          user_id: string
+        }
+        Insert: {
+          campaigns_created?: number | null
+          completed_at?: string | null
+          contacts_created?: number | null
+          created_at?: string
+          discovery_run_id: string
+          emails_extracted?: number | null
+          error_message?: string | null
+          errors?: Json | null
+          id?: string
+          leads_auto_approved?: number | null
+          leads_enriched?: number | null
+          leads_pending?: number | null
+          persona_id?: string | null
+          persona_name?: string | null
+          sequences_enrolled?: number | null
+          settings_snapshot?: Json | null
+          source_breakdown?: Json | null
+          started_at?: string
+          status?: string
+          total_leads_found?: number | null
+          trigger_type?: string | null
+          user_id: string
+        }
+        Update: {
+          campaigns_created?: number | null
+          completed_at?: string | null
+          contacts_created?: number | null
+          created_at?: string
+          discovery_run_id?: string
+          emails_extracted?: number | null
+          error_message?: string | null
+          errors?: Json | null
+          id?: string
+          leads_auto_approved?: number | null
+          leads_enriched?: number | null
+          leads_pending?: number | null
+          persona_id?: string | null
+          persona_name?: string | null
+          sequences_enrolled?: number | null
+          settings_snapshot?: Json | null
+          source_breakdown?: Json | null
+          started_at?: string
+          status?: string
+          total_leads_found?: number | null
+          trigger_type?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discovery_runs_persona_id_fkey"
+            columns: ["persona_id"]
+            isOneToOne: false
+            referencedRelation: "discovery_personas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_ab_test_assignments: {
         Row: {

@@ -466,9 +466,35 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
 
           <div className="flex items-center justify-between">
             <div>
+              <Label>Auto-Extract All Emails</Label>
+              <p className="text-xs text-muted-foreground">
+                Extract emails for ALL leads, not just auto-approved
+              </p>
+            </div>
+            <Switch
+              checked={localSettings?.auto_extract_all_emails || false}
+              onCheckedChange={(checked) => handleChange('auto_extract_all_emails', checked)}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Deep Enrichment Mode</Label>
+              <p className="text-xs text-muted-foreground">
+                Enrich ALL leads with Perplexity for better AI campaigns
+              </p>
+            </div>
+            <Switch
+              checked={localSettings?.deep_enrichment_mode || false}
+              onCheckedChange={(checked) => handleChange('deep_enrichment_mode', checked)}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
               <Label className="text-orange-600">Full Auto Mode</Label>
               <p className="text-xs text-muted-foreground">
-                Send emails without manual review (use with caution!)
+                Complete hands-free: enrich → extract emails → create campaigns → send
               </p>
             </div>
             <Switch

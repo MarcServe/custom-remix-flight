@@ -36,6 +36,10 @@ interface DiscoveryStats {
   pending: number;
   enriched: number;
   campaignsCreated: number;
+  emailsExtracted: number;
+  contactsCreated: number;
+  sequencesEnrolled: number;
+  errors: string[];
 }
 
 /**
@@ -232,7 +236,36 @@ Deno.serve(async (req) => {
           pending: 0,
           enriched: 0,
           campaignsCreated: 0,
+          emailsExtracted: 0,
+          contactsCreated: 0,
+          sequencesEnrolled: 0,
+          errors: [],
         };
+
+        // Determine trigger type for run tracking
+        const triggerType = manualUserId ? 'manual' : (forceRun ? 'catch_up' : 'scheduled');
+
+        // Create discovery run record
+        const { error: runError } = await supabase
+          .from('discovery_runs')
+          .insert({
+            user_id: setting.user_id,
+            discovery_run_id: discoveryRunId,
+            status: 'running',
+            trigger_type: triggerType,
+            settings_snapshot: {
+              full_auto_mode: setting.full_auto_mode,
+              auto_extract_emails: setting.auto_extract_emails,
+              auto_extract_all_emails: setting.auto_extract_all_emails,
+              deep_enrichment_mode: setting.deep_enrichment_mode,
+              auto_create_campaign: setting.auto_create_campaign,
+              enrich_with_perplexity: setting.enrich_with_perplexity,
+            },
+          });
+
+        if (runError) {
+          console.error(`[super-discovery] Failed to create run record:`, runError);
+        }
 
         // If user has personas, run discovery for each persona
         if (activePersonas.length > 0) {
@@ -301,6 +334,25 @@ Deno.serve(async (req) => {
           })
           .eq('user_id', setting.user_id);
 
+        // Update discovery run record with completion stats
+        await supabase
+          .from('discovery_runs')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            total_leads_found: userStats.totalLeads,
+            leads_enriched: userStats.enriched,
+            leads_auto_approved: userStats.autoApproved,
+            leads_pending: userStats.pending,
+            emails_extracted: userStats.emailsExtracted,
+            contacts_created: userStats.contactsCreated,
+            campaigns_created: userStats.campaignsCreated,
+            sequences_enrolled: userStats.sequencesEnrolled,
+            source_breakdown: userStats.bySource,
+            errors: userStats.errors,
+          })
+          .eq('discovery_run_id', discoveryRunId);
+
         processedCount++;
         console.log(`[super-discovery] Completed processing for user ${setting.user_id}. Stats:`, JSON.stringify(userStats));
 
@@ -340,6 +392,17 @@ Deno.serve(async (req) => {
 
       } catch (userError) {
         console.error(`[super-discovery] Error processing user ${setting.user_id}:`, userError);
+        
+        // Update discovery run record with error status
+        await supabase
+          .from('discovery_runs')
+          .update({
+            status: 'failed',
+            completed_at: new Date().toISOString(),
+            error_message: userError instanceof Error ? userError.message : 'Unknown error',
+          })
+          .eq('user_id', setting.user_id)
+          .eq('status', 'running');
       }
     }
 
@@ -399,6 +462,10 @@ async function runMultiSourceDiscovery(
     pending: 0,
     enriched: 0,
     campaignsCreated: 0,
+    emailsExtracted: 0,
+    contactsCreated: 0,
+    sequencesEnrolled: 0,
+    errors: [],
   };
 
   // Calculate leads per source based on target and enabled sources
@@ -470,11 +537,14 @@ async function runMultiSourceDiscovery(
     return stats;
   }
 
-  // Enrich leads with Perplexity if enabled (for top quality leads)
+  // Enrich leads with Perplexity
+  // In deep_enrichment_mode or full_auto_mode, enrich ALL leads for better AI campaign generation
   let enrichedLeads = filteredLeads;
-  if (setting.enrich_with_perplexity) {
-    enrichedLeads = await enrichLeadsWithPerplexity(filteredLeads, setting);
-    stats.enriched = enrichedLeads.filter((l: any) => l.enrichment_data).length;
+  const shouldEnrichAll = setting.deep_enrichment_mode || setting.full_auto_mode;
+  
+  if (setting.enrich_with_perplexity || shouldEnrichAll) {
+    enrichedLeads = await enrichLeadsWithPerplexity(filteredLeads, setting, shouldEnrichAll);
+    stats.enriched = enrichedLeads.filter((l: any) => l.wasEnriched).length;
   }
 
   // Save leads to database
@@ -489,6 +559,9 @@ async function runMultiSourceDiscovery(
   stats.totalLeads = savedStats.total;
   stats.autoApproved = savedStats.autoApproved;
   stats.pending = savedStats.pending;
+  stats.emailsExtracted = savedStats.emailsExtracted || 0;
+  stats.contactsCreated = savedStats.contactsCreated || 0;
+  stats.sequencesEnrolled = savedStats.sequencesEnrolled || 0;
 
   return stats;
 }
@@ -712,8 +785,9 @@ function filterLeadsByPersona(leads: any[], persona: Persona | null): any[] {
 
 /**
  * Enrich leads with Perplexity (batch, prioritizing Apify leads which have minimal data)
+ * When enrichAll is true (deep_enrichment_mode or full_auto_mode), enriches ALL leads
  */
-async function enrichLeadsWithPerplexity(leads: any[], setting: any): Promise<any[]> {
+async function enrichLeadsWithPerplexity(leads: any[], setting: any, enrichAll: boolean = false): Promise<any[]> {
   const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
   if (!PERPLEXITY_API_KEY) {
     console.log('[super-discovery] No Perplexity API key, skipping enrichment');
@@ -722,6 +796,20 @@ async function enrichLeadsWithPerplexity(leads: any[], setting: any): Promise<an
 
   const isOvernightMode = (setting.pre_discovery_hours || 0) > 0;
   const baseLimit = setting.max_perplexity_enriched || 20;
+  
+  // In enrichAll mode (full_auto_mode or deep_enrichment_mode), enrich ALL leads
+  // This ensures AI has enough context to create personalized campaigns
+  if (enrichAll) {
+    console.log(`[super-discovery] Deep enrichment mode: enriching ALL ${leads.length} leads with Perplexity`);
+    const maxToEnrich = Math.min(leads.length, setting.max_leads_per_run || 100);
+    const leadsToEnrich = leads.slice(0, maxToEnrich);
+    const remainingLeads = leads.slice(maxToEnrich);
+    
+    const enrichedLeads = await enrichBatch(leadsToEnrich, setting);
+    return [...enrichedLeads, ...remainingLeads];
+  }
+  
+  // Standard mode: prioritize Apify leads + top quality others
   const maxToEnrich = isOvernightMode ? (setting.max_leads_per_run || 50) : baseLimit;
   
   // Always enrich ALL Apify leads - they have minimal data and need deep enrichment
@@ -740,13 +828,21 @@ async function enrichLeadsWithPerplexity(leads: any[], setting: any): Promise<an
   
   console.log(`[super-discovery] Enriching ${leadsToEnrich.length} leads with Perplexity (${apifyLeads.length} Apify + ${topOtherLeads.length} other)${isOvernightMode ? ' (overnight mode)' : ''}`);
   
+  const enrichedLeads = await enrichBatch(leadsToEnrich, setting);
+  return [...enrichedLeads, ...remainingOtherLeads];
+}
+
+/**
+ * Enrich a batch of leads with rate limiting
+ */
+async function enrichBatch(leadsToEnrich: any[], _setting: any): Promise<any[]> {
   // Enrich in parallel batches (limit concurrency to avoid rate limits)
   const BATCH_SIZE = 5;
   const enrichedLeads: any[] = [];
   
   for (let i = 0; i < leadsToEnrich.length; i += BATCH_SIZE) {
     const batch = leadsToEnrich.slice(i, i + BATCH_SIZE);
-    const enrichPromises = batch.map(async (lead) => {
+    const enrichPromises = batch.map(async (lead: any) => {
       try {
         const enriched = await enrichSingleLeadStructured(lead);
         return { ...lead, ...enriched, wasEnriched: true, enrichmentTier: 'deep' };
@@ -765,7 +861,7 @@ async function enrichLeadsWithPerplexity(leads: any[], setting: any): Promise<an
     }
   }
   
-  return [...enrichedLeads, ...remainingOtherLeads];
+  return enrichedLeads;
 }
 
 /**
@@ -971,9 +1067,9 @@ async function saveDiscoveredLeads(
   setting: any,
   persona: Persona | null,
   discoveryRunId: string
-): Promise<{ total: number; autoApproved: number; pending: number }> {
+): Promise<{ total: number; autoApproved: number; pending: number; emailsExtracted: number; contactsCreated: number; sequencesEnrolled: number }> {
   const userId = setting.user_id;
-  const result = { total: 0, autoApproved: 0, pending: 0 };
+  const result = { total: 0, autoApproved: 0, pending: 0, emailsExtracted: 0, contactsCreated: 0, sequencesEnrolled: 0 };
   
   // Get existing companies to avoid duplicates
   const { data: existingCompanies } = await supabase
@@ -1079,12 +1175,39 @@ async function saveDiscoveredLeads(
   result.total = newLeads.length;
   console.log(`[super-discovery] Inserted ${newLeads.length} leads for user ${userId}`);
 
+  // In full_auto_mode or auto_extract_all_emails, extract emails for ALL leads (not just auto-approved)
+  const shouldExtractAll = setting.full_auto_mode || setting.auto_extract_all_emails;
+  
+  // Collect all leads needing email extraction
+  const allLeadsNeedingEmail: string[] = [];
+  
+  if (shouldExtractAll) {
+    // Get all newly inserted leads that need emails
+    const { data: allNewLeads } = await supabase
+      .from('autonomous_leads')
+      .select('id, company_website, company_data')
+      .eq('discovery_run_id', discoveryRunId)
+      .eq('user_id', userId);
+    
+    for (const lead of (allNewLeads || [])) {
+      const companyData = lead.company_data || {};
+      const hasEmail = companyData.generalEmail || companyData.general_email || companyData.email;
+      const hasWebsite = lead.company_website && !lead.company_website.includes('no-website');
+      
+      if (!hasEmail && hasWebsite) {
+        allLeadsNeedingEmail.push(lead.id);
+      }
+    }
+    
+    console.log(`[super-discovery] Full auto mode: ${allLeadsNeedingEmail.length} leads need email extraction`);
+  }
+
   // Auto-approve leads that meet threshold and save to companies
   const autoApprovedLeads = autonomousLeadsToInsert.filter(l => l.status === 'auto_approved');
   if (autoApprovedLeads.length > 0) {
     console.log(`[super-discovery] Auto-approving ${autoApprovedLeads.length} leads`);
     
-    // Collect lead IDs that need email extraction
+    // Collect lead IDs that need email extraction (for non-full-auto mode)
     const leadsNeedingEmail: string[] = [];
     
     for (const lead of autoApprovedLeads) {
@@ -1098,22 +1221,23 @@ async function saveDiscoveredLeads(
           .eq('user_id', userId)
           .eq('company_name', lead.company_name);
         
-        // Check if email extraction is needed
-        const companyData = lead.company_data || {};
-        const hasEmail = companyData.generalEmail || companyData.general_email;
-        const hasWebsite = lead.company_website && !lead.company_website.includes('no-website');
-        
-        if (!hasEmail && hasWebsite && setting.auto_extract_emails) {
-          // Get the autonomous_lead id for this lead
-          const { data: alead } = await supabase
-            .from('autonomous_leads')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('company_name', lead.company_name)
-            .maybeSingle();
+        // Check if email extraction is needed (for standard auto-extract mode)
+        if (!shouldExtractAll && setting.auto_extract_emails) {
+          const companyData = lead.company_data || {};
+          const hasEmail = companyData.generalEmail || companyData.general_email;
+          const hasWebsite = lead.company_website && !lead.company_website.includes('no-website');
           
-          if (alead?.id) {
-            leadsNeedingEmail.push(alead.id);
+          if (!hasEmail && hasWebsite) {
+            const { data: alead } = await supabase
+              .from('autonomous_leads')
+              .select('id')
+              .eq('user_id', userId)
+              .eq('company_name', lead.company_name)
+              .maybeSingle();
+            
+            if (alead?.id) {
+              leadsNeedingEmail.push(alead.id);
+            }
           }
         }
       }
@@ -1124,29 +1248,44 @@ async function saveDiscoveredLeads(
       
       if (sequenceId && companyId) {
         await enrollInSequence(supabase, companyId, sequenceId);
+        result.sequencesEnrolled++;
       }
 
       // Track feedback for AI learning
       await trackAutoApprovalFeedback(supabase, userId, lead, persona);
     }
     
+    // Combine all leads needing email extraction
+    const finalLeadsNeedingEmail = shouldExtractAll ? allLeadsNeedingEmail : leadsNeedingEmail;
+    
     // Auto-extract emails if enabled and there are leads needing emails
-    if (setting.auto_extract_emails && leadsNeedingEmail.length > 0) {
-      console.log(`[super-discovery] Auto-extracting emails for ${leadsNeedingEmail.length} leads`);
+    if ((setting.auto_extract_emails || shouldExtractAll) && finalLeadsNeedingEmail.length > 0) {
+      console.log(`[super-discovery] Auto-extracting emails for ${finalLeadsNeedingEmail.length} leads`);
       try {
+        // In full_auto_mode, extract more emails per run (up to 50)
+        const extractLimit = shouldExtractAll ? 50 : 20;
+        
         // Call bulk-extract-emails with createContact=true
-        await fetch(`${SUPABASE_URL}/functions/v1/bulk-extract-emails`, {
+        const extractResponse = await fetch(`${SUPABASE_URL}/functions/v1/bulk-extract-emails`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ 
-            leadIds: leadsNeedingEmail.slice(0, 20), // Limit to 20 to avoid timeout
+            leadIds: finalLeadsNeedingEmail.slice(0, extractLimit),
             createContact: true 
           }),
         });
-        console.log(`[super-discovery] Email extraction triggered for ${Math.min(leadsNeedingEmail.length, 20)} leads`);
+        
+        if (extractResponse.ok) {
+          const extractResult = await extractResponse.json();
+          result.emailsExtracted = extractResult.emailsFound || 0;
+          result.contactsCreated = extractResult.contactsCreated || 0;
+          console.log(`[super-discovery] Email extraction complete: ${result.emailsExtracted} emails found, ${result.contactsCreated} contacts created`);
+        } else {
+          console.error(`[super-discovery] Email extraction failed: ${extractResponse.status}`);
+        }
       } catch (extractError) {
         console.error('[super-discovery] Email extraction error:', extractError);
       }
@@ -1173,6 +1312,32 @@ async function saveDiscoveredLeads(
           })),
         });
       }
+    }
+  }
+  
+  // For full_auto_mode with no auto-approved leads, still extract emails for pending leads
+  if (shouldExtractAll && autoApprovedLeads.length === 0 && allLeadsNeedingEmail.length > 0) {
+    console.log(`[super-discovery] Full auto mode: extracting emails for ${allLeadsNeedingEmail.length} pending leads`);
+    try {
+      const extractResponse = await fetch(`${SUPABASE_URL}/functions/v1/bulk-extract-emails`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          leadIds: allLeadsNeedingEmail.slice(0, 50),
+          createContact: true 
+        }),
+      });
+      
+      if (extractResponse.ok) {
+        const extractResult = await extractResponse.json();
+        result.emailsExtracted = extractResult.emailsFound || 0;
+        result.contactsCreated = extractResult.contactsCreated || 0;
+      }
+    } catch (extractError) {
+      console.error('[super-discovery] Email extraction error:', extractError);
     }
   }
 
