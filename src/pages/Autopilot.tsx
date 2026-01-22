@@ -22,13 +22,16 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  History
 } from "lucide-react";
 import { AutopilotStatusCards } from "@/components/autopilot/AutopilotStatusCards";
 import { AutopilotSettingsPanel } from "@/components/autopilot/AutopilotSettingsPanel";
 import { AutopilotPersonasQuickView } from "@/components/autopilot/AutopilotPersonasQuickView";
 import { AutopilotPrerequisites } from "@/components/autopilot/AutopilotPrerequisites";
 import { AutopilotAnalyticsPreview } from "@/components/autopilot/AutopilotAnalyticsPreview";
+import { DiscoveryRunHistory } from "@/components/autopilot/DiscoveryRunHistory";
+import { AutopilotEmailStats } from "@/components/autopilot/AutopilotEmailStats";
 
 // Lazy load embedded components to avoid circular dependencies
 const PersonaManager = lazy(() => import("@/components/lead-inbox/PersonaManager").then(m => ({ default: m.PersonaManager })));
@@ -224,10 +227,14 @@ export default function Autopilot() {
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
           <TabsTrigger value="overview" className="gap-2">
             <Sparkles className="h-4 w-4" />
             Overview
+          </TabsTrigger>
+          <TabsTrigger value="history" className="gap-2">
+            <History className="h-4 w-4" />
+            History
           </TabsTrigger>
           <TabsTrigger value="settings" className="gap-2">
             <Settings className="h-4 w-4" />
@@ -304,8 +311,15 @@ export default function Autopilot() {
           {/* Personas Quick View */}
           <AutopilotPersonasQuickView onManage={() => setActiveTab("personas")} />
 
-          {/* Mini Analytics */}
-          <AutopilotAnalyticsPreview />
+          {/* Email Stats + Mini Analytics */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <AutopilotEmailStats />
+            <AutopilotAnalyticsPreview />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="history">
+          <DiscoveryRunHistory />
         </TabsContent>
 
         <TabsContent value="settings">
