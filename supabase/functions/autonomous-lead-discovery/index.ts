@@ -1369,7 +1369,169 @@ async function saveDiscoveredLeads(
 }
 
 /**
- * Create auto campaigns for auto-approved leads
+ * Generate AI-powered email content using enriched company data
+ */
+async function generateAIEmailContent(
+  lead: any,
+  persona: any,
+  contact: any,
+  senderProfile: any,
+  businessProfile: any
+): Promise<{ subject: string; body: string } | null> {
+  try {
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) {
+      console.warn('[ai-email] OpenAI API key not configured');
+      return null;
+    }
+
+    // Extract enrichment data
+    const enrichmentData = lead.enrichment_data || lead.company_data || {};
+    const companyDescription = enrichmentData.description || enrichmentData.perplexity_summary || '';
+    const recentNews = enrichmentData.recent_news || '';
+    const products = Array.isArray(enrichmentData.products) ? enrichmentData.products.join(', ') : (enrichmentData.products || '');
+    const technologies = Array.isArray(enrichmentData.technologies) ? enrichmentData.technologies.join(', ') : '';
+    const employees = enrichmentData.employee_count || lead.company_size || '';
+    const funding = enrichmentData.funding || '';
+
+    // Build sender info
+    const senderName = senderProfile?.full_name || 'Your Name';
+    const senderTitle = senderProfile?.job_title || '';
+    const senderCompany = businessProfile?.company_name || '';
+    const senderEmail = senderProfile?.email || '';
+    const senderPhone = senderProfile?.phone || businessProfile?.phone || '';
+    const senderWebsite = senderProfile?.website || businessProfile?.website || '';
+
+    const emailSignature = `Best regards,
+${senderName}
+${senderTitle}
+${senderCompany}${senderEmail ? '\n' + senderEmail : ''}${senderPhone ? '\n' + senderPhone : ''}${senderWebsite ? '\n' + senderWebsite : ''}`;
+
+    // Build persona context
+    let personaContext = '';
+    if (persona) {
+      personaContext = `
+MARKETING PERSONA CONTEXT:
+${persona.product_focus ? `- Your Product/Service: ${persona.product_focus}` : ''}
+${persona.value_proposition ? `- Your Value Proposition: ${persona.value_proposition}` : ''}
+${persona.talking_points?.length ? `- Key Talking Points: ${persona.talking_points.join(', ')}` : ''}
+${persona.call_to_action ? `- Call to Action: ${persona.call_to_action}` : ''}
+${persona.email_tone ? `- Tone: ${persona.email_tone}` : ''}
+`;
+    }
+
+    // Build comprehensive company research context
+    const companyResearch = `
+RESEARCHED COMPANY INTELLIGENCE:
+- Company: ${lead.company_name}
+- Industry: ${lead.industry || 'Unknown'}
+- Size: ${employees || 'Unknown'}
+- Location: ${lead.geography || 'Unknown'}
+${companyDescription ? `- About: ${companyDescription.slice(0, 500)}` : ''}
+${products ? `- Products/Services: ${products}` : ''}
+${recentNews ? `- Recent News: ${recentNews.slice(0, 300)}` : ''}
+${technologies ? `- Tech Stack: ${technologies}` : ''}
+${funding ? `- Funding: ${funding}` : ''}
+`;
+
+    const systemPrompt = `You are an expert B2B sales email writer. Write highly personalized, research-driven outreach emails that demonstrate genuine understanding of the prospect's business. Use the researched company intelligence to create relevant, compelling emails that feel hand-crafted, not templated.
+
+CRITICAL RULES:
+- Reference specific details from the company research (their products, news, industry challenges)
+- NEVER use brackets [like this] or placeholders
+- Keep emails concise (150-200 words max)
+- Sound human and conversational, not salesy
+- Make a clear connection between their business needs and how you can help`;
+
+    const userPrompt = `Write a personalized cold outreach email to ${contact.name || 'the decision maker'}${contact.title ? ` (${contact.title})` : ''} at ${lead.company_name}.
+
+${companyResearch}
+
+${personaContext}
+
+You are: ${senderName}${senderTitle ? `, ${senderTitle}` : ''}${senderCompany ? ` from ${senderCompany}` : ''}
+
+REQUIREMENTS:
+1. Open with something specific about THEIR company (from the research above)
+2. Bridge naturally to how you can help based on their situation
+3. ${persona?.call_to_action || 'End with a soft ask for a 15-minute call'}
+4. Use this EXACT signature:
+
+${persona?.email_signature_override || emailSignature}
+
+Return ONLY valid JSON: {"subject": "...", "body": "..."}`;
+
+    console.log(`[ai-email] Generating email for ${lead.company_name} / ${contact.name}`);
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'format_email',
+              description: 'Format the email with subject and body',
+              parameters: {
+                type: 'object',
+                properties: {
+                  subject: { type: 'string', description: 'The email subject line' },
+                  body: { type: 'string', description: 'The complete email body text' }
+                },
+                required: ['subject', 'body'],
+                additionalProperties: false
+              }
+            }
+          }
+        ],
+        tool_choice: { type: 'function', function: { name: 'format_email' } }
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[ai-email] OpenAI error: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    
+    if (toolCall?.function?.arguments) {
+      const result = JSON.parse(toolCall.function.arguments);
+      console.log(`[ai-email] Generated email for ${lead.company_name}: "${result.subject}"`);
+      return result;
+    }
+
+    // Fallback parsing
+    const content = data.choices?.[0]?.message?.content;
+    if (content) {
+      let jsonStr = content;
+      if (jsonStr.includes('```json')) {
+        jsonStr = jsonStr.split('```json')[1].split('```')[0].trim();
+      } else if (jsonStr.includes('```')) {
+        jsonStr = jsonStr.split('```')[1].split('```')[0].trim();
+      }
+      return JSON.parse(jsonStr);
+    }
+
+    return null;
+  } catch (error) {
+    console.error(`[ai-email] Error generating email for ${lead.company_name}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Create auto campaigns for auto-approved leads with AI-generated content
  */
 async function createAutoCampaigns(
   supabase: any,
@@ -1380,10 +1542,10 @@ async function createAutoCampaigns(
 
   console.log(`[super-discovery] Creating auto campaigns for discovery run ${discoveryRunId}`);
 
-  // Get auto-approved leads from this run
+  // Get auto-approved leads from this run with enrichment data
   const { data: autoApprovedLeads } = await supabase
     .from('autonomous_leads')
-    .select('*, company_id')
+    .select('*, company_id, enrichment_data, company_data')
     .eq('discovery_run_id', discoveryRunId)
     .eq('status', 'auto_approved')
     .not('company_id', 'is', null);
@@ -1392,6 +1554,19 @@ async function createAutoCampaigns(
     console.log('[super-discovery] No auto-approved leads with company_id to create campaigns for');
     return 0;
   }
+
+  // Fetch sender profile and business profile for email generation
+  const { data: senderProfile } = await supabase
+    .from('profiles')
+    .select('full_name, email, job_title, phone, website')
+    .eq('id', setting.user_id)
+    .single();
+
+  const { data: businessProfile } = await supabase
+    .from('business_profiles')
+    .select('company_name, website, phone, email_signature')
+    .eq('user_id', setting.user_id)
+    .single();
 
   // Group by persona
   const byPersona = new Map<string | null, any[]>();
@@ -1408,31 +1583,28 @@ async function createAutoCampaigns(
   // Create a campaign for each persona group
   for (const [personaId, leads] of byPersona) {
     try {
-      // Get persona details if applicable
+      // Get full persona details
+      let persona: any = null;
       let personaName = 'General Discovery';
-      let emailContext = '';
       
       if (personaId) {
-        const { data: persona } = await supabase
+        const { data: personaData } = await supabase
           .from('discovery_personas')
-          .select('name, value_proposition, email_tone, talking_points')
+          .select('name, value_proposition, email_tone, talking_points, product_focus, call_to_action, email_signature_override')
           .eq('id', personaId)
           .single();
         
-        if (persona) {
-          personaName = persona.name;
-          emailContext = [
-            persona.value_proposition,
-            persona.talking_points?.join('. '),
-          ].filter(Boolean).join(' ');
+        if (personaData) {
+          persona = personaData;
+          personaName = personaData.name;
         }
       }
 
-      // Get contacts for the companies
+      // Get contacts for the companies with their lead data
       const companyIds = leads.map((l: any) => l.company_id);
       const { data: contacts } = await supabase
         .from('contacts')
-        .select('*')
+        .select('id, name, email, title, company_id')
         .in('company_id', companyIds)
         .not('email', 'is', null);
 
@@ -1440,6 +1612,32 @@ async function createAutoCampaigns(
         console.log(`[super-discovery] No contacts with emails for persona ${personaName}`);
         continue;
       }
+
+      // Create lead lookup map
+      const leadsByCompanyId = new Map();
+      for (const lead of leads) {
+        leadsByCompanyId.set(lead.company_id, lead);
+      }
+
+      // Generate AI content for the first lead as template (or personalize per recipient)
+      const firstLead = leads[0];
+      const firstContact = contacts.find((c: any) => c.company_id === firstLead.company_id) || contacts[0];
+      
+      // Generate AI-powered email template using enriched data
+      let aiEmail = await generateAIEmailContent(
+        firstLead,
+        persona,
+        firstContact,
+        senderProfile,
+        businessProfile
+      );
+
+      // Fallback to static template if AI generation fails
+      const subjectTemplate = aiEmail?.subject || `Quick question for {{name}}`;
+      const bodyTemplate = aiEmail?.body || `Hi {{name}},\n\nI noticed {{company}} and wanted to reach out about how we can help.\n\n${persona?.value_proposition || 'We help businesses streamline their operations.'}\n\nBest regards`;
+
+      // Convert to HTML
+      const bodyHtmlTemplate = `<p>${bodyTemplate.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`;
 
       // Create draft campaign
       const campaignName = `Auto Discovery - ${personaName} - ${new Date().toLocaleDateString()}`;
@@ -1451,10 +1649,16 @@ async function createAutoCampaigns(
           name: campaignName,
           status: setting.full_auto_mode ? 'scheduled' : 'draft',
           scheduled_at: setting.full_auto_mode ? calculateCampaignSendTime(setting) : null,
-          subject_template: `Quick question for {{name}}`,
-          body_text_template: `Hi {{name}},\n\nI noticed {{company}} and wanted to reach out...\n\n${emailContext}\n\nBest,\n{{sender_name}}`,
-          body_html_template: `<p>Hi {{name}},</p><p>I noticed {{company}} and wanted to reach out...</p><p>${emailContext}</p><p>Best,<br/>{{sender_name}}</p>`,
+          subject_template: subjectTemplate,
+          body_text_template: bodyTemplate,
+          body_html_template: bodyHtmlTemplate,
           total_recipients: contacts.length,
+          metadata: {
+            ai_generated: true,
+            persona_id: personaId,
+            discovery_run_id: discoveryRunId,
+            leads_count: leads.length,
+          }
         })
         .select('id')
         .single();
@@ -1464,6 +1668,57 @@ async function createAutoCampaigns(
         continue;
       }
 
+      // Generate personalized content for each recipient if in full auto mode
+      if (setting.full_auto_mode && contacts.length <= 20) {
+        console.log(`[super-discovery] Generating personalized emails for ${contacts.length} recipients`);
+        
+        for (const contact of contacts) {
+          const lead = leadsByCompanyId.get(contact.company_id);
+          if (!lead) continue;
+
+          const personalizedEmail = await generateAIEmailContent(
+            lead,
+            persona,
+            contact,
+            senderProfile,
+            businessProfile
+          );
+
+          if (personalizedEmail) {
+            // Store personalized content for this recipient
+            await supabase
+              .from('email_campaign_recipients')
+              .insert({
+                campaign_id: campaign.id,
+                contact_id: contact.id,
+                personalized_subject: personalizedEmail.subject,
+                personalized_body: personalizedEmail.body,
+                status: 'pending',
+              });
+          } else {
+            // Use campaign template
+            await supabase
+              .from('email_campaign_recipients')
+              .insert({
+                campaign_id: campaign.id,
+                contact_id: contact.id,
+                status: 'pending',
+              });
+          }
+        }
+      } else {
+        // Just add recipients without personalized content
+        const recipientInserts = contacts.map((c: any) => ({
+          campaign_id: campaign.id,
+          contact_id: c.id,
+          status: 'pending',
+        }));
+
+        await supabase
+          .from('email_campaign_recipients')
+          .insert(recipientInserts);
+      }
+
       // Link leads to campaign
       await supabase
         .from('autonomous_leads')
@@ -1471,7 +1726,7 @@ async function createAutoCampaigns(
         .in('id', leads.map((l: any) => l.id));
 
       campaignsCreated++;
-      console.log(`[super-discovery] Created campaign "${campaignName}" with ${contacts.length} recipients`);
+      console.log(`[super-discovery] Created AI-powered campaign "${campaignName}" with ${contacts.length} recipients`);
 
     } catch (error) {
       console.error(`[super-discovery] Error creating campaign for persona ${personaId}:`, error);
