@@ -1,5 +1,8 @@
 project_id = "kgndpwzqohepotahnfeo"
 
+[functions.cron-trigger]
+verify_jwt = false
+
 [functions.ai-provider]
 verify_jwt = true
 
