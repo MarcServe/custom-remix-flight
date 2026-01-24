@@ -14,43 +14,79 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
-    );
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseClient.auth.getUser();
-
-    if (authError || !user) {
-      throw new Error('Unauthorized');
-    }
-
-    const { campaignId } = await req.json();
+    const { campaignId, triggeredByCron } = await req.json();
 
     if (!campaignId) {
       throw new Error('Campaign ID is required');
     }
 
-    console.log(`Processing bulk email campaign: ${campaignId}`);
+    console.log(`Processing bulk email campaign: ${campaignId}, triggeredByCron: ${triggeredByCron}`);
+
+    // Check if this is a service role request (from cron-trigger)
+    const authHeader = req.headers.get('Authorization') || '';
+    const isServiceRole = authHeader.includes(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || 'invalid');
+
+    let supabaseClient: any;
+    let userId: string | null = null;
+
+    if (isServiceRole || triggeredByCron) {
+      // Use service role client for cron-triggered requests
+      supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+      
+      // Get the campaign's user_id
+      const { data: campaign, error: campaignError } = await supabaseClient
+        .from('email_campaigns')
+        .select('user_id')
+        .eq('id', campaignId)
+        .single();
+      
+      if (campaignError || !campaign) {
+        throw new Error('Campaign not found');
+      }
+      
+      userId = campaign.user_id;
+      console.log(`[cron] Processing campaign for user: ${userId}`);
+    } else {
+      // Use authenticated client for user-initiated requests
+      supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        {
+          global: {
+            headers: { Authorization: authHeader },
+          },
+        }
+      );
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabaseClient.auth.getUser();
+
+      if (authError || !user) {
+        throw new Error('Unauthorized');
+      }
+      
+      userId = user.id;
+    }
 
     // Get campaign details
     const { data: campaign, error: campaignError } = await supabaseClient
       .from('email_campaigns')
       .select('*')
       .eq('id', campaignId)
-      .eq('user_id', user.id)
       .single();
 
     if (campaignError || !campaign) {
       throw new Error('Campaign not found');
+    }
+    
+    // Verify user ownership for non-service-role requests
+    if (!isServiceRole && !triggeredByCron && campaign.user_id !== userId) {
+      throw new Error('Unauthorized: Campaign does not belong to user');
     }
 
     // Update campaign status to sending
@@ -105,21 +141,21 @@ serve(async (req) => {
     const { data: userProfile } = await supabaseClient
       .from('profiles')
       .select('full_name, job_title, email')
-      .eq('id', user.id)
+      .eq('id', userId)
       .single();
 
     // Get business profile with email provider preference
     const { data: businessProfile } = await supabaseClient
       .from('business_profiles')
       .select('company_name, email_provider')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     // Get optimal provider based on tracking capabilities
     const { data: connections, error: connectionsError } = await supabaseClient
       .from('crm_connections')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('status', 'active')
       .order('tracking_enabled', { ascending: false });
 
@@ -128,8 +164,8 @@ serve(async (req) => {
     }
 
     // Priority: Providers with tracking > Resend/SendGrid > Gmail/Outlook > SMTP Direct
-    const optimalConnection = connections.find(c => c.tracking_enabled && ['resend', 'sendgrid'].includes(c.provider))
-      || connections.find(c => c.tracking_enabled && ['gmail', 'outlook'].includes(c.provider))
+    const optimalConnection = connections.find((c: any) => c.tracking_enabled && ['resend', 'sendgrid'].includes(c.provider))
+      || connections.find((c: any) => c.tracking_enabled && ['gmail', 'outlook'].includes(c.provider))
       || connections[0];
 
     const emailProvider = optimalConnection.provider;
@@ -141,7 +177,7 @@ serve(async (req) => {
       const { data: apiConnection } = await supabaseClient
         .from('crm_connections')
         .select('from_email')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('provider', emailProvider)
         .eq('status', 'active')
         .maybeSingle();
