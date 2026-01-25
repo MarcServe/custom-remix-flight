@@ -243,7 +243,7 @@ serve(async (req) => {
   console.log('[bulk-extract-emails] Starting bulk email extraction');
 
   try {
-    const { leadIds, createContact = true } = await req.json();
+    const { leadIds, createContact = true, stream: useStream = true } = await req.json();
 
     if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
       return new Response(
@@ -252,7 +252,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[bulk-extract-emails] Processing ${leadIds.length} leads`);
+    console.log(`[bulk-extract-emails] Processing ${leadIds.length} leads, stream: ${useStream}`);
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -284,8 +284,13 @@ serve(async (req) => {
     });
 
     console.log(`[bulk-extract-emails] ${leadsToProcess.length} leads need email extraction`);
+    
+    // If useStream=false, return JSON response for backend callers (like autonomous-lead-discovery)
+    if (!useStream) {
+      return await processLeadsAndReturnJson(supabase, leadsToProcess, createContact);
+    }
 
-    // Create SSE response
+    // Create SSE response for frontend callers
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
@@ -441,3 +446,115 @@ serve(async (req) => {
     );
   }
 });
+
+/**
+ * Process leads and return JSON response (for backend callers)
+ */
+async function processLeadsAndReturnJson(
+  supabase: any,
+  leadsToProcess: any[],
+  createContact: boolean
+): Promise<Response> {
+  let successCount = 0;
+  let failedCount = 0;
+  let contactsCreated = 0;
+
+  for (let i = 0; i < leadsToProcess.length; i++) {
+    const lead = leadsToProcess[i];
+    
+    try {
+      // Add delay between requests to avoid blocking
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      const { email, method } = await extractEmailForLead(lead);
+
+      if (email) {
+        // Update autonomous_leads company_data
+        const companyData = (lead.company_data || {}) as Record<string, any>;
+        const updatedCompanyData = {
+          ...companyData,
+          generalEmail: email,
+          emailExtractedAt: new Date().toISOString(),
+          emailExtractionMethod: method,
+        };
+
+        await supabase
+          .from('autonomous_leads')
+          .update({ 
+            company_data: updatedCompanyData,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', lead.id);
+
+        // Also update linked company if exists
+        if (lead.company_id) {
+          await supabase
+            .from('companies')
+            .update({ 
+              general_email: email,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', lead.company_id);
+
+          // Create contact if createContact flag is true
+          if (createContact) {
+            // Check if primary contact already exists
+            const { data: existingPrimary } = await supabase
+              .from('contacts')
+              .select('id')
+              .eq('company_id', lead.company_id)
+              .eq('is_primary_contact', true)
+              .maybeSingle();
+
+            // Get company name for the contact
+            const { data: company } = await supabase
+              .from('companies')
+              .select('name')
+              .eq('id', lead.company_id)
+              .single();
+
+            // Create or update contact
+            const { error: contactError } = await supabase
+              .from('contacts')
+              .upsert({
+                company_id: lead.company_id,
+                name: company?.name ? `${company.name} Contact` : 'General Contact',
+                email: email,
+                email_verified: true,
+                is_primary_contact: !existingPrimary,
+                title: 'General Inquiry',
+              }, {
+                onConflict: 'company_id,email',
+                ignoreDuplicates: false,
+              });
+
+            if (!contactError) {
+              contactsCreated++;
+              console.log(`[bulk-extract] Created contact for ${lead.company_name}`);
+            }
+          }
+        }
+
+        successCount++;
+      } else {
+        failedCount++;
+      }
+    } catch (error) {
+      failedCount++;
+      console.error(`[bulk-extract] Error for ${lead.company_name}:`, error);
+    }
+  }
+
+  return new Response(
+    JSON.stringify({
+      success: true,
+      emailsFound: successCount,
+      contactsCreated: contactsCreated,
+      failed: failedCount,
+      total: leadsToProcess.length,
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
