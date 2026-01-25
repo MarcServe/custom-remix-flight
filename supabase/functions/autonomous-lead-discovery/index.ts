@@ -316,7 +316,11 @@ Deno.serve(async (req) => {
         }
 
         // Auto-create campaign if enabled
-        if (setting.auto_create_campaign && userStats.autoApproved > 0) {
+        // In full_auto_mode, create campaigns even if leads are processed differently
+        const shouldCreateCampaign = setting.auto_create_campaign && 
+          (userStats.autoApproved > 0 || (setting.full_auto_mode && userStats.totalLeads > 0));
+        
+        if (shouldCreateCampaign) {
           const campaignsCreated = await createAutoCampaigns(supabase, setting, discoveryRunId);
           userStats.campaignsCreated = campaignsCreated;
         }
@@ -1107,10 +1111,17 @@ async function saveDiscoveredLeads(
   }
 
   // Insert autonomous leads
+  // In full_auto_mode, approve ALL leads regardless of threshold
   const autonomousLeadsToInsert = newLeads.map((lead: any) => {
-    const status = setting.auto_approve_threshold && lead.qualityScore >= setting.auto_approve_threshold 
-      ? 'auto_approved' 
-      : 'pending';
+    let status = 'pending';
+    
+    if (setting.full_auto_mode) {
+      // Full Auto Mode: Approve all leads for outreach
+      status = 'auto_approved';
+    } else if (setting.auto_approve_threshold && lead.qualityScore >= setting.auto_approve_threshold) {
+      // Standard mode: Use threshold-based approval
+      status = 'auto_approved';
+    }
 
     if (status === 'auto_approved') result.autoApproved++;
     else result.pending++;
@@ -1202,15 +1213,18 @@ async function saveDiscoveredLeads(
     console.log(`[super-discovery] Full auto mode: ${allLeadsNeedingEmail.length} leads need email extraction`);
   }
 
-  // Auto-approve leads that meet threshold and save to companies
-  const autoApprovedLeads = autonomousLeadsToInsert.filter(l => l.status === 'auto_approved');
-  if (autoApprovedLeads.length > 0) {
-    console.log(`[super-discovery] Auto-approving ${autoApprovedLeads.length} leads`);
+  // In full_auto_mode, save ALL leads to companies; otherwise only auto-approved
+  const leadsToSave = setting.full_auto_mode 
+    ? autonomousLeadsToInsert 
+    : autonomousLeadsToInsert.filter(l => l.status === 'auto_approved');
+    
+  if (leadsToSave.length > 0) {
+    console.log(`[super-discovery] Saving ${leadsToSave.length} leads to companies (full_auto: ${setting.full_auto_mode})`);
     
     // Collect lead IDs that need email extraction (for non-full-auto mode)
     const leadsNeedingEmail: string[] = [];
     
-    for (const lead of autoApprovedLeads) {
+    for (const lead of leadsToSave) {
       const companyId = await saveLeadToCompanies(supabase, lead, userId);
       
       // Update autonomous_lead with company_id
@@ -1265,7 +1279,7 @@ async function saveDiscoveredLeads(
         // In full_auto_mode, extract more emails per run (up to 50)
         const extractLimit = shouldExtractAll ? 50 : 20;
         
-        // Call bulk-extract-emails with createContact=true
+        // Call bulk-extract-emails with createContact=true and stream=false for JSON response
         const extractResponse = await fetch(`${SUPABASE_URL}/functions/v1/bulk-extract-emails`, {
           method: 'POST',
           headers: {
@@ -1274,7 +1288,8 @@ async function saveDiscoveredLeads(
           },
           body: JSON.stringify({ 
             leadIds: finalLeadsNeedingEmail.slice(0, extractLimit),
-            createContact: true 
+            createContact: true,
+            stream: false  // Return JSON instead of SSE for backend callers
           }),
         });
         
@@ -1291,11 +1306,11 @@ async function saveDiscoveredLeads(
       }
     }
 
-    // Send webhook notification for high-quality auto-approved leads
+    // Send webhook notification for high-quality leads
     const webhookUrl = setting.slack_webhook_url || setting.discord_webhook_url || setting.webhook_url;
     if (setting.webhook_enabled && webhookUrl) {
-      const highQualityLeads = autoApprovedLeads.filter(
-        l => l.quality_score >= (setting.notify_min_quality_score || 70)
+      const highQualityLeads = leadsToSave.filter(
+        (l: any) => l.quality_score >= (setting.notify_min_quality_score || 70)
       );
       
       if (highQualityLeads.length > 0 && setting.notify_on_auto_approve) {
@@ -1303,7 +1318,7 @@ async function saveDiscoveredLeads(
           type: 'auto_approved_leads',
           persona: persona?.name || 'Default',
           count: highQualityLeads.length,
-          leads: highQualityLeads.map(l => ({
+          leads: highQualityLeads.map((l: any) => ({
             name: l.company_name,
             website: l.company_website,
             industry: l.industry,
@@ -1315,8 +1330,8 @@ async function saveDiscoveredLeads(
     }
   }
   
-  // For full_auto_mode with no auto-approved leads, still extract emails for pending leads
-  if (shouldExtractAll && autoApprovedLeads.length === 0 && allLeadsNeedingEmail.length > 0) {
+  // For full_auto_mode with no leads saved, still extract emails for pending leads
+  if (shouldExtractAll && leadsToSave.length === 0 && allLeadsNeedingEmail.length > 0) {
     console.log(`[super-discovery] Full auto mode: extracting emails for ${allLeadsNeedingEmail.length} pending leads`);
     try {
       const extractResponse = await fetch(`${SUPABASE_URL}/functions/v1/bulk-extract-emails`, {
@@ -1327,7 +1342,8 @@ async function saveDiscoveredLeads(
         },
         body: JSON.stringify({ 
           leadIds: allLeadsNeedingEmail.slice(0, 50),
-          createContact: true 
+          createContact: true,
+          stream: false  // Return JSON instead of SSE for backend callers
         }),
       });
       
@@ -1542,18 +1558,27 @@ async function createAutoCampaigns(
 
   console.log(`[super-discovery] Creating auto campaigns for discovery run ${discoveryRunId}`);
 
-  // Get auto-approved leads from this run with enrichment data
-  const { data: autoApprovedLeads } = await supabase
+  // In full_auto_mode, get ALL leads with company_id (not just auto_approved)
+  // This ensures campaigns are created for all discovered leads in hands-free mode
+  let leadsQuery = supabase
     .from('autonomous_leads')
     .select('*, company_id, enrichment_data, company_data')
     .eq('discovery_run_id', discoveryRunId)
-    .eq('status', 'auto_approved')
     .not('company_id', 'is', null);
+  
+  // Only filter by status if NOT in full_auto_mode
+  if (!setting.full_auto_mode) {
+    leadsQuery = leadsQuery.eq('status', 'auto_approved');
+  }
+  
+  const { data: leadsForCampaign } = await leadsQuery;
 
-  if (!autoApprovedLeads || autoApprovedLeads.length === 0) {
-    console.log('[super-discovery] No auto-approved leads with company_id to create campaigns for');
+  if (!leadsForCampaign || leadsForCampaign.length === 0) {
+    console.log('[super-discovery] No leads with company_id to create campaigns for');
     return 0;
   }
+  
+  console.log(`[super-discovery] Found ${leadsForCampaign.length} leads for campaign creation (full_auto: ${setting.full_auto_mode})`);
 
   // Fetch sender profile and business profile for email generation
   const { data: senderProfile } = await supabase
@@ -1570,7 +1595,7 @@ async function createAutoCampaigns(
 
   // Group by persona
   const byPersona = new Map<string | null, any[]>();
-  for (const lead of autoApprovedLeads) {
+  for (const lead of leadsForCampaign) {
     const personaId = lead.persona_id;
     if (!byPersona.has(personaId)) {
       byPersona.set(personaId, []);
