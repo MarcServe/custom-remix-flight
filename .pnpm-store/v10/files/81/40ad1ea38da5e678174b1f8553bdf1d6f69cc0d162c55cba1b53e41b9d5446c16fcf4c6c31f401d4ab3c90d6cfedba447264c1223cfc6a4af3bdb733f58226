@@ -1,0 +1,56 @@
+import type { AuthSuccess, ErrorHandler } from './types.js';
+export interface PopupLayout {
+    width: number;
+    height: number;
+    top: number;
+    left: number;
+}
+/**
+ * Calculates the layout dimensions for a modal window based on the expected width and height
+ * @param expectedWidth - The expected width of the modal window
+ * @param expectedHeight - The expected height of the modal window
+ * @returns The layout details including left and top positions, as well as computed width and height
+ */
+export declare function computeLayout({ expectedWidth, expectedHeight }: {
+    expectedWidth: number;
+    expectedHeight: number;
+}): PopupLayout;
+/**
+ * Converts the features object of this class to a string
+ * @returns The string representation of features
+ */
+export declare function windowFeaturesToString(layout: PopupLayout): string;
+/**
+ * AuthorizationModal class
+ */
+export declare class AuthorizationModal {
+    private baseURL;
+    private debug;
+    private swClient;
+    private errorHandler;
+    modal?: Window;
+    isProcessingMessage: boolean;
+    constructor({ baseUrl, debug, webSocketUrl, successHandler, errorHandler }: {
+        baseUrl: URL;
+        debug: boolean;
+        webSocketUrl: string;
+        successHandler: (authSuccess: AuthSuccess) => void;
+        errorHandler: ErrorHandler;
+    });
+    setModal(modal: Window): void;
+    /**
+     * Handles the messages received from the Nango server via WebSocket
+     * @param message - The message event containing data from the server
+     * @param successHandler - The success handler function to be called when a success message is received
+     */
+    handleMessage(message: MessageEvent, successHandler: (authSuccess: AuthSuccess) => void): void;
+    /**
+     * Opens a modal window with the specified WebSocket client ID
+     */
+    open(): void;
+    /**
+     * Close modal, if opened
+     */
+    close(): void;
+}
+//# sourceMappingURL=authModal.d.ts.map

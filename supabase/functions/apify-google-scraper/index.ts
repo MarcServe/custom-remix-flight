@@ -64,20 +64,22 @@ serve(async (req) => {
     const body: ScraperRequest = await req.json();
     const { query, location, maxResults = 100, scrapeEmails = true } = body;
 
-    if (!query || !location) {
+    if (!query) {
       return new Response(
-        JSON.stringify({ error: "Query and location are required" }),
+        JSON.stringify({ error: "Query is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`Starting Apify scrape: "${query}" in "${location}", max ${maxResults} results`);
+    // Location is optional - if not provided, search globally
+    const locationQuery = location || "United States";
+    const searchString = location ? `${query} in ${location}` : query;
+
+    console.log(`Starting Apify scrape: "${searchString}", max ${maxResults} results`);
 
     // Use Google Maps Scraper actor
     const actorId = "nwua9Gu5YrADL7ZDj"; // Google Maps Scraper
     const actorRunUrl = `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items`;
-
-    const searchString = `${query} in ${location}`;
     
     const apifyResponse = await fetch(`${actorRunUrl}?token=${APIFY_API_TOKEN}`, {
       method: "POST",

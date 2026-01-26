@@ -2101,10 +2101,22 @@ async function saveLeadToCompanies(supabase: any, lead: any, userId: string): Pr
       console.log(`[super-discovery] Added ${contactsToInsert.length} contacts for company ${lead.company_name}`);
     }
 
-    // Auto-apply suggested tags
+    // Auto-apply suggested tags + industry tag
+    const tagsToApply: string[] = [];
+    
+    // Add suggested tags from enrichment
     const suggestedTags = companyData.suggestedTags || [];
-    if (suggestedTags.length > 0 && company.id) {
-      await applySuggestedTags(supabase, userId, company.id, suggestedTags);
+    tagsToApply.push(...suggestedTags);
+    
+    // Automatically add industry as a tag if available
+    if (lead.industry) {
+      tagsToApply.push(lead.industry);
+    }
+    
+    // Remove duplicates and apply
+    const uniqueTags = Array.from(new Set(tagsToApply.filter(Boolean)));
+    if (uniqueTags.length > 0 && company.id) {
+      await applySuggestedTags(supabase, userId, company.id, uniqueTags);
     }
 
     return company.id;

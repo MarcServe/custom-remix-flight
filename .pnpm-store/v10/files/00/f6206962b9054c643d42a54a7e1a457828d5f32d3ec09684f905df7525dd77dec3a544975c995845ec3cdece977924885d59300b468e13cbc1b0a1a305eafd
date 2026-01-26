@@ -1,0 +1,10 @@
+import { BlockNoteDefaultUIProps } from "./BlockNoteDefaultUI.js";
+export type BlockNoteViewContextValue = {
+    editorProps: {
+        autoFocus?: boolean;
+        contentEditableProps?: Record<string, any>;
+    };
+    defaultUIProps: BlockNoteDefaultUIProps;
+};
+export declare const BlockNoteViewContext: import("react").Context<BlockNoteViewContextValue | undefined>;
+export declare function useBlockNoteViewContext(): BlockNoteViewContextValue | undefined;

@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical } from "lucide-react";
+import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical, Phone, Plus, Settings } from "lucide-react";
+import { PhoneCampaignDialog } from "@/components/PhoneCampaignDialog";
+import { PhoneServiceDialog } from "@/components/integrations/PhoneServiceDialog";
 import { format } from "date-fns";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -48,6 +50,8 @@ export default function Campaigns() {
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'overview';
+  const [phoneCampaignDialogOpen, setPhoneCampaignDialogOpen] = useState(false);
+  const [phoneServiceDialogOpen, setPhoneServiceDialogOpen] = useState(false);
 
   const { data: campaigns, isLoading } = useQuery({
     queryKey: ['email-campaigns'],
@@ -127,15 +131,32 @@ export default function Campaigns() {
   return (
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
-            <Mail className="h-6 w-6 text-white" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
+              <Mail className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold">Campaigns Hub</h1>
+              <p className="text-sm text-muted-foreground">
+                Manage your email and phone campaigns, monitor health, and optimize performance
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold">Campaigns Hub</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage your email campaigns, monitor health, and optimize performance
-            </p>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setPhoneServiceDialogOpen(true)} 
+              className="gap-2"
+            >
+              <Settings className="h-4 w-4" />
+              Phone Services
+            </Button>
+            <Button onClick={() => setPhoneCampaignDialogOpen(true)} className="gap-2">
+              <Phone className="h-4 w-4" />
+              <Plus className="h-4 w-4" />
+              Phone Campaign
+            </Button>
           </div>
         </div>
       </div>
@@ -305,6 +326,16 @@ export default function Campaigns() {
           <ABTesting />
         </TabsContent>
       </Tabs>
+
+      <PhoneCampaignDialog
+        open={phoneCampaignDialogOpen}
+        onOpenChange={setPhoneCampaignDialogOpen}
+      />
+
+      <PhoneServiceDialog
+        open={phoneServiceDialogOpen}
+        onOpenChange={setPhoneServiceDialogOpen}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,9 +34,19 @@ interface AddContactDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  initialValues?: {
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+    phone?: string;
+    title?: string;
+    company_id?: string | null;
+    company_name?: string;
+    linkedin_url?: string;
+  };
 }
 
-export function AddContactDialog({ open, onOpenChange, onSuccess }: AddContactDialogProps) {
+export function AddContactDialog({ open, onOpenChange, onSuccess, initialValues }: AddContactDialogProps) {
   const { toast } = useToast();
 
   const form = useForm<ContactFormData>({
@@ -56,6 +66,39 @@ export function AddContactDialog({ open, onOpenChange, onSuccess }: AddContactDi
     },
   });
 
+  // Reset form when dialog opens with new initial values
+  useEffect(() => {
+    if (open) {
+      const values = initialValues ? {
+        first_name: initialValues.first_name || "",
+        last_name: initialValues.last_name || "",
+        email: initialValues.email || "",
+        phone: initialValues.phone || "",
+        title: initialValues.title || "",
+        company_id: initialValues.company_id || null,
+        company_name: initialValues.company_name || "",
+        linkedin_url: initialValues.linkedin_url || "",
+        twitter_url: "",
+        location: "",
+        bio: "",
+      } : {
+        first_name: "",
+        last_name: "",
+        email: "",
+        phone: "",
+        title: "",
+        company_id: null,
+        company_name: "",
+        linkedin_url: "",
+        twitter_url: "",
+        location: "",
+        bio: "",
+      };
+      
+      form.reset(values, { keepDefaultValues: false });
+    }
+  }, [open, initialValues, form]);
+
   // Fetch companies for dropdown
   const { data: companies } = useQuery({
     queryKey: ["companies-for-contact"],
@@ -69,11 +112,82 @@ export function AddContactDialog({ open, onOpenChange, onSuccess }: AddContactDi
     },
   });
 
-  // Create contact mutation
+  // Create contact mutation with intelligent duplicate handling
   const createContact = useMutation({
     mutationFn: async (values: ContactFormData) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
+
+      // Intelligent duplicate check: check by email (case-insensitive) if email provided
+      if (values.email && values.email.trim()) {
+        const { data: existingPerson } = await supabase
+          .from("people")
+          .select("id, email, first_name, last_name, company_id")
+          .ilike("email", values.email.trim())
+          .maybeSingle();
+
+        if (existingPerson) {
+          // Update existing contact with new information if provided
+          const updates: any = {};
+          let hasUpdates = false;
+
+          if (values.first_name && values.first_name.trim() && !existingPerson.first_name) {
+            updates.first_name = values.first_name.trim();
+            hasUpdates = true;
+          }
+          if (values.last_name && values.last_name.trim() && !existingPerson.last_name) {
+            updates.last_name = values.last_name.trim();
+            hasUpdates = true;
+          }
+          if (values.phone && !existingPerson.phone) {
+            updates.phone = values.phone;
+            hasUpdates = true;
+          }
+          if (values.title && !existingPerson.title) {
+            updates.title = values.title;
+            hasUpdates = true;
+          }
+          if (values.linkedin_url && !existingPerson.linkedin_url) {
+            updates.linkedin_url = values.linkedin_url;
+            hasUpdates = true;
+          }
+
+          // Handle company
+          let finalCompanyId = values.company_id;
+          if (values.company_name && !values.company_id) {
+            const { data: newCompany, error: companyError } = await supabase
+              .from("companies")
+              .insert({
+                user_id: user.id,
+                name: values.company_name,
+              })
+              .select()
+              .single();
+
+            if (companyError) throw companyError;
+            finalCompanyId = newCompany.id;
+          }
+
+          if (finalCompanyId && existingPerson.company_id !== finalCompanyId) {
+            updates.company_id = finalCompanyId;
+            hasUpdates = true;
+          }
+
+          if (hasUpdates) {
+            const { data: updatedPerson, error: updateError } = await supabase
+              .from("people")
+              .update(updates)
+              .eq("id", existingPerson.id)
+              .select()
+              .single();
+
+            if (updateError) throw updateError;
+            return { ...updatedPerson, wasExisting: true };
+          }
+
+          return { ...existingPerson, wasExisting: true };
+        }
+      }
 
       let finalCompanyId = values.company_id;
 
@@ -111,12 +225,14 @@ export function AddContactDialog({ open, onOpenChange, onSuccess }: AddContactDi
         .single();
 
       if (error) throw error;
-      return data;
+      return { ...data, wasExisting: false };
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       toast({
-        title: "Contact created",
-        description: "Contact has been added successfully",
+        title: data.wasExisting ? "Contact updated" : "Contact created",
+        description: data.wasExisting 
+          ? "Contact already existed and has been updated with new information"
+          : "Contact has been added successfully",
       });
       form.reset();
       onOpenChange(false);

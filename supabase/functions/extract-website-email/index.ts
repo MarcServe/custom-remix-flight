@@ -55,34 +55,87 @@ async function fetchWebsiteContent(url: string): Promise<string | null> {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   ];
   
   const randomAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
   
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 20000); // Increased timeout to 20s
     
     const response = await fetch(url, {
       headers: {
         'User-Agent': randomAgent,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
       },
       signal: controller.signal,
+      redirect: 'follow',
+      // Don't throw on HTTP errors, we'll handle them
     });
     
     clearTimeout(timeout);
     
     if (!response.ok) {
-      console.log(`[extract-website-email] Failed to fetch ${url}: ${response.status}`);
+      // Try HTTP if HTTPS failed
+      if (url.startsWith('https://')) {
+        const httpUrl = url.replace('https://', 'http://');
+        console.log(`[extract-website-email] HTTPS failed (${response.status}), trying HTTP: ${httpUrl}`);
+        try {
+          const httpController = new AbortController();
+          const httpTimeout = setTimeout(() => httpController.abort(), 15000);
+          const httpResponse = await fetch(httpUrl, {
+            headers: {
+              'User-Agent': randomAgent,
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            },
+            signal: httpController.signal,
+            redirect: 'follow',
+          });
+          clearTimeout(httpTimeout);
+          
+          if (httpResponse.ok) {
+            const contentType = httpResponse.headers.get('content-type') || '';
+            if (contentType.includes('text/html')) {
+              const html = await httpResponse.text();
+              if (html.length >= 100) {
+                return html;
+              }
+            }
+          }
+        } catch (httpError) {
+          console.log(`[extract-website-email] HTTP fallback also failed:`, httpError);
+        }
+      }
+      
+      console.log(`[extract-website-email] Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+      return null;
+    }
+    
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
+      console.log(`[extract-website-email] Response is not HTML: ${contentType}`);
       return null;
     }
     
     const html = await response.text();
+    
+    if (html.length < 100) {
+      console.log(`[extract-website-email] HTML content too short: ${html.length} chars`);
+      return null;
+    }
+    
     return html;
-  } catch (error) {
-    console.log(`[extract-website-email] Error fetching ${url}:`, error);
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.log(`[extract-website-email] Timeout fetching ${url} (20s)`);
+    } else {
+      console.log(`[extract-website-email] Error fetching ${url}:`, error.message || error);
+    }
     return null;
   }
 }
@@ -190,44 +243,82 @@ serve(async (req) => {
 
     console.log(`[extract-website-email] Extracting email for ${companyName} from ${website}`);
 
-    // Normalize URL
+    // Normalize URL - be more robust
     let url = website.trim();
+    
+    // Remove common prefixes/suffixes
+    url = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    
+    // Validate URL format
+    if (!url || url.length < 4 || !url.includes('.')) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Invalid website URL format',
+          website: website,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Add protocol
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       url = `https://${url}`;
     }
 
-    // Try multiple pages
+    console.log(`[extract-website-email] Normalized URL: ${url}`);
+
+    // Try multiple pages with better error handling
     const pagesToTry = [
       url,
       `${url}/contact`,
       `${url}/contact-us`,
       `${url}/about`,
       `${url}/about-us`,
+      `${url}/get-in-touch`,
+      `${url}/reach-us`,
     ];
 
     let allEmails: string[] = [];
     let htmlContent = '';
+    let lastError: string | null = null;
+    let pagesTried = 0;
 
     for (const pageUrl of pagesToTry) {
-      console.log(`[extract-website-email] Trying ${pageUrl}`);
-      const html = await fetchWebsiteContent(pageUrl);
-      
-      if (html) {
-        htmlContent = html;
-        const emails = extractEmailsFromHtml(html);
-        allEmails.push(...emails);
+      try {
+        pagesTried++;
+        console.log(`[extract-website-email] Trying ${pageUrl} (${pagesTried}/${pagesToTry.length})`);
+        const html = await fetchWebsiteContent(pageUrl);
         
-        // If we found emails on the main page, might not need others
-        if (allEmails.length > 0 && pageUrl === url) {
-          break;
+        if (html && html.length > 100) { // Ensure we got meaningful content
+          htmlContent = html;
+          const emails = extractEmailsFromHtml(html);
+          allEmails.push(...emails);
+          
+          console.log(`[extract-website-email] Found ${emails.length} emails on ${pageUrl}`);
+          
+          // If we found emails on the main page, might not need others
+          if (allEmails.length > 0 && pageUrl === url) {
+            console.log(`[extract-website-email] Found emails on main page, skipping other pages`);
+            break;
+          }
+        } else if (html) {
+          console.log(`[extract-website-email] Got HTML but too short (${html.length} chars) from ${pageUrl}`);
+        } else {
+          console.log(`[extract-website-email] Failed to fetch ${pageUrl}`);
+          lastError = `Could not access ${pageUrl}`;
         }
+      } catch (error: any) {
+        lastError = error.message || 'Failed to fetch page';
+        console.error(`[extract-website-email] Error fetching ${pageUrl}:`, error);
+        // Continue to next page
       }
     }
 
-    // Remove duplicates
-    allEmails = [...new Set(allEmails)];
+    // Remove duplicates and filter invalid emails
+    allEmails = [...new Set(allEmails)].filter(email => isValidBusinessEmail(email));
 
-    console.log(`[extract-website-email] Found ${allEmails.length} emails via regex:`, allEmails);
+    console.log(`[extract-website-email] Found ${allEmails.length} valid emails after filtering:`, allEmails);
 
     let finalEmail: string | null = null;
 
@@ -262,11 +353,21 @@ serve(async (req) => {
     }
 
     if (!finalEmail) {
+      const errorMessage = allEmails.length > 0
+        ? 'No suitable business email found (found personal/noreply emails only)'
+        : htmlContent
+        ? 'No email addresses found on website pages'
+        : lastError || 'Could not access website (timeout or connection error)';
+      
+      console.log(`[extract-website-email] No email found for ${companyName}: ${errorMessage}`);
+      console.log(`[extract-website-email] Pages tried: ${pagesTried}, HTML content length: ${htmlContent.length}, Emails found: ${allEmails.length}`);
+      
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'No business email found on website',
+          error: errorMessage,
           emailsScanned: allEmails.length,
+          pagesTried: pagesTried,
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

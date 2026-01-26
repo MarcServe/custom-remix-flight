@@ -378,6 +378,15 @@ export default function LeadInbox() {
 
         const companyData = (lead.company_data || {}) as Record<string, any>;
 
+        // Prepare tags: suggested tags + industry
+        const tagsToApply: string[] = [];
+        const suggestedTags = (companyData.suggestedTags || lead.enrichment_data?.suggestedTags || []) as string[];
+        tagsToApply.push(...suggestedTags);
+        if (lead.industry) {
+          tagsToApply.push(lead.industry);
+        }
+        const uniqueTags = Array.from(new Set(tagsToApply.filter(Boolean)));
+
         // Create the company
         const { data: company, error: companyError } = await supabase
           .from('companies')
@@ -397,6 +406,7 @@ export default function LeadInbox() {
             employee_count: companyData.employeeCount,
             enrichment_data: lead.enrichment_data,
             enrichment_status: lead.enrichment_data ? 'completed' : 'pending',
+            tags: uniqueTags.length > 0 ? uniqueTags : null,
           })
           .select('id')
           .single();
@@ -676,8 +686,40 @@ export default function LeadInbox() {
 
   // Sync local settings with fetched settings
   if (settings && !localSettings) {
-    setLocalSettings(settings);
+    setLocalSettings({
+      ...settings,
+      // Set default timezone to user's browser timezone if not set
+      timezone: settings.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
   }
+
+  // Helper function to format time in user's timezone
+  // Shows the hour with timezone abbreviation
+  const formatTimeInTimezone = (hour: number, timezone?: string) => {
+    const tz = timezone || localSettings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // Format hour as 12-hour time
+    const hour12 = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    // Get timezone abbreviation
+    const tzAbbr = new Date().toLocaleString('en-US', { timeZone: tz, timeZoneName: 'short' }).split(' ').pop() || '';
+    return `${hour12}:00 ${ampm} ${tzAbbr}`;
+  };
+
+  // Helper function to format date/time in user's timezone
+  const formatDateTimeInTimezone = (dateString: string, timezone?: string) => {
+    const tz = timezone || localSettings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const date = new Date(dateString);
+    const formatted = date.toLocaleString('en-US', {
+      timeZone: tz,
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+    const tzAbbr = date.toLocaleString('en-US', { timeZone: tz, timeZoneName: 'short' }).split(' ').pop() || '';
+    return `${formatted} ${tzAbbr}`;
+  };
 
   const handleSettingsChange = (key: string, value: any) => {
     setLocalSettings((prev: any) => ({ ...prev, [key]: value }));
@@ -1165,7 +1207,45 @@ export default function LeadInbox() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Preferred Delivery Time (UTC)</Label>
+                  <Label>Timezone</Label>
+                  <Select
+                    value={localSettings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}
+                    onValueChange={(value) => handleSettingsChange('timezone', value)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue>
+                        {localSettings?.timezone 
+                          ? (() => {
+                              const tz = localSettings.timezone;
+                              const offset = new Date().toLocaleString('en-US', { timeZone: tz, timeZoneName: 'short' }).split(' ').pop() || '';
+                              return `${tz.replace(/_/g, ' ')} (${offset})`;
+                            })()
+                          : Intl.DateTimeFormat().resolvedOptions().timeZone
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {Intl.supportedValuesOf('timeZone')
+                        .sort()
+                        .map((tz) => {
+                          const now = new Date();
+                          const offset = now.toLocaleString('en-US', { timeZone: tz, timeZoneName: 'short' }).split(' ').pop() || '';
+                          const displayName = tz.replace(/_/g, ' ');
+                          return (
+                            <SelectItem key={tz} value={tz}>
+                              {displayName} ({offset})
+                            </SelectItem>
+                          );
+                        })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Your local timezone for scheduling. All times will be displayed in this timezone.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Preferred Delivery Time</Label>
                   <Select
                     value={String(localSettings?.preferred_discovery_hour ?? 9)}
                     onValueChange={(value) => handleSettingsChange('preferred_discovery_hour', parseInt(value))}
@@ -1182,7 +1262,7 @@ export default function LeadInbox() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    When you want fresh leads delivered to your inbox
+                    When you want fresh leads delivered to your inbox (in your timezone)
                   </p>
                 </div>
               </div>
@@ -1385,7 +1465,7 @@ export default function LeadInbox() {
                 {localSettings?.auto_create_campaign && (
                   <div className="space-y-3 pl-4 border-l-2 border-muted">
                     <div className="space-y-2">
-                      <Label>Campaign send time (UTC)</Label>
+                      <Label>Campaign send time</Label>
                       <Select
                         value={localSettings?.campaign_send_time || '10:00'}
                         onValueChange={(value) => handleSettingsChange('campaign_send_time', value)}
@@ -1400,6 +1480,9 @@ export default function LeadInbox() {
                           <SelectItem value="14:00">2:00 PM</SelectItem>
                         </SelectContent>
                       </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Time in your selected timezone
+                      </p>
                     </div>
 
                     <div className="flex items-center justify-between">
@@ -1568,16 +1651,16 @@ export default function LeadInbox() {
                     <span className="text-muted-foreground">Automation:</span>
                     <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-200">
                       <Clock className="h-3 w-3 mr-1" />
-                      Daily at {localSettings?.preferred_discovery_hour ?? 9}:00 UTC
+                      Daily at {formatTimeInTimezone(localSettings?.preferred_discovery_hour ?? 9)}
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Last run:</span>
-                    <span className="font-medium">{settings?.last_run_at ? new Date(settings.last_run_at).toLocaleString() : 'Never'}</span>
+                    <span className="font-medium">{settings?.last_run_at ? formatDateTimeInTimezone(settings.last_run_at) : 'Never'}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Next scheduled:</span>
-                    <span className="font-medium">{settings?.next_run_at ? new Date(settings.next_run_at).toLocaleString() : 'Tomorrow at ' + (localSettings?.preferred_discovery_hour ?? 9) + ':00 UTC'}</span>
+                    <span className="font-medium">{settings?.next_run_at ? formatDateTimeInTimezone(settings.next_run_at) : 'Tomorrow at ' + formatTimeInTimezone(localSettings?.preferred_discovery_hour ?? 9)}</span>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-primary/10">

@@ -14,6 +14,7 @@ import { Slider } from "@/components/ui/slider";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { GoogleMapsScraper } from "@/components/lead-finder/GoogleMapsScraper";
 import { ImportCSVPanel } from "@/components/lead-finder/ImportCSVPanel";
+import { CompanyListSearch } from "@/components/lead-finder/CompanyListSearch";
 import { exportCompaniesToCSV } from "@/lib/utils/export";
 import { ContactsList } from "@/components/lead-finder/ContactsList";
 import { LeadCardSkeleton } from "@/components/lead-finder/LeadCardSkeleton";
@@ -434,35 +435,102 @@ export default function LeadFinder() {
       const {
         supabase
       } = await import("@/integrations/supabase/client");
-      let enrichedCount = 0;
-      let errorCount = 0;
-      for (const company of selectedCompanies) {
-        try {
-          const {
-            data,
-            error
-          } = await supabase.functions.invoke('generate-email-with-ai', {
-            body: {
-              companyName: company.name,
-              companyWebsite: company.website,
-              enrichOnly: true
-            }
-          });
-          if (error) throw error;
-          enrichedCount++;
-        } catch (error) {
-          console.error('Error enriching company:', error);
-          errorCount++;
-        }
-      }
+      
       toast({
-        title: 'Enrichment Complete',
-        description: `Enriched ${enrichedCount} ${enrichedCount === 1 ? 'company' : 'companies'}${errorCount > 0 ? ` (${errorCount} failed)` : ''}`
+        title: 'Enriching Companies',
+        description: `Enriching ${selectedCompanies.length} companies with AI...`,
       });
 
-      // Trigger a re-search to get updated data
-      if (enrichedCount > 0) {
-        await handleSearch();
+      // Prepare leads for enrichment
+      const leadsToEnrich = selectedCompanies.map(company => ({
+        name: company.name,
+        website: company.website,
+        industry: company.industry,
+        geography: company.geography,
+      }));
+
+      // Call the enrich-leads function
+      const { data, error } = await supabase.functions.invoke('enrich-leads', {
+        body: {
+          leads: leadsToEnrich,
+          provider: 'perplexity',
+        },
+      });
+
+      if (error) throw error;
+
+      // Handle streaming response
+      if (data instanceof ReadableStream) {
+        const reader = data.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let enrichedLeads: any[] = [];
+        let successCount = 0;
+        let failedCount = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const event = JSON.parse(line.slice(6));
+                if (event.type === 'enriched') {
+                  successCount++;
+                } else if (event.type === 'failed') {
+                  failedCount++;
+                } else if (event.type === 'complete' && event.enrichedLeads) {
+                  enrichedLeads = event.enrichedLeads;
+                }
+              } catch (e) {
+                console.error('Error parsing SSE event:', e);
+              }
+            }
+          }
+        }
+
+        // Update the leads with enriched data
+        if (enrichedLeads.length > 0) {
+          const updatedLeads = filteredAndSortedResults.leads.map((lead: any, idx: number) => {
+            if (selectedCompanyIndices.has(idx)) {
+              const enriched = enrichedLeads.find((e: any) => 
+                e.name === lead.name || e.website === lead.website
+              );
+              if (enriched) {
+                return {
+                  ...lead,
+                  ...enriched,
+                  wasEnriched: true,
+                  enrichmentTier: 'deep',
+                };
+              }
+            }
+            return lead;
+          });
+
+          // Update the results
+          setLeadFinderResults({
+            ...filteredAndSortedResults,
+            leads: updatedLeads,
+            wasEnriched: true,
+          });
+
+          toast({
+            title: 'Enrichment Complete',
+            description: `Enriched ${successCount} ${successCount === 1 ? 'company' : 'companies'}${failedCount > 0 ? ` (${failedCount} failed)` : ''}`,
+          });
+        }
+      } else {
+        // Non-streaming response
+        toast({
+          title: 'Enrichment Complete',
+          description: `Enriched ${selectedCompanies.length} companies`,
+        });
       }
     } catch (error) {
       console.error('Error in batch enrichment:', error);
@@ -658,6 +726,10 @@ export default function LeadFinder() {
             <TabsTrigger value="import-csv" className="gap-2 text-xs">
               <FileSpreadsheet className="h-3.5 w-3.5" />
               Import CSV
+            </TabsTrigger>
+            <TabsTrigger value="company-list" className="gap-2 text-xs">
+              <Database className="h-3.5 w-3.5" />
+              Company List
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1343,6 +1415,73 @@ export default function LeadFinder() {
               </p>
             </div>
             <ImportCSVPanel />
+          </div>
+        </TabsContent>
+
+        {/* Company List Search Tab */}
+        <TabsContent value="company-list" className="flex-1 overflow-auto mt-0 p-6">
+          <div className="max-w-2xl mx-auto">
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold mb-2">Search by Company List</h2>
+              <p className="text-sm text-muted-foreground">
+                Paste a list of company names or website URLs to search on Google Maps and enrich with AI
+              </p>
+            </div>
+            <CompanyListSearch 
+              onLeadsFound={(leads) => {
+                // Add leads to the results
+                if (leads && leads.length > 0) {
+                  const formattedLeads = leads.map(lead => ({
+                    ...lead,
+                    qualityScore: lead.wasEnriched ? 75 : (lead.website ? 60 : 40),
+                    dataCompleteness: lead.wasEnriched ? 85 : (lead.website && lead.phone ? 50 : 30),
+                    source: lead.source || 'apify',
+                    enrichmentTier: lead.wasEnriched ? 'deep' : undefined,
+                    enrichmentStatus: lead.wasEnriched ? 'completed' : 'pending',
+                    contacts: lead.email ? [{
+                      name: lead.name,
+                      email: lead.email,
+                      emailVerified: false,
+                    }] : [],
+                    generalEmail: lead.email || null,
+                    companyPhone: lead.phone || null,
+                    linkedinUrl: lead.linkedin || null,
+                    socialProfiles: lead.socialProfiles || {},
+                    keyExecutives: lead.keyExecutives || [],
+                    products: lead.products || null,
+                    recentNews: lead.recentNews || null,
+                    fundingInfo: lead.fundingInfo || null,
+                    technologies: lead.technologies || null,
+                    suggestedTags: lead.suggestedTags || [],
+                  }));
+                  
+                  // Merge with existing leads or replace
+                  const existingLeads = streamingSearch.leads || [];
+                  const mergedLeads = [...existingLeads, ...formattedLeads];
+                  
+                  // Update the UI store with new leads
+                  setLeadFinderResults({
+                    leads: mergedLeads,
+                    inserted: 0,
+                    dryRun: false,
+                    provider: 'apify',
+                    model: 'enrich-leads',
+                    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 },
+                    wasEnriched: formattedLeads.some(l => l.wasEnriched),
+                    traceUrl: '',
+                    stats: { 
+                      total: mergedLeads.length, 
+                      enriched: mergedLeads.filter(l => l.wasEnriched).length 
+                    },
+                  });
+                  
+                  toast({
+                    title: 'Leads Found',
+                    description: `Found ${formattedLeads.length} companies. ${formattedLeads.filter(l => l.wasEnriched).length} enriched with AI.`,
+                  });
+                }
+              }}
+            />
           </div>
         </TabsContent>
       </Tabs>

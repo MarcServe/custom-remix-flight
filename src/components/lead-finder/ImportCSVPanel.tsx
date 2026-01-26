@@ -12,9 +12,12 @@ import {
   CheckCircle, 
   Loader2,
   AlertCircle,
-  Database
+  Database,
+  Sparkles,
+  Globe
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -37,6 +40,9 @@ export function ImportCSVPanel() {
   const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(true);
+  const [enrichWithApify, setEnrichWithApify] = useState(false);
+  const [extractEmails, setExtractEmails] = useState(true);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -139,6 +145,112 @@ export function ImportCSVPanel() {
     return result;
   };
 
+  const enrichCompany = async (company: ParsedRow): Promise<{ email?: string; enrichedData?: any }> => {
+    let email = company.email;
+    let enrichedData: any = null;
+
+    // Try to extract email from website if not provided
+    if ((!email || extractEmails) && company.website) {
+      try {
+        const { data, error } = await supabase.functions.invoke('extract-website-email', {
+          body: {
+            companyId: null, // Will be set after company creation
+            website: company.website,
+            companyName: company.name || '',
+          },
+        });
+
+        if (!error && data?.success && data.email) {
+          email = data.email;
+        }
+      } catch (err) {
+        console.error('Email extraction error:', err);
+      }
+    }
+
+    // Enrich with Perplexity if enabled
+    if (enrichWithPerplexity && (company.name || company.website)) {
+      try {
+        const { data, error } = await supabase.functions.invoke('enrich-leads', {
+          body: {
+            leads: [{
+              name: company.name || '',
+              website: company.website,
+              industry: company.industry,
+              geography: company.geography,
+            }],
+            provider: 'perplexity',
+          },
+        });
+
+        if (!error && data) {
+          // Handle streaming response
+          if (data instanceof ReadableStream) {
+            const reader = data.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const event = JSON.parse(line.slice(6));
+                    if (event.type === 'complete' && event.enrichedLeads && event.enrichedLeads.length > 0) {
+                      enrichedData = event.enrichedLeads[0];
+                      if (enrichedData.generalEmail && !email) {
+                        email = enrichedData.generalEmail;
+                      }
+                    }
+                  } catch (e) {
+                    console.error('Error parsing enrichment event:', e);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Enrichment error:', err);
+      }
+    }
+
+    // Enrich with Apify if enabled and no email found
+    if (enrichWithApify && !email && (company.name || company.website)) {
+      try {
+        const searchQuery = company.website 
+          ? company.website.replace(/^https?:\/\//, '').replace(/^www\./, '')
+          : company.name || '';
+        
+        const { data, error } = await supabase.functions.invoke('apify-google-scraper', {
+          body: {
+            query: searchQuery,
+            location: company.geography || '',
+            maxResults: 1,
+            scrapeEmails: true,
+          },
+        });
+
+        if (!error && data?.results && data.results.length > 0) {
+          const result = data.results[0];
+          if (result.email && !email) {
+            email = result.email;
+          }
+        }
+      } catch (err) {
+        console.error('Apify enrichment error:', err);
+      }
+    }
+
+    return { email, enrichedData };
+  };
+
   const handleImport = async () => {
     if (parsedData.length === 0) {
       toast.error('No data to import');
@@ -149,6 +261,11 @@ export function ImportCSVPanel() {
     setImportProgress(0);
     let imported = 0;
     let skipped = 0;
+    let enriched = 0;
+    let emailsFound = 0;
+
+    const totalSteps = parsedData.length;
+    const enrichmentEnabled = enrichWithPerplexity || enrichWithApify || extractEmails;
 
     for (let i = 0; i < parsedData.length; i++) {
       const row = parsedData[i];
@@ -165,17 +282,74 @@ export function ImportCSVPanel() {
         if (existing) {
           skipped++;
         } else {
+          // Enrich company if enabled
+          let email = row.email;
+          let enrichedData: any = null;
+
+          if (enrichmentEnabled) {
+            const enrichment = await enrichCompany(row);
+            email = enrichment.email || email;
+            enrichedData = enrichment.enrichedData;
+            if (enrichment.email) emailsFound++;
+            if (enrichment.enrichedData) enriched++;
+          }
+
+          const insertData: any = {
+            user_id: user?.id,
+            name: row.name,
+            website: row.website || `no-website-${crypto.randomUUID()}`,
+            general_email: email,
+            company_phone: row.phone,
+            industry: row.industry || enrichedData?.suggestedTags?.[0],
+            geography: row.geography,
+          };
+
+          // Add enriched data if available
+          if (enrichedData) {
+            insertData.description = enrichedData.description;
+            insertData.enrichment_data = {
+              products: enrichedData.products,
+              recentNews: enrichedData.recentNews,
+              fundingInfo: enrichedData.fundingInfo,
+              technologies: enrichedData.technologies,
+              suggestedTags: enrichedData.suggestedTags,
+              socialProfiles: enrichedData.socialProfiles,
+              keyExecutives: enrichedData.keyExecutives,
+            };
+            insertData.enrichment_status = 'completed';
+            insertData.enrichment_provider = 'perplexity';
+            insertData.enriched_at = new Date().toISOString();
+            insertData.social_profiles = enrichedData.socialProfiles;
+            insertData.key_executives = enrichedData.keyExecutives;
+            insertData.employee_count = enrichedData.employeeCount;
+            insertData.recent_news = enrichedData.recentNews;
+            
+            // Auto-apply suggested tags from enrichment, plus industry tag
+            const tagsToApply = new Set<string>();
+            
+            // Add suggested tags from enrichment
+            if (enrichedData.suggestedTags && enrichedData.suggestedTags.length > 0) {
+              enrichedData.suggestedTags.forEach((tag: string) => tagsToApply.add(tag));
+            }
+            
+            // Automatically add industry as a tag if available
+            if (insertData.industry) {
+              tagsToApply.add(insertData.industry);
+            }
+            
+            // Also add industry from row if different
+            if (row.industry && row.industry !== insertData.industry) {
+              tagsToApply.add(row.industry);
+            }
+            
+            if (tagsToApply.size > 0) {
+              insertData.tags = Array.from(tagsToApply);
+            }
+          }
+
           const { error } = await supabase
             .from('companies')
-            .insert({
-              user_id: user?.id,
-              name: row.name,
-              website: row.website || `no-website-${crypto.randomUUID()}`,
-              general_email: row.email,
-              company_phone: row.phone,
-              industry: row.industry,
-              geography: row.geography,
-            });
+            .insert(insertData);
 
           if (!error) imported++;
         }
@@ -183,12 +357,15 @@ export function ImportCSVPanel() {
         console.error('Import error:', err);
       }
 
-      setImportProgress(Math.round(((i + 1) / parsedData.length) * 100));
+      setImportProgress(Math.round(((i + 1) / totalSteps) * 100));
     }
 
     queryClient.invalidateQueries({ queryKey: ['companies'] });
+    queryClient.invalidateQueries({ queryKey: ['companies-full'] });
     setIsImporting(false);
-    toast.success(`Imported ${imported} companies${skipped > 0 ? ` (${skipped} skipped)` : ''}`);
+    
+    const successMessage = `Imported ${imported} companies${skipped > 0 ? ` (${skipped} skipped)` : ''}${enriched > 0 ? `. ${enriched} enriched` : ''}${emailsFound > 0 ? `. ${emailsFound} emails found` : ''}`;
+    toast.success(successMessage);
     
     // Reset
     setFile(null);
@@ -270,11 +447,65 @@ export function ImportCSVPanel() {
             </ScrollArea>
           </Card>
 
+          {/* Enrichment Options */}
+          <Card className="p-4 bg-muted/30 space-y-3">
+            <h4 className="font-medium text-sm mb-3">Enrichment Options</h4>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-purple-500" />
+                  <Label htmlFor="enrich-perplexity" className="text-xs font-medium cursor-pointer">
+                    Enrich with Perplexity AI
+                  </Label>
+                </div>
+                <Switch
+                  id="enrich-perplexity"
+                  checked={enrichWithPerplexity}
+                  onCheckedChange={setEnrichWithPerplexity}
+                  disabled={isImporting}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-blue-500" />
+                  <Label htmlFor="enrich-apify" className="text-xs font-medium cursor-pointer">
+                    Enrich with Apify (Google Maps)
+                  </Label>
+                </div>
+                <Switch
+                  id="enrich-apify"
+                  checked={enrichWithApify}
+                  onCheckedChange={setEnrichWithApify}
+                  disabled={isImporting}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4 text-green-500" />
+                  <Label htmlFor="extract-emails" className="text-xs font-medium cursor-pointer">
+                    Extract Emails from Websites
+                  </Label>
+                </div>
+                <Switch
+                  id="extract-emails"
+                  checked={extractEmails}
+                  onCheckedChange={setExtractEmails}
+                  disabled={isImporting}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              {enrichWithPerplexity || enrichWithApify || extractEmails
+                ? 'Companies will be enriched with additional data and emails during import.'
+                : 'Only basic company data will be imported.'}
+            </p>
+          </Card>
+
           <div className="flex gap-2">
-            <Button variant="outline" onClick={resetImport} className="flex-1">
+            <Button variant="outline" onClick={resetImport} className="flex-1" disabled={isImporting}>
               Cancel
             </Button>
-            <Button onClick={handleImport} className="flex-1">
+            <Button onClick={handleImport} className="flex-1" disabled={isImporting}>
               <Database className="h-4 w-4 mr-2" />
               Import {parsedData.length} Companies
             </Button>

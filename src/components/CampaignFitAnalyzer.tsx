@@ -138,7 +138,7 @@ export function CampaignFitAnalyzer() {
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Target className="h-5 w-5" />
             Campaign Fit Analyzer
@@ -149,96 +149,108 @@ export function CampaignFitAnalyzer() {
         </DialogHeader>
 
         {!results ? (
-          <ScrollArea className="flex-1 pr-4">
-            <div className="space-y-6 py-4">
-              {/* Campaign Details */}
-              <div className="space-y-4">
-                <h3 className="font-medium flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  Campaign Details
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="campaignType">Campaign Type *</Label>
-                    <Input
-                      id="campaignType"
-                      placeholder="e.g., Product Launch, Demo Outreach, Content Promotion"
-                      value={campaignType}
-                      onChange={(e) => setCampaignType(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="productFocus">Product/Service Focus *</Label>
-                    <Input
-                      id="productFocus"
-                      placeholder="e.g., CRM Software, Marketing Automation"
-                      value={productFocus}
-                      onChange={(e) => setProductFocus(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="icp">Ideal Customer Profile</Label>
-                  <Textarea
-                    id="icp"
-                    placeholder="Describe your ideal customer... e.g., Mid-market B2B SaaS companies with 50-500 employees looking to scale their sales operations"
-                    value={idealCustomerProfile}
-                    onChange={(e) => setIdealCustomerProfile(e.target.value)}
-                    className="min-h-[80px]"
-                  />
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Targeting Criteria */}
-              <div className="space-y-4">
-                <h3 className="font-medium flex items-center gap-2">
-                  <Users className="h-4 w-4 text-primary" />
-                  Targeting Criteria
-                </h3>
-
+          <>
+            <ScrollArea className="flex-1 pr-4 min-h-0">
+              <div className="space-y-6 py-4">
+                {/* Campaign Details */}
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Target Industries</Label>
-                    <TagInput
-                      tags={targetIndustries}
-                      onTagsChange={setTargetIndustries}
-                      placeholder="Add industries (e.g., Technology, Healthcare, Finance)"
-                    />
+                  <h3 className="font-medium flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Campaign Details
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="campaignType">Campaign Type *</Label>
+                      <Input
+                        id="campaignType"
+                        placeholder="e.g., Product Launch, Demo Outreach, Content Promotion"
+                        value={campaignType}
+                        onChange={(e) => setCampaignType(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="productFocus">Product/Service Focus *</Label>
+                      <Input
+                        id="productFocus"
+                        placeholder="e.g., CRM Software, Marketing Automation"
+                        value={productFocus}
+                        onChange={(e) => setProductFocus(e.target.value)}
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Target Company Sizes</Label>
-                    <TagInput
-                      tags={targetSizes}
-                      onTagsChange={setTargetSizes}
-                      placeholder="Add sizes (e.g., 50-200, Enterprise, SMB)"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Target Geographies</Label>
-                    <TagInput
-                      tags={targetGeographies}
-                      onTagsChange={setTargetGeographies}
-                      placeholder="Add locations (e.g., United States, Europe, APAC)"
+                    <Label htmlFor="icp">Ideal Customer Profile</Label>
+                    <Textarea
+                      id="icp"
+                      placeholder="Describe your ideal customer... e.g., Mid-market B2B SaaS companies with 50-500 employees looking to scale their sales operations"
+                      value={idealCustomerProfile}
+                      onChange={(e) => setIdealCustomerProfile(e.target.value)}
+                      className="min-h-[80px]"
                     />
                   </div>
                 </div>
-              </div>
 
+                <Separator />
+
+                {/* Targeting Criteria */}
+                <div className="space-y-4">
+                  <h3 className="font-medium flex items-center gap-2">
+                    <Users className="h-4 w-4 text-primary" />
+                    Targeting Criteria
+                  </h3>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Target Industries</Label>
+                      <TagInput
+                        tags={targetIndustries}
+                        onTagsChange={setTargetIndustries}
+                        placeholder="Add industries (e.g., Technology, Healthcare, Finance)"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Target Company Sizes</Label>
+                      <TagInput
+                        tags={targetSizes}
+                        onTagsChange={setTargetSizes}
+                        placeholder="Add sizes (e.g., 50-200, Enterprise, SMB)"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Target Geographies</Label>
+                      <TagInput
+                        tags={targetGeographies}
+                        onTagsChange={setTargetGeographies}
+                        placeholder="Add locations (e.g., United States, Europe, APAC)"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+            
+            {/* Fixed Footer with Action Buttons */}
+            <div className="shrink-0 border-t pt-4 mt-4 flex gap-2">
+              <Button 
+                variant="outline"
+                onClick={() => setOpen(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
               <Button 
                 onClick={handleAnalyze} 
-                disabled={analysisMutation.isPending}
-                className="w-full"
+                disabled={analysisMutation.isPending || !campaignType || !productFocus}
+                className="flex-1"
               >
                 {analysisMutation.isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Analyzing Companies...
+                    Analyzing...
                   </>
                 ) : (
                   <>
@@ -248,118 +260,128 @@ export function CampaignFitAnalyzer() {
                 )}
               </Button>
             </div>
-          </ScrollArea>
+          </>
         ) : (
-          <ScrollArea className="flex-1 pr-4">
-            <div className="space-y-6 py-4">
-              {/* Summary Stats */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <div className="text-2xl font-bold text-primary">{results.summary.totalAnalyzed}</div>
-                    <div className="text-xs text-muted-foreground">Analyzed</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <div className="text-2xl font-bold text-green-600">{results.summary.highFit}</div>
-                    <div className="text-xs text-muted-foreground">High Fit</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <div className="text-2xl font-bold text-yellow-600">{results.summary.mediumFit}</div>
-                    <div className="text-xs text-muted-foreground">Medium Fit</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <div className="text-2xl font-bold">{results.summary.avgFitScore}</div>
-                    <div className="text-xs text-muted-foreground">Avg Score</div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* AI Insights */}
-              {results.aiInsights && (
-                <Card className="border-primary/20 bg-primary/5">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Sparkles className="h-4 w-4" />
-                      AI Campaign Strategy
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm whitespace-pre-line">{results.aiInsights}</p>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Separator />
-
-              {/* Results List */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-medium">Company Rankings</h3>
-                  <span className="text-sm text-muted-foreground">
-                    {results.summary.hasContacts} with email contacts
-                  </span>
-                </div>
-
-                {results.results.slice(0, 20).map((result, index) => (
-                  <Card key={result.companyId} className={index < 3 ? 'border-primary/30' : ''}>
-                    <CardContent className="py-3">
-                      <div className="flex items-start gap-3">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-sm font-medium">
-                          {index + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium">{result.companyName}</span>
-                            <Badge variant="outline" className={getPriorityColor(result.priority)}>
-                              {result.priority.toUpperCase()}
-                            </Badge>
-                            <span className="text-sm text-muted-foreground">
-                              Score: {result.fitScore}
-                            </span>
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {result.fitReason}
-                          </p>
-                          <div className="flex items-center gap-1 mt-2 text-xs text-primary">
-                            <ArrowRight className="h-3 w-3" />
-                            {result.recommendedApproach}
-                          </div>
-                        </div>
-                        <Progress value={result.fitScore} className="w-16 h-2" />
-                      </div>
+          <>
+            <ScrollArea className="flex-1 pr-4 min-h-0">
+              <div className="space-y-6 py-4">
+                {/* Summary Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="pt-4 text-center">
+                      <div className="text-2xl font-bold text-primary">{results.summary.totalAnalyzed}</div>
+                      <div className="text-xs text-muted-foreground">Analyzed</div>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
+                  <Card>
+                    <CardContent className="pt-4 text-center">
+                      <div className="text-2xl font-bold text-green-600">{results.summary.highFit}</div>
+                      <div className="text-xs text-muted-foreground">High Fit</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 text-center">
+                      <div className="text-2xl font-bold text-yellow-600">{results.summary.mediumFit}</div>
+                      <div className="text-xs text-muted-foreground">Medium Fit</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 text-center">
+                      <div className="text-2xl font-bold">{results.summary.avgFitScore}</div>
+                      <div className="text-xs text-muted-foreground">Avg Score</div>
+                    </CardContent>
+                  </Card>
+                </div>
 
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={resetForm} className="flex-1">
-                  New Analysis
-                </Button>
-                <Button 
-                  onClick={() => {
-                    // Copy high-fit company names to clipboard
-                    const highFit = results.results
-                      .filter(r => r.priority === 'high')
-                      .map(r => r.companyName)
-                      .join('\n');
-                    navigator.clipboard.writeText(highFit);
-                    toast({ title: "Copied!", description: "High-fit company names copied to clipboard" });
-                  }}
-                  className="flex-1"
-                >
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Copy High-Fit List
-                </Button>
+                {/* AI Insights */}
+                {results.aiInsights && (
+                  <Card className="border-primary/20 bg-primary/5">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Sparkles className="h-4 w-4" />
+                        AI Campaign Strategy
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm whitespace-pre-line">{results.aiInsights}</p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <Separator />
+
+                {/* Results List */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium">Company Rankings</h3>
+                    <span className="text-sm text-muted-foreground">
+                      {results.summary.hasContacts} with email contacts
+                    </span>
+                  </div>
+
+                  {results.results.slice(0, 20).map((result, index) => (
+                    <Card key={result.companyId} className={index < 3 ? 'border-primary/30' : ''}>
+                      <CardContent className="py-3">
+                        <div className="flex items-start gap-3">
+                          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-sm font-medium">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium">{result.companyName}</span>
+                              <Badge variant="outline" className={getPriorityColor(result.priority)}>
+                                {result.priority.toUpperCase()}
+                              </Badge>
+                              <span className="text-sm text-muted-foreground">
+                                Score: {result.fitScore}
+                              </span>
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {result.fitReason}
+                            </p>
+                            <div className="flex items-center gap-1 mt-2 text-xs text-primary">
+                              <ArrowRight className="h-3 w-3" />
+                              {result.recommendedApproach}
+                            </div>
+                          </div>
+                          <Progress value={result.fitScore} className="w-16 h-2" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
+            </ScrollArea>
+            
+            {/* Fixed Footer with Action Buttons */}
+            <div className="shrink-0 border-t pt-4 mt-4 flex gap-2">
+              <Button variant="outline" onClick={resetForm} className="flex-1">
+                New Analysis
+              </Button>
+              <Button 
+                onClick={() => {
+                  // Copy high-fit company names to clipboard
+                  const highFit = results.results
+                    .filter(r => r.priority === 'high')
+                    .map(r => r.companyName)
+                    .join('\n');
+                  navigator.clipboard.writeText(highFit);
+                  toast({ title: "Copied!", description: "High-fit company names copied to clipboard" });
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                Copy High-Fit List
+              </Button>
+              <Button 
+                onClick={() => setOpen(false)}
+                className="flex-1"
+              >
+                Close
+              </Button>
             </div>
-          </ScrollArea>
+          </>
         )}
       </DialogContent>
     </Dialog>

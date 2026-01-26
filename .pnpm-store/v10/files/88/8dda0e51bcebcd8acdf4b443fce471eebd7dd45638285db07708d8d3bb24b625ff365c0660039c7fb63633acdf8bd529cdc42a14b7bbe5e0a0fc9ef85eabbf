@@ -1,0 +1,100 @@
+{
+  "name": "@blocknote/react",
+  "homepage": "https://github.com/TypeCellOS/BlockNote",
+  "private": false,
+  "sideEffects": [
+    "*.css"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TypeCellOS/BlockNote.git",
+    "directory": "packages/react"
+  },
+  "license": "MPL-2.0",
+  "version": "0.41.1",
+  "files": [
+    "dist",
+    "types",
+    "src"
+  ],
+  "keywords": [
+    "react",
+    "javascript",
+    "editor",
+    "typescript",
+    "prosemirror",
+    "wysiwyg",
+    "rich-text-editor",
+    "notion",
+    "yjs",
+    "block-based",
+    "tiptap"
+  ],
+  "description": "A \"Notion-style\" block-based extensible text editor built on top of Prosemirror and Tiptap.",
+  "type": "module",
+  "source": "src/index.ts",
+  "types": "./types/src/index.d.ts",
+  "main": "./dist/blocknote-react.cjs",
+  "module": "./dist/blocknote-react.js",
+  "exports": {
+    ".": {
+      "types": "./types/src/index.d.ts",
+      "import": "./dist/blocknote-react.js",
+      "require": "./dist/blocknote-react.cjs"
+    },
+    "./style.css": {
+      "import": "./dist/style.css",
+      "require": "./dist/style.css",
+      "style": "./dist/style.css"
+    }
+  },
+  "dependencies": {
+    "@blocknote/core": "0.41.1",
+    "@emoji-mart/data": "^1.2.1",
+    "@floating-ui/react": "^0.27.16",
+    "@tiptap/core": "^3.4.3",
+    "@tiptap/pm": "^3.4.3",
+    "@tiptap/react": "^3.4.3",
+    "emoji-mart": "^5.6.0",
+    "lodash.merge": "^4.6.2",
+    "react-icons": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/emoji-mart": "^3.0.14",
+    "@types/lodash.foreach": "^4.5.9",
+    "@types/lodash.groupby": "^4.6.9",
+    "@types/lodash.merge": "^4.6.9",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "eslint": "^8.10.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "rimraf": "^5.0.5",
+    "rollup-plugin-webpack-stats": "^0.2.2",
+    "typescript": "^5.3.3",
+    "vite": "^5.3.4",
+    "vite-plugin-eslint": "^1.8.1",
+    "vite-plugin-externalize-deps": "^0.8.0",
+    "vitest": "^2.0.3"
+  },
+  "peerDependencies": {
+    "react": "^18.0 || ^19.0 || >= 19.0.0-rc",
+    "react-dom": "^18.0 || ^19.0 || >= 19.0.0-rc"
+  },
+  "eslintConfig": {
+    "extends": [
+      "../../.eslintrc.json"
+    ]
+  },
+  "gitHead": "d5e8c96e2ad5f6832da60bc3c9acd3f6c16c25c5",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --max-warnings 0",
+    "test": "vitest --run",
+    "test:watch": "vitest --watch",
+    "clean": "rimraf dist && rimraf types"
+  }
+}

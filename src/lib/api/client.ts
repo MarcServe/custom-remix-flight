@@ -27,20 +27,115 @@ export const apiClient = {
       }
 
       console.log(`Calling edge function: ${functionName} with auth`);
-      const { data, error } = await supabase.functions.invoke(functionName, {
-        body,
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) {
-        console.error(`Edge function ${functionName} error:`, error);
-        return { data: null, error };
+      let responseData: any = null;
+      let responseError: any = null;
+      
+      try {
+        const { data, error } = await supabase.functions.invoke(functionName, {
+          body,
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+        
+        responseData = data;
+        responseError = error;
+      } catch (invokeError: any) {
+        console.error(`Edge function ${functionName} invoke exception:`, invokeError);
+        responseError = invokeError;
       }
 
-      console.log(`Edge function ${functionName} success:`, data);
-      return { data: data as T, error: null };
+      if (responseError) {
+        console.error(`Edge function ${functionName} error:`, responseError);
+        console.error(`Error type:`, typeof responseError);
+        console.error(`Error keys:`, Object.keys(responseError || {}));
+        console.error(`Error context:`, responseError?.context);
+        
+        // Try to extract error message from response
+        let errorMessage = responseError?.message || 'Unknown error';
+        
+        // Check if error has a response body we can parse
+        // FunctionsHttpError has context as the Response object
+        if (responseError?.context) {
+          try {
+            // The context might be a Response object (for FunctionsHttpError)
+            const response = responseError.context;
+            
+            // If it's a Response object, read the body
+            if (response instanceof Response || (response && typeof response.json === 'function')) {
+              try {
+                const errorBody = await response.json();
+                console.log('Parsed error body from Response:', errorBody);
+                
+                if (errorBody && typeof errorBody === 'object') {
+                  if (errorBody.error) {
+                    errorMessage = errorBody.error;
+                    if (errorBody.details) {
+                      errorMessage += `: ${errorBody.details}`;
+                    }
+                  } else if (errorBody.message) {
+                    errorMessage = errorBody.message;
+                  }
+                }
+              } catch (jsonError) {
+                // If JSON parsing fails, try text
+                try {
+                  const errorText = await response.text();
+                  console.log('Error response text:', errorText);
+                  // Try to parse as JSON
+                  const errorBody = JSON.parse(errorText);
+                  if (errorBody.error) {
+                    errorMessage = errorBody.error;
+                    if (errorBody.details) {
+                      errorMessage += `: ${errorBody.details}`;
+                    }
+                  }
+                } catch (textError) {
+                  console.error('Failed to read error response:', textError);
+                }
+              }
+            } else if (response && typeof response === 'object') {
+              // Context might be a plain object with response data
+              const responseBody = response.data || response.body || response.response?.data;
+              
+              if (responseBody) {
+                const errorBody = typeof responseBody === 'string' 
+                  ? JSON.parse(responseBody) 
+                  : responseBody;
+                
+                if (errorBody && typeof errorBody === 'object') {
+                  if (errorBody.error) {
+                    errorMessage = errorBody.error;
+                    if (errorBody.details) {
+                      errorMessage += `: ${errorBody.details}`;
+                    }
+                  } else if (errorBody.message) {
+                    errorMessage = errorBody.message;
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Failed to parse error response:', e);
+          }
+        }
+        
+        // Also check if data exists but indicates an error
+        if (responseData && typeof responseData === 'object' && 'error' in responseData) {
+          errorMessage = responseData.error;
+          if (responseData.details) {
+            errorMessage += `: ${responseData.details}`;
+          }
+        }
+        
+        return { 
+          data: responseData || null, 
+          error: new Error(errorMessage) 
+        };
+      }
+
+      console.log(`Edge function ${functionName} success:`, responseData);
+      return { data: responseData as T, error: null };
     } catch (error) {
       console.error(`Edge function ${functionName} exception:`, error);
       return {

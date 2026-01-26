@@ -26,6 +26,7 @@ interface Contact {
   companies?: {
     name: string;
   };
+  source?: "contact" | "company";
 }
 
 export function ImportLeadsDialog({ open, onOpenChange }: ImportLeadsDialogProps) {
@@ -47,11 +48,40 @@ export function ImportLeadsDialog({ open, onOpenChange }: ImportLeadsDialogProps
         .select("email");
 
       const existingEmails = new Set(peopleEmails?.map(p => p.email?.toLowerCase()) || []);
-      
-      // Filter to contacts with emails that are NOT already in people
-      return (contactsData as Contact[] || []).filter(
-        contact => contact.email && !existingEmails.has(contact.email.toLowerCase())
-      );
+
+      const { data: companiesData } = await supabase
+        .from("companies")
+        .select("id, name, general_email")
+        .not("general_email", "is", null)
+        .order("created_at", { ascending: false });
+
+      const contactLeads = (contactsData as Contact[] || []).map(contact => ({
+        ...contact,
+        source: "contact" as const,
+      }));
+
+      const companyLeads: Contact[] = (companiesData || []).map(company => ({
+        id: `company-${company.id}`,
+        name: company.name,
+        email: company.general_email || undefined,
+        title: "Company",
+        company_id: company.id,
+        companies: { name: company.name },
+        source: "company" as const,
+      }));
+
+      const merged = [...contactLeads, ...companyLeads];
+
+      const dedupedByEmail = new Map<string, Contact>();
+      for (const lead of merged) {
+        if (!lead.email) continue;
+        const key = lead.email.toLowerCase();
+        if (!existingEmails.has(key) && !dedupedByEmail.has(key)) {
+          dedupedByEmail.set(key, lead);
+        }
+      }
+
+      return Array.from(dedupedByEmail.values());
     },
     enabled: open,
   });

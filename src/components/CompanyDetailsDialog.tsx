@@ -166,10 +166,13 @@ export function CompanyDetailsDialog({
 
   // Reset extracted email and sync tags when company changes
   useEffect(() => {
-    setExtractedEmail(null);
+    // If company now has an email, clear extractedEmail (it's been saved)
+    if (company?.general_email || company?.generalEmail) {
+      setExtractedEmail(null);
+    }
     setIsExtractingEmail(false);
     setLocalTags(company?.tags || []);
-  }, [company?.id, company?.tags]);
+  }, [company?.id, company?.general_email, company?.generalEmail, company?.tags]);
 
   // Handle tag changes - auto-save when tags are modified
   const handleTagsChange = (newTags: string[]) => {
@@ -211,7 +214,7 @@ export function CompanyDetailsDialog({
     technologies: company.technologies || company.tech_stack || (company.enrichment_data as any)?.technologies,
     employeeCount: company.employeeCount || company.employee_count,
     companyPhone: company.companyPhone || company.company_phone,
-    generalEmail: company.generalEmail || company.general_email,
+    generalEmail: extractedEmail || company.generalEmail || company.general_email,
     // Consolidate LinkedIn into socialProfiles and merge all social profiles
     socialProfiles: (() => {
       const profiles = {
@@ -505,13 +508,46 @@ export function CompanyDetailsDialog({
 
       if (data.success && data.email) {
         setExtractedEmail(data.email);
+        
+        // Optimistically update the query cache
+        queryClient.setQueryData(['companies-full'], (oldData: any) => {
+          if (!oldData) return oldData;
+          return oldData.map((c: any) => {
+            if (c.id === company.id) {
+              return {
+                ...c,
+                general_email: data.email,
+                generalEmail: data.email,
+              };
+            }
+            return c;
+          });
+        });
+        
+        // Also update companies query if it exists
+        queryClient.setQueryData(['companies'], (oldData: any) => {
+          if (!oldData) return oldData;
+          return oldData.map((c: any) => {
+            if (c.id === company.id) {
+              return {
+                ...c,
+                general_email: data.email,
+                generalEmail: data.email,
+              };
+            }
+            return c;
+          });
+        });
+        
         toast({
           title: "Email found",
           description: `Extracted: ${data.email}`,
         });
         
-        // Invalidate queries to refresh company data
-        queryClient.invalidateQueries({ queryKey: ['companies'] });
+        // Invalidate and refetch queries to ensure consistency with database
+        await queryClient.invalidateQueries({ queryKey: ['companies'] });
+        await queryClient.invalidateQueries({ queryKey: ['companies-full'] });
+        await queryClient.refetchQueries({ queryKey: ['companies-full'] });
       } else {
         toast({
           title: "No email found",

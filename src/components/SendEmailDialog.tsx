@@ -10,11 +10,13 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Send, Sparkles, Code, Eye, Bot } from "lucide-react";
+import { Loader2, Send, Sparkles, Code, Eye, Bot, Tag } from "lucide-react";
 import { RichTextEditor } from "./email/RichTextEditor";
 import { EmailTemplateSelector, EMAIL_TEMPLATES, type EmailTemplate } from "./email/EmailTemplateSelector";
 import { FileAttachmentSelector } from "./email/FileAttachmentSelector";
 import { PersonaSelector, type MarketingPersona } from "./email/PersonaSelector";
+import { TagInput } from "@/components/ui/tag-input";
+import { useCompanyTags } from "@/hooks/use-company-tags";
 
 interface SendEmailDialogProps {
   open: boolean;
@@ -45,7 +47,9 @@ export function SendEmailDialog({
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
   const [selectedPersona, setSelectedPersona] = useState<MarketingPersona | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const { toast } = useToast();
+  const { allSuggestions } = useCompanyTags();
 
   const { data: connections } = useQuery({
     queryKey: ['email-connections'],
@@ -169,6 +173,7 @@ export function SendEmailDialog({
           sender,
           enableAutoResponder,
           attachments: attachments.length > 0 ? attachments : undefined,
+          tags: selectedTags.length > 0 ? selectedTags : undefined,
         },
       });
 
@@ -187,6 +192,7 @@ export function SendEmailDialog({
       setTemplate('blank');
       setEnableAutoResponder(false);
       setAttachments([]);
+      setSelectedTags([]);
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error sending email:", error);
@@ -330,6 +336,23 @@ export function SendEmailDialog({
               onChange={handlePersonaChange}
               disabled={isSending || isGenerating}
             />
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Tag className="h-4 w-4" />
+                Tags (Optional)
+              </Label>
+              <TagInput
+                tags={selectedTags}
+                onTagsChange={setSelectedTags}
+                suggestions={allSuggestions}
+                placeholder="Add tags for tracking/categorization..."
+                maxTags={10}
+              />
+              <p className="text-xs text-muted-foreground">
+                Tags help categorize and track this email campaign
+              </p>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="context">AI Context {selectedPersona ? '(auto-filled from persona)' : '(Optional)'}</Label>

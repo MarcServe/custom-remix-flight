@@ -150,8 +150,34 @@ CRITICAL: Use the EXACT signature provided above. Do not modify it or add placeh
 Return the response as JSON with 'subject' and 'body' fields.`;
     } else {
       // This is a personal/sales email request
-      const { recipientName, companyName, context, persona } = requestBody;
+      const { recipientName, companyName, companyData, context, persona } = requestBody;
       console.log('Processing personal email for:', recipientName, 'with persona:', persona?.product_focus);
+      
+      // Build company context from companyData if provided
+      let companyContext = '';
+      if (companyData) {
+        const contextParts: string[] = [];
+        if (companyData.description) contextParts.push(`Description: ${companyData.description}`);
+        if (companyData.industry) contextParts.push(`Industry: ${companyData.industry}`);
+        const enrichmentData = companyData.enrichment_data || {};
+        if (enrichmentData.products || companyData.products) {
+          const products = enrichmentData.products || companyData.products;
+          contextParts.push(`Products/Services: ${Array.isArray(products) ? products.join(', ') : products}`);
+        }
+        if (companyData.recent_news || enrichmentData.recentNews) {
+          contextParts.push(`Recent News: ${companyData.recent_news || enrichmentData.recentNews}`);
+        }
+        if (companyData.funding_stage || enrichmentData.fundingInfo) {
+          contextParts.push(`Funding: ${companyData.funding_stage || enrichmentData.fundingInfo}`);
+        }
+        if (companyData.employee_count || enrichmentData.employeeCount) {
+          contextParts.push(`Company Size: ${companyData.employee_count || enrichmentData.employeeCount} employees`);
+        }
+        if (companyData.tech_stack && Array.isArray(companyData.tech_stack) && companyData.tech_stack.length > 0) {
+          contextParts.push(`Technologies: ${companyData.tech_stack.join(', ')}`);
+        }
+        companyContext = contextParts.length > 0 ? `\nCOMPANY INFORMATION:\n${contextParts.join('\n')}\n` : '';
+      }
       
       // Build persona-specific instructions if provided
       let personaInstructions = '';
@@ -174,8 +200,7 @@ Use this marketing context to craft the email. Focus on the product/service ment
 
 You are: ${senderName}${senderTitle ? `, ${senderTitle}` : ''}${senderCompany ? ` from ${senderCompany}` : ''}
 
-${personaInstructions}
-${context ? `ADDITIONAL CONTEXT: ${context}\n` : ''}
+${companyContext}${personaInstructions}${context ? `ADDITIONAL CONTEXT: ${context}\n` : ''}
 
 STRICT RULES - NO EXCEPTIONS:
 1. NEVER write [brackets] or (placeholders) anywhere in the email
