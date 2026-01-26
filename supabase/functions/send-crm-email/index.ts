@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { wrapEmailContent } from "../_shared/email-wrapper.ts";
+import { renderEmailTemplate } from "../_shared/professional-template.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -73,10 +73,10 @@ serve(async (req) => {
       .eq('id', user.id)
       .single();
 
-    // Fetch business profile for company name and email provider preference
+    // Fetch business profile for company name, email provider preference, and branding settings
     const { data: businessProfile } = await supabaseClient
       .from('business_profiles')
-      .select('company_name, email_provider')
+      .select('company_name, email_provider, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_signature')
       .eq('user_id', user.id)
       .maybeSingle();
     
@@ -88,19 +88,43 @@ serve(async (req) => {
     // Generate thread_id for email threading (used across all sending methods)
     const threadId = `crm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Build email signature
-    const signatureText = `\n\nBest regards,\n${userProfile?.full_name || 'Team'}\n${userProfile?.job_title ? `${userProfile.job_title}\n` : ''}${businessProfile?.company_name || ''}`;
-    const signatureHtml = `<br><br><p>Best regards,<br><strong>${userProfile?.full_name || 'Team'}</strong><br>${userProfile?.job_title ? `${userProfile.job_title}<br>` : ''}${businessProfile?.company_name || ''}</p>`;
-
-    // Support both legacy plain text and new HTML emails with signature
-    let emailBodyHtml = bodyHtml || (body ? `<p>${body.replace(/\n/g, '</p><p>')}</p>` : '');
+    // Support both legacy plain text and new HTML emails
+    // Note: We'll use renderEmailTemplate which handles signatures, so we extract just the body content
+    let emailBodyContent = bodyHtml || (body ? `<p>${body.replace(/\n/g, '</p><p>')}</p>` : '');
     let emailBodyText = bodyText || body || '';
+    
+    // Remove signature if already included (to avoid duplicates when renderEmailTemplate adds it)
+    // Look for common signature patterns - more comprehensive removal
+    const signaturePatterns = [
+      /<br><br><p>Best regards,.*$/is,
+      /<br><br>Best regards,.*$/is,
+      /<p>Best regards,.*$/is,
+      /\n\nBest regards,.*$/is,
+      /Best regards,.*$/is,
+      /<div class="signature".*$/is,
+      /<div class="email-signature".*$/is,
+      /<div[^>]*class="[^"]*signature[^"]*".*$/is,
+      /michael orji.*$/is,
+      /Michael Orji.*$/is,
+      /AI Founding Engineer.*$/is,
+      /AI innovation Studio.*$/is,
+      /AI Innovation Studio.*$/is,
+      /Biz Boosters Ltd.*$/is,
+      /biz boosters.*$/is,
+    ];
+    
+    for (const pattern of signaturePatterns) {
+      emailBodyContent = emailBodyContent.replace(pattern, '').trim();
+    }
+    
+    // Also remove any trailing signature-like content (multiple newlines/breaks followed by name/email patterns)
+    emailBodyContent = emailBodyContent.replace(/(<br\s*\/?>|\n){2,}.*?(michael|orji|biz boosters|founding engineer|AI innovation|innovation studio|@bizboosters).*$/is, '').trim();
 
     // If invoice is attached, append it to the email body
     if (attachInvoice && invoiceHtml) {
-      emailBodyHtml += `<hr style="margin: 40px 0; border: none; border-top: 2px solid #e5e7eb;" />`;
-      emailBodyHtml += `<h2 style="margin-bottom: 20px;">Attached ${invoiceNumber ? invoiceNumber : 'Document'}</h2>`;
-      emailBodyHtml += invoiceHtml;
+      emailBodyContent += `<hr style="margin: 40px 0; border: none; border-top: 2px solid #e5e7eb;" />`;
+      emailBodyContent += `<h2 style="margin-bottom: 20px;">Attached ${invoiceNumber ? invoiceNumber : 'Document'}</h2>`;
+      emailBodyContent += invoiceHtml;
     }
 
     // Append signature if not already present
@@ -286,8 +310,23 @@ serve(async (req) => {
         throw new Error('Business Email not configured. Please set your business email in Settings > Profile.');
       }
 
-      const senderName = businessProfile?.company_name || 'Your Business';
-      const wrappedHtml = wrapEmailContent(emailBodyHtml, senderName, fromEmail);
+      const senderName = businessProfile?.company_name || userProfile?.full_name || 'Your Business';
+      
+      // Render with branded template
+      const wrappedHtml = renderEmailTemplate(
+        businessProfile?.email_template_style || templateStyle || 'professional',
+        {
+          body: emailBodyContent,
+          senderName,
+          senderEmail: fromEmail,
+          senderTitle: userProfile?.job_title,
+          companyName: businessProfile?.company_name,
+          logoUrl: businessProfile?.email_logo_url,
+          brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+          footerText: businessProfile?.email_footer_text,
+          signature: businessProfile?.email_signature,
+        }
+      );
 
       console.log(`Sending via Resend with verified domain: ${senderName} <${connection.from_email}>`);
 
@@ -356,8 +395,23 @@ serve(async (req) => {
       if (!fromEmail) {
         throw new Error('Business Email not configured. Please set your business email in Settings > Profile and verify it in SendGrid.');
       }
-      const senderName = businessProfile?.company_name || 'Your Business';
-      const wrappedHtml = wrapEmailContent(emailBodyHtml, senderName, fromEmail);
+      const senderName = businessProfile?.company_name || userProfile?.full_name || 'Your Business';
+      
+      // Render with branded template
+      const wrappedHtml = renderEmailTemplate(
+        businessProfile?.email_template_style || templateStyle || 'professional',
+        {
+          body: emailBodyContent,
+          senderName,
+          senderEmail: fromEmail,
+          senderTitle: userProfile?.job_title,
+          companyName: businessProfile?.company_name,
+          logoUrl: businessProfile?.email_logo_url,
+          brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+          footerText: businessProfile?.email_footer_text,
+          signature: businessProfile?.email_signature,
+        }
+      );
 
       console.log(`Sending via SendGrid from: ${senderName} <${fromEmail}>`);
 

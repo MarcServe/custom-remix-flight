@@ -61,10 +61,19 @@ export function TagInput({
   const [open, setOpen] = React.useState(false);
   const [inputValue, setInputValue] = React.useState("");
 
+  // Extract search term for filtering suggestions (last part after comma if comma exists)
+  const searchTerm = React.useMemo(() => {
+    if (inputValue.includes(',')) {
+      const parts = inputValue.split(',');
+      return parts[parts.length - 1].trim();
+    }
+    return inputValue.trim();
+  }, [inputValue]);
+
   const filteredSuggestions = suggestions.filter(
     (s) =>
       !tags.includes(s) &&
-      (inputValue.trim() === "" || s.toLowerCase().includes(inputValue.toLowerCase()))
+      (searchTerm === "" || s.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const addTag = (tag: string) => {
@@ -85,6 +94,39 @@ export function TagInput({
       addTag(inputValue);
     } else if (e.key === "Backspace" && !inputValue && tags.length > 0) {
       removeTag(tags[tags.length - 1]);
+    }
+  };
+
+  // Handle comma-separated tag input
+  const handleInputChange = (value: string) => {
+    // Always update input value first so suggestions can filter properly
+    setInputValue(value);
+    
+    // Check if input contains commas and we should process them
+    if (value.includes(',')) {
+      // Split by comma
+      const parts = value.split(',');
+      const tagsToAdd: string[] = [];
+      
+      // Process all parts except the last one (which might be incomplete)
+      for (let i = 0; i < parts.length - 1; i++) {
+        const trimmed = parts[i].trim();
+        if (trimmed && !tags.includes(trimmed) && tags.length + tagsToAdd.length < maxTags) {
+          tagsToAdd.push(trimmed);
+        }
+      }
+      
+      // Add all tags at once if we found any
+      if (tagsToAdd.length > 0) {
+        onTagsChange([...tags, ...tagsToAdd]);
+        // After adding tags, update input to only show the remaining part (after last comma)
+        // Use the raw last part (not trimmed) to preserve any spaces the user typed
+        const remainingValue = parts[parts.length - 1];
+        // Only update if remaining value is different to avoid unnecessary re-renders
+        if (remainingValue !== value) {
+          setInputValue(remainingValue);
+        }
+      }
     }
   };
 
@@ -135,11 +177,11 @@ export function TagInput({
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-64 p-0" align="start">
-              <Command>
+              <Command shouldFilter={false}>
                 <CommandInput
                   placeholder={placeholder}
                   value={inputValue}
-                  onValueChange={setInputValue}
+                  onValueChange={handleInputChange}
                   onKeyDown={handleKeyDown}
                 />
                 <CommandList>
@@ -192,11 +234,11 @@ export function TagInput({
         {/* Inline input when showAddButton is false (used inside another popover) */}
         {!showAddButton && !disabled && tags.length < maxTags && (
           <div className="space-y-2">
-            <Command>
+            <Command shouldFilter={false}>
               <CommandInput
                 placeholder={placeholder}
                 value={inputValue}
-                onValueChange={setInputValue}
+                onValueChange={handleInputChange}
                 onKeyDown={handleKeyDown}
               />
               <CommandList>

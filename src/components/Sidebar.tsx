@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FolderOpen, CreditCard, Inbox, Brain } from "lucide-react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FolderOpen, CreditCard, Inbox, Brain, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,6 +46,7 @@ const navigation: NavigationItem[] = [
     children: [
       { name: "Autopilot", href: "/autopilot", icon: Brain },
       { name: "Lead Finder", href: "/lead-finder", icon: Sparkles },
+      { name: "Enrichment", href: "/enrichment", icon: Wand2 },
       { name: "Lead Inbox", href: "/lead-inbox", icon: Inbox },
     ]
   },
@@ -498,9 +499,13 @@ export const Sidebar = () => {
               <Button 
                 variant="ghost" 
                 className={cn(
-                  "w-full h-auto p-3",
+                  "w-full h-auto p-3 hover:bg-muted",
                   isCollapsed ? "justify-center" : "justify-start gap-3"
                 )}
+                onClick={(e) => {
+                  // Prevent any parent click handlers from interfering
+                  e.stopPropagation();
+                }}
               >
                 <Avatar className="h-8 w-8 shrink-0">
                   <AvatarFallback className="bg-primary text-primary-foreground">
@@ -508,26 +513,38 @@ export const Sidebar = () => {
                   </AvatarFallback>
                 </Avatar>
                 {!isCollapsed && (
-                  <div className="flex flex-col items-start text-sm">
-                    <span className="font-medium">{getUserDisplayName()}</span>
-                    <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+                  <div className="flex flex-col items-start text-sm flex-1 min-w-0">
+                    <span className="font-medium truncate w-full">{getUserDisplayName()}</span>
+                    <span className="text-xs text-muted-foreground truncate w-full">
                       {user.email}
                     </span>
                   </div>
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent 
+              align={isCollapsed ? "center" : "end"} 
+              side={isCollapsed ? "right" : "top"}
+              className="w-56 !z-[9999]"
+              sideOffset={8}
+              alignOffset={isCollapsed ? 0 : -10}
+            >
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link to="/profile" className="cursor-pointer">
+                <Link to="/profile" className="cursor-pointer flex items-center w-full">
                   <User className="mr-2 h-4 w-4" />
                   Profile Settings
                 </Link>
               </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/business-profile" className="cursor-pointer flex items-center w-full">
+                  <Building2 className="mr-2 h-4 w-4" />
+                  Business Profile
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={signOut} className="text-destructive">
+              <DropdownMenuItem onClick={signOut} className="text-destructive cursor-pointer">
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
               </DropdownMenuItem>

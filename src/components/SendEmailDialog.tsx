@@ -85,11 +85,11 @@ export function SendEmailDialog({
       let processedSubject = templateData.subject;
       let processedBody = templateData.body;
 
-      // Replace variables
+      // Replace variables (case-insensitive to match {{firstName}}, {{FirstName}}, etc.)
       const firstName = recipientName.split(' ')[0];
-      processedSubject = processedSubject.replace(/{{firstName}}/g, firstName);
-      processedBody = processedBody.replace(/{{firstName}}/g, firstName);
-      processedBody = processedBody.replace(/{{companyName}}/g, companyId ? 'your company' : 'your team');
+      processedSubject = processedSubject.replace(/{{firstName}}/gi, firstName);
+      processedBody = processedBody.replace(/{{firstName}}/gi, firstName);
+      processedBody = processedBody.replace(/{{companyName}}/gi, companyId ? 'your company' : 'your team');
 
       setSubject(processedSubject);
       setBodyHtml(processedBody);

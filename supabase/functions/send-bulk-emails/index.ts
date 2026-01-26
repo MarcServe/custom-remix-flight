@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
-import { wrapEmailContent } from "../_shared/email-wrapper.ts";
+import { renderEmailTemplate } from "../_shared/professional-template.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -142,14 +142,14 @@ serve(async (req) => {
       .from('profiles')
       .select('full_name, job_title, email')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
-    // Get business profile with email provider preference
+    // Get business profile with email provider preference and branding settings
     const { data: businessProfile } = await supabaseClient
       .from('business_profiles')
-      .select('company_name, email_provider')
+      .select('company_name, email_provider, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_signature')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     // Get optimal provider based on tracking capabilities
     const { data: connections, error: connectionsError } = await supabaseClient
@@ -222,12 +222,49 @@ serve(async (req) => {
           const nangoData = await nangoResponse.json();
           messageId = nangoData.id || null;
         } else if (optimalConnection.provider === 'smtp') {
-          // Send via SMTP
-          const senderName = businessProfile?.company_name || 'Your Business';
-          const wrappedHtml = wrapEmailContent(
-            recipient.personalized_body_html, 
-            senderName, 
-            optimalConnection.from_email
+          // Send via SMTP with branded template
+          const senderName = businessProfile?.company_name || userProfile?.full_name || 'Your Business';
+          const fromEmail = optimalConnection.from_email || userProfile?.email || 'noreply@yourdomain.com';
+          
+          // Extract body HTML (remove signature if already included to avoid duplicates)
+          let bodyHtml = recipient.personalized_body_html || '';
+          // More comprehensive signature removal patterns
+          const signaturePatterns = [
+            /<br><br><p>Best regards,.*$/is,
+            /<br><br>Best regards,.*$/is,
+            /<p>Best regards,.*$/is,
+            /Best regards,.*$/is,
+            /<div class="signature".*$/is,
+            /<div class="email-signature".*$/is,
+            /<div[^>]*class="[^"]*signature[^"]*".*$/is,
+            /michael orji.*$/is,  // Remove if signature contains name
+            /Michael Orji.*$/is,
+            /AI Founding Engineer.*$/is,
+            /AI innovation Studio.*$/is,
+            /AI Innovation Studio.*$/is,
+            /Biz Boosters Ltd.*$/is,
+            /biz boosters.*$/is,
+          ];
+          for (const pattern of signaturePatterns) {
+            bodyHtml = bodyHtml.replace(pattern, '').trim();
+          }
+          // Also remove any trailing signature-like content (multiple newlines followed by name/email patterns)
+          bodyHtml = bodyHtml.replace(/(<br\s*\/?>|\n){2,}.*?(michael|orji|biz boosters|founding engineer|AI innovation|innovation studio).*$/is, '').trim();
+          
+          // Render with branded template
+          const wrappedHtml = renderEmailTemplate(
+            businessProfile?.email_template_style || 'professional',
+            {
+              body: bodyHtml,
+              senderName,
+              senderEmail: fromEmail,
+              senderTitle: userProfile?.job_title,
+              companyName: businessProfile?.company_name,
+              logoUrl: businessProfile?.email_logo_url,
+              brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+              footerText: businessProfile?.email_footer_text,
+              signature: businessProfile?.email_signature,
+            }
           );
 
           const smtpMode = (optimalConnection.metadata as any)?.smtp_mode || 'direct'; // Default to 'direct' for open-source use
@@ -294,16 +331,52 @@ serve(async (req) => {
           const sendgridApiKey = Deno.env.get('SENDGRID_API_KEY');
           if (!sendgridApiKey) throw new Error('SendGrid not configured');
 
-          const senderName = businessProfile?.company_name || 'Your Business';
+          const senderName = businessProfile?.company_name || userProfile?.full_name || 'Your Business';
           // Priority: effectiveConnection.from_email > connection.from_email > profiles.email > error
           const fromEmail = effectiveConnection.from_email || userProfile?.email;
           if (!fromEmail) {
             throw new Error('Business Email not configured. Please set your business email in Settings > Profile and verify it in SendGrid.');
           }
-          const wrappedHtml = wrapEmailContent(
-            recipient.personalized_body_html, 
-            senderName, 
-            fromEmail
+          
+          // Extract body HTML (remove signature if already included to avoid duplicates)
+          let bodyHtml = recipient.personalized_body_html || '';
+          // More comprehensive signature removal patterns
+          const signaturePatterns = [
+            /<br><br><p>Best regards,.*$/is,
+            /<br><br>Best regards,.*$/is,
+            /<p>Best regards,.*$/is,
+            /Best regards,.*$/is,
+            /<div class="signature".*$/is,
+            /<div class="email-signature".*$/is,
+            /<div[^>]*class="[^"]*signature[^"]*".*$/is,
+            /michael orji.*$/is,  // Remove if signature contains name
+            /Michael Orji.*$/is,
+            /AI Founding Engineer.*$/is,
+            /AI innovation Studio.*$/is,
+            /AI Innovation Studio.*$/is,
+            /Biz Boosters Ltd.*$/is,
+            /biz boosters.*$/is,
+          ];
+          for (const pattern of signaturePatterns) {
+            bodyHtml = bodyHtml.replace(pattern, '').trim();
+          }
+          // Also remove any trailing signature-like content (multiple newlines followed by name/email patterns)
+          bodyHtml = bodyHtml.replace(/(<br\s*\/?>|\n){2,}.*?(michael|orji|biz boosters|founding engineer|AI innovation|innovation studio).*$/is, '').trim();
+          
+          // Render with branded template
+          const wrappedHtml = renderEmailTemplate(
+            businessProfile?.email_template_style || 'professional',
+            {
+              body: bodyHtml,
+              senderName,
+              senderEmail: fromEmail,
+              senderTitle: userProfile?.job_title,
+              companyName: businessProfile?.company_name,
+              logoUrl: businessProfile?.email_logo_url,
+              brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+              footerText: businessProfile?.email_footer_text,
+              signature: businessProfile?.email_signature,
+            }
           );
 
           const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
@@ -352,6 +425,7 @@ serve(async (req) => {
             status: 'sent',
             sent_at: new Date().toISOString(),
             external_message_id: messageId,
+            email_period: 'new', // Mark as new email
           })
           .eq('id', recipient.id);
 
@@ -366,6 +440,7 @@ serve(async (req) => {
             status: 'sent',
             sent_at: new Date().toISOString(),
             external_message_id: messageId,
+            email_period: 'new', // Mark as new email
             metadata: {
               campaign_id: campaignId,
               provider: optimalConnection.provider,

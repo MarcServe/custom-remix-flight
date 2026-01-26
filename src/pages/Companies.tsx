@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2 } from "lucide-react";
+import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2, Search } from "lucide-react";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
 import BulkEmailDialog from "@/components/BulkEmailDialog";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,10 +44,33 @@ export default function Companies() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [bulkEmailDialogOpen, setBulkEmailDialogOpen] = useState(false);
+  const [bulkEmailPeople, setBulkEmailPeople] = useState<Array<{
+    id: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    company_id?: string;
+    companies?: {
+      id?: string;
+      name?: string;
+      tags?: string[];
+      description?: string;
+      industry?: string;
+      website?: string;
+      enrichment_data?: any;
+      recent_news?: any;
+      funding_stage?: string;
+      funding_total?: number;
+      employee_count?: number;
+      tech_stack?: string[];
+      key_executives?: any;
+    };
+  }>>([]);
   const [csvUploaderOpen, setCsvUploaderOpen] = useState(false);
   const [scraperDialogOpen, setScraperDialogOpen] = useState(false);
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
   const [emailStatusFilter, setEmailStatusFilter] = useState<'all' | 'has-email' | 'has-email-not-in-contacts' | 'in-contacts' | 'no-email'>('all');
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<Set<string>>(new Set());
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [emailRecipient, setEmailRecipient] = useState<{
@@ -946,6 +970,27 @@ export default function Companies() {
     });
     
     const filtered = companies.filter(company => {
+      // Search filter - search across company name, website, description, industry, email
+      if (searchQuery.trim()) {
+        const query = searchQuery.trim().toLowerCase();
+        const name = (company.name || '').toLowerCase();
+        const website = (company.website || '').toLowerCase();
+        const description = (company.description || '').toLowerCase();
+        const industry = (company.industry || '').toLowerCase();
+        const email = (company.general_email || (company as any).generalEmail || '').toLowerCase();
+        
+        const matchesSearch = 
+          name.includes(query) ||
+          website.includes(query) ||
+          description.includes(query) ||
+          industry.includes(query) ||
+          email.includes(query);
+        
+        if (!matchesSearch) {
+          return false;
+        }
+      }
+      
       // Tag filter - case-insensitive matching with trimmed tags
       // Check both company.tags AND enrichment_data.suggestedTags
       if (selectedTagFilters.length > 0) {
@@ -960,11 +1005,25 @@ export default function Companies() {
         
         if (enrichmentData) {
           // Check various possible locations for suggestedTags
-          const possibleTags = enrichmentData.suggestedTags || 
-                              enrichmentData.suggested_tags ||
-                              null;
+          let possibleTags = enrichmentData.suggestedTags || 
+                            enrichmentData.suggested_tags ||
+                            enrichmentData.suggestedTagsArray ||
+                            null;
           
-          if (Array.isArray(possibleTags)) {
+          // If it's a string, try to parse it
+          if (typeof possibleTags === 'string') {
+            try {
+              const parsed = JSON.parse(possibleTags);
+              possibleTags = parsed;
+            } catch (e) {
+              // Not JSON, might be comma-separated
+              if (possibleTags.includes(',')) {
+                possibleTags = possibleTags.split(',').map((t: string) => t.trim()).filter(Boolean);
+              }
+            }
+          }
+          
+          if (Array.isArray(possibleTags) && possibleTags.length > 0) {
             suggestedTags = possibleTags.map((tag: string) => 
               typeof tag === 'string' ? tag.trim().toLowerCase() : String(tag).toLowerCase()
             ).filter(Boolean);
@@ -975,16 +1034,49 @@ export default function Companies() {
         const allCompanyTags = [...companyTags, ...suggestedTags];
         const selectedTagsLower = selectedTagFilters.map(tag => tag.trim().toLowerCase()).filter(Boolean);
         
+        // Debug first few companies when filtering
+        if (companies.indexOf(company) < 3) {
+          console.log('[Filter] Company tag check:', {
+            name: company.name,
+            companyTags: companyTags,
+            suggestedTags: suggestedTags,
+            allCompanyTags: allCompanyTags,
+            selectedTags: selectedTagFilters,
+            selectedTagsLower: selectedTagsLower,
+            hasEnrichmentData: !!enrichmentData
+          });
+        }
+        
         // Use OR logic with partial matching: company matches if it has ANY of the selected tags
         // Also support partial matches (e.g., "translation" matches "translation service")
-        const tagMatch = selectedTagsLower.length > 0 && selectedTagsLower.some(selectedTag => {
-          // Exact match
-          if (allCompanyTags.includes(selectedTag)) return true;
+        // Normalize tags by trimming and lowercasing, but keep special characters for exact matching
+        const normalizeTag = (tag: string) => tag
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, ' '); // Normalize multiple spaces to single space
+        
+        const normalizedCompanyTags = allCompanyTags.map(normalizeTag);
+        const normalizedSelectedTags = selectedTagsLower.map(normalizeTag);
+        
+        const tagMatch = normalizedSelectedTags.length > 0 && normalizedSelectedTags.some(selectedTag => {
+          // Exact match (normalized)
+          if (normalizedCompanyTags.includes(selectedTag)) {
+            if (companies.indexOf(company) < 3) {
+              console.log(`[Filter] ✅ Exact match found for "${selectedTag}" in company "${company.name}"`);
+            }
+            return true;
+          }
           
           // Partial match - check if any company tag contains the selected tag or vice versa
-          return allCompanyTags.some(companyTag => 
+          const partialMatch = normalizedCompanyTags.some(companyTag => 
             companyTag.includes(selectedTag) || selectedTag.includes(companyTag)
           );
+          
+          if (partialMatch && companies.indexOf(company) < 3) {
+            console.log(`[Filter] ✅ Partial match found for "${selectedTag}" in company "${company.name}"`);
+          }
+          
+          return partialMatch;
         });
         
         if (!tagMatch) {
@@ -1031,30 +1123,57 @@ export default function Companies() {
     if (selectedTagFilters.length > 0 && filtered.length === 0) {
       console.warn('[Filter] ⚠️ No companies matched the selected tags:', selectedTagFilters);
       
-      // Find companies that might have similar tags
+      // Find companies that might have similar tags - improved extraction
       const potentialMatches = companies.slice(0, 10).map(c => {
         const enrichmentData = c.enrichment_data as any;
-        const companyTags = (c.tags || []).map((t: string) => t.toLowerCase());
-        const suggestedTags = (enrichmentData?.suggestedTags || []).map((t: string) => t.toLowerCase());
+        const companyTags = ((c.tags || []) as string[]).map((t: string) => typeof t === 'string' ? t.toLowerCase() : String(t).toLowerCase());
+        
+        let suggestedTags: string[] = [];
+        let possibleSt: any = enrichmentData?.suggestedTags || enrichmentData?.suggested_tags || enrichmentData?.suggestedTagsArray || null;
+        
+        if (typeof possibleSt === 'string') {
+          try {
+            possibleSt = JSON.parse(possibleSt);
+          } catch (e) {
+            if (possibleSt.includes(',')) {
+              possibleSt = possibleSt.split(',').map((t: string) => t.trim()).filter(Boolean);
+            }
+          }
+        }
+        
+        if (Array.isArray(possibleSt)) {
+          suggestedTags = possibleSt.map((t: string) => typeof t === 'string' ? t.toLowerCase() : String(t).toLowerCase());
+        }
+        
         const allTags = [...companyTags, ...suggestedTags];
+        const selectedLower = selectedTagFilters.map(t => t.toLowerCase());
         
         return {
           name: c.name,
           tags: c.tags || [],
-          suggestedTags: enrichmentData?.suggestedTags || [],
+          suggestedTags: possibleSt,
           allTagsLower: allTags,
-          hasSimilarTag: selectedTagFilters.some(st => 
-            allTags.some(ct => ct.includes(st.toLowerCase()) || st.toLowerCase().includes(ct))
+          selectedTagsLower: selectedLower,
+          hasSimilarTag: selectedLower.some(selected => 
+            allTags.some(tag => tag === selected || tag.includes(selected) || selected.includes(tag))
           )
         };
       }).filter(c => c.hasSimilarTag || c.allTagsLower.length > 0);
       
-      console.warn('[Filter] Companies with tags (potential matches):', potentialMatches);
+      console.warn('[Filter] 🔍 Companies with tags (potential matches):', potentialMatches);
       console.warn('[Filter] 💡 Tip: Click "Apply Intelligent Tags to Companies" button to migrate tags from enrichment data');
+      console.warn('[Filter] 💡 Selected tags:', selectedTagFilters.map(t => t.toLowerCase()));
     }
     
-    return filtered;
-  }, [companies, selectedTagFilters, emailStatusFilter, peopleEmails]);
+    // Sort by created_at descending (newest first) to show recently added companies first
+    const sorted = filtered.sort((a, b) => {
+      const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return dateB - dateA; // Descending order (newest first)
+    });
+    
+    return sorted;
+  }, [companies, selectedTagFilters, emailStatusFilter, peopleEmails, searchQuery]);
 
   const handleTagFilterClick = (tag: string) => {
     setSelectedTagFilters(prev => 
@@ -1104,6 +1223,230 @@ export default function Companies() {
       });
     }
     setEmailDialogOpen(true);
+  };
+
+  const handleBulkEmailFromCompanies = async () => {
+    const selectedCompanies = filteredCompanies?.filter(c => selectedCompanyIds.has(c.id)) || [];
+    const companiesWithEmail = selectedCompanies.filter(company => {
+      const match = getCompanyEmailContact(company);
+      return !!match?.email;
+    });
+
+    if (companiesWithEmail.length === 0) {
+      toast({
+        title: "No emails available",
+        description: "Selected companies don't have email addresses. Please extract emails first or add contacts.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Get all people from selected companies, or create temporary entries for companies with general_email
+      const peopleForEmail: Array<{
+        id: string;
+        first_name: string;
+        last_name: string;
+        email: string;
+        company_id?: string;
+        companies?: {
+          id?: string;
+          name?: string;
+          tags?: string[];
+        };
+      }> = [];
+
+      // Fetch people from database for these companies
+      const companyIds = companiesWithEmail.map(c => c.id);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data: existingPeople } = await supabase
+        .from('people')
+        .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
+        .in('company_id', companyIds)
+        .not('email', 'is', null);
+
+      // Create a map of company_id -> existing people for that company
+      const peopleByCompanyId = new Map<string, any[]>();
+      if (existingPeople) {
+        existingPeople.forEach((p: any) => {
+          if (p.company_id) {
+            if (!peopleByCompanyId.has(p.company_id)) {
+              peopleByCompanyId.set(p.company_id, []);
+            }
+            peopleByCompanyId.get(p.company_id)!.push(p);
+          }
+        });
+      }
+
+      // Add all existing people to the list
+      if (existingPeople) {
+        peopleForEmail.push(...existingPeople.map((p: any) => ({
+          id: p.id,
+          first_name: p.first_name || '',
+          last_name: p.last_name || '',
+          email: p.email,
+          company_id: p.company_id,
+          companies: p.companies ? {
+            id: p.companies.id,
+            name: p.companies.name,
+            tags: p.companies.tags || [],
+          } : undefined,
+        })));
+      }
+
+      // For companies without people in database, create people records using general_email or contact email
+      // Also check if we need to add additional contacts from companies that already have some people
+      const existingEmails = new Set(peopleForEmail.map(p => p.email.toLowerCase().trim()));
+      
+      for (const company of companiesWithEmail) {
+        const companyPeople = peopleByCompanyId.get(company.id) || [];
+        const emailMatch = getCompanyEmailContact(company);
+        
+        // If company has no people OR we want to add the primary contact email if not already added
+        if (emailMatch?.email && !existingEmails.has(emailMatch.email.toLowerCase().trim())) {
+          // Check if person with this email already exists (might be from a different company)
+          const { data: existingPersonByEmail } = await supabase
+            .from('people')
+            .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
+            .ilike('email', emailMatch.email)
+            .maybeSingle();
+
+          if (existingPersonByEmail) {
+            // Use existing person, but update company_id if needed
+            if (existingPersonByEmail.company_id !== company.id) {
+              await supabase
+                .from('people')
+                .update({ company_id: company.id })
+                .eq('id', existingPersonByEmail.id);
+            }
+            // Only add if not already in our list
+            if (!peopleForEmail.find(p => p.id === existingPersonByEmail.id)) {
+              peopleForEmail.push({
+                id: existingPersonByEmail.id,
+                first_name: existingPersonByEmail.first_name || '',
+                last_name: existingPersonByEmail.last_name || '',
+                email: existingPersonByEmail.email,
+                company_id: company.id,
+                companies: existingPersonByEmail.companies ? {
+                  id: existingPersonByEmail.companies.id,
+                  name: existingPersonByEmail.companies.name,
+                  tags: existingPersonByEmail.companies.tags || [],
+                } : undefined,
+              });
+              existingEmails.add(existingPersonByEmail.email.toLowerCase().trim());
+            }
+          } else {
+            // Create new person record for this company
+            const nameParts = emailMatch.type === 'contact' && emailMatch.contact?.name
+              ? emailMatch.contact.name.trim().split(' ')
+              : company.name.trim().split(' ');
+            
+            const firstName = nameParts[0] || company.name;
+            const lastName = nameParts.slice(1).join(' ') || '';
+
+            const { data: newPerson, error: createError } = await supabase
+              .from('people')
+              .insert({
+                first_name: firstName,
+                last_name: lastName,
+                email: emailMatch.email,
+                company_id: company.id,
+                user_id: user.id,
+              })
+              .select('id, first_name, last_name, email, company_id')
+              .single();
+
+            if (!createError && newPerson) {
+              peopleForEmail.push({
+                id: newPerson.id,
+                first_name: newPerson.first_name || '',
+                last_name: newPerson.last_name || '',
+                email: newPerson.email,
+                company_id: newPerson.company_id,
+                companies: {
+                  id: company.id,
+                  name: company.name,
+                  tags: company.tags || [],
+                },
+              });
+              existingEmails.add(newPerson.email.toLowerCase().trim());
+            }
+          }
+        }
+      }
+
+      if (peopleForEmail.length === 0) {
+        toast({
+          title: "No recipients found",
+          description: "Could not find email addresses for selected companies.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Now fetch full company data with overview and tags for personalization
+      const { data: companiesData } = await supabase
+        .from('companies')
+        .select('id, name, description, industry, website, enrichment_data, recent_news, funding_stage, funding_total, employee_count, tech_stack, key_executives, tags')
+        .in('id', companyIds);
+
+      // Enrich people with full company data
+      const enrichedPeople = peopleForEmail.map(person => {
+        const companyData = companiesData?.find(c => c.id === person.company_id);
+        if (companyData) {
+          // Normalize funding_total to number
+          const fundingTotal = typeof companyData.funding_total === 'string' 
+            ? (parseFloat(companyData.funding_total) || undefined)
+            : (typeof companyData.funding_total === 'number' ? companyData.funding_total : undefined);
+          
+          return {
+            id: person.id,
+            first_name: person.first_name,
+            last_name: person.last_name,
+            email: person.email,
+            company_id: person.company_id,
+            companies: {
+              id: companyData.id,
+              name: companyData.name,
+              tags: companyData.tags || [],
+              // Include all company overview data for personalization
+              description: companyData.description,
+              industry: companyData.industry,
+              website: companyData.website,
+              enrichment_data: companyData.enrichment_data,
+              recent_news: companyData.recent_news,
+              funding_stage: companyData.funding_stage,
+              funding_total: fundingTotal,
+              employee_count: companyData.employee_count,
+              tech_stack: Array.isArray(companyData.tech_stack) ? companyData.tech_stack : undefined,
+              key_executives: Array.isArray(companyData.key_executives) ? (companyData.key_executives as any[]) : undefined,
+            },
+          };
+        }
+        // Return person as-is if no company data found
+        return {
+          id: person.id,
+          first_name: person.first_name,
+          last_name: person.last_name,
+          email: person.email,
+          company_id: person.company_id,
+          companies: person.companies,
+        };
+      });
+
+      // Store enriched people data and open bulk email dialog
+      setBulkEmailPeople(enrichedPeople);
+      setBulkEmailDialogOpen(true);
+    } catch (error: any) {
+      console.error('Error preparing bulk email:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to prepare bulk email",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleAddToContactList = (company: Company) => {
@@ -1208,10 +1551,32 @@ export default function Companies() {
           <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Companies</h1>
           <p className="text-muted-foreground mt-1 md:mt-2 text-sm md:text-base">
             {filteredCompanies?.length || 0} of {companies?.length || 0} companies
-            {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all') && " (filtered)"}
+            {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all' || searchQuery.trim()) && " (filtered)"}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {/* Search Input */}
+          <div className="relative w-full sm:w-auto">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search companies..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-full sm:w-64"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                onClick={() => setSearchQuery("")}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+          
           {/* Email Status Filter */}
           <Popover>
             <PopoverTrigger asChild>
@@ -1531,6 +1896,16 @@ export default function Companies() {
                           )}
                         </Button>
                       )}
+                      {/* Always visible Bulk Email button - opens dialog even without selections */}
+                      <Button
+                        variant={companiesWithEmail.length > 0 ? "default" : "outline"}
+                        size="sm"
+                        onClick={handleBulkEmailFromCompanies}
+                        disabled={bulkExtractEmailMutation.isPending}
+                      >
+                        <Mail className="h-4 w-4 mr-1" />
+                        {companiesWithEmail.length > 0 ? `Send Bulk Email (${companiesWithEmail.length})` : "Send Bulk Email"}
+                      </Button>
                     </>
                   );
                 })()}
@@ -1851,6 +2226,17 @@ export default function Companies() {
       <ApifyScraperDialog
         open={scraperDialogOpen}
         onOpenChange={setScraperDialogOpen}
+      />
+
+      <BulkEmailDialog
+        open={bulkEmailDialogOpen}
+        onOpenChange={(open) => {
+          setBulkEmailDialogOpen(open);
+          if (!open) {
+            setBulkEmailPeople([]);
+          }
+        }}
+        selectedPeople={bulkEmailPeople}
       />
 
       {/* Bulk Delete Confirmation Dialog */}

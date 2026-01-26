@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send, Plus, UserPlus, Loader2, CheckCircle2, Filter, X, Clock, Tag, ChevronDown } from "lucide-react";
+import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send, Plus, UserPlus, Loader2, CheckCircle2, Filter, X, Clock, Tag, ChevronDown, Search } from "lucide-react";
 import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
 import { PersonDetailsDialog } from "@/components/PersonDetailsDialog";
 import BulkEmailDialog from "@/components/BulkEmailDialog";
@@ -15,8 +15,10 @@ import { useToast } from "@/hooks/use-toast";
 import { TagInput, TagBadges } from "@/components/ui/tag-input";
 import { useCompanyTags } from "@/hooks/use-company-tags";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { EmailHistoryView } from "@/components/email/EmailHistoryView";
 
 export default function People() {
   const queryClient = useQueryClient();
@@ -32,6 +34,7 @@ export default function People() {
   const [selectedIndustryFilters, setSelectedIndustryFilters] = useState<string[]>([]);
   const [selectedCampaignFilter, setSelectedCampaignFilter] = useState<string | null>(null);
   const [expandedEmailHistory, setExpandedEmailHistory] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState<string>("");
   
   const { data: people, isLoading, refetch } = useQuery({
     queryKey: ["people"],
@@ -249,57 +252,97 @@ export default function People() {
 
   // Get all unique tags from people and their companies (prioritize intelligent tags)
   // Extract from both tags column AND enrichment_data.suggestedTags
-  const allPeopleTags = new Set<string>();
-  if (people && Array.isArray(people)) {
-    people.forEach(person => {
-      // Add person's own tags (using type assertion since tags column exists but types may not be updated)
-      const personTags = (person as any).tags;
-      if (personTags && Array.isArray(personTags)) {
-        personTags.forEach((tag: string) => {
-          if (tag && typeof tag === 'string' && tag.trim()) {
-            allPeopleTags.add(tag.trim());
-          }
-        });
-      }
-      // Add company tags from tags column (intelligent tags like "translation service", "healthcare", etc.)
-      if (person.companies?.tags && Array.isArray(person.companies.tags)) {
-        person.companies.tags.forEach((tag: string) => {
-          if (tag && typeof tag === 'string' && tag.trim()) {
-            allPeopleTags.add(tag.trim());
-          }
-        });
-      }
-      // Also extract tags from company enrichment_data.suggestedTags
-      if (person.companies?.enrichment_data) {
-        const enrichmentData = person.companies.enrichment_data as any;
-        const suggestedTags = enrichmentData?.suggestedTags || 
-                             enrichmentData?.suggested_tags ||
-                             null;
-        
-        if (Array.isArray(suggestedTags)) {
-          suggestedTags.forEach((tag: string) => {
+  const allPeopleTags = useMemo(() => {
+    const tagsSet = new Set<string>();
+    let peopleWithTags = 0;
+    let peopleWithCompanyTags = 0;
+    let peopleWithEnrichmentData = 0;
+    let peopleWithSuggestedTags = 0;
+    
+    if (people && Array.isArray(people)) {
+      people.forEach((person, index) => {
+        // Add person's own tags
+        const personTags = (person as any).tags;
+        if (personTags && Array.isArray(personTags) && personTags.length > 0) {
+          peopleWithTags++;
+          personTags.forEach((tag: string) => {
             if (tag && typeof tag === 'string' && tag.trim()) {
-              allPeopleTags.add(tag.trim());
+              tagsSet.add(tag.trim());
             }
           });
-        } else if (typeof suggestedTags === 'string') {
-          // Try parsing if it's a JSON string
-          try {
-            const parsed = JSON.parse(suggestedTags);
-            if (Array.isArray(parsed)) {
-              parsed.forEach((tag: string) => {
-                if (tag && typeof tag === 'string' && tag.trim()) {
-                  allPeopleTags.add(tag.trim());
-                }
-              });
+        }
+        
+        // Add company tags from tags column
+        if (person.companies?.tags && Array.isArray(person.companies.tags) && person.companies.tags.length > 0) {
+          peopleWithCompanyTags++;
+          person.companies.tags.forEach((tag: string) => {
+            if (tag && typeof tag === 'string' && tag.trim()) {
+              tagsSet.add(tag.trim());
             }
-          } catch (e) {
-            // Not JSON, skip
+          });
+        }
+        
+        // Extract tags from company enrichment_data.suggestedTags
+        if (person.companies?.enrichment_data) {
+          peopleWithEnrichmentData++;
+          const enrichmentData = person.companies.enrichment_data as any;
+          
+          // Check multiple possible paths for suggestedTags
+          let suggestedTags = enrichmentData?.suggestedTags || 
+                             enrichmentData?.suggested_tags ||
+                             enrichmentData?.suggestedTagsArray ||
+                             null;
+          
+          // If it's a string, try to parse it
+          if (typeof suggestedTags === 'string') {
+            try {
+              const parsed = JSON.parse(suggestedTags);
+              suggestedTags = parsed;
+            } catch (e) {
+              // Not JSON, might be comma-separated
+              if (suggestedTags.includes(',')) {
+                suggestedTags = suggestedTags.split(',').map((t: string) => t.trim()).filter(Boolean);
+              }
+            }
+          }
+          
+          if (Array.isArray(suggestedTags) && suggestedTags.length > 0) {
+            peopleWithSuggestedTags++;
+            suggestedTags.forEach((tag: string) => {
+              if (tag && typeof tag === 'string' && tag.trim()) {
+                tagsSet.add(tag.trim());
+              }
+            });
+          }
+          
+          // Debug first few companies
+          if (index < 5) {
+            console.log(`[People Tags] Person ${index}:`, {
+              name: `${person.first_name} ${person.last_name}`,
+              company: person.companies?.name,
+              personTags: personTags || [],
+              companyTags: person.companies?.tags || [],
+              hasEnrichmentData: !!enrichmentData,
+              suggestedTags: suggestedTags,
+              enrichmentDataKeys: enrichmentData ? Object.keys(enrichmentData) : []
+            });
           }
         }
-      }
-    });
-  }
+      });
+      
+      console.log('[People Tags] Summary:', {
+        totalPeople: people.length,
+        peopleWithTags,
+        peopleWithCompanyTags,
+        peopleWithEnrichmentData,
+        peopleWithSuggestedTags,
+        totalUniqueTags: tagsSet.size,
+        sampleTags: Array.from(tagsSet).slice(0, 20)
+      });
+    }
+    
+    return tagsSet;
+  }, [people]);
 
   // Get all unique industries from companies
   const allIndustries = new Set<string>();
@@ -330,67 +373,97 @@ export default function People() {
     });
   }
 
-  // Filter people by selected tags, industries, and campaigns
-  const filteredPeople = (people && Array.isArray(people)) ? people.filter(person => {
-    // Tag filter - case-insensitive matching with trimmed tags and partial matching
-    if (selectedTagFilters.length > 0) {
-      // Get tags from person.tags array (using type assertion since tags column exists but types may not be updated)
-      const personTags = ((person as any).tags && Array.isArray((person as any).tags)) 
-        ? (person as any).tags.map((tag: string) => typeof tag === 'string' ? tag.trim().toLowerCase() : String(tag).toLowerCase()).filter(Boolean)
-        : [];
-      
-      // Get tags from company.tags array
-      const companyTags = (person.companies?.tags && Array.isArray(person.companies.tags))
-        ? person.companies.tags.map((tag: string) => typeof tag === 'string' ? tag.trim().toLowerCase() : String(tag).toLowerCase()).filter(Boolean)
-        : [];
-      
-      // Also get tags from company enrichment_data.suggestedTags
-      let suggestedTags: string[] = [];
-      if (person.companies?.enrichment_data) {
-        const enrichmentData = person.companies.enrichment_data as any;
-        const possibleTags = enrichmentData?.suggestedTags || 
-                            enrichmentData?.suggested_tags ||
-                            null;
+  // Filter people by selected tags, industries, campaigns, and search query
+  const filteredPeople = useMemo(() => {
+    if (!people || !Array.isArray(people)) return [];
+    
+    return people.filter(person => {
+      // Search filter - search across name, email, company name, title, phone
+      if (searchQuery.trim()) {
+        const query = searchQuery.trim().toLowerCase();
+        const fullName = `${person.first_name || ''} ${person.last_name || ''}`.toLowerCase();
+        const email = (person.email || '').toLowerCase();
+        const companyName = (person.companies?.name || '').toLowerCase();
+        const title = (person.title || '').toLowerCase();
+        const phone = (person.phone || '').toLowerCase();
         
-        if (Array.isArray(possibleTags)) {
-          suggestedTags = possibleTags.map((tag: string) => 
-            typeof tag === 'string' ? tag.trim().toLowerCase() : String(tag).toLowerCase()
-          ).filter(Boolean);
-        } else if (typeof possibleTags === 'string') {
-          try {
-            const parsed = JSON.parse(possibleTags);
-            if (Array.isArray(parsed)) {
-              suggestedTags = parsed.map((tag: string) => 
-                typeof tag === 'string' ? tag.trim().toLowerCase() : String(tag).toLowerCase()
-              ).filter(Boolean);
-            }
-          } catch (e) {
-            // Not JSON, skip
-          }
+        const matchesSearch = 
+          fullName.includes(query) ||
+          email.includes(query) ||
+          companyName.includes(query) ||
+          title.includes(query) ||
+          phone.includes(query);
+        
+        if (!matchesSearch) {
+          return false;
         }
       }
       
-      // Combine all tag sources
-      const allPersonTags = [...personTags, ...companyTags, ...suggestedTags];
-      const selectedTagsLower = selectedTagFilters.map(tag => tag.trim().toLowerCase()).filter(Boolean);
-      
-      // Use OR logic with partial matching: person matches if they have ANY of the selected tags
-      // Also support partial matches (e.g., "EdTech" matches "EdTech platform")
-      const hasTag = selectedTagsLower.length > 0 && selectedTagsLower.some(selectedTag => {
-        // Exact match
-        if (allPersonTags.includes(selectedTag)) return true;
+      // Tag filter - case-insensitive matching with trimmed tags and partial matching
+      if (selectedTagFilters.length > 0) {
+        // Get tags from person.tags array
+        const personTags = ((person as any).tags && Array.isArray((person as any).tags)) 
+          ? (person as any).tags.map((tag: string) => typeof tag === 'string' ? tag.trim().toLowerCase() : String(tag).toLowerCase()).filter(Boolean)
+          : [];
         
-        // Partial match - check if any person tag contains the selected tag or vice versa
-        return allPersonTags.some(personTag => 
-          personTag.includes(selectedTag) || selectedTag.includes(personTag)
-        );
-      });
-      
-      if (!hasTag) {
-        // Debug logging for first few people that don't match
-        if (people.indexOf(person) < 3) {
-          console.log('[People Filter] Person did not match tags:', {
+        // Get tags from company.tags array
+        const companyTags = (person.companies?.tags && Array.isArray(person.companies.tags))
+          ? person.companies.tags.map((tag: string) => typeof tag === 'string' ? tag.trim().toLowerCase() : String(tag).toLowerCase()).filter(Boolean)
+          : [];
+        
+        // Also get tags from company enrichment_data.suggestedTags
+        let suggestedTags: string[] = [];
+        if (person.companies?.enrichment_data) {
+          const enrichmentData = person.companies.enrichment_data as any;
+          let possibleTags = enrichmentData?.suggestedTags || 
+                            enrichmentData?.suggested_tags ||
+                            enrichmentData?.suggestedTagsArray ||
+                            null;
+          
+          // If it's a string, try to parse it
+          if (typeof possibleTags === 'string') {
+            try {
+              const parsed = JSON.parse(possibleTags);
+              possibleTags = parsed;
+            } catch (e) {
+              // Not JSON, might be comma-separated
+              if (possibleTags.includes(',')) {
+                possibleTags = possibleTags.split(',').map((t: string) => t.trim()).filter(Boolean);
+              }
+            }
+          }
+          
+          if (Array.isArray(possibleTags) && possibleTags.length > 0) {
+            suggestedTags = possibleTags.map((tag: string) => 
+              typeof tag === 'string' ? tag.trim().toLowerCase() : String(tag).toLowerCase()
+            ).filter(Boolean);
+          }
+        }
+        
+        // Combine all tag sources
+        const allPersonTags = [...personTags, ...companyTags, ...suggestedTags];
+        const selectedTagsLower = selectedTagFilters.map(tag => tag.trim().toLowerCase()).filter(Boolean);
+        
+        // Use OR logic with partial matching: person matches if they have ANY of the selected tags
+        const hasTag = selectedTagsLower.length > 0 && selectedTagsLower.some(selectedTag => {
+          // Exact match
+          if (allPersonTags.includes(selectedTag)) return true;
+          
+          // Partial match - check if any person tag contains the selected tag or vice versa
+          return allPersonTags.some(personTag => 
+            personTag.includes(selectedTag) || selectedTag.includes(personTag)
+          );
+        });
+        
+        if (!hasTag) {
+          return false;
+        }
+        
+        // Debug: log first match
+        if (people.indexOf(person) === 0) {
+          console.log('[People Filter] ✅ First person matched:', {
             name: `${person.first_name} ${person.last_name}`,
+            company: person.companies?.name,
             selectedTags: selectedTagFilters,
             personTags: personTags,
             companyTags: companyTags,
@@ -398,9 +471,7 @@ export default function People() {
             allPersonTags: allPersonTags
           });
         }
-        return false;
       }
-    }
 
     // Industry filter
     if (selectedIndustryFilters.length > 0) {
@@ -419,8 +490,14 @@ export default function People() {
       if (!wasInCampaign) return false;
     }
 
-    return true;
-  }) : [];
+      return true;
+    }).sort((a, b) => {
+      // Sort by created_at descending (newest first) to show recently added people first
+      const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return dateB - dateA; // Descending order (newest first)
+    });
+  }, [people, selectedTagFilters, selectedIndustryFilters, selectedCampaignFilter, emailHistory, searchQuery]);
 
   // Debug logging when filtering by tags but no results
   if (selectedTagFilters.length > 0 && filteredPeople.length === 0 && people && people.length > 0) {
@@ -529,23 +606,24 @@ export default function People() {
                 <h1 className="text-4xl font-bold tracking-tight">People</h1>
                 <p className="text-muted-foreground mt-1">
                   {filteredPeople?.length || 0} of {people?.length || 0} contacts
-                  {selectedTagFilters.length > 0 && ` (filtered by ${selectedTagFilters.length} tag${selectedTagFilters.length > 1 ? 's' : ''})`}
+                  {(selectedTagFilters.length > 0 || searchQuery.trim()) && " (filtered)"}
                   {selectedPeopleIds.size > 0 && ` • ${selectedPeopleIds.size} selected`}
                 </p>
               </div>
             </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap w-full sm:w-auto">
+              {/* Always visible Bulk Email button - opens dialog even without selections */}
+              <Button 
+                onClick={() => setBulkEmailDialogOpen(true)} 
+                size="lg"
+                variant={selectedPeopleIds.size > 0 ? "default" : "outline"}
+                className="w-full sm:w-auto"
+              >
+                <Send className="mr-2 h-4 w-4" />
+                {selectedPeopleIds.size > 0 ? `Bulk Send (${selectedPeopleIds.size})` : "Send Bulk Email"}
+              </Button>
               {selectedPeopleIds.size > 0 && (
                 <>
-                  <Button 
-                    onClick={() => setBulkEmailDialogOpen(true)} 
-                    size="lg"
-                    variant="default"
-                    className="w-full sm:w-auto"
-                  >
-                    <Send className="mr-2 h-4 w-4" />
-                    Bulk Send ({selectedPeopleIds.size})
-                  </Button>
                   {(() => {
                     const selectedPeopleWithEmails = people?.filter(p => 
                       selectedPeopleIds.has(p.id) && p.email
@@ -608,6 +686,28 @@ export default function People() {
               </div>
             )}
             
+            {/* Search Input */}
+            <div className="relative w-full sm:w-auto">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search contacts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 w-full sm:w-64"
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                  onClick={() => setSearchQuery("")}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+            
             {/* Tag Filter */}
             <Popover>
               <PopoverTrigger asChild>
@@ -648,7 +748,7 @@ export default function People() {
                     showAddButton={false}
                   />
                   <p className="text-xs text-muted-foreground">
-                    {Array.from(allPeopleTags).length} intelligent tags from your contacts. Select multiple tags to filter.
+                    {allPeopleTags.size} intelligent tags from your contacts. Select multiple tags to filter.
                   </p>
                 </div>
               </PopoverContent>
@@ -738,9 +838,18 @@ export default function People() {
                       </CardTitle>
                       <p className="text-sm text-muted-foreground">{person.title}</p>
                       {allPersonTags.length > 0 && (
-                        <div className="mt-1">
-                          <TagBadges tags={allPersonTags} maxDisplay={3} />
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          <TagBadges tags={allPersonTags} maxDisplay={5} onClick={(tag) => {
+                            if (!selectedTagFilters.includes(tag)) {
+                              setSelectedTagFilters([...selectedTagFilters, tag]);
+                            }
+                          }} />
                         </div>
+                      )}
+                      {companyTags.length > 0 && personTags.length === 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Company tags: {companyTags.slice(0, 3).join(', ')}{companyTags.length > 3 ? '...' : ''}
+                        </p>
                       )}
                       {person.created_at && (() => {
                         try {
@@ -810,112 +919,15 @@ export default function People() {
                     </Button>
                   )}
                   
-                  {/* Email History */}
+                  {/* Email History - Enhanced with Intelligent Separation */}
                   {hasEmailHistory && (
-                    <Collapsible open={isEmailHistoryExpanded} onOpenChange={() => toggleEmailHistory(person.id)}>
-                      <CollapsibleTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-full justify-between text-xs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (person.id) {
-                              toggleEmailHistory(person.id);
-                            }
-                          }}
-                        >
-                          <span className="flex items-center gap-2">
-                            <Mail className="h-3 w-3" />
-                            Email History ({personEmailHistory.length})
-                          </span>
-                          <ChevronDown className={`h-3 w-3 transition-transform ${isEmailHistoryExpanded ? 'rotate-180' : ''}`} />
-                        </Button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="mt-2 space-y-2">
-                        <div className="space-y-2 text-xs">
-                          {personEmailHistory.slice(0, 5).map((email: any) => {
-                            if (!email) return null;
-                            const campaign = email.email_campaigns || {};
-                            const sentDate = email.sent_at ? new Date(email.sent_at) : null;
-                            const isRecent = sentDate && !isNaN(sentDate.getTime()) && (Date.now() - sentDate.getTime()) < 7 * 24 * 60 * 60 * 1000; // Last 7 days
-                            const isToday = sentDate && !isNaN(sentDate.getTime()) && sentDate.toDateString() === new Date().toDateString();
-                            const isThisWeek = sentDate && !isNaN(sentDate.getTime()) && (Date.now() - sentDate.getTime()) < 7 * 24 * 60 * 60 * 1000;
-                            
-                            return (
-                              <div
-                                key={email.id}
-                                className={`p-2 rounded border space-y-1 ${
-                                  isToday ? 'bg-primary/5 border-primary/20' :
-                                  isThisWeek ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/50' :
-                                  'bg-muted/50'
-                                }`}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="font-medium truncate text-xs">{campaign?.name || 'Campaign'}</span>
-                                  <Badge
-                                    variant={
-                                      email.status === 'sent' ? 'default' :
-                                      email.status === 'opened' ? 'default' :
-                                      email.status === 'failed' ? 'destructive' : 'secondary'
-                                    }
-                                    className="text-xs"
-                                  >
-                                    {email.status}
-                                  </Badge>
-                                </div>
-                                {sentDate && (() => {
-                                  try {
-                                    return (
-                                      <div className="flex items-center gap-1 text-muted-foreground text-xs">
-                                        <Clock className="h-3 w-3" />
-                                        <span>
-                                          {isToday ? 'Today' : isThisWeek ? 'This week' : format(sentDate, 'MMM d, yyyy')} at {format(sentDate, 'h:mm a')}
-                                        </span>
-                                      </div>
-                                    );
-                                  } catch (e) {
-                                    return null;
-                                  }
-                                })()}
-                                {campaign?.tags && Array.isArray(campaign.tags) && campaign.tags.length > 0 && (
-                                  <div className="flex items-center gap-1 flex-wrap">
-                                    <Tag className="h-3 w-3 text-muted-foreground" />
-                                    <TagBadges tags={campaign.tags} maxDisplay={3} />
-                                  </div>
-                                )}
-                                {email.personalized_subject && (
-                                  <div className="text-muted-foreground text-xs truncate" title={email.personalized_subject}>
-                                    Subject: {email.personalized_subject}
-                                  </div>
-                                )}
-                                {email.opened_at && (() => {
-                                  try {
-                                    const openedDate = new Date(email.opened_at);
-                                    if (!isNaN(openedDate.getTime())) {
-                                      return (
-                                        <div className="text-muted-foreground text-xs">
-                                          ✓ Opened: {format(openedDate, 'MMM d, yyyy h:mm a')}
-                                        </div>
-                                      );
-                                    }
-                                  } catch (e) {
-                                    return null;
-                                  }
-                                  return null;
-                                })()}
-                              </div>
-                            );
-                          })}
-                          {personEmailHistory.length > 5 && (
-                            <p className="text-xs text-muted-foreground text-center">
-                              +{personEmailHistory.length - 5} more email{personEmailHistory.length - 5 > 1 ? 's' : ''}
-                            </p>
-                          )}
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
+                    <div className="mt-2">
+                      <EmailHistoryView 
+                        personId={person.id}
+                        showFilters={false}
+                        maxItems={10}
+                      />
+                    </div>
                   )}
                 </CardContent>
               </div>
