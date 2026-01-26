@@ -41,21 +41,62 @@ export function useCompanyTags() {
   });
 
   // Fetch all unique tags used in companies (for suggestions)
+  // Extract from both tags column AND enrichment_data.suggestedTags
   const { data: existingTags, isLoading: tagsLoading } = useQuery({
     queryKey: ["company-existing-tags", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("companies")
-        .select("tags")
-        .eq("user_id", user?.id)
-        .not("tags", "is", null);
+        .select("tags, enrichment_data")
+        .eq("user_id", user?.id);
 
       if (error) throw error;
 
-      // Flatten and dedupe all tags
+      // Flatten and dedupe all tags from both sources
       const allTags = new Set<string>();
-      (data || []).forEach((company: { tags: string[] | null }) => {
-        (company.tags || []).forEach((tag: string) => allTags.add(tag));
+      let companiesWithTags = 0;
+      let companiesWithEnrichment = 0;
+      let companiesWithSuggestedTags = 0;
+      
+      (data || []).forEach((company: { tags: string[] | null; enrichment_data: any }) => {
+        // Extract from tags column
+        if (company.tags && Array.isArray(company.tags) && company.tags.length > 0) {
+          companiesWithTags++;
+          company.tags.forEach((tag: string) => {
+            if (tag && typeof tag === 'string' && tag.trim()) {
+              allTags.add(tag.trim());
+            }
+          });
+        }
+        
+        // Also extract from enrichment_data.suggestedTags (where AI intelligent tags are stored)
+        const enrichmentData = company.enrichment_data;
+        if (enrichmentData) {
+          companiesWithEnrichment++;
+          
+          // Check multiple possible paths
+          const suggestedTags = enrichmentData.suggestedTags || 
+                                enrichmentData.suggested_tags ||
+                                null;
+          
+          if (suggestedTags && Array.isArray(suggestedTags) && suggestedTags.length > 0) {
+            companiesWithSuggestedTags++;
+            suggestedTags.forEach((tag: string) => {
+              if (tag && typeof tag === 'string' && tag.trim()) {
+                allTags.add(tag.trim());
+              }
+            });
+          }
+        }
+      });
+
+      console.log('[useCompanyTags] Query results:', {
+        totalCompanies: data?.length || 0,
+        companiesWithTags,
+        companiesWithEnrichment,
+        companiesWithSuggestedTags,
+        uniqueTagsFound: allTags.size,
+        sampleTags: Array.from(allTags).slice(0, 20)
       });
 
       return Array.from(allTags).sort();

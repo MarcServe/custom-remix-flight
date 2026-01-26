@@ -45,6 +45,7 @@ export interface TagInputProps {
   disabled?: boolean;
   maxTags?: number;
   className?: string;
+  showAddButton?: boolean; // Allow disabling the internal "+ Add" popover
 }
 
 export function TagInput({
@@ -55,6 +56,7 @@ export function TagInput({
   disabled = false,
   maxTags = 10,
   className,
+  showAddButton = true, // Default to showing the add button
 }: TagInputProps) {
   const [open, setOpen] = React.useState(false);
   const [inputValue, setInputValue] = React.useState("");
@@ -62,7 +64,7 @@ export function TagInput({
   const filteredSuggestions = suggestions.filter(
     (s) =>
       !tags.includes(s) &&
-      s.toLowerCase().includes(inputValue.toLowerCase())
+      (inputValue.trim() === "" || s.toLowerCase().includes(inputValue.toLowerCase()))
   );
 
   const addTag = (tag: string) => {
@@ -120,7 +122,7 @@ export function TagInput({
           );
         })}
         
-        {!disabled && tags.length < maxTags && (
+        {showAddButton && !disabled && tags.length < maxTags && (
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -141,28 +143,15 @@ export function TagInput({
                   onKeyDown={handleKeyDown}
                 />
                 <CommandList>
-                  <CommandEmpty>
-                    {inputValue.trim() ? (
-                      <div
-                        className="p-2 cursor-pointer hover:bg-accent text-sm flex items-center gap-2"
-                        onClick={() => addTag(inputValue)}
-                      >
-                        <Plus className="h-3 w-3" />
-                        Create "{inputValue}"
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground text-sm p-2">Type to add a tag</span>
-                    )}
-                  </CommandEmpty>
-                  {filteredSuggestions.length > 0 && (
-                    <CommandGroup heading="Suggestions">
-                      {filteredSuggestions.slice(0, 10).map((suggestion) => (
+                  {filteredSuggestions.length > 0 ? (
+                    <CommandGroup heading={`Suggestions (${filteredSuggestions.length})`}>
+                      {filteredSuggestions.slice(0, 50).map((suggestion) => (
                         <CommandItem
                           key={suggestion}
                           value={suggestion}
                           onSelect={() => {
                             addTag(suggestion);
-                            setOpen(false);
+                            setInputValue(""); // Clear input but keep popover open for multiple selections
                           }}
                         >
                           <Check
@@ -175,11 +164,85 @@ export function TagInput({
                         </CommandItem>
                       ))}
                     </CommandGroup>
+                  ) : (
+                    <CommandEmpty>
+                      {inputValue.trim() ? (
+                        <div
+                          className="p-2 cursor-pointer hover:bg-accent text-sm flex items-center gap-2"
+                          onClick={() => addTag(inputValue)}
+                        >
+                          <Plus className="h-3 w-3" />
+                          Create "{inputValue}"
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm p-2">
+                          {suggestions.length > 0 
+                            ? "Type to filter suggestions" 
+                            : "No tags available. Type to create a new tag"}
+                        </span>
+                      )}
+                    </CommandEmpty>
                   )}
                 </CommandList>
               </Command>
             </PopoverContent>
           </Popover>
+        )}
+        
+        {/* Inline input when showAddButton is false (used inside another popover) */}
+        {!showAddButton && !disabled && tags.length < maxTags && (
+          <div className="space-y-2">
+            <Command>
+              <CommandInput
+                placeholder={placeholder}
+                value={inputValue}
+                onValueChange={setInputValue}
+                onKeyDown={handleKeyDown}
+              />
+              <CommandList>
+                {filteredSuggestions.length > 0 ? (
+                  <CommandGroup heading={`Suggestions (${filteredSuggestions.length})`}>
+                    {filteredSuggestions.slice(0, 50).map((suggestion) => (
+                      <CommandItem
+                        key={suggestion}
+                        value={suggestion}
+                        onSelect={() => {
+                          addTag(suggestion);
+                          setInputValue("");
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            tags.includes(suggestion) ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        {suggestion}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                ) : (
+                  <CommandEmpty>
+                    {inputValue.trim() ? (
+                      <div
+                        className="p-2 cursor-pointer hover:bg-accent text-sm flex items-center gap-2"
+                        onClick={() => addTag(inputValue)}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Create "{inputValue}"
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-sm p-2">
+                        {suggestions.length > 0 
+                          ? "Type to filter suggestions" 
+                          : "No tags available. Type to create a new tag"}
+                      </span>
+                    )}
+                  </CommandEmpty>
+                )}
+              </CommandList>
+            </Command>
+          </div>
         )}
       </div>
     </div>
