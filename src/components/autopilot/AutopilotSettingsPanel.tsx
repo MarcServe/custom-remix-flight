@@ -499,7 +499,13 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
             </div>
             <Switch
               checked={localSettings?.full_auto_mode || false}
-              onCheckedChange={(checked) => handleChange('full_auto_mode', checked)}
+              onCheckedChange={(checked) => {
+                handleChange('full_auto_mode', checked);
+                // Auto-enable campaign creation when turning on full auto (required for the flow)
+                if (checked && !localSettings?.auto_create_campaign) {
+                  handleChange('auto_create_campaign', true);
+                }
+              }}
             />
           </div>
         </CardContent>
