@@ -21,7 +21,9 @@ export function renderProfessionalTemplate({
   footerText,
   signature,
 }: EmailTemplateProps): string {
-  const bodyHtml = body.replace(/\n/g, '<br>');
+  // Ensure body is always a string to prevent errors
+  const safeBody = body || '';
+  const bodyHtml = safeBody.replace(/\n/g, '<br>');
   
   return `
 <!DOCTYPE html>
@@ -153,7 +155,9 @@ export function renderMinimalTemplate({
   footerText,
   signature,
 }: EmailTemplateProps): string {
-  const bodyHtml = body.replace(/\n/g, '<br>');
+  // Ensure body is always a string to prevent errors
+  const safeBody = body || '';
+  const bodyHtml = safeBody.replace(/\n/g, '<br>');
   
   return `
 <!DOCTYPE html>
@@ -250,7 +254,9 @@ export function renderModernTemplate({
   footerText,
   signature,
 }: EmailTemplateProps): string {
-  const bodyHtml = body.replace(/\n/g, '<br>');
+  // Ensure body is always a string to prevent errors
+  const safeBody = body || '';
+  const bodyHtml = safeBody.replace(/\n/g, '<br>');
   
   return `
 <!DOCTYPE html>

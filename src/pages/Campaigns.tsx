@@ -442,7 +442,6 @@ export default function Campaigns() {
             )}
           </DialogContent>
         </Dialog>
-        </TabsContent>
 
         <TabsContent value="health">
           <EmailDeliverability />

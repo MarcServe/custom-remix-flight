@@ -20,6 +20,7 @@ interface EmailRequest {
   companyId?: string;
   contactId?: string;
   sender?: 'gmail' | 'gmail_direct' | 'resend' | 'smtp' | 'sendgrid';
+  senderConnectionId?: string; // Specific connection ID to use (optional, will query if not provided)
   testConnection?: boolean; // Test SMTP connection without sending
   enableAutoResponder?: boolean; // Enable AI auto-responder for replies
   templateStyle?: string; // Email template style (professional, modern, minimal, etc.)
@@ -43,6 +44,8 @@ serve(async (req) => {
   }
 
   try {
+    console.log('Starting send-crm-email function');
+    
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -60,11 +63,30 @@ serve(async (req) => {
     } = await supabaseClient.auth.getUser();
 
     if (authError || !user) {
+      console.error('Auth error:', authError);
       throw new Error('Unauthorized');
     }
 
-    const emailRequest: EmailRequest = await req.json();
-    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, useInboundReplyTo = false, attachments = [] } = emailRequest;
+    console.log('User authenticated:', user.id);
+
+    let emailRequest: EmailRequest;
+    try {
+      emailRequest = await req.json();
+      console.log('Request parsed successfully. Fields:', {
+        toEmail: emailRequest.toEmail,
+        subject: emailRequest.subject,
+        hasBodyHtml: !!emailRequest.bodyHtml,
+        hasBodyText: !!emailRequest.bodyText,
+        hasBody: !!emailRequest.body,
+        sender: emailRequest.sender,
+        senderConnectionId: emailRequest.senderConnectionId,
+      });
+    } catch (jsonError) {
+      console.error('JSON parse error:', jsonError);
+      throw new Error('Invalid JSON in request body');
+    }
+    
+    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, senderConnectionId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, useInboundReplyTo = false, attachments = [] } = emailRequest;
     
     // Fetch user profile for signature and business email
     const { data: userProfile } = await supabaseClient
@@ -90,35 +112,43 @@ serve(async (req) => {
 
     // Support both legacy plain text and new HTML emails
     // Note: We'll use renderEmailTemplate which handles signatures, so we extract just the body content
-    let emailBodyContent = bodyHtml || (body ? `<p>${body.replace(/\n/g, '</p><p>')}</p>` : '');
+    let emailBodyContent = bodyHtml || (body ? `<p>${body.replace(/\n/g, '</p><p>')}</p>` : '') || '';
     let emailBodyText = bodyText || body || '';
     
-    // Remove signature if already included (to avoid duplicates when renderEmailTemplate adds it)
-    // Look for common signature patterns - more comprehensive removal
-    const signaturePatterns = [
-      /<br><br><p>Best regards,.*$/is,
-      /<br><br>Best regards,.*$/is,
-      /<p>Best regards,.*$/is,
-      /\n\nBest regards,.*$/is,
-      /Best regards,.*$/is,
-      /<div class="signature".*$/is,
-      /<div class="email-signature".*$/is,
-      /<div[^>]*class="[^"]*signature[^"]*".*$/is,
-      /michael orji.*$/is,
-      /Michael Orji.*$/is,
-      /AI Founding Engineer.*$/is,
-      /AI innovation Studio.*$/is,
-      /AI Innovation Studio.*$/is,
-      /Biz Boosters Ltd.*$/is,
-      /biz boosters.*$/is,
-    ];
-    
-    for (const pattern of signaturePatterns) {
-      emailBodyContent = emailBodyContent.replace(pattern, '').trim();
+    // Ensure emailBodyContent is always a string (not undefined/null)
+    if (!emailBodyContent) {
+      emailBodyContent = '';
     }
     
-    // Also remove any trailing signature-like content (multiple newlines/breaks followed by name/email patterns)
-    emailBodyContent = emailBodyContent.replace(/(<br\s*\/?>|\n){2,}.*?(michael|orji|biz boosters|founding engineer|AI innovation|innovation studio|@bizboosters).*$/is, '').trim();
+    // Remove signature if already included (to avoid duplicates when renderEmailTemplate adds it)
+    // Only process if emailBodyContent is a string
+    if (typeof emailBodyContent === 'string' && emailBodyContent.length > 0) {
+      // Look for common signature patterns - more comprehensive removal
+      const signaturePatterns = [
+        /<br><br><p>Best regards,.*$/is,
+        /<br><br>Best regards,.*$/is,
+        /<p>Best regards,.*$/is,
+        /\n\nBest regards,.*$/is,
+        /Best regards,.*$/is,
+        /<div class="signature".*$/is,
+        /<div class="email-signature".*$/is,
+        /<div[^>]*class="[^"]*signature[^"]*".*$/is,
+        /michael orji.*$/is,
+        /Michael Orji.*$/is,
+        /AI Founding Engineer.*$/is,
+        /AI innovation Studio.*$/is,
+        /AI Innovation Studio.*$/is,
+        /Biz Boosters Ltd.*$/is,
+        /biz boosters.*$/is,
+      ];
+      
+      for (const pattern of signaturePatterns) {
+        emailBodyContent = emailBodyContent.replace(pattern, '').trim();
+      }
+      
+      // Also remove any trailing signature-like content (multiple newlines/breaks followed by name/email patterns)
+      emailBodyContent = emailBodyContent.replace(/(<br\s*\/?>|\n){2,}.*?(michael|orji|biz boosters|founding engineer|AI innovation|innovation studio|@bizboosters).*$/is, '').trim();
+    }
 
     // If invoice is attached, append it to the email body
     if (attachInvoice && invoiceHtml) {
@@ -127,19 +157,42 @@ serve(async (req) => {
       emailBodyContent += invoiceHtml;
     }
 
-    // Append signature if not already present
-    if (!emailBodyText.includes('Best regards,')) {
-      emailBodyText += signatureText;
-    }
-    if (!emailBodyHtml.includes('Best regards,') && !attachInvoice) {
-      emailBodyHtml += signatureHtml;
-    }
+    // Create emailBodyHtml from emailBodyContent for compatibility
+    // Note: renderEmailTemplate will handle signature and branding, so we just use the content here
+    let emailBodyHtml = emailBodyContent;
 
-    if (!toEmail || !subject || !emailBodyText) {
-      throw new Error('Missing required fields: toEmail, subject, body');
+    // Validate required fields - allow either text or HTML body
+    // Check for both undefined/null and empty strings
+    const hasTextBody = emailBodyText && emailBodyText.trim().length > 0;
+    const hasHtmlBody = emailBodyHtml && emailBodyHtml.trim().length > 0;
+    
+    if (!toEmail || !subject || (!hasTextBody && !hasHtmlBody)) {
+      throw new Error('Missing required fields: toEmail, subject, and at least one of bodyText or bodyHtml');
+    }
+    
+    // Ensure we have at least a minimal text version for providers that require it
+    if (!hasTextBody && hasHtmlBody) {
+      // Extract text from HTML as fallback
+      emailBodyText = emailBodyHtml.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() || 'Email content';
+    } else if (!hasHtmlBody && hasTextBody) {
+      // If we only have text, create a simple HTML version
+      emailBodyHtml = `<p>${emailBodyText.replace(/\n/g, '</p><p>')}</p>`;
+    }
+    
+    // Final safety check - ensure both are non-empty strings
+    if (!emailBodyText || emailBodyText.trim().length === 0) {
+      emailBodyText = 'Email content';
+    }
+    if (!emailBodyHtml || emailBodyHtml.trim().length === 0) {
+      emailBodyHtml = '<p>Email content</p>';
     }
 
     console.log(`Sending email to ${toEmail} from user ${user.email} using ${sender}${useInboundReplyTo ? ' (with inbound reply-to tracking)' : ''}`);
+    console.log('Email body content length:', {
+      emailBodyContent: emailBodyContent?.length || 0,
+      emailBodyText: emailBodyText?.length || 0,
+      emailBodyHtml: emailBodyHtml?.length || 0,
+    });
 
     // Fetch and prepare attachments if any
     const attachmentData: Array<{ filename: string; content: string; type: string }> = [];
@@ -184,13 +237,19 @@ serve(async (req) => {
 
     if (sender === 'gmail' || sender === 'gmail_direct') {
       // Send via Gmail Direct OAuth
-      const { data: connection, error: connectionError } = await supabaseClient
+      let connectionQuery = supabaseClient
         .from('crm_connections')
         .select('id, metadata, from_email')
         .eq('user_id', user.id)
         .in('provider', ['gmail', 'gmail_direct'])
-        .eq('status', 'active')
-        .maybeSingle();
+        .eq('status', 'active');
+      
+      // Use specific connection if provided
+      if (senderConnectionId) {
+        connectionQuery = connectionQuery.eq('id', senderConnectionId);
+      }
+      
+      const { data: connection, error: connectionError } = await connectionQuery.maybeSingle();
 
       if (connectionError || !connection) {
         throw new Error('Gmail not connected. Please connect Gmail in Settings.');
@@ -285,24 +344,26 @@ serve(async (req) => {
       console.log('Email sent via Gmail Direct:', gmailData);
     } else if (sender === 'smtp') {
       // Send via Resend using verified business email
-      const { data: connection, error: connectionError } = await supabaseClient
+      let connectionQuery = supabaseClient
         .from('crm_connections')
         .select('from_email, status')
         .eq('user_id', user.id)
-        .eq('provider', 'smtp')
-        .eq('status', 'active')
-        .maybeSingle();
+        .eq('provider', 'sendgrid')
+        .eq('status', 'active');
+      
+      // Use specific connection if provided
+      if (senderConnectionId) {
+        connectionQuery = connectionQuery.eq('id', senderConnectionId);
+      }
+      
+      const { data: connection, error: connectionError } = await connectionQuery.maybeSingle();
 
       if (connectionError || !connection || !connection.from_email) {
         throw new Error('Business Email not configured. Please verify your email in Settings.');
       }
 
-      // Fetch business profile for company name
-      const { data: businessProfile } = await supabaseClient
-        .from('business_profiles')
-        .select('company_name')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // Use businessProfile from top-level fetch (already has all needed fields)
+      // No need to fetch again - businessProfile is already available in scope
 
       // Priority: connection.from_email > profiles.email > error
       const fromEmail = connection.from_email || userProfile?.email;
@@ -313,20 +374,26 @@ serve(async (req) => {
       const senderName = businessProfile?.company_name || userProfile?.full_name || 'Your Business';
       
       // Render with branded template
-      const wrappedHtml = renderEmailTemplate(
-        businessProfile?.email_template_style || templateStyle || 'professional',
-        {
-          body: emailBodyContent,
-          senderName,
-          senderEmail: fromEmail,
-          senderTitle: userProfile?.job_title,
-          companyName: businessProfile?.company_name,
-          logoUrl: businessProfile?.email_logo_url,
-          brandColor: businessProfile?.email_brand_color || '#8b5cf6',
-          footerText: businessProfile?.email_footer_text,
-          signature: businessProfile?.email_signature,
-        }
-      );
+      let wrappedHtml: string;
+      try {
+        wrappedHtml = renderEmailTemplate(
+          businessProfile?.email_template_style || templateStyle || 'professional',
+          {
+            body: emailBodyContent || '',
+            senderName,
+            senderEmail: fromEmail,
+            senderTitle: userProfile?.job_title,
+            companyName: businessProfile?.company_name,
+            logoUrl: businessProfile?.email_logo_url,
+            brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+            footerText: businessProfile?.email_footer_text,
+            signature: businessProfile?.email_signature,
+          }
+        );
+      } catch (templateError: any) {
+        console.error('Error rendering email template (SMTP):', templateError);
+        throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
+      }
 
       console.log(`Sending via Resend with verified domain: ${senderName} <${connection.from_email}>`);
 
@@ -376,13 +443,19 @@ serve(async (req) => {
       }
 
       // Get verified sender email
-      const { data: connection } = await supabaseClient
+      let sendgridConnectionQuery = supabaseClient
         .from('crm_connections')
         .select('from_email')
         .eq('user_id', user.id)
-        .eq('provider', 'smtp')
-        .eq('status', 'active')
-        .maybeSingle();
+        .eq('provider', 'sendgrid')
+        .eq('status', 'active');
+      
+      // Use specific connection if provided
+      if (senderConnectionId) {
+        sendgridConnectionQuery = sendgridConnectionQuery.eq('id', senderConnectionId);
+      }
+      
+      const { data: connection } = await sendgridConnectionQuery.maybeSingle();
 
       const { data: businessProfile } = await supabaseClient
         .from('business_profiles')
@@ -398,20 +471,26 @@ serve(async (req) => {
       const senderName = businessProfile?.company_name || userProfile?.full_name || 'Your Business';
       
       // Render with branded template
-      const wrappedHtml = renderEmailTemplate(
-        businessProfile?.email_template_style || templateStyle || 'professional',
-        {
-          body: emailBodyContent,
-          senderName,
-          senderEmail: fromEmail,
-          senderTitle: userProfile?.job_title,
-          companyName: businessProfile?.company_name,
-          logoUrl: businessProfile?.email_logo_url,
-          brandColor: businessProfile?.email_brand_color || '#8b5cf6',
-          footerText: businessProfile?.email_footer_text,
-          signature: businessProfile?.email_signature,
-        }
-      );
+      let wrappedHtml: string;
+      try {
+        wrappedHtml = renderEmailTemplate(
+          businessProfile?.email_template_style || templateStyle || 'professional',
+          {
+            body: emailBodyContent || '',
+            senderName,
+            senderEmail: fromEmail,
+            senderTitle: userProfile?.job_title,
+            companyName: businessProfile?.company_name,
+            logoUrl: businessProfile?.email_logo_url,
+            brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+            footerText: businessProfile?.email_footer_text,
+            signature: businessProfile?.email_signature,
+          }
+        );
+      } catch (templateError: any) {
+        console.error('Error rendering email template (SMTP):', templateError);
+        throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
+      }
 
       console.log(`Sending via SendGrid from: ${senderName} <${fromEmail}>`);
 
@@ -475,51 +554,123 @@ serve(async (req) => {
       }
 
       // Get Resend connection for verified from_email
-      const { data: resendConnection } = await supabaseClient
+      let resendConnectionQuery = supabaseClient
         .from('crm_connections')
         .select('from_email')
         .eq('user_id', user.id)
         .eq('provider', 'resend')
-        .eq('status', 'active')
-        .maybeSingle();
+        .eq('status', 'active');
+      
+      // Use specific connection if provided
+      if (senderConnectionId) {
+        resendConnectionQuery = resendConnectionQuery.eq('id', senderConnectionId);
+      }
+      
+      const { data: resendConnection } = await resendConnectionQuery.maybeSingle();
 
       const fromEmail = resendConnection?.from_email || userProfile?.email || 'onboarding@resend.dev';
       const senderName = businessProfile?.company_name || 'CRM';
 
       console.log(`Sending via Resend from: ${senderName} <${fromEmail}>`);
 
-      const resendResponse = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-      body: JSON.stringify({
-        from: `${senderName} <${fromEmail}>`,
-        to: [toEmail],
-        subject,
-        text: emailBodyText,
-        html: wrapEmailContent(emailBodyHtml, senderName, fromEmail),
-        reply_to: useInboundReplyTo ? RESEND_INBOUND_EMAIL : fromEmail, // Use inbound email for reply tracking if enabled
-        headers: {
-          'X-Entity-Ref-ID': threadId, // Custom header for tracking
-        },
-        attachments: attachmentData.length > 0 ? attachmentData.map(att => ({
-          filename: att.filename,
-          content: att.content,
-        })) : undefined,
-      }),
-      });
+      // Render email template with error handling
+      let renderedHtml: string;
+      try {
+        renderedHtml = renderEmailTemplate(
+          businessProfile?.email_template_style || templateStyle || 'professional',
+          {
+            body: emailBodyContent || '',
+            senderName,
+            senderEmail: fromEmail,
+            senderTitle: userProfile?.job_title,
+            companyName: businessProfile?.company_name,
+            logoUrl: businessProfile?.email_logo_url,
+            brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+            footerText: businessProfile?.email_footer_text,
+            signature: businessProfile?.email_signature,
+          }
+        );
+      } catch (templateError: any) {
+        console.error('Error rendering email template:', templateError);
+        throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
+      }
+
+      // Prepare request body
+      let requestBody: any;
+      try {
+        requestBody = {
+          from: `${senderName} <${fromEmail}>`,
+          to: [toEmail],
+          subject,
+          text: emailBodyText,
+          html: renderedHtml,
+          reply_to: useInboundReplyTo ? RESEND_INBOUND_EMAIL : fromEmail,
+          headers: {
+            'X-Entity-Ref-ID': threadId,
+          },
+        };
+        
+        // Only add attachments if present
+        if (attachmentData.length > 0) {
+          requestBody.attachments = attachmentData.map(att => ({
+            filename: att.filename,
+            content: att.content,
+          }));
+        }
+        
+        console.log('Sending to Resend API with:', {
+          from: requestBody.from,
+          to: requestBody.to,
+          subject: requestBody.subject,
+          hasHtml: !!requestBody.html,
+          hasText: !!requestBody.text,
+          attachmentsCount: requestBody.attachments?.length || 0,
+        });
+      } catch (bodyError: any) {
+        console.error('Error preparing request body:', bodyError);
+        throw new Error(`Failed to prepare email request: ${bodyError instanceof Error ? bodyError.message : String(bodyError)}`);
+      }
+
+      let resendResponse: Response;
+      try {
+        resendResponse = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        });
+      } catch (fetchError: any) {
+        console.error('Network error calling Resend API:', fetchError);
+        throw new Error(`Network error: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
+      }
 
       if (!resendResponse.ok) {
         const errorData = await resendResponse.text();
-        console.error('Resend API error:', errorData);
-        throw new Error(`Failed to send via Resend: ${errorData}`);
+        console.error('Resend API error:', {
+          status: resendResponse.status,
+          statusText: resendResponse.statusText,
+          errorData,
+        });
+        throw new Error(`Failed to send via Resend (${resendResponse.status}): ${errorData}`);
       }
 
-      const resendData = await resendResponse.json();
-      messageId = resendData.id || null;
-      console.log('Email sent via Resend:', resendData);
+      let resendData: any;
+      try {
+        resendData = await resendResponse.json();
+        messageId = resendData.id || null;
+        console.log('Email sent via Resend:', resendData);
+      } catch (jsonError: any) {
+        console.error('Error parsing Resend response:', jsonError);
+        // If we can't parse the response but got 200, assume success
+        if (resendResponse.ok) {
+          console.log('Resend returned OK but unparseable response, assuming success');
+          messageId = null;
+        } else {
+          throw new Error(`Failed to parse Resend response: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
+        }
+      }
     }
 
     // Check if company has an active sequence
@@ -669,14 +820,44 @@ serve(async (req) => {
     );
   } catch (error: any) {
     console.error('Error in send-crm-email function:', error);
-    return new Response(
-      JSON.stringify({
-        error: error.message || 'An error occurred while sending the email',
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
-    );
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorName = error instanceof Error ? error.name : 'UnknownError';
+    console.error('Error details:', { 
+      errorMessage, 
+      errorStack, 
+      errorName,
+      errorType: typeof error,
+      errorString: String(error),
+      errorJSON: JSON.stringify(error, Object.getOwnPropertyNames(error))
+    });
+    
+    // Return detailed error response
+    try {
+      return new Response(
+        JSON.stringify({
+          error: errorMessage || 'An error occurred while sending the email',
+          errorType: errorName,
+          details: Deno.env.get('ENVIRONMENT') === 'development' ? {
+            stack: errorStack,
+            fullError: String(error),
+          } : undefined,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500,
+        }
+      );
+    } catch (responseError) {
+      // If even creating the error response fails, return a minimal response
+      console.error('Failed to create error response:', responseError);
+      return new Response(
+        JSON.stringify({ error: 'Internal server error' }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500,
+        }
+      );
+    }
   }
 });

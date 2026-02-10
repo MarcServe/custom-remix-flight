@@ -283,7 +283,7 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
 
       const { data, error } = await supabase
         .from('email_campaigns')
-        .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, scheduled_at, scheduled_timezone, tags')
+        .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, scheduled_at, tags')
         .eq('user_id', user.id)
         .eq('status', 'draft')
         .order('updated_at', { ascending: false })
@@ -356,7 +356,7 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
 
           const { data: draftData, error } = await supabase
             .from('email_campaigns')
-            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, scheduled_at, scheduled_timezone, tags')
+            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, scheduled_at, tags')
             .eq('id', initialDraftId)
             .eq('status', 'draft')
             .single();
@@ -974,9 +974,7 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
         const scheduledDate = new Date(draft.scheduled_at);
         setScheduledDate(scheduledDate);
         setScheduledTime(format(scheduledDate, 'HH:mm'));
-        if (draft.scheduled_timezone) {
-          setScheduledTimezone(draft.scheduled_timezone);
-        }
+        // scheduled_timezone column doesn't exist - removed
       }
       
       if (draft.tags && Array.isArray(draft.tags)) {
@@ -1111,12 +1109,14 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
       if (hasPersonalizedEmail) {
         const personalized = personalizedEmails[testPerson.id];
         testSubject = personalized.subject;
-        testBodyHtml = personalized.bodyHtml + signatureHtml;
-        testBodyText = personalized.bodyText + signatureText;
+        // Don't append signature - backend's renderEmailTemplate will add it with proper branding
+        testBodyHtml = personalized.bodyHtml;
+        testBodyText = personalized.bodyText;
       } else {
         testSubject = personalizeText(subject, testPerson);
-        testBodyHtml = personalizeText(bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`, testPerson) + signatureHtml;
-        testBodyText = personalizeText(bodyText, testPerson) + signatureText;
+        // Don't append signature - backend's renderEmailTemplate will add it with proper branding
+        testBodyHtml = personalizeText(bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`, testPerson);
+        testBodyText = personalizeText(bodyText, testPerson);
       }
 
       const { error } = await supabase.functions.invoke('send-crm-email', {
@@ -1127,6 +1127,7 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
           bodyHtml: testBodyHtml,
           bodyText: testBodyText,
           sender,
+          senderConnectionId: senderConnectionId || undefined, // Pass the specific connection ID
           attachments: attachments.length > 0 ? attachments : undefined,
         },
       });
@@ -1143,9 +1144,19 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
       setTestRecipientId(null);
     } catch (error: any) {
       console.error('Error sending test email:', error);
+      // Extract more detailed error message
+      let errorMessage = "Failed to send test email";
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.error) {
+        errorMessage = typeof error.error === 'string' ? error.error : error.error?.message || errorMessage;
+      } else if (error.data?.error) {
+        errorMessage = error.data.error;
+      }
+      
       toast({
         title: "Error",
-        description: error.message || "Failed to send test email",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

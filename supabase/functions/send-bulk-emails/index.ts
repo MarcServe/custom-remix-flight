@@ -151,25 +151,60 @@ serve(async (req) => {
       .eq('user_id', userId)
       .maybeSingle();
 
-    // Get optimal provider based on tracking capabilities
-    const { data: connections, error: connectionsError } = await supabaseClient
-      .from('crm_connections')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .order('tracking_enabled', { ascending: false });
+    // Get connection - use campaign's sender_connection_id if specified, otherwise find optimal
+    let optimalConnection: any;
+    
+    if (campaign.sender_connection_id) {
+      // Use the specific connection saved with the campaign
+      const { data: campaignConnection, error: connectionError } = await supabaseClient
+        .from('crm_connections')
+        .select('*')
+        .eq('id', campaign.sender_connection_id)
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .single();
 
-    if (!connections || connections.length === 0) {
-      throw new Error('No active email connections found. Please configure an email provider.');
+      if (connectionError || !campaignConnection) {
+        console.error('Campaign connection not found, falling back to optimal:', connectionError);
+        // Fall back to finding optimal connection
+        const { data: connections } = await supabaseClient
+          .from('crm_connections')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .order('tracking_enabled', { ascending: false });
+
+        if (!connections || connections.length === 0) {
+          throw new Error('No active email connections found. Please configure an email provider.');
+        }
+
+        optimalConnection = connections.find((c: any) => c.tracking_enabled && ['resend', 'sendgrid'].includes(c.provider))
+          || connections.find((c: any) => c.tracking_enabled && ['gmail', 'outlook'].includes(c.provider))
+          || connections[0];
+      } else {
+        optimalConnection = campaignConnection;
+      }
+    } else {
+      // No specific connection in campaign, find optimal one
+      const { data: connections, error: connectionsError } = await supabaseClient
+        .from('crm_connections')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .order('tracking_enabled', { ascending: false });
+
+      if (!connections || connections.length === 0) {
+        throw new Error('No active email connections found. Please configure an email provider.');
+      }
+
+      // Priority: Providers with tracking > Resend/SendGrid > Gmail/Outlook > SMTP Direct
+      optimalConnection = connections.find((c: any) => c.tracking_enabled && ['resend', 'sendgrid'].includes(c.provider))
+        || connections.find((c: any) => c.tracking_enabled && ['gmail', 'outlook'].includes(c.provider))
+        || connections[0];
     }
 
-    // Priority: Providers with tracking > Resend/SendGrid > Gmail/Outlook > SMTP Direct
-    const optimalConnection = connections.find((c: any) => c.tracking_enabled && ['resend', 'sendgrid'].includes(c.provider))
-      || connections.find((c: any) => c.tracking_enabled && ['gmail', 'outlook'].includes(c.provider))
-      || connections[0];
-
     const emailProvider = optimalConnection.provider;
-    console.log(`Using optimal email provider: ${emailProvider} (tracking: ${optimalConnection.tracking_enabled})`);
+    console.log(`Using email provider: ${emailProvider} (connection ID: ${optimalConnection.id}, tracking: ${optimalConnection.tracking_enabled})`);
 
     // Get API-key provider connection for verified from_email (if not already optimal)
     let effectiveConnection = optimalConnection;
@@ -190,6 +225,19 @@ serve(async (req) => {
     // Send emails with rate limiting
     for (const recipient of recipients) {
       try {
+        // Validate recipient has required fields
+        if (!recipient.email || !recipient.personalized_subject) {
+          throw new Error(`Missing required fields for recipient ${recipient.id}: email or subject`);
+        }
+
+        // Ensure we have body content
+        const bodyText = recipient.personalized_body_text || '';
+        const bodyHtml = recipient.personalized_body_html || '';
+        
+        if (!bodyText.trim() && !bodyHtml.trim()) {
+          throw new Error(`No body content for recipient ${recipient.email}`);
+        }
+
         let messageId: string | null = null;
 
         if (optimalConnection.provider === 'gmail') {
@@ -252,20 +300,26 @@ serve(async (req) => {
           bodyHtml = bodyHtml.replace(/(<br\s*\/?>|\n){2,}.*?(michael|orji|biz boosters|founding engineer|AI innovation|innovation studio).*$/is, '').trim();
           
           // Render with branded template
-          const wrappedHtml = renderEmailTemplate(
-            businessProfile?.email_template_style || 'professional',
-            {
-              body: bodyHtml,
-              senderName,
-              senderEmail: fromEmail,
-              senderTitle: userProfile?.job_title,
-              companyName: businessProfile?.company_name,
-              logoUrl: businessProfile?.email_logo_url,
-              brandColor: businessProfile?.email_brand_color || '#8b5cf6',
-              footerText: businessProfile?.email_footer_text,
-              signature: businessProfile?.email_signature,
-            }
-          );
+          let wrappedHtml: string;
+          try {
+            wrappedHtml = renderEmailTemplate(
+              businessProfile?.email_template_style || 'professional',
+              {
+                body: bodyHtml || '',
+                senderName,
+                senderEmail: fromEmail,
+                senderTitle: userProfile?.job_title,
+                companyName: businessProfile?.company_name,
+                logoUrl: businessProfile?.email_logo_url,
+                brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+                footerText: businessProfile?.email_footer_text,
+                signature: businessProfile?.email_signature,
+              }
+            );
+          } catch (templateError: any) {
+            console.error('Error rendering email template (SMTP):', templateError);
+            throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
+          }
 
           const smtpMode = (optimalConnection.metadata as any)?.smtp_mode || 'direct'; // Default to 'direct' for open-source use
 
@@ -364,20 +418,26 @@ serve(async (req) => {
           bodyHtml = bodyHtml.replace(/(<br\s*\/?>|\n){2,}.*?(michael|orji|biz boosters|founding engineer|AI innovation|innovation studio).*$/is, '').trim();
           
           // Render with branded template
-          const wrappedHtml = renderEmailTemplate(
-            businessProfile?.email_template_style || 'professional',
-            {
-              body: bodyHtml,
-              senderName,
-              senderEmail: fromEmail,
-              senderTitle: userProfile?.job_title,
-              companyName: businessProfile?.company_name,
-              logoUrl: businessProfile?.email_logo_url,
-              brandColor: businessProfile?.email_brand_color || '#8b5cf6',
-              footerText: businessProfile?.email_footer_text,
-              signature: businessProfile?.email_signature,
-            }
-          );
+          let wrappedHtml: string;
+          try {
+            wrappedHtml = renderEmailTemplate(
+              businessProfile?.email_template_style || 'professional',
+              {
+                body: bodyHtml || '',
+                senderName,
+                senderEmail: fromEmail,
+                senderTitle: userProfile?.job_title,
+                companyName: businessProfile?.company_name,
+                logoUrl: businessProfile?.email_logo_url,
+                brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+                footerText: businessProfile?.email_footer_text,
+                signature: businessProfile?.email_signature,
+              }
+            );
+          } catch (templateError: any) {
+            console.error('Error rendering email template (SMTP):', templateError);
+            throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
+          }
 
           const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
             method: 'POST',
@@ -416,6 +476,77 @@ serve(async (req) => {
           }
 
           messageId = sendgridResponse.headers.get('X-Message-Id') || null;
+        } else if (emailProvider === 'resend') {
+          // Send via Resend
+          const resendApiKey = Deno.env.get('RESEND_API_KEY');
+          if (!resendApiKey) throw new Error('Resend not configured. Please add RESEND_API_KEY.');
+
+          const senderName = businessProfile?.company_name || userProfile?.full_name || 'CRM';
+          const fromEmail = effectiveConnection.from_email || userProfile?.email || 'onboarding@resend.dev';
+          
+          // Extract body HTML (remove signature if already included to avoid duplicates)
+          let bodyHtml = recipient.personalized_body_html || '';
+          // More comprehensive signature removal patterns
+          const signaturePatterns = [
+            /<br><br><p>Best regards,.*$/is,
+            /<br><br>Best regards,.*$/is,
+            /<p>Best regards,.*$/is,
+            /Best regards,.*$/is,
+            /<div class="signature".*$/is,
+            /<div class="email-signature".*$/is,
+            /<div[^>]*class="[^"]*signature[^"]*".*$/is,
+          ];
+          for (const pattern of signaturePatterns) {
+            bodyHtml = bodyHtml.replace(pattern, '').trim();
+          }
+          
+          // Render with branded template
+          let wrappedHtml: string;
+          try {
+            wrappedHtml = renderEmailTemplate(
+              businessProfile?.email_template_style || 'professional',
+              {
+                body: bodyHtml || '',
+                senderName,
+                senderEmail: fromEmail,
+                senderTitle: userProfile?.job_title,
+                companyName: businessProfile?.company_name,
+                logoUrl: businessProfile?.email_logo_url,
+                brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+                footerText: businessProfile?.email_footer_text,
+                signature: businessProfile?.email_signature,
+              }
+            );
+          } catch (templateError: any) {
+            console.error('Error rendering email template (Resend):', templateError);
+            throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
+          }
+
+          const resendResponse = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${resendApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: `${senderName} <${fromEmail}>`,
+              to: [recipient.email],
+              subject: recipient.personalized_subject,
+              text: recipient.personalized_body_text || '',
+              html: wrappedHtml,
+            }),
+          });
+
+          if (!resendResponse.ok) {
+            const errorData = await resendResponse.text();
+            console.error('Resend API error:', errorData);
+            throw new Error(`Failed to send via Resend: ${errorData}`);
+          }
+
+          const resendData = await resendResponse.json();
+          messageId = resendData.id || null;
+        } else {
+          throw new Error(`Unsupported email provider: ${emailProvider}`);
         }
 
         // Update recipient status with tracking metadata
