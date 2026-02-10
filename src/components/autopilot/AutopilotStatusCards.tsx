@@ -107,7 +107,7 @@ export function AutopilotStatusCards({ settings }: AutopilotStatusCardsProps) {
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            {settings?.discovery_frequency || 'Daily'} discovery · {settings?.max_leads_per_run || 10} leads/run
+            {settings?.discovery_frequency || 'Daily'} discovery · {settings?.max_leads_per_run ?? 25} leads/run
           </p>
           <div className="mt-3 space-y-1">
             <div className="flex justify-between text-xs">

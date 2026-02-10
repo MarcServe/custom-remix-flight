@@ -596,7 +596,7 @@ async function runLeadFinder(
       model: 'gpt-4o-mini',
       enrichWithPerplexity: false, // We'll do batch enrichment later
       useSerpApi: setting.use_serp_api !== false,
-      maxResults: Math.min(maxResults, setting.max_leads_per_run || 20),
+      maxResults: Math.min(maxResults, setting.max_leads_per_run || 25),
       autonomousMode: true,
     }),
   });

@@ -221,13 +221,13 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
             </p>
           )}
 
-          <div className="space-y-3">
+            <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label>Max Leads Per Run</Label>
-              <Badge variant="secondary">{localSettings?.max_leads_per_run || 10}</Badge>
+              <Badge variant="secondary">{localSettings?.max_leads_per_run ?? 25}</Badge>
             </div>
             <Slider
-              value={[localSettings?.max_leads_per_run || 10]}
+              value={[localSettings?.max_leads_per_run ?? 25]}
               onValueChange={([value]) => handleChange('max_leads_per_run', value)}
               min={5}
               max={50}
@@ -500,11 +500,17 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
             <Switch
               checked={localSettings?.full_auto_mode || false}
               onCheckedChange={(checked) => {
-                handleChange('full_auto_mode', checked);
-                // Auto-enable campaign creation when turning on full auto (required for the flow)
-                if (checked && !localSettings?.auto_create_campaign) {
-                  handleChange('auto_create_campaign', true);
-                }
+                setLocalSettings((prev: any) => ({
+                  ...prev,
+                  full_auto_mode: checked,
+                  // Auto-enable required settings for full autopilot flow
+                  ...(checked
+                    ? {
+                        auto_create_campaign: prev?.auto_create_campaign ?? true,
+                        auto_extract_all_emails: prev?.auto_extract_all_emails ?? prev?.auto_extract_emails ?? true,
+                      }
+                    : {}),
+                }));
               }}
             />
           </div>

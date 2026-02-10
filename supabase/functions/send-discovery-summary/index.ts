@@ -179,6 +179,13 @@ Provide:
     <p style="margin: 16px 0 0 0; font-size: 12px; color: #64748b; text-align: center;">
       ${sourceList}
     </p>
+    ${stats.campaignsCreated === 0 && stats.totalLeads > 0 ? `
+    <div style="margin-top: 16px; padding: 12px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
+      <p style="margin: 0; font-size: 13px; color: #92400e;">
+        <strong>💡 No campaigns created?</strong> Enable <strong>Full Auto Mode</strong> and <strong>Auto-Create Campaigns</strong> in Autopilot settings to automatically create and send campaigns when leads are found.
+      </p>
+    </div>
+    ` : ''}
   </div>
 
   ${aiSummary ? `

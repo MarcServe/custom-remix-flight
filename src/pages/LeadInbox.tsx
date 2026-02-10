@@ -1269,9 +1269,9 @@ export default function LeadInbox() {
 
               {/* Max Leads */}
               <div className="space-y-2">
-                <Label>Leads per discovery run: {localSettings?.max_leads_per_run || 10}</Label>
+                <Label>Leads per discovery run: {localSettings?.max_leads_per_run ?? 25}</Label>
                 <Slider
-                  value={[localSettings?.max_leads_per_run || 10]}
+                  value={[localSettings?.max_leads_per_run ?? 25]}
                   onValueChange={([value]) => handleSettingsChange('max_leads_per_run', value)}
                   min={5}
                   max={50}
