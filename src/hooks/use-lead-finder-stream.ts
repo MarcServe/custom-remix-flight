@@ -82,6 +82,8 @@ interface SearchParams {
   enrichWithPerplexity?: boolean;
   useSerpApi?: boolean;
   useApify?: boolean;
+  /** Target number of leads to fetch (e.g. 25, 50, 100). Backend will request more from APIs to try to reach this. */
+  maxResults?: number;
 }
 
 export const useLeadFinderStream = () => {

@@ -1,279 +1,498 @@
 /**
- * Comprehensive Industry Taxonomy for CRM Lead Generation
- * Aligned with NAICS & LinkedIn industry standards
- * 18+ main categories, 300+ sub-industries
+ * Enterprise CRM Industry Taxonomy (Neutral, Scalable)
+ * Merged from: NAICS/LinkedIn alignment, Social Care & SEN depth,
+ * Accessibility & Inclusion coverage, and neutral enterprise framework.
+ * Supports B2B/B2C, regulated sectors, and international search.
  */
 
 export const industryTaxonomy: Record<string, string[]> = {
-  'Primary, Energy & Resources': [
-    'Agriculture & Farming',
-    'AgriTech',
-    'Forestry & Timber',
-    'Fishing & Aquaculture',
-    'Mining & Metals',
-    'Oil & Gas (Exploration, Refining, Distribution)',
-    'Coal & Commodities Trading',
-    'Energy Utilities (Electric, Water, Gas)',
-    'Renewable Energy (Solar, Wind, Hydro, Geothermal)',
-    'CleanTech & Carbon Management',
-    'Environmental Services',
-    'Waste Management & Recycling',
-    'Sustainability & ESG Consulting'
+  'Government & Public Sector': [
+    'Local Authorities',
+    'County Councils',
+    'Borough Councils',
+    'Adult Social Care Commissioning',
+    'Children\'s Services Departments',
+    'SEND Departments',
+    'Public Health',
+    'Government Agencies',
+    'Regulatory Bodies',
+    'Procurement & Commissioning',
+    'Housing Authorities',
+    'Public Administration',
+    'Defense & Security',
+    'Civic Tech / GovTech',
+    'Electoral Services',
+    'Public Consultation Platforms',
+    'Integrated Care Boards (ICB)',
+    'NHS Trust Community Services',
+    'Law Enforcement & Emergency Services'
   ],
-  'Manufacturing & Industrial': [
-    'Industrial Manufacturing',
-    'Automotive Manufacturing',
-    'Aerospace & Defense Manufacturing',
-    'Machinery & Equipment',
-    'Electrical & Electronics Manufacturing',
-    'Chemical Manufacturing',
-    'Plastics & Rubber Products',
-    'Paper & Packaging',
-    'Textiles & Apparel Manufacturing',
-    'Food & Beverage Manufacturing',
-    'Medical Device Manufacturing',
-    'Furniture & Fixtures',
-    'Industrial Automation & Robotics',
-    '3D Printing / Additive Manufacturing'
-  ],
-  'Construction, Real Estate & Infrastructure': [
-    'Architecture & Design',
-    'Civil Engineering',
-    'Construction & Building Materials',
-    'Real Estate Development',
-    'Property Management',
-    'Facilities Services',
-    'Urban Planning & Smart Cities',
-    'Commercial Real Estate',
-    'Residential Real Estate',
-    'Infrastructure Development',
-    'Land Surveying & Mapping'
-  ],
-  'Transportation, Supply Chain & Logistics': [
-    'Freight & Logistics',
-    'Supply Chain Management',
-    'Warehousing & Distribution',
-    'Shipping & Maritime',
-    'Aviation & Aerospace',
-    'Airlines & Air Freight',
-    'Railways',
-    'Trucking & Road Transport',
-    'Courier & Express Delivery',
-    'Ports & Terminals',
-    'Public Transportation',
-    'Last-Mile Delivery',
-    'Fleet Management',
-    'Drones & Autonomous Delivery',
-    'Mobility / EV Logistics'
-  ],
-  'Technology & Software': [
-    'Information Technology & Services',
-    'Software Development',
-    'Cloud Computing & Infrastructure',
-    'SaaS (Software as a Service)',
-    'Artificial Intelligence / Machine Learning',
-    'Data Analytics & Big Data',
-    'Cybersecurity',
-    'IT Consulting & System Integration',
-    'Enterprise Software (ERP, CRM, HRM)',
-    'DevOps & Automation',
-    'Blockchain & Web3',
-    'Internet of Things (IoT)',
-    'Robotics & Autonomous Systems',
-    'Quantum Computing',
-    'AR / VR / XR (Extended Reality)',
-    'Computer Hardware & Semiconductors',
-    'Mobile App Development',
-    'Game Development',
-    'Digital Twins',
-    'Tech Research & Development'
-  ],
-  'Finance, Fintech & Professional Services': [
-    'Banking (Retail, Commercial, Investment)',
-    'Insurance (Life, Health, Property, Casualty)',
-    'Fintech & Digital Payments',
-    'Accounting & Auditing',
-    'Investment Management',
-    'Private Equity & Venture Capital',
-    'Asset Management',
-    'Wealth Management',
-    'Real Estate Finance',
-    'Crowdfunding Platforms',
-    'Stock Exchanges & Brokerage',
-    'Financial Advisory',
-    'Risk Management',
-    'Corporate Finance',
-    'Actuarial Science',
-    'Legal Services & Law Firms',
-    'Consulting (Strategy, Management, Digital)',
-    'Compliance & Regulatory Affairs',
-    'Tax & Accounting Technology'
-  ],
-  'Retail, E-Commerce & Consumer Goods': [
-    'Retail (Physical & Online)',
-    'E-Commerce & Marketplaces',
-    'Wholesale & Distribution',
-    'Consumer Electronics',
-    'Fashion & Apparel',
-    'Footwear',
-    'Beauty & Cosmetics',
-    'Luxury Goods',
-    'Home & Furniture',
-    'Food & Beverage (FMCG)',
-    'Supermarkets & Grocery Chains',
-    'Department Stores',
-    'Direct-to-Consumer Brands',
-    'Subscription Box Services',
-    'Consumer Product Manufacturing',
-    'Packaging & Supply'
-  ],
-  'Healthcare, Life Sciences & Wellness': [
+  'Healthcare': [
+    'NHS Trusts',
+    'Private Hospitals',
     'Hospitals & Healthcare Systems',
+    'Clinics',
+    'Primary Care Networks',
+    'GP Practices',
+    'Community Health Services',
+    'Mental Health Services',
+    'CAMHS',
+    'Diagnostics & Labs',
+    'Telehealth / Telemedicine',
+    'Rehabilitation Centres',
+    'Learning Disability Nursing',
+    'Integrated Care Systems',
     'Pharmaceuticals',
     'Biotechnology',
     'Medical Devices & Equipment',
     'HealthTech / Digital Health',
-    'Telemedicine / Remote Care',
-    'Diagnostics & Labs',
     'Clinical Trials & CROs',
-    'Wellness & Fitness',
-    'Mental Health & Therapy Services',
-    'Nutrition & Supplements',
-    'Elderly Care / Assisted Living',
-    'Veterinary & Animal Health',
-    'Biopharma Manufacturing',
-    'Public Health & NGOs'
+    'Public Health',
+    'Health Charities',
+    'Complex Care Providers',
+    'Social Prescribing Services'
   ],
-  'Education, Research & Training': [
-    'Primary & Secondary Education',
+  'Social Care': [
+    'Adult Social Care',
+    'Children\'s Social Care',
+    'Learning Disability Services',
+    'Intellectual Disability Support',
+    'Autism Services',
+    'Neurodiversity Support',
+    'Supported Living Providers',
+    'Residential Care (LD)',
+    'Day Centres',
+    'Outreach Support',
+    'Respite Services',
+    'Behavioural Support',
+    'PBS (Positive Behaviour Support)',
+    'Disability Advocacy',
+    'Carer Support Services',
+    'Complex Needs Care',
+    'Specialist Housing Providers',
+    'Disability Employment Support',
+    'Care Quality Consultancy',
+    'Social Work Services',
+    'Safeguarding Services',
+    'Home Care / Domiciliary Care',
+    'Care Assessment Services',
+    'Transition Services (Child to Adult)',
+    'Commissioned Care Providers'
+  ],
+  'Education': [
+    'Primary Schools',
+    'Secondary Schools',
+    'Academies',
     'Higher Education / Universities',
+    'SEN Schools',
+    'SEN Colleges',
+    'Alternative Provision Schools',
+    'Inclusive Education Providers',
     'Vocational & Technical Schools',
     'Online Education (EdTech)',
     'Corporate Training & Learning Platforms',
+    'Educational Psychology',
+    'Learning Support Services',
+    'SEN Consultancy',
+    'Autism Education Providers',
     'Research & Development Institutes',
-    'STEM Education Initiatives',
     'Publishing (Academic & Educational)',
-    'Skill Development & Upskilling'
+    'Specialist Training Providers (Care Sector)'
   ],
-  'Media, Marketing & Creative Industries': [
-    'Media & Broadcasting (TV, Radio, Streaming)',
+  'Housing & Real Estate': [
+    'Housing Associations',
+    'Social Housing Providers',
+    'Supported Accommodation',
+    'Property Management',
+    'Letting Agencies',
+    'Estate Agencies',
+    'Real Estate Development',
+    'Commercial Real Estate',
+    'Residential Real Estate',
+    'Retirement Living',
+    'Specialist Disability Housing',
+    'Student Housing Providers',
+    'REITs',
+    'Property Developers'
+  ],
+  'Nonprofit & Charity': [
+    'Disability Charities',
+    'Autism Charities',
+    'Mental Health Charities',
+    'Youth Charities',
+    'Community Interest Companies',
+    'Grant-Making Foundations',
+    'Faith-Based Organisations',
+    'Advocacy Groups',
+    'International NGOs',
+    'Environmental NGOs',
+    'Food Banks',
+    'Homelessness Charities',
+    'Refugee Services',
+    'Crisis Helplines',
+    'Domestic Abuse Support',
+    'Disaster Relief Organisations'
+  ],
+  'Banking & Financial Services': [
+    'Banks',
+    'Building Societies',
+    'Credit Unions',
+    'Retail Banking',
+    'Investment Management',
+    'Wealth Management',
+    'Asset Management',
+    'FinTech & Digital Payments',
+    'Payment Providers',
+    'Stock Exchanges & Brokerage',
+    'Financial Advisory',
+    'Corporate Finance',
+    'Accounting & Auditing',
+    'Crowdfunding Platforms',
+    'Lending Platforms',
+    'RegTech / Compliance Platforms'
+  ],
+  'Insurance': [
+    'General Insurance',
+    'Health Insurance',
+    'Travel Insurance',
+    'Commercial Insurance',
+    'Life & Pensions',
+    'Claims Management',
+    'Accident Management',
+    'InsurTech'
+  ],
+  'Retail & Ecommerce': [
+    'Grocery Retail',
+    'Fashion Retail',
+    'Fast Fashion',
+    'Luxury Retail',
+    'Beauty & Cosmetics',
+    'Electronics Retail',
+    'Homeware & Furniture',
+    'E-Commerce & Marketplaces',
+    'Direct-to-Consumer Brands',
+    'Subscription Retail',
+    'Marketplace Sellers',
+    'Multi-Channel Retail',
+    'Department Stores',
+    'Supermarkets & Grocery Chains'
+  ],
+  'Utilities & Infrastructure': [
+    'Energy Providers',
+    'Water Companies',
+    'Waste Management',
+    'Broadband Providers',
+    'Telecoms',
+    'Smart Meter Providers',
+    'Renewable Energy',
+    'Energy Utilities (Electric, Gas)'
+  ],
+  'Transportation': [
+    'Bus Operators',
+    'Rail Operators',
+    'Airlines',
+    'Public Transportation',
+    'Taxi & Ride-Sharing',
+    'Logistics Companies',
+    'Last-Mile Delivery',
+    'Freight & Logistics',
+    'Shipping & Maritime',
+    'EV & Mobility Providers',
+    'Parking Operators'
+  ],
+  'Legal Services': [
+    'Law Firms',
+    'Legal Aid Providers',
+    'Barristers Chambers',
+    'Corporate Legal',
+    'Injury & Claims Law'
+  ],
+  'Digital & SaaS': [
+    'SaaS Platforms',
+    'AI & Machine Learning',
+    'Cloud Computing & Infrastructure',
+    'Cybersecurity',
+    'CRM & Workflow Automation',
+    'HealthTech',
+    'EdTech',
+    'GovTech',
+    'Accessibility Tech',
+    'Software Development',
+    'Data Analytics & Big Data',
+    'Blockchain & Web3',
+    'IoT & Smart Cities',
+    'AR/VR Platforms'
+  ],
+  'Recruitment & HR': [
+    'Recruitment Agencies',
+    'Job Boards',
+    'Executive Search',
+    'HRTech / Workforce Management',
+    'Payroll & Benefits',
+    'Apprenticeship Providers',
+    'Supported Employment',
+    'Outsourcing / BPO',
+    'Career Platforms'
+  ],
+  'Professional Services': [
+    'Consulting (Strategy, Management, Digital)',
+    'Accountancy Firms',
+    'Tax Advisory',
+    'Compliance & Regulatory',
+    'ESG Advisory',
+    'Accessibility Consultants',
+    'WCAG Audit Firms',
+    'Digital Inclusion Agencies',
+    'Inclusive Design & UX',
+    'Translation & Localization'
+  ],
+  'Construction': [
+    'Construction Firms',
+    'Civil Engineering',
+    'Architecture Practices',
+    'Surveyors',
+    'Construction & Building Materials',
+    'Facilities Management',
+    'Infrastructure Development'
+  ],
+  'Manufacturing': [
+    'Industrial Manufacturing',
+    'Equipment Manufacturers',
+    'Medical Device Manufacturing',
+    'Consumer Goods Manufacturing',
+    'Automotive Manufacturing',
+    'Aerospace & Defense Manufacturing',
+    'Machinery & Equipment',
+    'Food & Beverage Manufacturing',
+    'Industrial Automation & Robotics'
+  ],
+  'Automotive': [
+    'Automotive Manufacturing',
+    'Vehicle Retail & Leasing',
+    'EV & Mobility',
+    'Parts & Supply'
+  ],
+  'Defence & Aerospace': [
+    'Defence Contractors',
+    'Aerospace & Aviation',
+    'Security Firms',
+    'Surveillance & Cybersecurity'
+  ],
+  'Agriculture & Rural': [
+    'Agricultural Suppliers',
+    'Farm Retailers',
+    'Farming Cooperatives',
+    'AgriTech',
+    'Forestry & Timber',
+    'Rural Support Charities'
+  ],
+  'Energy & Utilities': [
+    'Renewable Energy',
+    'Solar & Wind',
+    'Oil & Gas',
+    'Energy Utilities',
+    'Climate Tech',
+    'Carbon Offset & ESG'
+  ],
+  'Environmental & Climate': [
+    'Environmental Services',
+    'CleanTech & Carbon Management',
+    'Waste Management & Recycling',
+    'Sustainability & ESG Consulting',
+    'ClimateTech',
+    'Water Management',
+    'Environmental Consulting'
+  ],
+  'Logistics & Supply Chain': [
+    'Warehousing',
+    'Courier & Express Delivery',
+    'Freight Operators',
+    'Distribution Networks',
+    'Fulfilment & 3PL',
+    'Supply Chain Management'
+  ],
+  'Hospitality': [
+    'Hotels & Resorts',
+    'Hostels',
+    'Restaurants',
+    'Catering Services',
+    'Event Venues',
+    'Conference Centres'
+  ],
+  'Tourism & Travel': [
+    'Travel Agencies',
+    'Tour Operators',
+    'Airlines & Cruise',
+    'Holiday Parks',
+    'Adventure & Ecotourism',
+    'TravelTech'
+  ],
+  'Entertainment & Media': [
+    'Media & Broadcasting',
+    'Streaming Services',
+    'News & Publishing',
+    'Podcast & Digital Content',
+    'Film, TV & Video Production',
+    'Gaming & eSports'
+  ],
+  'Marketing & Advertising': [
     'Advertising & Marketing',
     'Digital Marketing / Martech',
     'SEO & SEM Agencies',
-    'Content Creation & Copywriting',
-    'Public Relations & Communications',
-    'Social Media Marketing',
-    'Design & Branding Studios',
-    'Film, TV & Video Production',
-    'Photography & Animation',
-    'Gaming & eSports',
-    'Music & Audio Production',
-    'Publishing & Journalism',
-    'Influencer Marketing',
-    'Event Planning & Experiential Marketing'
+    'Creative Agencies',
+    'Design & Branding',
+    'Public Relations',
+    'Influencer Marketing'
   ],
-  'Travel, Hospitality & Leisure': [
-    'Travel & Tourism',
-    'Hotels & Resorts',
-    'Airlines & Cruise Lines',
-    'Restaurants & Food Service',
+  'Membership Organisations': [
+    'Professional Bodies',
+    'Trade Associations',
+    'Chambers of Commerce',
+    'Unions',
+    'Subscription & Loyalty Platforms'
+  ],
+  'Venture Capital & Investment': [
+    'Venture Capital',
+    'Private Equity',
+    'Investment Platforms',
+    'Corporate Ventures',
+    'Grant-Making Bodies'
+  ],
+  'Corporate Enterprises': [
+    'FTSE 100 / Large Cap',
+    'FTSE 250 / Mid Cap',
+    'Multinationals',
+    'ESG Reporting Organisations',
+    'Corporate Foundations'
+  ],
+  'Consumer Goods': [
+    'FMCG',
+    'Consumer Electronics',
+    'Packaging & Supply',
+    'Wholesale & Distribution'
+  ],
+  'Wholesale & Distribution': [
+    'Wholesale',
+    'Distribution Networks',
+    'B2B Supply',
+    'Import/Export'
+  ],
+  'Food & Beverage': [
+    'Restaurant Chains',
+    'Food Delivery Platforms',
     'Catering & Events',
-    'Adventure & Ecotourism',
-    'TravelTech',
-    'Car Rentals & Ride Sharing',
+    'Coffee & Quick Service',
+    'Hospitality Groups'
+  ],
+  'Fashion & Apparel': [
+    'Fashion Retail',
+    'Footwear',
+    'Luxury & Designer',
+    'Textiles & Apparel Manufacturing'
+  ],
+  'Sports & Leisure': [
+    'Gyms & Fitness',
+    'Sports Clubs',
+    'Football & Major League',
+    'Esports',
     'Theme Parks & Attractions',
-    'Sports & Recreation',
-    'Casinos & Entertainment Venues'
+    'Casinos & Entertainment'
   ],
-  'Public Sector, Government & NGOs': [
-    'Public Administration',
-    'Local Government & Councils',
-    'Defense & Security',
-    'International Development',
-    'Nonprofits / Charities',
-    'Social Services',
-    'Environmental NGOs',
-    'Civic Tech / GovTech',
-    'Law Enforcement & Emergency Services'
+  'Events & Experiences': [
+    'Festivals',
+    'Exhibition Centres',
+    'Conference Organisers',
+    'Ticketing Platforms',
+    'Live Events'
   ],
-  'Science, Environment & Innovation': [
-    'Research & Innovation',
-    'SpaceTech & Aerospace Research',
-    'ClimateTech & Sustainability',
-    'Renewable Energy Research',
-    'Water Management',
-    'Geospatial & Earth Sciences',
-    'Environmental Consulting',
-    'CleanTech & Carbon Capture',
-    'Circular Economy Initiatives'
-  ],
-  'HR, Operations & Internal Services': [
-    'Human Resources & Staffing',
-    'Recruitment & Executive Search',
-    'HRTech / Workforce Management',
-    'Payroll & Benefits Platforms',
-    'Outsourcing / BPO',
-    'Facilities & Workplace Management',
-    'Business Process Automation',
-    'Procurement & Vendor Management'
-  ],
-  'Telecommunications, Internet & Media Infrastructure': [
-    'Internet Service Providers (ISPs)',
-    'Telecommunications Operators',
+  'Telecommunications': [
+    'Internet Service Providers',
     'Mobile Networks',
-    'Satellite Communications',
-    'Fiber Optics & Broadband',
+    'Broadband & Fiber',
     'Data Centers',
-    'Cloud Infrastructure Providers',
-    'Web Hosting & Domain Services'
+    'Satellite Communications'
   ],
-  'Modern Emerging Industries': [
-    'Fintech',
-    'HealthTech',
-    'EdTech',
-    'AgriTech',
-    'PropTech',
-    'LegalTech',
-    'InsurTech',
-    'HRTech',
-    'GovTech',
-    'ClimateTech',
-    'FoodTech',
-    'TravelTech',
-    'CleanTech',
-    'MobilityTech / EVs',
-    'SpaceTech',
-    'Quantum Computing',
-    'Robotics & Automation'
+  'Technology Hardware': [
+    'Computer Hardware & Semiconductors',
+    'Devices & Electronics',
+    'IoT Hardware'
   ],
-  'Other Specialized Services': [
-    'Printing & Publishing',
-    'Translation & Localization',
-    'Courier & Postal Services',
-    'Security & Surveillance',
-    'Interior Design',
-    'Landscaping & Gardening',
-    'Waste & Environmental Engineering',
-    'Maritime & Offshore Services'
+  'Biotechnology': [
+    'Biotech Research',
+    'Pharma R&D',
+    'Medical Biotechnology',
+    'Agricultural Biotechnology'
+  ],
+  'Engineering': [
+    'Civil Engineering',
+    'Mechanical & Electrical',
+    'Industrial Engineering',
+    'Land Surveying & Mapping'
+  ],
+  'Human Services & Welfare': [
+    'Food Banks',
+    'Community Kitchens',
+    'Family Support Services',
+    'Addiction Recovery',
+    'Youth Offending Services',
+    'Prison Rehabilitation',
+    'Refugee Services'
+  ],
+  'Emergency & Critical Services': [
+    'Ambulance Services',
+    'Fire & Rescue',
+    'Crisis Helplines',
+    'Safeguarding Hotlines',
+    'Suicide Prevention',
+    'Domestic Abuse Support'
+  ],
+  'Cultural Institutions': [
+    'Museums',
+    'Libraries',
+    'Theatres',
+    'Art Galleries',
+    'Heritage Sites'
+  ],
+  'Faith & Religious Organisations': [
+    'Churches',
+    'Mosques',
+    'Synagogues',
+    'Religious Charities',
+    'Faith Education',
+    'Religious Community Centres'
+  ],
+  'Higher Regulation Industries': [
+    'Gambling & Betting',
+    'Online Gaming',
+    'Cryptocurrency Exchanges',
+    'Trading Platforms',
+    'Payday Lending',
+    'BNPL Providers'
+  ],
+  'Other / Emerging Industries': [
+    'Other Specialized Services',
+    'Emerging Tech',
+    'Hybrid Sectors',
+    'New Verticals'
   ]
 };
 
 /**
- * Get all main industry categories
+ * Get all primary industry categories (sorted for UI)
  */
 export const getIndustryCategories = (): string[] => {
   return Object.keys(industryTaxonomy);
 };
 
 /**
- * Get subcategories for a specific main category
+ * Get subcategories for a specific primary sector
  */
 export const getIndustrySubcategories = (category: string): string[] => {
   return industryTaxonomy[category] || [];
 };
 
 /**
- * Format industry string for API calls
+ * Format industry string for search/API (subcategory in context of sector)
  */
 export const formatIndustryString = (category: string, subcategory: string): string => {
   return `${subcategory} (${category})`;

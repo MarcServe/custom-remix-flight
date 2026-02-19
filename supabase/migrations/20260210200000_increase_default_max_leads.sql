@@ -8,6 +8,6 @@ BEGIN
     WHERE table_schema = 'public' AND table_name = 'autonomous_discovery_settings'
   ) THEN
     ALTER TABLE public.autonomous_discovery_settings 
-      ALTER COLUMN max_leads_per_run SET DEFAULT 25;
+      ALTER COLUMN max_leads_per_run SET DEFAULT 100;
   END IF;
 END $$;

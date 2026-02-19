@@ -9,6 +9,7 @@ import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, 
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
 import BulkEmailDialog from "@/components/BulkEmailDialog";
+import { CampaignGroupingDialog, type CompanyForGrouping } from "@/components/CampaignGroupingDialog";
 import { AddContactDialog } from "@/components/AddContactDialog";
 import { ProspectAnalyzer, TemperatureBadge } from "@/components/ProspectAnalyzer";
 import { ApifyCSVUploader } from "@/components/ApifyCSVUploader";
@@ -36,6 +37,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import type { Company } from "@/lib/api/companies";
+import { getCompanySource, SOURCE_TAG_LIST } from "@/lib/company-sources";
 
 export default function Companies() {
   const queryClient = useQueryClient();
@@ -73,6 +75,10 @@ export default function Companies() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<Set<string>>(new Set());
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [groupingDialogOpen, setGroupingDialogOpen] = useState(false);
+  const [groupingDialogCompanies, setGroupingDialogCompanies] = useState<CompanyForGrouping[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<string | null>(null);
+  const [groupBySource, setGroupBySource] = useState(true);
   const [emailRecipient, setEmailRecipient] = useState<{
     email: string;
     name: string;
@@ -970,7 +976,7 @@ export default function Companies() {
     });
     
     const filtered = companies.filter(company => {
-      // Search filter - search across company name, website, description, industry, email
+      // Search filter - search across company name, website, description, industry, email, and tags (group/category)
       if (searchQuery.trim()) {
         const query = searchQuery.trim().toLowerCase();
         const name = (company.name || '').toLowerCase();
@@ -978,13 +984,19 @@ export default function Companies() {
         const description = (company.description || '').toLowerCase();
         const industry = (company.industry || '').toLowerCase();
         const email = (company.general_email || (company as any).generalEmail || '').toLowerCase();
+        const companyTags = (company.tags || []).map((t: string) => String(t).toLowerCase()).filter(Boolean);
+        const enrichmentData = company.enrichment_data as any;
+        const suggestedTags = (enrichmentData?.suggestedTags || []).map((t: string) => String(t).toLowerCase()).filter(Boolean);
+        const allTags = [...companyTags, ...suggestedTags];
+        const matchesTag = allTags.some((tag: string) => tag.includes(query) || query.includes(tag));
         
         const matchesSearch = 
           name.includes(query) ||
           website.includes(query) ||
           description.includes(query) ||
           industry.includes(query) ||
-          email.includes(query);
+          email.includes(query) ||
+          matchesTag;
         
         if (!matchesSearch) {
           return false;
@@ -1165,15 +1177,35 @@ export default function Companies() {
       console.warn('[Filter] 💡 Selected tags:', selectedTagFilters.map(t => t.toLowerCase()));
     }
     
+    // Source filter: when set, keep only companies with that source tag
+    let bySource = filtered;
+    if (sourceFilter) {
+      bySource = filtered.filter((c) => getCompanySource(c) === sourceFilter);
+    }
+
     // Sort by created_at descending (newest first) to show recently added companies first
-    const sorted = filtered.sort((a, b) => {
+    const sorted = bySource.sort((a, b) => {
       const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
       const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
       return dateB - dateA; // Descending order (newest first)
     });
     
     return sorted;
-  }, [companies, selectedTagFilters, emailStatusFilter, peopleEmails, searchQuery]);
+  }, [companies, selectedTagFilters, emailStatusFilter, peopleEmails, searchQuery, sourceFilter]);
+
+  // Group filtered companies by source for display (when groupBySource is true)
+  const companiesGroupedBySource = useMemo(() => {
+    if (!groupBySource || !filteredCompanies.length) return null;
+    const groups: Record<string, Company[]> = {};
+    const order = [...SOURCE_TAG_LIST, "Other"];
+    order.forEach((label) => { groups[label] = []; });
+    for (const company of filteredCompanies) {
+      const source = getCompanySource(company) || "Other";
+      if (!groups[source]) groups[source] = [];
+      groups[source].push(company);
+    }
+    return order.filter((label) => (groups[label]?.length ?? 0) > 0).map((label) => ({ label, companies: groups[label] }));
+  }, [groupBySource, filteredCompanies]);
 
   const handleTagFilterClick = (tag: string) => {
     setSelectedTagFilters(prev => 
@@ -1223,6 +1255,30 @@ export default function Companies() {
       });
     }
     setEmailDialogOpen(true);
+  };
+
+  const openGroupingOrBulkEmail = () => {
+    const selectedCompanies = filteredCompanies?.filter(c => selectedCompanyIds.has(c.id)) || [];
+    const companiesWithEmail = selectedCompanies.filter(company => {
+      const match = getCompanyEmailContact(company);
+      return !!match?.email;
+    });
+    if (companiesWithEmail.length === 0) {
+      toast({
+        title: "No emails available",
+        description: "Selected companies don't have email addresses. Please extract emails first or add contacts.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setGroupingDialogCompanies(companiesWithEmail.map(c => ({
+      id: c.id,
+      name: c.name,
+      industry: c.industry ?? undefined,
+      tags: c.tags ?? undefined,
+      description: c.description ?? undefined,
+    })));
+    setGroupingDialogOpen(true);
   };
 
   const handleBulkEmailFromCompanies = async () => {
@@ -1560,7 +1616,7 @@ export default function Companies() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Search companies..."
+              placeholder="Search by name, industry, or group/category..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 w-full sm:w-64"
@@ -1746,6 +1802,51 @@ export default function Companies() {
               </div>
             </PopoverContent>
           </Popover>
+          {/* Source filter: group companies by where they were added from */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Building2 className="h-4 w-4" />
+                Source
+                {sourceFilter && (
+                  <Badge variant="secondary" className="ml-1">{sourceFilter}</Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56" align="end">
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm">Filter by source</h4>
+                <Button
+                  variant={sourceFilter === null ? "secondary" : "ghost"}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setSourceFilter(null)}
+                >
+                  All sources
+                </Button>
+                {SOURCE_TAG_LIST.map((label) => (
+                  <Button
+                    key={label}
+                    variant={sourceFilter === label ? "secondary" : "ghost"}
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => setSourceFilter(label)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+                <div className="pt-2 border-t">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={groupBySource}
+                      onCheckedChange={(v) => setGroupBySource(!!v)}
+                    />
+                    Group by source
+                  </label>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
           <CampaignFitAnalyzer />
           <Button onClick={() => setCsvUploaderOpen(true)} variant="outline">
             <Upload className="h-4 w-4 mr-2" />
@@ -1759,9 +1860,19 @@ export default function Companies() {
       </div>
 
       {/* Active Filters */}
-      {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all') && (
+      {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all' || sourceFilter) && (
         <div className="flex flex-wrap gap-2 px-4 md:px-0 items-center">
           <span className="text-sm text-muted-foreground">Filtering by:</span>
+          {sourceFilter && (
+            <Badge
+              variant="secondary"
+              className="gap-1 cursor-pointer"
+              onClick={() => setSourceFilter(null)}
+            >
+              Source: {sourceFilter}
+              <X className="h-3 w-3 ml-1" />
+            </Badge>
+          )}
           {emailStatusFilter !== 'all' && (
             <Badge
               variant="secondary"
@@ -1896,11 +2007,11 @@ export default function Companies() {
                           )}
                         </Button>
                       )}
-                      {/* Always visible Bulk Email button - opens dialog even without selections */}
+                      {/* Always visible Bulk Email button - opens grouping preview then compose */}
                       <Button
                         variant={companiesWithEmail.length > 0 ? "default" : "outline"}
                         size="sm"
-                        onClick={handleBulkEmailFromCompanies}
+                        onClick={openGroupingOrBulkEmail}
                         disabled={bulkExtractEmailMutation.isPending}
                       >
                         <Mail className="h-4 w-4 mr-1" />
@@ -1985,21 +2096,34 @@ export default function Companies() {
       )}
 
       <div className="space-y-3 px-4 md:px-0 max-h-[calc(100vh-16rem)] overflow-y-auto">
-        {filteredCompanies?.map((company, index) => {
-          const contactCount = company.contacts?.length || 0;
-          const dealCount = company.deals?.length || 0;
-          const hasEmail = !!(company.general_email || company.generalEmail || company.contacts?.some(contact => contact.email));
-          const isEnriched = company.enrichment_status === 'completed';
-          const companyTags = company.tags || [];
-          const isSelected = selectedCompanyIds.has(company.id);
-          const alreadyInContacts = isCompanyInContacts(company);
-          const isNew = isCompanyNew(company);
-          // Only show status badge if:
-          // 1. Status is "NEW" AND company is actually new (within 7 days), OR
-          // 2. Status is something other than "NEW"
-          const shouldShowStatus = company.status && (company.status !== 'NEW' || isNew);
+        {(groupBySource && companiesGroupedBySource?.length
+          ? companiesGroupedBySource.flatMap(({ label, companies: sectionCompanies }) => [
+              { _type: 'header' as const, key: `header-${label}`, label, count: sectionCompanies.length },
+              ...sectionCompanies.map((company) => ({ _type: 'company' as const, key: company.id, company, index: filteredCompanies!.indexOf(company) })),
+            ])
+          : (filteredCompanies ?? []).map((company, index) => ({ _type: 'company' as const, key: company.id, company, index }))
+        )?.map((item) =>
+          item._type === 'header' ? (
+            <div key={item.key} className="pt-3 pb-1 first:pt-0">
+              <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                {item.label}
+                <Badge variant="secondary" className="text-xs">{item.count}</Badge>
+              </h3>
+            </div>
+          ) : (
+            (() => {
+              const { company, index } = item;
+              const contactCount = company.contacts?.length || 0;
+              const dealCount = company.deals?.length || 0;
+              const hasEmail = !!(company.general_email || company.generalEmail || company.contacts?.some(contact => contact.email));
+              const isEnriched = company.enrichment_status === 'completed';
+              const companyTags = company.tags || [];
+              const isSelected = selectedCompanyIds.has(company.id);
+              const alreadyInContacts = isCompanyInContacts(company);
+              const isNew = isCompanyNew(company);
+              const shouldShowStatus = company.status && (company.status !== 'NEW' || isNew);
 
-          return (
+              return (
             <Card 
               key={company.id} 
               className={`transition-all hover:shadow-lg border bg-card/50 backdrop-blur-sm cursor-pointer ${isSelected ? 'ring-2 ring-primary border-primary' : ''}`}
@@ -2172,8 +2296,9 @@ export default function Companies() {
                 </div>
               </CardContent>
             </Card>
-          );
-        })}
+              );
+            })() )
+        )}
       </div>
 
       {selectedCompany && companies && (
@@ -2237,6 +2362,13 @@ export default function Companies() {
           }
         }}
         selectedPeople={bulkEmailPeople}
+      />
+
+      <CampaignGroupingDialog
+        open={groupingDialogOpen}
+        onOpenChange={setGroupingDialogOpen}
+        companies={groupingDialogCompanies}
+        onContinueToCompose={handleBulkEmailFromCompanies}
       />
 
       {/* Bulk Delete Confirmation Dialog */}

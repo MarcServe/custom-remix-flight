@@ -35,11 +35,15 @@ serve(async (req) => {
       throw new Error('Not authenticated');
     }
 
-    const { companyIds } = await req.json();
+    const { companyIds, fitCriteria } = await req.json();
     
     if (!companyIds || companyIds.length === 0) {
       throw new Error('No company IDs provided');
     }
+
+    const fitContext = fitCriteria && String(fitCriteria).trim()
+      ? `\n\nIMPORTANT - Fit criteria for this analysis: The user wants to identify companies that are a BEST FIT for: "${String(fitCriteria).trim()}". Rate Hot/Warm/Cold and suggest next actions specifically with this use case in mind. A "Hot" prospect should be one that is well-suited for this purpose; "Cold" should be poor fit for this use case.`
+      : '';
 
     // Fetch companies to analyze
     const { data: companies, error: companiesError } = await supabaseClient
@@ -76,25 +80,29 @@ serve(async (req) => {
     }));
 
     const systemPrompt = `You are a sales intelligence AI that categorizes prospects and suggests next actions.
-
 Analyze each company and assign a temperature (hot/warm/cold) based on:
-- HOT: Strong buying signals, recent activity, good fit, urgent need
-- WARM: Good potential, needs nurturing, moderate fit
-- COLD: Low priority, poor fit, or no recent engagement
-
-Also suggest 2-3 specific next actions to move each prospect forward.
+- HOT: Strong buying signals, recent activity, good fit for the stated use case, urgent need
+- WARM: Good potential, needs nurturing, moderate fit for the stated use case
+- COLD: Low priority, poor fit for the stated use case, or no recent engagement
+${fitContext}
+Also suggest 2-3 specific next actions to move each prospect forward (tailored to the fit criteria when provided).
 
 Return JSON array with this structure:
 [{
   "companyId": "uuid",
   "temperature": "hot" | "warm" | "cold",
-  "reasoning": "Brief explanation of categorization",
+  "reasoning": "Brief explanation of categorization (reference the fit criteria when provided)",
   "suggestedActions": [
     { "action": "Specific action", "priority": "high|medium|low", "reason": "Why this action" }
   ]
 }]`;
 
-    const prompt = `Analyze these companies and categorize them:\n\n${JSON.stringify(companyData, null, 2)}`;
+    const fitCriteriaStr = fitCriteria ? String(fitCriteria).trim() : '';
+    const userPrompt = fitCriteriaStr
+      ? `Analyze these companies for best fit. Use case: "${fitCriteriaStr}". Categorize each and suggest actions with this in mind.\n\n${JSON.stringify(companyData, null, 2)}`
+      : `Analyze these companies and categorize them:\n\n${JSON.stringify(companyData, null, 2)}`;
+
+    const prompt = userPrompt;
 
     console.log('Calling OpenAI to analyze prospects...');
 
@@ -131,39 +139,56 @@ Return JSON array with this structure:
     const aiData = await aiResponse.json();
     const content = aiData.choices[0].message.content;
     
-    let analysis;
+    let analysis: Array<{ companyId?: string; id?: string; temperature?: string; suggestedActions?: any[] }>;
     try {
       const parsed = JSON.parse(content);
-      // Handle both direct array and wrapped object responses
-      analysis = Array.isArray(parsed) ? parsed : (parsed.companies || parsed.analysis || []);
+      // Handle direct array or object with various key names (models return different shapes)
+      if (Array.isArray(parsed)) {
+        analysis = parsed;
+      } else if (parsed.companies && Array.isArray(parsed.companies)) {
+        analysis = parsed.companies;
+      } else if (parsed.analysis && Array.isArray(parsed.analysis)) {
+        analysis = parsed.analysis;
+      } else if (parsed.results && Array.isArray(parsed.results)) {
+        analysis = parsed.results;
+      } else if (parsed.data && Array.isArray(parsed.data)) {
+        analysis = parsed.data;
+      } else {
+        const arrKey = Object.keys(parsed).find((k) => Array.isArray(parsed[k]));
+        analysis = arrKey ? parsed[arrKey] : [];
+      }
     } catch (e) {
       console.error('Failed to parse AI response:', content);
       throw new Error('Invalid AI response format');
     }
 
-    // Update companies with analysis results
-    const updates = [];
+    const companyIdSet = new Set(companyIds);
+    let updatedCount = 0;
+
     for (const result of analysis) {
-      const updatePromise = supabaseClient
+      const id = result.companyId ?? result.id;
+      if (!id || !companyIdSet.has(id)) continue;
+      const temp = (result.temperature || '').toLowerCase();
+      if (temp !== 'hot' && temp !== 'warm' && temp !== 'cold') continue;
+
+      const { error } = await supabaseClient
         .from('companies')
         .update({
-          temperature: result.temperature,
+          temperature: temp,
           suggested_actions: result.suggestedActions || [],
           last_analyzed_at: new Date().toISOString(),
         })
-        .eq('id', result.companyId)
+        .eq('id', id)
         .eq('user_id', user.id);
-      
-      updates.push(updatePromise);
+
+      if (!error) updatedCount++;
     }
 
-    await Promise.all(updates);
-
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         success: true,
-        analyzed: analysis.length,
-        results: analysis 
+        analyzed: updatedCount,
+        results: analysis,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

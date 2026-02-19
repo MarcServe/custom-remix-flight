@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send, Plus, UserPlus, Loader2, CheckCircle2, Filter, X, Clock, Tag, ChevronDown, Search } from "lucide-react";
+import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send, Plus, UserPlus, Loader2, CheckCircle2, Filter, X, Clock, Tag, ChevronDown, Search, Trash2 } from "lucide-react";
 import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
 import { PersonDetailsDialog } from "@/components/PersonDetailsDialog";
 import BulkEmailDialog from "@/components/BulkEmailDialog";
@@ -18,7 +18,18 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { EmailHistoryView } from "@/components/email/EmailHistoryView";
+import { SOURCE_TAG_LIST } from "@/lib/company-sources";
 
 export default function People() {
   const queryClient = useQueryClient();
@@ -33,8 +44,10 @@ export default function People() {
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
   const [selectedIndustryFilters, setSelectedIndustryFilters] = useState<string[]>([]);
   const [selectedCampaignFilter, setSelectedCampaignFilter] = useState<string | null>(null);
+  const [selectedGroupFilter, setSelectedGroupFilter] = useState<string | null>(null);
   const [expandedEmailHistory, setExpandedEmailHistory] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   
   const { data: people, isLoading, refetch } = useQuery({
     queryKey: ["people"],
@@ -250,6 +263,33 @@ export default function People() {
     },
   });
 
+  const deleteSelectedMutation = useMutation({
+    mutationFn: async (personIds: string[]) => {
+      const { error } = await supabase
+        .from("people")
+        .delete()
+        .in("id", personIds);
+      if (error) throw error;
+      return personIds.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ["people"] });
+      setSelectedPeopleIds(new Set());
+      setDeleteDialogOpen(false);
+      toast({
+        title: "Contacts deleted",
+        description: `${count} contact${count === 1 ? "" : "s"} removed.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // Get all unique tags from people and their companies (prioritize intelligent tags)
   // Extract from both tags column AND enrichment_data.suggestedTags
   const allPeopleTags = useMemo(() => {
@@ -378,7 +418,7 @@ export default function People() {
     if (!people || !Array.isArray(people)) return [];
     
     return people.filter(person => {
-      // Search filter - search across name, email, company name, title, phone
+      // Search filter - search across name, email, company name, title, phone, and company tags (group/category)
       if (searchQuery.trim()) {
         const query = searchQuery.trim().toLowerCase();
         const fullName = `${person.first_name || ''} ${person.last_name || ''}`.toLowerCase();
@@ -386,13 +426,25 @@ export default function People() {
         const companyName = (person.companies?.name || '').toLowerCase();
         const title = (person.title || '').toLowerCase();
         const phone = (person.phone || '').toLowerCase();
+        const companyTags = (person.companies?.tags && Array.isArray(person.companies.tags))
+          ? person.companies.tags.map((t: string) => String(t).toLowerCase()).filter(Boolean)
+          : [];
+        let suggestedTags: string[] = [];
+        if (person.companies?.enrichment_data) {
+          const ed = person.companies.enrichment_data as any;
+          const raw = ed?.suggestedTags || ed?.suggested_tags || [];
+          suggestedTags = (Array.isArray(raw) ? raw : []).map((t: string) => String(t).toLowerCase()).filter(Boolean);
+        }
+        const allCompanyTags = [...companyTags, ...suggestedTags];
+        const matchesGroupOrCategory = allCompanyTags.some((tag: string) => tag.includes(query) || query.includes(tag));
         
         const matchesSearch = 
           fullName.includes(query) ||
           email.includes(query) ||
           companyName.includes(query) ||
           title.includes(query) ||
-          phone.includes(query);
+          phone.includes(query) ||
+          matchesGroupOrCategory;
         
         if (!matchesSearch) {
           return false;
@@ -490,6 +542,12 @@ export default function People() {
       if (!wasInCampaign) return false;
     }
 
+    // Group / category filter - show only contacts whose company has this tag (source or custom category)
+    if (selectedGroupFilter) {
+      const companyTags = (person.companies?.tags || []).map((t: string) => String(t).trim()).filter(Boolean);
+      if (!companyTags.includes(selectedGroupFilter)) return false;
+    }
+
       return true;
     }).sort((a, b) => {
       // Sort by created_at descending (newest first) to show recently added people first
@@ -497,7 +555,18 @@ export default function People() {
       const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
       return dateB - dateA; // Descending order (newest first)
     });
-  }, [people, selectedTagFilters, selectedIndustryFilters, selectedCampaignFilter, emailHistory, searchQuery]);
+  }, [people, selectedTagFilters, selectedIndustryFilters, selectedCampaignFilter, selectedGroupFilter, emailHistory, searchQuery]);
+
+  // Category options: source groups + custom tags (for Category dropdown)
+  const categoryOptions = useMemo(() => {
+    const sourceSet = new Set<string>(SOURCE_TAG_LIST);
+    const custom = Array.from(allPeopleTags).filter((t) => !sourceSet.has(t)).sort();
+    return [...SOURCE_TAG_LIST, ...custom];
+  }, [allPeopleTags]);
+  const customCategoryOptions = useMemo(
+    () => categoryOptions.filter((t) => !(SOURCE_TAG_LIST as readonly string[]).includes(t)),
+    [categoryOptions]
+  );
 
   // Debug logging when filtering by tags but no results
   if (selectedTagFilters.length > 0 && filteredPeople.length === 0 && people && people.length > 0) {
@@ -650,6 +719,15 @@ export default function People() {
                       </Button>
                     );
                   })()}
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full sm:w-auto text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setDeleteDialogOpen(true)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete ({selectedPeopleIds.size})
+                  </Button>
                 </>
               )}
               <Button 
@@ -686,12 +764,67 @@ export default function People() {
               </div>
             )}
             
+            {/* Group / Category filter - source groups + custom categories for targeted campaigns */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Users className="h-4 w-4" />
+                  Category
+                  {selectedGroupFilter && (
+                    <Badge variant="secondary" className="ml-1">{selectedGroupFilter}</Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 max-h-[320px] overflow-y-auto" align="start">
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Filter by category</h4>
+                  <p className="text-xs text-muted-foreground">Source groups or custom categories (e.g. Real Estate Rentals). Use for targeted campaigns.</p>
+                  <Button
+                    variant={selectedGroupFilter === null ? "secondary" : "ghost"}
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => setSelectedGroupFilter(null)}
+                  >
+                    All categories
+                  </Button>
+                  <p className="text-xs text-muted-foreground pt-1 pb-0.5">Source</p>
+                  {SOURCE_TAG_LIST.map((label) => (
+                    <Button
+                      key={label}
+                      variant={selectedGroupFilter === label ? "secondary" : "ghost"}
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => setSelectedGroupFilter(label)}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                  {customCategoryOptions.length > 0 && (
+                    <>
+                      <p className="text-xs text-muted-foreground pt-2 pb-0.5">Custom</p>
+                      {customCategoryOptions.map((label) => (
+                        <Button
+                          key={label}
+                          variant={selectedGroupFilter === label ? "secondary" : "ghost"}
+                          size="sm"
+                          className="w-full justify-start"
+                          onClick={() => setSelectedGroupFilter(label)}
+                        >
+                          {label}
+                        </Button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+            
             {/* Search Input */}
             <div className="relative w-full sm:w-auto">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Search contacts..."
+                placeholder="Search by name, email, company, or group..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 w-full sm:w-64"
@@ -756,9 +889,19 @@ export default function People() {
           </div>
           
           {/* Active Filters */}
-          {selectedTagFilters.length > 0 && (
+          {(selectedTagFilters.length > 0 || selectedGroupFilter) && (
             <div className="flex flex-wrap gap-2 items-center">
               <span className="text-sm text-muted-foreground">Filtering by:</span>
+              {selectedGroupFilter && (
+                <Badge
+                  variant="secondary"
+                  className="gap-1 cursor-pointer"
+                  onClick={() => setSelectedGroupFilter(null)}
+                >
+                  Category: {selectedGroupFilter}
+                  <X className="h-3 w-3 ml-1" />
+                </Badge>
+              )}
               {selectedTagFilters.map((tag) => (
                 <Badge
                   key={tag}
@@ -978,6 +1121,30 @@ export default function People() {
         onOpenChange={setBulkEmailDialogOpen}
         selectedPeople={selectedPeople}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete selected contacts?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove {selectedPeopleIds.size} contact{selectedPeopleIds.size === 1 ? "" : "s"} from People. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteSelectedMutation.mutate(Array.from(selectedPeopleIds))}
+              disabled={deleteSelectedMutation.isPending}
+            >
+              {deleteSelectedMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -4,8 +4,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
+import { ResearchChatProvider } from "./contexts/ResearchChatContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Sidebar } from "./components/Sidebar";
+import { ResearchChatSlideOut } from "./components/ResearchChatSlideOut";
 import { useAllRealtime } from "./hooks/use-realtime";
 import { useAllEmailNotifications } from "./hooks/use-email-notifications";
 import Dashboard from "./pages/Dashboard";
@@ -60,11 +62,12 @@ const App = () => (
                 path="/*"
                 element={
                   <ProtectedRoute>
-                    <div className="flex h-screen overflow-hidden">
-                      <Sidebar />
-                      <main className="flex-1 overflow-auto bg-gradient-to-br from-background to-muted/20 p-4 pt-16 lg:pt-6 lg:p-6 xl:p-8 min-w-0">
-                        <div className="max-w-full">
-                        <Routes>
+                    <ResearchChatProvider>
+                      <div className="flex h-screen overflow-hidden">
+                        <Sidebar />
+                        <main className="flex-1 overflow-auto bg-gradient-to-br from-background to-muted/20 p-4 pt-16 lg:pt-6 lg:p-6 xl:p-8 min-w-0">
+                          <div className="max-w-full">
+                          <Routes>
                           <Route path="/" element={<Dashboard />} />
                           <Route path="/companies" element={<Companies />} />
                           <Route path="/deals" element={<Deals />} />
@@ -93,9 +96,11 @@ const App = () => (
                           <Route path="/subscription" element={<Subscription />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
-                        </div>
-                      </main>
-                    </div>
+                          </div>
+                        </main>
+                      </div>
+                      <ResearchChatSlideOut />
+                    </ResearchChatProvider>
                   </ProtectedRoute>
                 }
               />

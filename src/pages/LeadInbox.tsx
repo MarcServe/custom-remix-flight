@@ -48,6 +48,8 @@ import { EmptyState } from "@/components/lead-inbox/EmptyState";
 import { StatsHeader } from "@/components/lead-inbox/StatsHeader";
 import { DiscoveryBatchHeader } from "@/components/lead-inbox/DiscoveryBatchHeader";
 import { startOfDay, subDays, isAfter, format } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useCompanyTags } from "@/hooks/use-company-tags";
 
 type LeadStatus = 'pending' | 'approved' | 'rejected' | 'auto_approved';
 type DateFilter = 'today' | 'last7days' | 'last30days' | 'all';
@@ -78,6 +80,8 @@ export default function LeadInbox() {
   const [personaFilter, setPersonaFilter] = useState<string>('all');
   const [isExtractingEmails, setIsExtractingEmails] = useState(false);
   const [extractionProgress, setExtractionProgress] = useState<{ current: number; total: number; companyName: string } | null>(null);
+  const [approveCategoryTag, setApproveCategoryTag] = useState("");
+  const { allSuggestions: categoryTagSuggestions } = useCompanyTags();
   // Fetch autonomous discovery settings
   const { data: settings, isLoading: settingsLoading } = useQuery({
     queryKey: ['autonomous-discovery-settings'],
@@ -361,9 +365,11 @@ export default function LeadInbox() {
     if (error) console.error('Error enrolling in sequence:', error);
   };
 
-  // Approve lead mutation
+  // Approve lead mutation (accepts leadIds or { leadIds, category? })
   const approveLeadMutation = useMutation({
-    mutationFn: async (leadIds: string[]) => {
+    mutationFn: async (arg: string[] | { leadIds: string[]; category?: string }) => {
+      const leadIds = Array.isArray(arg) ? arg : arg.leadIds;
+      const category = !Array.isArray(arg) && arg?.category ? arg.category : undefined;
       const startTime = Date.now();
       
       for (const leadId of leadIds) {
@@ -378,13 +384,15 @@ export default function LeadInbox() {
 
         const companyData = (lead.company_data || {}) as Record<string, any>;
 
-        // Prepare tags: suggested tags + industry
+        // Prepare tags: suggested tags + industry + optional category
         const tagsToApply: string[] = [];
         const suggestedTags = (companyData.suggestedTags || lead.enrichment_data?.suggestedTags || []) as string[];
         tagsToApply.push(...suggestedTags);
         if (lead.industry) {
           tagsToApply.push(lead.industry);
         }
+        tagsToApply.push('Lead Inbox');
+        if (category) tagsToApply.push(category);
         const uniqueTags = Array.from(new Set(tagsToApply.filter(Boolean)));
 
         // Create the company
@@ -872,7 +880,7 @@ export default function LeadInbox() {
                     const threshold = settings?.auto_approve_threshold || 70;
                     const leadsAboveThreshold = filteredLeads.filter(l => (l.quality_score || 0) >= threshold);
                     if (leadsAboveThreshold.length > 0) {
-                      approveLeadMutation.mutate(leadsAboveThreshold.map(l => l.id));
+                      approveLeadMutation.mutate({ leadIds: leadsAboveThreshold.map(l => l.id), category: approveCategoryTag?.trim() || undefined });
                     } else {
                       toast({ title: 'No leads above threshold', description: `No leads with quality score ≥ ${threshold}` });
                     }
@@ -926,16 +934,41 @@ export default function LeadInbox() {
           {/* Bulk Actions */}
           {selectedLeads.size > 0 && (
             <Card className="border-primary/50 bg-primary/5">
-              <CardContent className="flex items-center justify-between py-3">
+              <CardContent className="flex flex-wrap items-center justify-between gap-2 py-3">
                 <span className="text-sm font-medium">
                   {selectedLeads.size} lead{selectedLeads.size !== 1 ? 's' : ''} selected
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {activeTab === 'pending' && (
                     <>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button type="button" variant="outline" size="sm" className="gap-1.5" title="Add approved leads to a category">
+                            Category: {approveCategoryTag ? <Badge variant="secondary" className="font-normal text-xs">{approveCategoryTag}</Badge> : "Optional"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72" align="end">
+                          <div className="space-y-2">
+                            <Label className="text-xs">Add to category when approving (optional)</Label>
+                            <Input
+                              placeholder="e.g. Healthcare Sales"
+                              value={approveCategoryTag}
+                              onChange={(e) => setApproveCategoryTag(e.target.value)}
+                              list="lead-inbox-approve-category-list"
+                              className="h-8 text-sm"
+                            />
+                            <datalist id="lead-inbox-approve-category-list">
+                              {(categoryTagSuggestions || []).slice(0, 30).map((tag) => (
+                                <option key={tag} value={tag} />
+                              ))}
+                            </datalist>
+                            {approveCategoryTag && <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setApproveCategoryTag("")}>Clear</Button>}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                       <Button 
                         size="sm" 
-                        onClick={() => approveLeadMutation.mutate(Array.from(selectedLeads))}
+                        onClick={() => approveLeadMutation.mutate({ leadIds: Array.from(selectedLeads), category: approveCategoryTag?.trim() || undefined })}
                         disabled={approveLeadMutation.isPending}
                       >
                         {approveLeadMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
@@ -1103,7 +1136,7 @@ export default function LeadInbox() {
                           pendingLeadIds={pendingLeadIds}
                           approvedLeadIds={approvedLeadIds}
                           sequences={sequences || []}
-                          onApproveAll={(ids) => approveLeadMutation.mutate(ids)}
+                          onApproveAll={(ids) => approveLeadMutation.mutate({ leadIds: ids, category: approveCategoryTag?.trim() || undefined })}
                           onRejectAll={(ids) => rejectLeadMutation.mutate(ids)}
                           onDeleteAll={(ids) => deleteLeadMutation.mutate(ids)}
                           onEnrollInSequence={handleBatchEnrollInSequence}
@@ -1125,7 +1158,7 @@ export default function LeadInbox() {
                               isSelected={selectedLeads.has(lead.id)}
                               onSelect={() => toggleLeadSelection(lead.id)}
                               onView={() => handleViewLead(lead)}
-                              onApprove={() => approveLeadMutation.mutate([lead.id])}
+                              onApprove={() => approveLeadMutation.mutate({ leadIds: [lead.id], category: approveCategoryTag?.trim() || undefined })}
                               onReject={() => rejectLeadMutation.mutate([lead.id])}
                               isPending={approveLeadMutation.isPending || rejectLeadMutation.isPending}
                               personaName={personaMap.get(lead.persona_id)}

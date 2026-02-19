@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sparkles, Loader2, Building2, ExternalLink, Search, Database, Zap, Globe, Mail, Phone, ChevronLeft, ChevronRight, ChevronDown, FilterX, Download, RefreshCw, UserPlus, MoreVertical, Eye, Copy, StopCircle, X, AlertCircle, Clock, Linkedin, Facebook, Twitter, Instagram, Youtube, MapPin, FileSpreadsheet } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
@@ -30,15 +31,24 @@ import { companiesApi } from "@/lib/api/companies";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useCompanyTags } from "@/hooks/use-company-tags";
 import { industryTaxonomy, getIndustryCategories, getIndustrySubcategories, formatIndustryString } from "@/lib/data/industry-taxonomy";
 import { QualityScoreBadge } from "@/components/lead-finder/QualityScoreBadge";
 import { QualityStars } from "@/components/lead-finder/QualityStars";
 import { DataCompletenessBar } from "@/components/lead-finder/DataCompletenessBar";
 import { SourceBadges, SourcesSummary } from "@/components/lead-finder/SourceBadges";
+const SIZE_OPTIONS = [
+  { value: "1-10", label: "1-10 employees" },
+  { value: "11-50", label: "11-50 employees" },
+  { value: "51-200", label: "51-200 employees" },
+  { value: "201-500", label: "201-500 employees" },
+  { value: "500+", label: "500+ employees" },
+];
+
 export default function LeadFinder() {
-  const [size, setSize] = useState("");
+  const [sizes, setSizes] = useState<string[]>([]);
   const [geography, setGeography] = useState("");
-  const [industryCategory, setIndustryCategory] = useState("");
+  const [industryCategories, setIndustryCategories] = useState<string[]>([]);
   const [industrySubcategories, setIndustrySubcategories] = useState<string[]>([]);
   const [subcategorySearch, setSubcategorySearch] = useState("");
   const [customSearchText, setCustomSearchText] = useState("");
@@ -46,6 +56,8 @@ export default function LeadFinder() {
   const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(true);
   const [useSerpApi, setUseSerpApi] = useState(false);
   const [useApify, setUseApify] = useState(false);
+  /** Target number of leads to fetch per search (25–100). More = more API calls / results. */
+  const [maxResults, setMaxResults] = useState<number>(50);
   const [selectedCompany, setSelectedCompany] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedCompanyIndices, setSelectedCompanyIndices] = useState<Set<number>>(new Set());
@@ -66,6 +78,10 @@ export default function LeadFinder() {
 
   // Sorting state
   const [sortBy, setSortBy] = useState<'quality' | 'completeness' | 'alphabetical' | 'employees'>('quality');
+  // Optional category when saving to CRM (e.g. "Real Estate Rentals") so leads are grouped for campaigns
+  const [saveCategoryTag, setSaveCategoryTag] = useState<string>("");
+  const [addToCrmDialogOpen, setAddToCrmDialogOpen] = useState(false);
+  const { allSuggestions: categoryTagSuggestions } = useCompanyTags();
   const {
     defaultProvider,
     defaultModels
@@ -85,6 +101,14 @@ export default function LeadFinder() {
       model: defaultModels[defaultProvider] as string | undefined
     });
   }, [defaultProvider, defaultModels]);
+
+  // When multiple industry categories are selected, subcategories don't apply
+  useEffect(() => {
+    if (industryCategories.length !== 1) {
+      setIndustrySubcategories([]);
+      setSubcategorySearch("");
+    }
+  }, [industryCategories.length]);
   const {
     leadFinderResults,
     setLeadFinderResults
@@ -114,11 +138,11 @@ export default function LeadFinder() {
     forceSave?: boolean;
   }) => {
     const shouldDryRun = options?.forceSave ? false : dryRun;
-    const industryString = industrySubcategories.length > 0 
-      ? industrySubcategories.map(sub => formatIndustryString(industryCategory, sub)).join(', ')
-      : industryCategory;
+    const industryString = industryCategories.length === 1 && industrySubcategories.length > 0
+      ? industrySubcategories.map(sub => formatIndustryString(industryCategories[0], sub)).join(', ')
+      : industryCategories.join(', ');
     await streamingSearch.findLeads({
-      size,
+      size: sizes.join(', '),
       geography,
       industry: industryString,
       customSearchText,
@@ -127,7 +151,8 @@ export default function LeadFinder() {
       model: providerConfig.model,
       enrichWithPerplexity,
       useSerpApi,
-      useApify
+      useApify,
+      maxResults,
     });
   };
   const handleCancelSearch = () => {
@@ -212,7 +237,8 @@ export default function LeadFinder() {
               products: company.products,
               recentNews: company.recentNews,
               fundingInfo: company.fundingInfo
-            } : undefined
+            } : undefined,
+            tags: ['Lead Finder', saveCategoryTag?.trim()].filter(Boolean)
           });
           if (companyError) {
             console.error('Error creating company:', companyError);
@@ -294,9 +320,10 @@ export default function LeadFinder() {
       setSelectedCompanyIndices(new Set(filteredAndSortedResults.leads.map((_, idx) => idx)));
     }
   };
-  const availableSubcategories = industryCategory ? getIndustrySubcategories(industryCategory) : [];
+  const primaryIndustryCategory = industryCategories.length === 1 ? industryCategories[0] : null;
+  const availableSubcategories = primaryIndustryCategory ? getIndustrySubcategories(primaryIndustryCategory) : [];
   const filteredSubcategories = availableSubcategories.filter(sub => sub.toLowerCase().includes(subcategorySearch.toLowerCase()));
-  const isFormValid = size && geography && industryCategory || customSearchText.trim().length > 0;
+  const isFormValid = (sizes.length > 0 && geography && industryCategories.length > 0) || customSearchText.trim().length > 0;
   const isLoading = streamingSearch.isLoading;
 
   // Create results object compatible with existing code
@@ -748,18 +775,41 @@ export default function LeadFinder() {
                 <div className="space-y-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="size" className="text-xs font-medium">Company Size</Label>
-                    <Select value={size} onValueChange={setSize}>
-                      <SelectTrigger id="size" className="h-9 text-xs">
-                        <SelectValue placeholder="Select size" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1-10">1-10 employees</SelectItem>
-                        <SelectItem value="11-50">11-50 employees</SelectItem>
-                        <SelectItem value="51-200">51-200 employees</SelectItem>
-                        <SelectItem value="201-500">201-500 employees</SelectItem>
-                        <SelectItem value="500+">500+ employees</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" role="combobox" id="size" className="w-full min-h-9 h-auto justify-between text-xs font-normal py-2">
+                          <span className="text-left flex-1 truncate">
+                            {sizes.length === 0
+                              ? "Select size(s)"
+                              : sizes.length === 1
+                                ? SIZE_OPTIONS.find(o => o.value === sizes[0])?.label ?? sizes[0]
+                                : `${sizes.length} selected`}
+                          </span>
+                          <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <ScrollArea className="h-[220px]">
+                          <div className="p-2 space-y-1">
+                            {sizes.length > 0 && (
+                              <Button variant="ghost" size="sm" className="w-full h-7 text-xs text-muted-foreground mb-1" onClick={() => setSizes([])}>
+                                Clear all ({sizes.length})
+                              </Button>
+                            )}
+                            {SIZE_OPTIONS.map(opt => (
+                              <div
+                                key={opt.value}
+                                className="flex items-center space-x-2 px-2 py-1.5 hover:bg-accent rounded-md cursor-pointer"
+                                onClick={() => setSizes(prev => prev.includes(opt.value) ? prev.filter(s => s !== opt.value) : [...prev, opt.value])}
+                              >
+                                <Checkbox checked={sizes.includes(opt.value)} />
+                                <span className="text-xs">{opt.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
                   <div className="space-y-1.5">
@@ -769,21 +819,52 @@ export default function LeadFinder() {
 
                   <div className="space-y-1.5">
                     <Label htmlFor="industry-category" className="text-xs font-medium">Industry Category</Label>
-                    <Select value={industryCategory} onValueChange={value => {
-                    setIndustryCategory(value);
-                    setIndustrySubcategories([]);
-                    setSubcategorySearch("");
-                  }}>
-                      <SelectTrigger id="industry-category" className="h-9 text-xs">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[300px]">
-                        {getIndustryCategories().map(category => <SelectItem key={category} value={category}>{category}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" role="combobox" id="industry-category" className="w-full min-h-9 h-auto justify-between text-xs font-normal py-2">
+                          <span className="text-left flex-1 truncate">
+                            {industryCategories.length === 0
+                              ? "Select category(ies)"
+                              : industryCategories.length === 1
+                                ? industryCategories[0]
+                                : `${industryCategories.length} selected`}
+                          </span>
+                          <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-h-[300px] p-0" align="start">
+                        <ScrollArea className="h-[260px]">
+                          <div className="p-2 space-y-1">
+                            {industryCategories.length > 0 && (
+                              <Button variant="ghost" size="sm" className="w-full h-7 text-xs text-muted-foreground mb-1" onClick={() => { setIndustryCategories([]); setIndustrySubcategories([]); setSubcategorySearch(""); }}>
+                                Clear all ({industryCategories.length})
+                              </Button>
+                            )}
+                            {getIndustryCategories().map(category => (
+                              <div
+                                key={category}
+                                className="flex items-center space-x-2 px-2 py-1.5 hover:bg-accent rounded-md cursor-pointer"
+                                onClick={() => {
+                                  setIndustryCategories(prev =>
+                                    prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
+                                  );
+                                  if (industryCategories.length === 1 && industryCategories[0] === category) {
+                                    setIndustrySubcategories([]);
+                                    setSubcategorySearch("");
+                                  }
+                                }}
+                              >
+                                <Checkbox checked={industryCategories.includes(category)} />
+                                <span className="text-xs">{category}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
-                  {industryCategory && <div className="space-y-1.5">
+                  {primaryIndustryCategory && <div className="space-y-1.5">
                       <Label htmlFor="industry-subcategory" className="text-xs font-medium">Subcategories (Optional)</Label>
                       <Popover>
                         <PopoverTrigger asChild>
@@ -810,8 +891,8 @@ export default function LeadFinder() {
                               <div className="space-y-1">
                                 {filteredSubcategories.length > 0 ? filteredSubcategories.map(subcategory => (
                                   <div key={subcategory} className="flex items-center space-x-2 px-2 py-1.5 hover:bg-accent rounded-md cursor-pointer" onClick={() => {
-                                    setIndustrySubcategories(prev => 
-                                      prev.includes(subcategory) 
+                                    setIndustrySubcategories(prev =>
+                                      prev.includes(subcategory)
                                         ? prev.filter(s => s !== subcategory)
                                         : [...prev, subcategory]
                                     );
@@ -899,6 +980,20 @@ export default function LeadFinder() {
                   Options
                 </h2>
                 <div className="space-y-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-normal">Target leads per search</Label>
+                    <Select value={String(maxResults)} onValueChange={v => setMaxResults(Number(v))}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="75">75</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="flex items-center space-x-2">
                     <Checkbox id="dryRun" checked={dryRun} onCheckedChange={checked => setDryRun(checked as boolean)} />
                     <Label htmlFor="dryRun" className="text-xs font-normal cursor-pointer">
@@ -1201,15 +1296,48 @@ export default function LeadFinder() {
                         </DropdownMenuContent>
                       </DropdownMenu>}
 
-                    {filteredAndSortedResults.dryRun && filteredAndSortedResults.leads.length > 0 && <Button size="sm" onClick={handleSaveSelectedCompanies} disabled={isLoading || isSaving || selectedCompanyIndices.size === 0} className="h-8 text-xs">
-                        {isSaving ? <>
+                    {filteredAndSortedResults.dryRun && filteredAndSortedResults.leads.length > 0 && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" title="Add these leads to a category for easier campaign targeting">
+                              <span className="text-muted-foreground">Category:</span>
+                              {saveCategoryTag ? <Badge variant="secondary" className="font-normal">{saveCategoryTag}</Badge> : <span className="text-muted-foreground">Optional</span>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-72" align="end">
+                            <div className="space-y-2">
+                              <Label className="text-xs">Add to category (optional)</Label>
+                              <p className="text-xs text-muted-foreground">e.g. Real Estate Rentals. New leads will get this tag so you can filter campaigns later.</p>
+                              <Input
+                                placeholder="e.g. Real Estate Rentals"
+                                value={saveCategoryTag}
+                                onChange={(e) => setSaveCategoryTag(e.target.value)}
+                                list="lead-finder-category-list"
+                                className="h-8 text-sm"
+                              />
+                              <datalist id="lead-finder-category-list">
+                                {(categoryTagSuggestions || []).slice(0, 30).map((tag) => (
+                                  <option key={tag} value={tag} />
+                                ))}
+                              </datalist>
+                              {saveCategoryTag && (
+                                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSaveCategoryTag("")}>Clear category</Button>
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                        <Button size="sm" onClick={handleSaveSelectedCompanies} disabled={isLoading || isSaving || selectedCompanyIndices.size === 0} className="h-8 text-xs">
+                          {isSaving ? <>
                             <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
                             Saving...
                           </> : <>
                             <Database className="h-3 w-3 mr-1.5" />
                             Add {selectedCompanyIndices.size > 0 ? `${selectedCompanyIndices.size} ` : ''}to CRM
                           </>}
-                      </Button>}
+                        </Button>
+                      </div>
+                    )}
                     <div className="text-xs text-muted-foreground whitespace-nowrap">
                       {filteredAndSortedResults.dryRun ? "Preview" : `${filteredAndSortedResults.inserted} added`}
                     </div>

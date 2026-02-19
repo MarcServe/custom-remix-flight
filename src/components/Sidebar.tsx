@@ -3,6 +3,7 @@ import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, Lo
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useResearchChat } from "@/contexts/ResearchChatContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,7 @@ type NavigationItem = {
   name: string;
   href: string;
   icon: any;
-  children?: NavigationItem[];
+  children?: (NavigationItem & { opensResearchPanel?: boolean })[];
 };
 
 const navigation: NavigationItem[] = [
@@ -46,6 +47,7 @@ const navigation: NavigationItem[] = [
     children: [
       { name: "Autopilot", href: "/autopilot", icon: Brain },
       { name: "Lead Finder", href: "/lead-finder", icon: Sparkles },
+      { name: "Research Chat", href: "#", icon: MessageSquare, opensResearchPanel: true },
       { name: "Enrichment", href: "/enrichment", icon: Wand2 },
       { name: "Lead Inbox", href: "/lead-inbox", icon: Inbox },
     ]
@@ -118,6 +120,7 @@ export const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { setOpen: openResearchPanel } = useResearchChat();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { data: pendingCounts } = usePendingCounts();
@@ -406,17 +409,33 @@ export const Sidebar = () => {
                         else if (child.href === '/company-sequences') pendingCount = pendingCounts.campaigns;
                         else if (child.href === '/events') pendingCount = pendingCounts.events;
                       }
+
+                      const childClassName = cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors relative w-full",
+                        isChildActive
+                          ? "bg-primary text-primary-foreground font-medium"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      );
+
+                      if (child.opensResearchPanel) {
+                        return (
+                          <button
+                            key={child.name}
+                            type="button"
+                            onClick={() => openResearchPanel(true)}
+                            className={childClassName}
+                          >
+                            <child.icon className="h-4 w-4 shrink-0" />
+                            <span className="flex-1 text-left">{child.name}</span>
+                          </button>
+                        );
+                      }
                       
                       return (
                         <Link
                           key={child.name}
                           to={child.href}
-                          className={cn(
-                            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors relative",
-                            isChildActive
-                              ? "bg-primary text-primary-foreground font-medium"
-                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                          )}
+                          className={childClassName}
                         >
                           <child.icon className="h-4 w-4 shrink-0" />
                           <span className="flex-1">{child.name}</span>

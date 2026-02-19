@@ -2,10 +2,23 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, TrendingUp, AlertCircle, Loader2 } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Sparkles, TrendingUp, AlertCircle, Loader2, Settings2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Company } from '@/lib/api/companies';
+
+const FIT_PRESETS = [
+  { value: '', label: 'General fit (no specific use case)' },
+  { value: 'retail_email', label: 'Retail / e-commerce email campaigns' },
+  { value: 'cold_outreach', label: 'Cold outreach & sales leads' },
+  { value: 'partnership', label: 'Partnership & channel deals' },
+  { value: 'event_sponsorship', label: 'Event or sponsorship' },
+  { value: 'content_marketing', label: 'Content marketing & thought leadership' },
+  { value: 'enterprise_sales', label: 'Enterprise / large deal sales' },
+  { value: 'custom', label: 'Custom (describe below)' },
+];
 
 interface ProspectAnalyzerProps {
   companies: Company[];
@@ -14,15 +27,26 @@ interface ProspectAnalyzerProps {
 
 export function ProspectAnalyzer({ companies, onAnalysisComplete }: ProspectAnalyzerProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [fitPreset, setFitPreset] = useState('');
+  const [fitCriteriaCustom, setFitCriteriaCustom] = useState('');
   const { toast } = useToast();
+
+  const getFitCriteria = (): string => {
+    if (fitPreset === 'custom' && fitCriteriaCustom.trim()) return fitCriteriaCustom.trim();
+    const preset = FIT_PRESETS.find(p => p.value === fitPreset);
+    if (preset?.value && preset.value !== '') return preset.label;
+    if (fitCriteriaCustom.trim()) return fitCriteriaCustom.trim();
+    return '';
+  };
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
     try {
       const companyIds = companies.map(c => c.id);
-      
+      const fitCriteria = getFitCriteria();
+
       const { data, error } = await supabase.functions.invoke('analyze-prospects', {
-        body: { companyIds }
+        body: { companyIds, fitCriteria: fitCriteria || undefined }
       });
 
       if (error) throw error;
@@ -62,6 +86,37 @@ export function ProspectAnalyzer({ companies, onAnalysisComplete }: ProspectAnal
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Settings2 className="h-4 w-4 text-muted-foreground" />
+            Analysis criteria (best fit for)
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="fit-preset" className="text-xs text-muted-foreground">Use case</Label>
+            <select
+              id="fit-preset"
+              value={fitPreset}
+              onChange={(e) => setFitPreset(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {FIT_PRESETS.map((p) => (
+                <option key={p.value || 'none'} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+            {(fitPreset === 'custom' || fitCriteriaCustom) && (
+              <>
+                <Label htmlFor="fit-custom" className="text-xs text-muted-foreground">Describe who is a best fit (e.g. companies suited for retail email campaigns)</Label>
+                <Textarea
+                  id="fit-custom"
+                  placeholder="e.g. Companies best suited for retail email campaigns, with high open rates and B2C focus"
+                  value={fitCriteriaCustom}
+                  onChange={(e) => setFitCriteriaCustom(e.target.value)}
+                  className="min-h-[72px] text-sm resize-none"
+                />
+              </>
+            )}
+          </div>
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">Unanalyzed</p>

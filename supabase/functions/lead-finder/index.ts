@@ -1158,8 +1158,8 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify, autonomousMode } = await req.json();
-  console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify, autonomousMode });
+  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify, autonomousMode, maxResults } = await req.json();
+  console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify, autonomousMode, maxResults });
 
   // Initialize Supabase
   const authHeader = req.headers.get('Authorization')!;
@@ -1242,7 +1242,7 @@ Deno.serve(async (req) => {
             .from('lead_finder_searches')
             .insert({
               user_id: user!.id,
-              search_params: { size, geography, industry, provider, model, enrichWithPerplexity, customSearchText, useSerpApi, useApify },
+              search_params: { size, geography, industry, provider, model, enrichWithPerplexity, customSearchText, useSerpApi, useApify, maxResults },
               status: 'running',
               progress: 5,
               current_status: 'Initializing search...'
@@ -1280,32 +1280,55 @@ Deno.serve(async (req) => {
       
       const exaSpan = createSpan(trace, 'exa-search');
 
-      let industryContext = industry;
+      const hasStructuredFilters = [size, geography, industry].some(
+        (v) => v != null && String(v).trim() !== ''
+      );
+      let industryContext = industry?.trim() || '';
       let mainCategory = '';
-      if (industry.includes('(') && industry.includes(')')) {
-        const match = industry.match(/^(.+?)\s*\((.+?)\)$/);
+      if (industryContext && industryContext.includes('(') && industryContext.includes(')')) {
+        const match = industryContext.match(/^(.+?)\s*\((.+?)\)$/);
         if (match) {
           industryContext = match[1].trim();
           mainCategory = match[2].trim();
         }
       }
+      const sizeContext = (size?.trim() || '').replace(/\s*,\s*/g, ' or ');
+      const geoContext = geography?.trim() || '';
 
-      // Build Exa queries with custom search text if provided
-      const customContext = customSearchText ? ` ${customSearchText}` : '';
-      const exaQueries = [
-        `${industryContext} companies in ${geography} with approximately ${size} employees${customContext}`,
-        `site:linkedin.com/company ${industryContext} ${geography} ${size}${customContext}`,
-        `${industryContext} company directory ${geography} industry list${customContext}`,
-        `${industryContext} company news ${geography} 2024 2025${customContext}`
-      ];
+      // When only custom search is provided, use it as the primary query context for best results
+      const customContext = customSearchText ? ` ${customSearchText.trim()}` : '';
+      let exaQueries: string[];
+      if (!hasStructuredFilters && customContext) {
+        const q = customSearchText!.trim();
+        exaQueries = [
+          `${q} companies`,
+          `site:linkedin.com/company ${q}`,
+          `${q} providers services`,
+          `${q} organisations UK`
+        ];
+      } else {
+        exaQueries = [
+          `${industryContext || 'companies'}${geoContext ? ` in ${geoContext}` : ''}${sizeContext ? ` with approximately ${sizeContext} employees` : ''}${customContext}`,
+          `site:linkedin.com/company ${industryContext || 'company'} ${geoContext} ${sizeContext}${customContext}`.trim(),
+          `${industryContext || 'company'} directory ${geoContext}${customContext}`.trim(),
+          `${industryContext || 'company'} news ${geoContext} 2024 2025${customContext}`.trim()
+        ];
+      }
+      // When only custom search is set, use it as industry context for SerpAPI/Apify and extraction prompts
+      if (!hasStructuredFilters && customSearchText?.trim()) {
+        industryContext = customSearchText.trim();
+      }
 
+      // Target this many leads total; we have 4 Exa queries so request numResults per query to reach target (capped at 50 per query)
+      const targetLeads = typeof maxResults === 'number' && maxResults > 0 ? Math.min(200, Math.max(10, maxResults)) : 50;
+      const exaNumResults = Math.min(50, Math.max(15, Math.ceil(targetLeads / 4)));
       const exaPromises = exaQueries.map(query =>
         fetch("https://api.exa.ai/search", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-api-key": String(EXA_API_KEY).trim() },
           body: JSON.stringify({
             query,
-            numResults: 20,
+            numResults: exaNumResults,
             useAutoprompt: true,
             type: "keyword",
             includeDomains: ["linkedin.com", "crunchbase.com"],

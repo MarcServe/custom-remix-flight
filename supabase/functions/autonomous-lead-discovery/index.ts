@@ -113,7 +113,8 @@ Deno.serve(async (req) => {
     const isUserPreferredHour = (setting: any): boolean => {
       const preferredLocalHour = setting.preferred_discovery_hour ?? 9;
       const preBakeHours = setting.pre_discovery_hours || 0;
-      const timezone = setting.timezone || 'America/New_York';
+      let timezone = setting.timezone || 'Europe/London';
+      if (timezone === 'London') timezone = 'Europe/London';
       
       // Calculate the hour when discovery should START (before delivery time for overnight mode)
       const discoveryStartHour = (preferredLocalHour - preBakeHours + 24) % 24;
@@ -328,8 +329,12 @@ Deno.serve(async (req) => {
         totalLeadsDiscovered += userStats.totalLeads;
         allStats.push(userStats);
 
-        // Update last_run_at and next_run_at
-        const nextRunAt = calculateNextRun(setting.discovery_frequency, setting.preferred_discovery_hour ?? 9);
+        // Update last_run_at and next_run_at (use user's timezone so 9 AM London is 9 AM London, not 9 UTC)
+        const nextRunAt = calculateNextRun(
+          setting.discovery_frequency,
+          setting.preferred_discovery_hour ?? 9,
+          setting.timezone || 'Europe/London'
+        );
         await supabase
           .from('autonomous_discovery_settings')
           .update({ 
@@ -472,21 +477,24 @@ async function runMultiSourceDiscovery(
     errors: [],
   };
 
-  // Calculate leads per source based on target and enabled sources
+  // Calculate leads per source. Request at least daily_lead_target from lead-finder (up to max_leads_per_run)
   const dailyTarget = setting.daily_lead_target || 50;
+  const maxPerRun = setting.max_leads_per_run ?? 100;
   const enabledSources = [
     setting.use_serp_api !== false, // EXA + SerpAPI via lead-finder
     setting.use_apify === true,     // Apify Google Maps
   ].filter(Boolean).length + 1; // +1 for Exa (always on)
 
   const leadsPerSource = Math.ceil(dailyTarget / enabledSources);
+  // Lead-finder: request as many as we can use (at least daily target, cap at max per run) so we get 50–100+ results
+  const leadFinderMax = Math.min(maxPerRun, Math.max(leadsPerSource, dailyTarget));
 
   // Prepare parallel source calls
   const sourcePromises: Promise<SourceResult>[] = [];
 
   // Source 1: Lead Finder (Exa + SerpAPI combined)
   sourcePromises.push(
-    runLeadFinder(supabase, setting, searchQuery, persona, leadsPerSource)
+    runLeadFinder(supabase, setting, searchQuery, persona, leadFinderMax)
       .then(leads => ({ source: 'lead-finder', leads }))
       .catch(error => ({ source: 'lead-finder', leads: [], error: error.message }))
   );
@@ -596,7 +604,7 @@ async function runLeadFinder(
       model: 'gpt-4o-mini',
       enrichWithPerplexity: false, // We'll do batch enrichment later
       useSerpApi: setting.use_serp_api !== false,
-      maxResults: Math.min(maxResults, setting.max_leads_per_run || 25),
+      maxResults: maxResults,
       autonomousMode: true,
     }),
   });
@@ -1186,118 +1194,45 @@ async function saveDiscoveredLeads(
   result.total = newLeads.length;
   console.log(`[super-discovery] Inserted ${newLeads.length} leads for user ${userId}`);
 
-  // In full_auto_mode or auto_extract_all_emails, extract emails for ALL leads (not just auto-approved)
   const shouldExtractAll = setting.full_auto_mode || setting.auto_extract_all_emails;
-  
-  // Collect all leads needing email extraction
-  const allLeadsNeedingEmail: string[] = [];
-  
-  if (shouldExtractAll) {
-    // Get all newly inserted leads that need emails
-    const { data: allNewLeads } = await supabase
-      .from('autonomous_leads')
-      .select('id, company_website, company_data')
-      .eq('discovery_run_id', discoveryRunId)
-      .eq('user_id', userId);
-    
-    for (const lead of (allNewLeads || [])) {
-      const companyData = lead.company_data || {};
+  const extractLimit = Math.min(setting.max_leads_per_run ?? 100, shouldExtractAll ? 100 : 50);
+
+  // Fetch inserted autonomous_leads (with ids) for this run
+  const { data: insertedRows, error: fetchInsertedError } = await supabase
+    .from('autonomous_leads')
+    .select('id, company_name, company_website, company_data, status, quality_score, industry, sources_used, persona_id')
+    .eq('discovery_run_id', discoveryRunId)
+    .eq('user_id', userId);
+
+  if (!fetchInsertedError && insertedRows?.length) {
+    // Step 1: Run find-email BEFORE saving to companies (extract one-by-one; only sendable leads get added)
+    const leadIdsNeedingEmail: string[] = [];
+    for (const row of insertedRows) {
+      const companyData = (row.company_data || {}) as Record<string, any>;
       const hasEmail = companyData.generalEmail || companyData.general_email || companyData.email;
-      const hasWebsite = lead.company_website && !lead.company_website.includes('no-website');
-      
-      if (!hasEmail && hasWebsite) {
-        allLeadsNeedingEmail.push(lead.id);
-      }
+      const hasWebsite = row.company_website && !String(row.company_website).includes('no-website') && String(row.company_website).trim() !== '';
+      if (!hasEmail && hasWebsite) leadIdsNeedingEmail.push(row.id);
     }
-    
-    console.log(`[super-discovery] Full auto mode: ${allLeadsNeedingEmail.length} leads need email extraction`);
-  }
-
-  // In full_auto_mode, save ALL leads to companies; otherwise only auto-approved
-  const leadsToSave = setting.full_auto_mode 
-    ? autonomousLeadsToInsert 
-    : autonomousLeadsToInsert.filter(l => l.status === 'auto_approved');
-    
-  if (leadsToSave.length > 0) {
-    console.log(`[super-discovery] Saving ${leadsToSave.length} leads to companies (full_auto: ${setting.full_auto_mode})`);
-    
-    // Collect lead IDs that need email extraction (for non-full-auto mode)
-    const leadsNeedingEmail: string[] = [];
-    
-    for (const lead of leadsToSave) {
-      const companyId = await saveLeadToCompanies(supabase, lead, userId);
-      
-      // Update autonomous_lead with company_id
-      if (companyId) {
-        await supabase
-          .from('autonomous_leads')
-          .update({ company_id: companyId })
-          .eq('user_id', userId)
-          .eq('company_name', lead.company_name);
-        
-        // Check if email extraction is needed (for standard auto-extract mode)
-        if (!shouldExtractAll && setting.auto_extract_emails) {
-          const companyData = lead.company_data || {};
-          const hasEmail = companyData.generalEmail || companyData.general_email;
-          const hasWebsite = lead.company_website && !lead.company_website.includes('no-website');
-          
-          if (!hasEmail && hasWebsite) {
-            const { data: alead } = await supabase
-              .from('autonomous_leads')
-              .select('id')
-              .eq('user_id', userId)
-              .eq('company_name', lead.company_name)
-              .maybeSingle();
-            
-            if (alead?.id) {
-              leadsNeedingEmail.push(alead.id);
-            }
-          }
-        }
-      }
-      
-      // Determine which sequence to use (persona-specific or global)
-      const sequenceId = persona?.auto_enroll_sequence_id || 
-                         (setting.auto_enroll_enabled ? setting.auto_enroll_sequence_id : null);
-      
-      if (sequenceId && companyId) {
-        await enrollInSequence(supabase, companyId, sequenceId);
-        result.sequencesEnrolled++;
-      }
-
-      // Track feedback for AI learning
-      await trackAutoApprovalFeedback(supabase, userId, lead, persona);
-    }
-    
-    // Combine all leads needing email extraction
-    const finalLeadsNeedingEmail = shouldExtractAll ? allLeadsNeedingEmail : leadsNeedingEmail;
-    
-    // Auto-extract emails if enabled and there are leads needing emails
-    if ((setting.auto_extract_emails || shouldExtractAll) && finalLeadsNeedingEmail.length > 0) {
-      console.log(`[super-discovery] Auto-extracting emails for ${finalLeadsNeedingEmail.length} leads`);
+    const toExtract = leadIdsNeedingEmail.slice(0, extractLimit);
+    if ((setting.auto_extract_emails || shouldExtractAll) && toExtract.length > 0) {
+      console.log(`[super-discovery] Auto-extracting emails for ${toExtract.length} leads (before saving to companies)`);
       try {
-        // In full_auto_mode, extract more emails per run (up to 50)
-        const extractLimit = shouldExtractAll ? 50 : 20;
-        
-        // Call bulk-extract-emails with createContact=true and stream=false for JSON response
         const extractResponse = await fetch(`${SUPABASE_URL}/functions/v1/bulk-extract-emails`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ 
-            leadIds: finalLeadsNeedingEmail.slice(0, extractLimit),
-            createContact: true,
-            stream: false  // Return JSON instead of SSE for backend callers
+          body: JSON.stringify({
+            leadIds: toExtract,
+            createContact: false,
+            stream: false,
           }),
         });
-        
         if (extractResponse.ok) {
           const extractResult = await extractResponse.json();
           result.emailsExtracted = extractResult.emailsFound || 0;
-          result.contactsCreated = extractResult.contactsCreated || 0;
-          console.log(`[super-discovery] Email extraction complete: ${result.emailsExtracted} emails found, ${result.contactsCreated} contacts created`);
+          console.log(`[super-discovery] Email extraction complete: ${result.emailsExtracted} emails found`);
         } else {
           console.error(`[super-discovery] Email extraction failed: ${extractResponse.status}`);
         }
@@ -1306,54 +1241,65 @@ async function saveDiscoveredLeads(
       }
     }
 
-    // Send webhook notification for high-quality leads
+    // Step 2: Re-fetch so company_data includes any extracted generalEmail
+    const { data: rowsAfterExtract } = await supabase
+      .from('autonomous_leads')
+      .select('id, company_name, company_website, company_data, status, quality_score, industry, sources_used, persona_id')
+      .eq('discovery_run_id', discoveryRunId)
+      .eq('user_id', userId);
+
+    const allRows = rowsAfterExtract || insertedRows;
+    const hasEmail = (row: any) => {
+      const d = (row.company_data || {}) as Record<string, any>;
+      return !!(d.generalEmail || d.general_email || d.email);
+    };
+    // Step 3: Save to companies ONLY leads that have an email (auto-send only gets sendable leads)
+    const leadsToSaveRows = allRows.filter((row: any) => row.status === 'auto_approved' && hasEmail(row));
+
+    console.log(`[super-discovery] Saving ${leadsToSaveRows.length} leads with emails to companies (of ${allRows.length} total)`);
+
+    for (const row of leadsToSaveRows) {
+      const leadForSave = {
+        company_name: row.company_name,
+        company_website: row.company_website,
+        company_data: row.company_data,
+        industry: row.industry,
+        contacts: (row.company_data as any)?.contacts || [],
+        status: row.status,
+        quality_score: row.quality_score,
+        sources_used: row.sources_used,
+      };
+      const companyId = await saveLeadToCompanies(supabase, leadForSave, userId);
+      if (companyId) {
+        result.contactsCreated += 1;
+        const sequenceId = persona?.auto_enroll_sequence_id ?? (setting.auto_enroll_enabled ? setting.auto_enroll_sequence_id : null);
+        if (sequenceId) {
+          await enrollInSequence(supabase, companyId, sequenceId);
+          result.sequencesEnrolled++;
+        }
+        await trackAutoApprovalFeedback(supabase, userId, leadForSave, persona);
+      }
+    }
+
     const webhookUrl = setting.slack_webhook_url || setting.discord_webhook_url || setting.webhook_url;
-    if (setting.webhook_enabled && webhookUrl) {
-      const highQualityLeads = leadsToSave.filter(
-        (l: any) => l.quality_score >= (setting.notify_min_quality_score || 70)
+    if (setting.webhook_enabled && webhookUrl && leadsToSaveRows.length > 0 && setting.notify_on_auto_approve) {
+      const highQualityLeads = leadsToSaveRows.filter(
+        (r: any) => (r.quality_score || 0) >= (setting.notify_min_quality_score || 70)
       );
-      
-      if (highQualityLeads.length > 0 && setting.notify_on_auto_approve) {
+      if (highQualityLeads.length > 0) {
         await sendWebhookNotification(webhookUrl, {
           type: 'auto_approved_leads',
           persona: persona?.name || 'Default',
           count: highQualityLeads.length,
-          leads: highQualityLeads.map((l: any) => ({
-            name: l.company_name,
-            website: l.company_website,
-            industry: l.industry,
-            qualityScore: l.quality_score,
-            sources: l.sources_used,
+          leads: highQualityLeads.map((r: any) => ({
+            name: r.company_name,
+            website: r.company_website,
+            industry: r.industry,
+            qualityScore: r.quality_score,
+            sources: r.sources_used,
           })),
         });
       }
-    }
-  }
-  
-  // For full_auto_mode with no leads saved, still extract emails for pending leads
-  if (shouldExtractAll && leadsToSave.length === 0 && allLeadsNeedingEmail.length > 0) {
-    console.log(`[super-discovery] Full auto mode: extracting emails for ${allLeadsNeedingEmail.length} pending leads`);
-    try {
-      const extractResponse = await fetch(`${SUPABASE_URL}/functions/v1/bulk-extract-emails`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          leadIds: allLeadsNeedingEmail.slice(0, 50),
-          createContact: true,
-          stream: false  // Return JSON instead of SSE for backend callers
-        }),
-      });
-      
-      if (extractResponse.ok) {
-        const extractResult = await extractResponse.json();
-        result.emailsExtracted = extractResult.emailsFound || 0;
-        result.contactsCreated = extractResult.contactsCreated || 0;
-      }
-    } catch (extractError) {
-      console.error('[super-discovery] Email extraction error:', extractError);
     }
   }
 
@@ -1931,26 +1877,45 @@ function shouldRunDiscovery(setting: any): boolean {
   }
 }
 
-function calculateNextRun(frequency: string, preferredHour: number = 9): Date {
+/**
+ * Compute next run time as the next occurrence of preferredHour (0-23) in the user's timezone.
+ * Returns a Date (UTC) so discovery runs at e.g. 9:00 AM London, not 9:00 UTC.
+ */
+function calculateNextRun(frequency: string, preferredHour: number = 9, timezone: string = 'Europe/London'): Date {
   const now = new Date();
+  const tz = timezone && timezone.trim() ? timezone : 'Europe/London';
+
+  // Find next moment when it's preferredHour:00 in the user's timezone (search next 8 days for weekly)
+  const daysToSearch = frequency === 'weekly' ? 8 : frequency === 'twice_weekly' ? 4 : 2;
+  for (let d = 0; d < daysToSearch; d++) {
+    const day = new Date(now);
+    day.setUTCDate(day.getUTCDate() + d);
+    day.setUTCHours(0, 0, 0, 0);
+    for (let utcHour = 0; utcHour < 24; utcHour++) {
+      const candidate = new Date(day);
+      candidate.setUTCHours(utcHour, 0, 0, 0);
+      if (candidate <= now) continue;
+      try {
+        const hourInTz = parseInt(
+          new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(candidate),
+          10
+        );
+        const minInTz = parseInt(
+          new Intl.DateTimeFormat('en-US', { minute: '2-digit', hour12: false, timeZone: tz }).format(candidate),
+          10
+        );
+        if (hourInTz === preferredHour && minInTz === 0) return candidate;
+      } catch {
+        // Invalid TZ: fall back to UTC
+        if (utcHour === preferredHour) return candidate;
+      }
+    }
+  }
+
+  // Fallback: tomorrow at preferredHour UTC (legacy)
   const next = new Date(now);
-  
-  // Set to the user's preferred hour
+  next.setUTCDate(next.getUTCDate() + 1);
   next.setUTCHours(preferredHour, 0, 0, 0);
-  
-  // Calculate days to add based on frequency
-  let daysToAdd = 1; // Default for daily
-  switch (frequency) {
-    case 'daily': daysToAdd = 1; break;
-    case 'twice_weekly': daysToAdd = 3; break; // ~3.5 days
-    case 'weekly': daysToAdd = 7; break;
-  }
-  
-  // If we've already passed that hour today, move to next occurrence
-  if (next <= now) {
-    next.setDate(next.getDate() + daysToAdd);
-  }
-  
   return next;
 }
 
@@ -2099,10 +2064,32 @@ async function saveLeadToCompanies(supabase: any, lead: any, userId: string): Pr
       
       await supabase.from('contacts').insert(contactsToInsert);
       console.log(`[super-discovery] Added ${contactsToInsert.length} contacts for company ${lead.company_name}`);
+    } else if (company.id) {
+      // No contacts array: create one contact from general email so campaigns can be created
+      const generalEmail =
+        companyData.generalEmail ??
+        companyData.general_email ??
+        lead.general_email ??
+        lead.generalEmail;
+      const email = typeof generalEmail === 'string' ? generalEmail.trim() : '';
+      if (email) {
+        await supabase.from('contacts').insert({
+          company_id: company.id,
+          name: 'Primary',
+          email,
+          email_verified: false,
+          linkedin_url: null,
+          title: null,
+          department: 'General',
+          phone: null,
+          is_primary_contact: true,
+        });
+        console.log(`[super-discovery] Created primary contact from general_email for company ${lead.company_name}`);
+      }
     }
 
-    // Auto-apply suggested tags + industry tag
-    const tagsToApply: string[] = [];
+    // Auto-apply suggested tags + industry tag + source tag for grouping on Companies page
+    const tagsToApply: string[] = ['Autopilot'];
     
     // Add suggested tags from enrichment
     const suggestedTags = companyData.suggestedTags || [];

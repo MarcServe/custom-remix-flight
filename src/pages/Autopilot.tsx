@@ -107,28 +107,18 @@ export default function Autopilot() {
     },
   });
 
-  const formatNextRun = (lastRun: string | null, frequency: string) => {
-    if (!lastRun) return 'Not scheduled yet';
-    
-    const last = new Date(lastRun);
-    const next = new Date(last);
-    
-    switch (frequency) {
-      case 'daily':
-        next.setDate(next.getDate() + 1);
-        break;
-      case 'twice_weekly':
-        next.setDate(next.getDate() + 3);
-        break;
-      case 'weekly':
-        next.setDate(next.getDate() + 7);
-        break;
-      default:
-        next.setDate(next.getDate() + 1);
-    }
-    
-    return next.toLocaleString();
+  const tz = settings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const formatInTz = (iso: string | null) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString(undefined, { timeZone: tz, dateStyle: 'short', timeStyle: 'short' });
   };
+  const scheduleLabel = (() => {
+    const hour = settings?.preferred_discovery_hour ?? 9;
+    const h = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    const ampm = hour < 12 ? 'AM' : 'PM';
+    const tzLabel = (settings?.timezone || 'UTC').replace('_', ' ').split('/').pop() || 'UTC';
+    return `daily at ${h}:00 ${ampm} ${tzLabel}`;
+  })();
 
   if (settingsLoading) {
     return (
@@ -199,22 +189,20 @@ export default function Autopilot() {
                   <Clock className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Last run:</span>
                   <span className="font-medium">
-                    {settings?.last_run_at 
-                      ? new Date(settings.last_run_at).toLocaleString() 
-                      : 'Never'}
+                    {settings?.last_run_at ? formatInTz(settings.last_run_at) : 'Never'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Rocket className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Next run:</span>
                   <span className="font-medium">
-                    {formatNextRun(settings?.last_run_at, settings?.discovery_frequency || 'daily')}
+                    {settings?.next_run_at ? formatInTz(settings.next_run_at) : scheduleLabel}
                   </span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="text-xs">
-                  {settings?.discovery_frequency || 'Daily'} at 9:00 AM UTC
+                  {scheduleLabel}
                 </Badge>
               </div>
             </div>
