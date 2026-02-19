@@ -566,7 +566,8 @@ async function searchWithApify(
   query: string,
   geography: string,
   industry: string,
-  traceId: string
+  traceId: string,
+  options?: { isPublicSector?: boolean }
 ): Promise<any[]> {
   const APIFY_API_TOKEN = Deno.env.get("APIFY_API_TOKEN");
   if (!APIFY_API_TOKEN) {
@@ -578,8 +579,17 @@ async function searchWithApify(
 
   try {
     // Use Apify's Google Maps Scraper actor
-    const searchQuery = `${industry} ${geography} ${query}`.trim();
-    console.log(`Apify search query: "${searchQuery}"`);
+    const baseQuery = `${industry} ${geography} ${query}`.trim();
+    const isPublicSector = options?.isPublicSector ?? false;
+    const searchStringsArray = isPublicSector && (geography || industry || query)
+      ? [
+          baseQuery,
+          geography ? `local councils ${geography}`.trim() : baseQuery,
+          geography ? `local authorities ${geography}`.trim() : baseQuery,
+        ].filter((s, i, a) => s && a.indexOf(s) === i)
+      : [baseQuery];
+    const maxCrawledPlacesPerSearch = isPublicSector ? 100 : 50;
+    console.log(`Apify search queries: ${JSON.stringify(searchStringsArray)}, maxPerSearch: ${maxCrawledPlacesPerSearch}`);
 
     const actorRunUrl = "https://api.apify.com/v2/acts/nwua9Gu5YrADL7ZDj/run-sync-get-dataset-items";
     
@@ -587,8 +597,8 @@ async function searchWithApify(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        searchStringsArray: [searchQuery],
-        maxCrawledPlacesPerSearch: 50, // Increased from 20 for more results
+        searchStringsArray,
+        maxCrawledPlacesPerSearch,
         language: "en",
         maxImages: 0,
         maxReviews: 0,
@@ -1319,21 +1329,43 @@ Deno.serve(async (req) => {
         industryContext = customSearchText.trim();
       }
 
-      // Target this many leads total; we have 4 Exa queries so request numResults per query to reach target (capped at 50 per query)
+      // For government/council/public sector searches, allow all domains (e.g. .gov.uk) so Exa returns councils and public bodies
+      const isPublicSectorSearch = /\b(local\s+authorit(y|ies)|council(s)?|government|public\s+sector|gov\.uk|\.gov\b)/i.test(industryContext + ' ' + (customSearchText || ''));
+      if (isPublicSectorSearch) {
+        console.log("Lead Finder: public sector / council search detected — Exa will search all domains (including .gov.uk); Apify will use multiple queries and higher limit");
+        // Extra queries to get more council/authority results (no LinkedIn site: so we get .gov.uk and directories)
+        const geoPart = geoContext || 'UK';
+        exaQueries = [
+          ...exaQueries,
+          `list of local councils ${geoPart}`,
+          `local authorities ${geoPart} directory`,
+        ];
+      }
+      const exaIncludeDomains = isPublicSectorSearch
+        ? undefined
+        : ["linkedin.com", "crunchbase.com"];
+
+      // Target this many leads total; we have 4 Exa queries (6 for public sector) so request numResults per query to reach target (capped at 50 per query)
       const targetLeads = typeof maxResults === 'number' && maxResults > 0 ? Math.min(200, Math.max(10, maxResults)) : 50;
-      const exaNumResults = Math.min(50, Math.max(15, Math.ceil(targetLeads / 4)));
+      const exaQueryCount = exaQueries.length;
+      const exaNumResults = isPublicSectorSearch
+        ? Math.min(50, Math.max(25, Math.ceil(targetLeads / Math.max(1, exaQueryCount))))
+        : Math.min(50, Math.max(15, Math.ceil(targetLeads / 4)));
+      const exaBody: Record<string, unknown> = {
+        query: '',
+        numResults: exaNumResults,
+        useAutoprompt: true,
+        type: "keyword",
+        contents: { text: { maxCharacters: 2000, includeHtmlTags: false } }
+      };
+      if (exaIncludeDomains) {
+        exaBody.includeDomains = exaIncludeDomains;
+      }
       const exaPromises = exaQueries.map(query =>
         fetch("https://api.exa.ai/search", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-api-key": String(EXA_API_KEY).trim() },
-          body: JSON.stringify({
-            query,
-            numResults: exaNumResults,
-            useAutoprompt: true,
-            type: "keyword",
-            includeDomains: ["linkedin.com", "crunchbase.com"],
-            contents: { text: { maxCharacters: 2000, includeHtmlTags: false } }
-          }),
+          body: JSON.stringify({ ...exaBody, query }),
         }).then(r => r.ok ? r.json() : { results: [] }).catch(() => ({ results: [] }))
       );
 
@@ -1345,7 +1377,7 @@ Deno.serve(async (req) => {
       }
       
       if (useApify) {
-        searchPromises.push(searchWithApify(customContext, geography, industryContext, trace.id));
+        searchPromises.push(searchWithApify(customContext, geography, industryContext, trace.id, { isPublicSector: isPublicSectorSearch }));
       }
 
       const searchResults = await Promise.all(searchPromises);
@@ -1422,7 +1454,7 @@ CRITICAL INSTRUCTIONS:
 
 REQUIRED FIELDS (must attempt to extract):
 - name: Company name
-- website: Official website URL
+- website: Official company/organization website only (e.g. https://www.council.gov.uk). NEVER use LinkedIn (linkedin.com), Crunchbase (crunchbase.com), or other listing/social URLs as website — leave website empty if only those appear.
 - description: Detailed company description (minimum 50 characters if available)
 - industry: "${industryContext}"
 - size: "${size}"
@@ -1523,6 +1555,19 @@ ${JSON.stringify(batch, null, 2)}`;
             continue;
           }
 
+          // POST-PROCESSING: Never use LinkedIn/Crunchbase as company website; prefer real site from Apify/SerpAPI
+          batchLeads.forEach(lead => {
+            const w = lead.website && String(lead.website).trim();
+            if (w) {
+              try {
+                const host = new URL(w.startsWith('http') ? w : `https://${w}`).hostname.toLowerCase();
+                if (host.includes('linkedin.com') || host.includes('crunchbase.com')) {
+                  lead.website = null;
+                }
+              } catch {}
+            }
+          });
+
           // POST-PROCESSING: Merge back original data from SerpAPI/Apify that AI might have missed
           const originalBatch = batches[batchIndex];
           batchLeads.forEach(lead => {
@@ -1537,6 +1582,16 @@ ${JSON.stringify(batch, null, 2)}`;
             });
 
             if (originalResult) {
+              // Use real website from Apify/SerpAPI when lead has none or had LinkedIn/Crunchbase cleared
+              const origUrl = originalResult.website || originalResult.url;
+              if (origUrl && (originalResult.source === 'apify' || originalResult.source === 'google_maps' || originalResult.source === 'serpapi')) {
+                try {
+                  const host = new URL(origUrl.startsWith('http') ? origUrl : `https://${origUrl}`).hostname.toLowerCase();
+                  if (!host.includes('linkedin.com') && !host.includes('crunchbase.com') && !host.includes('google.com')) {
+                    if (!lead.website) lead.website = origUrl;
+                  }
+                } catch {}
+              }
               // Preserve phone if AI missed it
               if (!lead.companyPhone && originalResult.phone) {
                 lead.companyPhone = originalResult.phone;
@@ -1577,7 +1632,8 @@ ${JSON.stringify(batch, null, 2)}`;
             lead.dataCompleteness = calculateDataCompleteness(lead);
           });
 
-          const qualifiedLeads = batchLeads.filter(l => l.qualityScore >= 25);
+          const minQuality = isPublicSectorSearch ? 15 : 25;
+          const qualifiedLeads = batchLeads.filter(l => l.qualityScore >= minQuality);
           allLeads.push(...qualifiedLeads);
 
           // Save leads to database immediately (batch insert)

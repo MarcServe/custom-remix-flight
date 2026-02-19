@@ -71,7 +71,7 @@ export default function Companies() {
   const [csvUploaderOpen, setCsvUploaderOpen] = useState(false);
   const [scraperDialogOpen, setScraperDialogOpen] = useState(false);
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
-  const [emailStatusFilter, setEmailStatusFilter] = useState<'all' | 'has-email' | 'has-email-not-in-contacts' | 'in-contacts' | 'no-email'>('all');
+  const [emailStatusFilter, setEmailStatusFilter] = useState<'all' | 'has-email' | 'has-email-and-phone' | 'has-email-not-in-contacts' | 'in-contacts' | 'no-email'>('all');
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<Set<string>>(new Set());
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
@@ -217,7 +217,7 @@ export default function Companies() {
       
       // Filter companies: no email, has website, and website is valid (not "no-website-")
       const companiesWithoutEmail = selectedCompanies.filter(company => {
-        const hasEmail = !!(company.general_email || company.generalEmail || company.contacts?.some(c => c.email));
+        const hasEmail = !!(company.general_email || (company as any).generalEmail || company.contacts?.some(c => c.email));
         const hasValidWebsite = company.website && 
                                 !company.website.startsWith('no-website-') && 
                                 company.website.trim().length > 0 &&
@@ -518,7 +518,7 @@ export default function Companies() {
     if (contactWithEmail?.email) {
       return { type: "contact" as const, contact: contactWithEmail, email: contactWithEmail.email };
     }
-    const companyEmail = company.general_email || company.generalEmail;
+    const companyEmail = company.general_email || (company as any).generalEmail;
     if (companyEmail) {
       return { type: "company" as const, contact: null, email: companyEmail };
     }
@@ -742,6 +742,42 @@ export default function Companies() {
       return newSet;
     });
   };
+
+  // Add selected companies to Enrichment Queue (for re-enrichment / email extraction)
+  const addToEnrichmentMutation = useMutation({
+    mutationFn: async (companyIds: string[]) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const selected = (companies || []).filter(c => companyIds.includes(c.id));
+      const inserts = selected.map(c => ({
+        user_id: user.id,
+        name: c.name,
+        website: c.website || null,
+        industry: c.industry || null,
+        geography: c.geography || null,
+        email: c.general_email || (c as any).generalEmail || (c.contacts?.find((x: any) => x.email) as any)?.email || null,
+        phone: (c as any).company_phone || (c.contacts?.find((x: any) => x.phone) as any)?.phone || null,
+        source: 'import',
+        source_metadata: { from: 'companies', company_id: c.id },
+        enrichment_status: 'pending',
+        email_extraction_status: (c.website && !(c.general_email || (c as any).generalEmail)) ? 'pending' : 'not_needed',
+      }));
+      const { data, error } = await (supabase as any).from('enrichment_queue').insert(inserts).select('id');
+      if (error) throw error;
+      return { count: data?.length ?? 0 };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['enrichment-queue'] });
+      setSelectedCompanyIds(new Set());
+      toast({
+        title: 'Added to Enrichment Queue',
+        description: `${result.count} companies added. Run enrichment on the Enrichment page.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
 
   const toggleSelectAll = () => {
     if (selectedCompanyIds.size === (filteredCompanies?.length || 0)) {
@@ -1098,24 +1134,28 @@ export default function Companies() {
 
     // Email status filter
     if (emailStatusFilter !== 'all') {
-      const hasEmail = !!(company.general_email || company.generalEmail || company.contacts?.some(c => c.email));
+      const hasEmail = !!(company.general_email || (company as any).generalEmail || company.contacts?.some(c => c.email));
+      const hasPhone = !!(
+        (company as any).company_phone ||
+        company.contacts?.some((c: any) => c.phone && String(c.phone).trim())
+      );
       const inContacts = isCompanyInContacts(company);
 
       switch (emailStatusFilter) {
         case 'has-email':
-          // Show companies that have email (regardless of whether in contacts)
           if (!hasEmail) return false;
           break;
+        case 'has-email-and-phone':
+          // Only businesses with both email and phone (contactable)
+          if (!hasEmail || !hasPhone) return false;
+          break;
         case 'has-email-not-in-contacts':
-          // Show companies that have email but are NOT in contacts
           if (!hasEmail || inContacts) return false;
           break;
         case 'in-contacts':
-          // Show companies that are already in contacts
           if (!inContacts) return false;
           break;
         case 'no-email':
-          // Show companies without email (for easy extraction)
           if (hasEmail) return false;
           break;
       }
@@ -1505,6 +1545,172 @@ export default function Companies() {
     }
   };
 
+  const openBulkEmailForCompanyIds = async (companyIds: string[]) => {
+    if (companyIds.length === 0) return;
+    try {
+      const { data: companiesData, error: fetchErr } = await supabase
+        .from("companies")
+        .select("*, contacts(*)")
+        .in("id", companyIds);
+      if (fetchErr) throw fetchErr;
+      const companies = (companiesData || []) as Company[];
+      const companiesWithEmail = companies.filter((company) => {
+        const match = getCompanyEmailContact(company);
+        return !!match?.email;
+      });
+      if (companiesWithEmail.length === 0) {
+        toast({
+          title: "No emails available",
+          description: "Selected companies don't have email addresses. Add contacts or send them to Enrichment Queue first.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const peopleForEmail: Array<{
+        id: string;
+        first_name: string;
+        last_name: string;
+        email: string;
+        company_id?: string;
+        companies?: { id?: string; name?: string; tags?: string[] };
+      }> = [];
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      const ids = companiesWithEmail.map((c) => c.id);
+      const { data: existingPeople } = await supabase
+        .from("people")
+        .select("id, first_name, last_name, email, company_id, companies(id, name, tags)")
+        .in("company_id", ids)
+        .not("email", "is", null);
+      const peopleByCompanyId = new Map<string, any[]>();
+      if (existingPeople) {
+        existingPeople.forEach((p: any) => {
+          if (p.company_id) {
+            if (!peopleByCompanyId.has(p.company_id)) peopleByCompanyId.set(p.company_id, []);
+            peopleByCompanyId.get(p.company_id)!.push(p);
+          }
+        });
+      }
+      if (existingPeople) {
+        peopleForEmail.push(
+          ...existingPeople.map((p: any) => ({
+            id: p.id,
+            first_name: p.first_name || "",
+            last_name: p.last_name || "",
+            email: p.email,
+            company_id: p.company_id,
+            companies: p.companies ? { id: p.companies.id, name: p.companies.name, tags: p.companies.tags || [] } : undefined,
+          }))
+        );
+      }
+      const existingEmails = new Set(peopleForEmail.map((p) => p.email.toLowerCase().trim()));
+      for (const company of companiesWithEmail) {
+        const emailMatch = getCompanyEmailContact(company);
+        if (emailMatch?.email && !existingEmails.has(emailMatch.email.toLowerCase().trim())) {
+          const { data: existingPersonByEmail } = await supabase
+            .from("people")
+            .select("id, first_name, last_name, email, company_id, companies(id, name, tags)")
+            .ilike("email", emailMatch.email)
+            .maybeSingle();
+          if (existingPersonByEmail) {
+            if (!peopleForEmail.find((p) => p.id === existingPersonByEmail.id)) {
+              peopleForEmail.push({
+                id: existingPersonByEmail.id,
+                first_name: existingPersonByEmail.first_name || "",
+                last_name: existingPersonByEmail.last_name || "",
+                email: existingPersonByEmail.email,
+                company_id: company.id,
+                companies: { id: company.id, name: company.name, tags: company.tags || [] },
+              });
+              existingEmails.add(existingPersonByEmail.email.toLowerCase().trim());
+            }
+          } else {
+            const nameParts =
+              emailMatch.type === "contact" && emailMatch.contact?.name
+                ? emailMatch.contact.name.trim().split(" ")
+                : company.name.trim().split(" ");
+            const { data: newPerson, error: createError } = await supabase
+              .from("people")
+              .insert({
+                first_name: nameParts[0] || company.name,
+                last_name: nameParts.slice(1).join(" ") || "",
+                email: emailMatch.email,
+                company_id: company.id,
+                user_id: user.id,
+              })
+              .select("id, first_name, last_name, email, company_id")
+              .single();
+            if (!createError && newPerson) {
+              peopleForEmail.push({
+                id: newPerson.id,
+                first_name: newPerson.first_name || "",
+                last_name: newPerson.last_name || "",
+                email: newPerson.email,
+                company_id: newPerson.company_id,
+                companies: { id: company.id, name: company.name, tags: company.tags || [] },
+              });
+              existingEmails.add(newPerson.email.toLowerCase().trim());
+            }
+          }
+        }
+      }
+      if (peopleForEmail.length === 0) {
+        toast({
+          title: "No recipients found",
+          description: "Could not find email addresses for selected companies.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const { data: companiesOverview } = await supabase
+        .from("companies")
+        .select("id, name, description, industry, website, enrichment_data, recent_news, funding_stage, funding_total, employee_count, tech_stack, key_executives, tags")
+        .in("id", ids);
+      const enrichedPeople = peopleForEmail.map((person) => {
+        const companyData = companiesOverview?.find((c) => c.id === person.company_id);
+        if (companyData) {
+          const fundingTotal =
+            typeof companyData.funding_total === "string"
+              ? parseFloat(companyData.funding_total) || undefined
+              : typeof companyData.funding_total === "number"
+                ? companyData.funding_total
+                : undefined;
+          return {
+            id: person.id,
+            first_name: person.first_name,
+            last_name: person.last_name,
+            email: person.email,
+            company_id: person.company_id,
+            companies: {
+              id: companyData.id,
+              name: companyData.name,
+              tags: companyData.tags || [],
+              description: companyData.description,
+              industry: companyData.industry,
+              website: companyData.website,
+              enrichment_data: companyData.enrichment_data,
+              recent_news: companyData.recent_news,
+              funding_stage: companyData.funding_stage,
+              funding_total: fundingTotal,
+              employee_count: companyData.employee_count,
+              tech_stack: Array.isArray(companyData.tech_stack) ? companyData.tech_stack : undefined,
+              key_executives: Array.isArray(companyData.key_executives) ? (companyData.key_executives as any[]) : undefined,
+            },
+          };
+        }
+        return { id: person.id, first_name: person.first_name, last_name: person.last_name, email: person.email, company_id: person.company_id, companies: person.companies };
+      });
+      setBulkEmailPeople(enrichedPeople);
+      setBulkEmailDialogOpen(true);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to open bulk email",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleAddToContactList = (company: Company) => {
     const emailMatch = getCompanyEmailContact(company);
     
@@ -1691,6 +1897,20 @@ export default function Companies() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Checkbox
+                      id="filter-email-phone"
+                      checked={emailStatusFilter === 'has-email-and-phone'}
+                      onCheckedChange={() => setEmailStatusFilter('has-email-and-phone')}
+                    />
+                    <label
+                      htmlFor="filter-email-phone"
+                      className="text-sm cursor-pointer flex-1 flex items-center gap-2"
+                    >
+                      <Phone className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>Has Email & Phone</span>
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
                       id="filter-email-has-not-contacts"
                       checked={emailStatusFilter === 'has-email-not-in-contacts'}
                       onCheckedChange={() => setEmailStatusFilter('has-email-not-in-contacts')}
@@ -1847,7 +2067,7 @@ export default function Companies() {
               </div>
             </PopoverContent>
           </Popover>
-          <CampaignFitAnalyzer />
+          <CampaignFitAnalyzer onOpenBulkEmail={openBulkEmailForCompanyIds} />
           <Button onClick={() => setCsvUploaderOpen(true)} variant="outline">
             <Upload className="h-4 w-4 mr-2" />
             Import CSV
@@ -1895,6 +2115,12 @@ export default function Companies() {
                 <>
                   <CheckCircle2 className="h-3 w-3 text-blue-600" />
                   Added to Contacts
+                </>
+              )}
+              {emailStatusFilter === 'has-email-and-phone' && (
+                <>
+                  <Phone className="h-3 w-3 text-emerald-600" />
+                  Has Email & Phone
                 </>
               )}
               {emailStatusFilter === 'no-email' && (
@@ -1949,7 +2175,7 @@ export default function Companies() {
                 {(() => {
                   const selectedCompanies = filteredCompanies?.filter(c => selectedCompanyIds.has(c.id)) || [];
                   const companiesWithoutEmail = selectedCompanies.filter(company => {
-                    const hasEmail = !!(company.general_email || company.generalEmail || company.contacts?.some(c => c.email));
+                    const hasEmail = !!(company.general_email || (company as any).generalEmail || company.contacts?.some(c => c.email));
                     const website = company.website?.trim() || '';
                     const hasValidWebsite = website && 
                                             !website.startsWith('no-website-') && 
@@ -1987,6 +2213,24 @@ export default function Companies() {
                           )}
                         </Button>
                       )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => addToEnrichmentMutation.mutate(Array.from(selectedCompanyIds))}
+                        disabled={addToEnrichmentMutation.isPending}
+                      >
+                        {addToEnrichmentMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            Adding...
+                          </>
+                        ) : (
+                          <>
+                            <Wand2 className="h-4 w-4 mr-1" />
+                            Add to Enrichment ({selectedCompanies.length})
+                          </>
+                        )}
+                      </Button>
                       {companiesNotInContacts.length > 0 && (
                         <Button
                           variant="default"
@@ -2115,7 +2359,7 @@ export default function Companies() {
               const { company, index } = item;
               const contactCount = company.contacts?.length || 0;
               const dealCount = company.deals?.length || 0;
-              const hasEmail = !!(company.general_email || company.generalEmail || company.contacts?.some(contact => contact.email));
+              const hasEmail = !!(company.general_email || (company as any).generalEmail || company.contacts?.some((contact: any) => contact.email));
               const isEnriched = company.enrichment_status === 'completed';
               const companyTags = company.tags || [];
               const isSelected = selectedCompanyIds.has(company.id);

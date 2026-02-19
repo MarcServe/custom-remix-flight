@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -30,7 +30,12 @@ import {
   Building2,
   TrendingUp,
   Users,
+  Mail,
+  Upload,
+  FileText,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DialogFooter } from "@/components/ui/dialog";
 
 interface CampaignFitResult {
   companyId: string;
@@ -55,10 +60,15 @@ interface AnalysisResponse {
   aiInsights: string;
 }
 
-export function CampaignFitAnalyzer() {
+export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (companyIds: string[]) => void } = {}) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<AnalysisResponse | null>(null);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<Set<string>>(new Set());
+  const [saveToNotesOpen, setSaveToNotesOpen] = useState(false);
+  const [saveToNotesTitle, setSaveToNotesTitle] = useState("");
+  const [saveToNotesContent, setSaveToNotesContent] = useState("");
   
   const [campaignType, setCampaignType] = useState("");
   const [targetIndustries, setTargetIndustries] = useState<string[]>([]);
@@ -112,6 +122,7 @@ export function CampaignFitAnalyzer() {
 
   const resetForm = () => {
     setResults(null);
+    setSelectedCompanyIds(new Set());
     setCampaignType("");
     setTargetIndustries([]);
     setTargetSizes([]);
@@ -119,6 +130,111 @@ export function CampaignFitAnalyzer() {
     setProductFocus("");
     setIdealCustomerProfile("");
   };
+
+  const hasNoEmail = (result: CampaignFitResult) =>
+    result.fitReason.includes("No email contact");
+
+  const noEmailResults = results?.results.filter(hasNoEmail) ?? [];
+  const selectedNoEmail = results?.results.filter(
+    (r) => selectedCompanyIds.has(r.companyId) && hasNoEmail(r)
+  ) ?? [];
+
+  const sendToEnrichmentMutation = useMutation({
+    mutationFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      const ids = selectedNoEmail.map((r) => r.companyId);
+      if (ids.length === 0) throw new Error("No companies without email selected");
+      const { data: companies, error: fetchErr } = await supabase
+        .from("companies")
+        .select("id, name, website, industry, geography, general_email, company_phone")
+        .in("id", ids);
+      if (fetchErr) throw fetchErr;
+      const toInsert = (companies || []).filter(
+        (c) => !(c.general_email && String(c.general_email).trim())
+      );
+      if (toInsert.length === 0) {
+        toast({ title: "No missing emails", description: "Selected companies already have emails.", variant: "destructive" });
+        return { count: 0 };
+      }
+      const inserts = toInsert.map((c) => ({
+        user_id: user.id,
+        name: c.name,
+        website: c.website || null,
+        industry: c.industry || null,
+        geography: c.geography || null,
+        email: c.general_email || null,
+        phone: c.company_phone || null,
+        source: "import",
+        source_metadata: { from: "campaign_fit_analyzer", company_id: c.id },
+        enrichment_status: "pending",
+        email_extraction_status: c.website ? "pending" : "not_needed",
+      }));
+      const { error } = await (supabase as any).from("enrichment_queue").insert(inserts);
+      if (error) throw error;
+      return { count: inserts.length };
+    },
+    onSuccess: (data) => {
+      if (data.count > 0) {
+        queryClient.invalidateQueries({ queryKey: ["enrichment-queue"] });
+        toast({ title: "Sent to Enrichment", description: `${data.count} companies added to Enrichment Queue. Run enrichment on the Enrichment page.` });
+      }
+    },
+    onError: (e: any) => {
+      const msg = e?.message || "";
+      const hint = msg.includes("enrichment_queue") || msg.includes("schema cache")
+        ? " Run the migration that creates the enrichment_queue table (e.g. supabase db push) and ensure the Enrichment page loads."
+        : "";
+      toast({ title: "Error", description: msg + hint, variant: "destructive" });
+    },
+  });
+
+  const handleBulkEmail = () => {
+    const ids = Array.from(selectedCompanyIds);
+    if (ids.length === 0) {
+      toast({ title: "No selection", description: "Select at least one company.", variant: "destructive" });
+      return;
+    }
+    onOpenBulkEmail?.(ids);
+  };
+
+  const openSaveToNotes = () => {
+    if (!results) return;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    setSaveToNotesTitle(`Campaign Fit Analysis ${dateStr}`);
+    const lines = [
+      `Campaign Fit Analysis – ${dateStr}`,
+      `Summary: ${results.summary.totalAnalyzed} analyzed, ${results.summary.highFit} high fit, ${results.summary.mediumFit} medium fit, ${results.summary.avgFitScore} avg score.`,
+      results.aiInsights ? `\nAI Strategy:\n${results.aiInsights}` : "",
+      "\nCompany rankings:",
+      ...results.results.map((r, i) => `${i + 1}. ${r.companyName} – ${r.priority.toUpperCase()} (${r.fitScore}) – ${r.fitReason}`),
+    ];
+    setSaveToNotesContent(lines.filter(Boolean).join("\n"));
+    setSaveToNotesOpen(true);
+  };
+
+  const saveToNotesMutation = useMutation({
+    mutationFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      const { error } = await (supabase as any)
+        .from("crm_notes")
+        .insert({
+          user_id: user.id,
+          title: saveToNotesTitle.trim() || "Campaign Fit Analysis",
+          content: saveToNotesContent.trim() || "",
+          source: "campaign_fit_analyzer",
+          source_metadata: { summary: results?.summary },
+        });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["crm-notes"] });
+      setSaveToNotesOpen(false);
+      toast({ title: "Saved to Notes", description: "Find it under Outreach → Notes. Use it when creating campaigns." });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -312,78 +428,191 @@ export function CampaignFitAnalyzer() {
 
                 {/* Results List */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <h3 className="font-medium">Company Rankings</h3>
                     <span className="text-sm text-muted-foreground">
-                      {results.summary.hasContacts} with email contacts
+                      {results.summary.hasContacts} with email contacts · {noEmailResults.length} without email
                     </span>
                   </div>
 
-                  {results.results.slice(0, 20).map((result, index) => (
-                    <Card key={result.companyId} className={index < 3 ? 'border-primary/30' : ''}>
-                      <CardContent className="py-3">
-                        <div className="flex items-start gap-3">
-                          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-sm font-medium">
-                            {index + 1}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-medium">{result.companyName}</span>
-                              <Badge variant="outline" className={getPriorityColor(result.priority)}>
-                                {result.priority.toUpperCase()}
-                              </Badge>
-                              <span className="text-sm text-muted-foreground">
-                                Score: {result.fitScore}
-                              </span>
+                  {/* Select all / Select no-email only */}
+                  <div className="flex items-center gap-3 rounded-lg border bg-muted/50 p-2 flex-wrap">
+                    <Checkbox
+                      checked={results.results.length > 0 && results.results.every((r) => selectedCompanyIds.has(r.companyId))}
+                      onCheckedChange={(checked) => {
+                        setSelectedCompanyIds(checked ? new Set(results.results.map((r) => r.companyId)) : new Set());
+                      }}
+                    />
+                    <span className="text-sm font-medium">Select all ({results.results.length})</span>
+                    <Checkbox
+                      checked={noEmailResults.length > 0 && noEmailResults.every((r) => selectedCompanyIds.has(r.companyId))}
+                      onCheckedChange={(checked) => {
+                        setSelectedCompanyIds((prev) => {
+                          const next = new Set(prev);
+                          if (checked) noEmailResults.forEach((r) => next.add(r.companyId));
+                          else noEmailResults.forEach((r) => next.delete(r.companyId));
+                          return next;
+                        });
+                      }}
+                    />
+                    <span className="text-sm font-medium">Select no-email only ({noEmailResults.length})</span>
+                    {selectedCompanyIds.size > 0 && (
+                      <span className="text-xs text-muted-foreground ml-auto">{selectedCompanyIds.size} selected</span>
+                    )}
+                  </div>
+
+                  <ScrollArea className="h-[280px] border rounded-md">
+                    <div className="p-2 space-y-2">
+                      {results.results.map((result, index) => (
+                        <Card key={result.companyId} className={index < 3 ? "border-primary/30" : ""}>
+                          <CardContent className="py-3">
+                            <div className="flex items-start gap-3">
+                              <Checkbox
+                                checked={selectedCompanyIds.has(result.companyId)}
+                                onCheckedChange={(checked) => {
+                                  setSelectedCompanyIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (checked) next.add(result.companyId);
+                                    else next.delete(result.companyId);
+                                    return next;
+                                  });
+                                }}
+                              />
+                              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-sm font-medium shrink-0">
+                                {index + 1}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium">{result.companyName}</span>
+                                  <Badge variant="outline" className={getPriorityColor(result.priority)}>
+                                    {result.priority.toUpperCase()}
+                                  </Badge>
+                                  <span className="text-sm text-muted-foreground">
+                                    Score: {result.fitScore}
+                                  </span>
+                                  {hasNoEmail(result) && (
+                                    <span className="text-xs text-amber-600">No email</span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  {result.fitReason}
+                                </p>
+                                <div className="flex items-center gap-1 mt-2 text-xs text-primary">
+                                  <ArrowRight className="h-3 w-3" />
+                                  {result.recommendedApproach}
+                                </div>
+                              </div>
+                              <Progress value={result.fitScore} className="w-16 h-2 shrink-0" />
                             </div>
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {result.fitReason}
-                            </p>
-                            <div className="flex items-center gap-1 mt-2 text-xs text-primary">
-                              <ArrowRight className="h-3 w-3" />
-                              {result.recommendedApproach}
-                            </div>
-                          </div>
-                          <Progress value={result.fitScore} className="w-16 h-2" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </ScrollArea>
                 </div>
               </div>
             </ScrollArea>
             
             {/* Fixed Footer with Action Buttons */}
-            <div className="shrink-0 border-t pt-4 mt-4 flex gap-2">
-              <Button variant="outline" onClick={resetForm} className="flex-1">
+            <div className="shrink-0 border-t pt-4 mt-4 flex flex-wrap gap-2">
+              <Button variant="outline" onClick={resetForm} className="flex-1 min-w-[120px]">
                 New Analysis
               </Button>
-              <Button 
+              <Button
+                variant="outline"
+                onClick={() => sendToEnrichmentMutation.mutate()}
+                disabled={selectedNoEmail.length === 0 || sendToEnrichmentMutation.isPending}
+                className="flex-1 min-w-[120px]"
+                title="Add selected companies without email to Enrichment Queue for email extraction"
+              >
+                {sendToEnrichmentMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4 mr-2" />
+                )}
+                Send to Enrichment ({selectedNoEmail.length})
+              </Button>
+              {onOpenBulkEmail && (
+                <Button
+                  variant="outline"
+                  onClick={handleBulkEmail}
+                  disabled={selectedCompanyIds.size === 0}
+                  className="flex-1 min-w-[120px]"
+                  title="Compose bulk email for contacts at selected companies"
+                >
+                  <Mail className="h-4 w-4 mr-2" />
+                  Bulk email ({selectedCompanyIds.size})
+                </Button>
+              )}
+              <Button
                 onClick={() => {
-                  // Copy high-fit company names to clipboard
                   const highFit = results.results
-                    .filter(r => r.priority === 'high')
-                    .map(r => r.companyName)
-                    .join('\n');
+                    .filter((r) => r.priority === "high")
+                    .map((r) => r.companyName)
+                    .join("\n");
                   navigator.clipboard.writeText(highFit);
                   toast({ title: "Copied!", description: "High-fit company names copied to clipboard" });
                 }}
                 variant="outline"
-                className="flex-1"
+                className="flex-1 min-w-[120px]"
               >
                 <CheckCircle2 className="h-4 w-4 mr-2" />
                 Copy High-Fit List
               </Button>
-              <Button 
-                onClick={() => setOpen(false)}
-                className="flex-1"
+              <Button
+                onClick={openSaveToNotes}
+                variant="outline"
+                className="flex-1 min-w-[120px]"
+                title="Save analysis to CRM Notes for use in campaigns"
               >
+                <FileText className="h-4 w-4 mr-2" />
+                Save to Notes
+              </Button>
+              <Button onClick={() => setOpen(false)} className="flex-1 min-w-[120px]">
                 Close
               </Button>
             </div>
           </>
         )}
       </DialogContent>
+
+      {/* Save to Notes dialog */}
+      <Dialog open={saveToNotesOpen} onOpenChange={setSaveToNotesOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Save to Notes</DialogTitle>
+            <DialogDescription>Save this analysis to CRM Notes. You can use it later when creating campaigns (e.g. paste company list).</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="save-notes-title">Title</Label>
+              <Input
+                id="save-notes-title"
+                value={saveToNotesTitle}
+                onChange={(e) => setSaveToNotesTitle(e.target.value)}
+                placeholder="e.g. Campaign Fit - High fit list"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="save-notes-content">Content</Label>
+              <Textarea
+                id="save-notes-content"
+                value={saveToNotesContent}
+                onChange={(e) => setSaveToNotesContent(e.target.value)}
+                className="min-h-[200px] resize-y font-mono text-sm"
+                placeholder="Analysis summary and company list..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveToNotesOpen(false)}>Cancel</Button>
+            <Button onClick={() => saveToNotesMutation.mutate()} disabled={saveToNotesMutation.isPending}>
+              {saveToNotesMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Save to Notes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

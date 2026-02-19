@@ -90,8 +90,34 @@ Deno.serve(async (req) => {
           throw new Error(`Enrichment failed: ${enrichResponse.statusText}`);
         }
 
-        const enrichData = await enrichResponse.json();
-        
+        // enrich-leads returns SSE stream, not JSON — parse events to get final enrichedLeads
+        const contentType = enrichResponse.headers.get('content-type') || '';
+        let enrichData: { success?: boolean; enriched?: any[]; enrichedLeads?: any[]; error?: string } = { success: false };
+
+        if (contentType.includes('text/event-stream')) {
+          const text = await enrichResponse.text();
+          const lines = text.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const event = JSON.parse(line.slice(6).trim());
+                if (event.type === 'complete' && event.enrichedLeads && event.enrichedLeads.length > 0) {
+                  enrichData = { success: true, enriched: event.enrichedLeads };
+                  break;
+                }
+                if (event.type === 'complete' && (event.failed === event.total || !event.enrichedLeads?.length)) {
+                  enrichData = { success: false, error: event.error || 'No enrichment data returned' };
+                  break;
+                }
+              } catch (_) {
+                // skip malformed SSE lines
+              }
+            }
+          }
+        } else {
+          enrichData = await enrichResponse.json();
+        }
+
         if (enrichData.success && enrichData.enriched && enrichData.enriched.length > 0) {
           const enriched = enrichData.enriched[0];
           

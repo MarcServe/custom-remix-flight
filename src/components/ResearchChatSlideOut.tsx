@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Sheet,
   SheetContent,
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useResearchChat } from "@/contexts/ResearchChatContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,6 +29,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { COMPANY_SOURCE_TAGS } from "@/lib/company-sources";
@@ -150,11 +152,15 @@ function formatChatContent(content: string) {
   return out.length ? <div className="space-y-1">{out}</div> : <p className="text-sm whitespace-pre-wrap">{content}</p>;
 }
 
+const RESEARCH_CHAT_HISTORY_DAYS = 30;
+
 export function ResearchChatSlideOut() {
   const { open, setOpen } = useResearchChat();
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [input, setInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -164,8 +170,54 @@ export function ResearchChatSlideOut() {
   const [extractedFromChat, setExtractedFromChat] = useState<ExtractedRow[] | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [importCategoryTag, setImportCategoryTag] = useState("");
+  const [sendIncompleteToEnrichment, setSendIncompleteToEnrichment] = useState(false);
   const { allSuggestions: categoryTagSuggestions } = useCompanyTags();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Load chat history when panel opens (retain 30 days)
+  useEffect(() => {
+    if (!open || !user?.id) {
+      if (!open) setHistoryLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await (supabase as any)
+        .from("research_chat_history")
+        .select("messages, updated_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        setMessages([]);
+        setHistoryLoaded(true);
+        return;
+      }
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - RESEARCH_CHAT_HISTORY_DAYS);
+      const updatedAt = data?.updated_at ? new Date(data.updated_at) : null;
+      if (data?.messages && Array.isArray(data.messages) && updatedAt && updatedAt >= cutoff) {
+        setMessages(data.messages as ChatMessage[]);
+      } else {
+        setMessages([]);
+      }
+      setHistoryLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [open, user?.id]);
+
+  const saveHistory = useCallback(
+    async (msgs: ChatMessage[]) => {
+      if (!user?.id) return;
+      await (supabase as any)
+        .from("research_chat_history")
+        .upsert(
+          { user_id: user.id, messages: msgs, updated_at: new Date().toISOString() },
+          { onConflict: "user_id" }
+        );
+    },
+    [user?.id]
+  );
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -200,17 +252,22 @@ export function ResearchChatSlideOut() {
 
       if (error) throw error;
       const content = data?.content ?? "No response.";
-      setMessages((prev) => [...prev, { role: "assistant", content }]);
+      const newMessages: ChatMessage[] = [...messages, userMsg, { role: "assistant", content }];
+      setMessages(newMessages);
+      saveHistory(newMessages);
     } catch (err: any) {
       toast({
         title: "Chat error",
         description: err?.message ?? "Failed to get reply",
         variant: "destructive",
       });
-      setMessages((prev) => [
-        ...prev,
+      const fallback: ChatMessage[] = [
+        ...messages,
+        userMsg,
         { role: "assistant", content: "Sorry, I couldn’t process that. Please try again." },
-      ]);
+      ];
+      setMessages(fallback);
+      saveHistory(fallback);
     } finally {
       setChatLoading(false);
     }
@@ -352,6 +409,90 @@ export function ResearchChatSlideOut() {
     }
   };
 
+  const sendExtractedToEnrichment = async (onlyWithoutEmail: boolean) => {
+    if (!extractedFromChat?.length) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast({ title: "Please sign in", variant: "destructive" });
+      return;
+    }
+    const rows = onlyWithoutEmail
+      ? extractedFromChat.filter((r) => !r.email?.trim())
+      : extractedFromChat;
+    if (rows.length === 0) {
+      toast({ title: "No rows to send", description: onlyWithoutEmail ? "All rows have an email." : "No data.", variant: "destructive" });
+      return;
+    }
+    setImporting(true);
+    try {
+      const inserts = rows.map((r) => ({
+        user_id: user.id,
+        name: r.name,
+        website: r.website || null,
+        industry: r.industry || null,
+        geography: r.geography || null,
+        email: r.email || null,
+        source: "import",
+        source_metadata: { from: "research_chat" },
+        enrichment_status: "pending",
+        email_extraction_status: r.website && !r.email ? "pending" : "not_needed",
+      }));
+      const { error } = await (supabase as any).from("enrichment_queue").insert(inserts);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["enrichment-queue"] });
+      toast({
+        title: "Sent to Enrichment",
+        description: `${rows.length} lead(s) added to Enrichment Queue. Run enrichment on the Enrichment page.`,
+      });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Failed to add to enrichment", variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const sendSearchResultsToEnrichment = async (onlyWithoutEmail: boolean) => {
+    if (searchResults.length === 0) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast({ title: "Please sign in", variant: "destructive" });
+      return;
+    }
+    const leads = onlyWithoutEmail
+      ? searchResults.filter((l) => !getLeadEmail(l))
+      : searchResults;
+    if (leads.length === 0) {
+      toast({ title: "No leads to send", description: onlyWithoutEmail ? "All leads have an email." : "No data.", variant: "destructive" });
+      return;
+    }
+    setImporting(true);
+    try {
+      const inserts = leads.map((l) => ({
+        user_id: user.id,
+        name: l.name,
+        website: l.website || null,
+        industry: l.industry || null,
+        geography: l.geography || null,
+        email: getLeadEmail(l) || null,
+        source: "import",
+        source_metadata: { from: "research_chat" },
+        enrichment_status: "pending",
+        email_extraction_status: l.website && !getLeadEmail(l) ? "pending" : "not_needed",
+      }));
+      const { error } = await (supabase as any).from("enrichment_queue").insert(inserts);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["enrichment-queue"] });
+      toast({
+        title: "Sent to Enrichment",
+        description: `${leads.length} lead(s) added to Enrichment Queue. Run enrichment on the Enrichment page.`,
+      });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Failed to add to enrichment", variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const downloadExtractedCsv = () => {
     if (!extractedFromChat?.length) return;
     const headers = ["name", "website", "email", "industry", "geography", "notes"];
@@ -414,9 +555,43 @@ export function ResearchChatSlideOut() {
         }
       } catch (_) {}
     }
+    if (sendIncompleteToEnrichment) {
+      const incomplete = extractedFromChat.filter((r) => !r.email?.trim());
+      if (incomplete.length > 0) {
+        try {
+          const inserts = incomplete.map((r) => ({
+            user_id: user.id,
+            name: r.name,
+            website: r.website || null,
+            industry: r.industry || null,
+            geography: r.geography || null,
+            email: null,
+            source: "import",
+            source_metadata: { from: "research_chat" },
+            enrichment_status: "pending",
+            email_extraction_status: r.website ? "pending" : "not_needed",
+          }));
+          const { error } = await (supabase as any).from("enrichment_queue").insert(inserts);
+          if (!error) {
+            queryClient.invalidateQueries({ queryKey: ["enrichment-queue"] });
+            toast({
+              title: "Import complete",
+              description: `Added ${imported} companies to CRM. ${incomplete.length} lead(s) without email sent to Enrichment Queue.`,
+            });
+          } else {
+            toast({ title: "Import complete", description: `Added ${imported} companies to CRM. Could not add to Enrichment: ${error.message}.` });
+          }
+        } catch (_) {
+          toast({ title: "Import complete", description: `Added ${imported} companies to CRM. Some could not be sent to Enrichment.` });
+        }
+      } else {
+        toast({ title: "Import complete", description: `Added ${imported} companies to CRM.` });
+      }
+    } else {
+      toast({ title: "Import complete", description: `Added ${imported} companies to CRM.` });
+    }
     setImporting(false);
     queryClient.invalidateQueries({ queryKey: ["companies"] });
-    toast({ title: "Import complete", description: `Added ${imported} companies to CRM.` });
     setExtractedFromChat(null);
   };
 
@@ -678,6 +853,23 @@ export function ResearchChatSlideOut() {
                     <Download className="h-3.5 w-3.5 mr-1.5" />
                     Download CSV
                   </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => sendExtractedToEnrichment(false)} disabled={importing} className="flex-1 min-w-0" title="Enrich and extract emails before CRM">
+                    {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Sparkles className="h-3.5 w-3.5 mr-1.5" />}
+                    Send to Enrichment
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => sendExtractedToEnrichment(true)} disabled={importing || !extractedFromChat.some((r) => !r.email?.trim())} title="Send only rows without email">
+                    Send to Enrichment (no email only)
+                  </Button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Checkbox
+                      id="send-incomplete-to-enrichment"
+                      checked={sendIncompleteToEnrichment}
+                      onCheckedChange={(v) => setSendIncompleteToEnrichment(!!v)}
+                    />
+                    <Label htmlFor="send-incomplete-to-enrichment" className="text-xs cursor-pointer whitespace-nowrap">
+                      Send leads without email to Enrichment Queue
+                    </Label>
+                  </div>
                   <Button type="button" size="sm" onClick={importExtractedToCrm} disabled={importing} className="flex-1 min-w-0">
                     {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Building2 className="h-3.5 w-3.5 mr-1.5" />}
                     Import to CRM
@@ -750,7 +942,7 @@ export function ResearchChatSlideOut() {
               <section>
                 <h3 className="text-sm font-medium flex items-center gap-2 mb-2">
                   <Download className="h-4 w-4" />
-                  Import to CRM
+                  Import to CRM or Enrichment
                 </h3>
                 <div className="flex flex-wrap items-center gap-2">
                   <Popover>
@@ -778,6 +970,26 @@ export function ResearchChatSlideOut() {
                       </div>
                     </PopoverContent>
                   </Popover>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => sendSearchResultsToEnrichment(false)}
+                    disabled={importing}
+                  >
+                    {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Sparkles className="h-3.5 w-3.5 mr-1.5" />}
+                    Send to Enrichment
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => sendSearchResultsToEnrichment(true)}
+                    disabled={importing || searchResults.every((l) => getLeadEmail(l))}
+                    title="Send only leads without email"
+                  >
+                    Send to Enrichment (no email only)
+                  </Button>
                   <Button
                     onClick={handleImportToCrm}
                     disabled={importing}

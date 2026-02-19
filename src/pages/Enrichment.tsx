@@ -30,6 +30,8 @@ import {
   Trash2,
   Sparkles,
   AlertCircle,
+  Upload,
+  Users,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -66,6 +68,14 @@ export default function Enrichment() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'enriching' | 'enriched' | 'ready_for_crm' | 'failed'>('all');
   const [searchQuery, setSearchQuery] = useState("");
   const [addLeadDialogOpen, setAddLeadDialogOpen] = useState(false);
+  const [importFromCompaniesOpen, setImportFromCompaniesOpen] = useState(false);
+  const [importFromPeopleOpen, setImportFromPeopleOpen] = useState(false);
+  type ImportFilter = 'all' | 'missing-email' | 'missing-phone' | 'missing-email-and-phone';
+  const [importCompanyFilter, setImportCompanyFilter] = useState<ImportFilter>('missing-email-and-phone');
+  const [importPeopleFilter, setImportPeopleFilter] = useState<ImportFilter>('missing-email-and-phone');
+  const [importSelectedIds, setImportSelectedIds] = useState<Set<string>>(new Set());
+  const [importPeopleSelectedIds, setImportPeopleSelectedIds] = useState<Set<string>>(new Set());
+  const [importAutoRun, setImportAutoRun] = useState(false);
   const [newLead, setNewLead] = useState({
     name: "",
     website: "",
@@ -80,7 +90,7 @@ export default function Enrichment() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      let query = supabase
+      let query = (supabase as any)
         .from('enrichment_queue')
         .select('*')
         .eq('user_id', user.id)
@@ -93,6 +103,173 @@ export default function Enrichment() {
       const { data, error } = await query;
       if (error) throw error;
       return (data || []) as EnrichmentQueueItem[];
+    },
+  });
+
+  // Fetch companies for Import from Companies dialog
+  const { data: companiesForImport } = useQuery({
+    queryKey: ['companies-for-enrichment-import'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('companies')
+        .select('id, name, website, industry, geography, general_email, company_phone')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []) as Array<{
+        id: string;
+        name: string;
+        website?: string;
+        industry?: string;
+        geography?: string;
+        general_email?: string;
+        company_phone?: string;
+      }>;
+    },
+    enabled: importFromCompaniesOpen,
+  });
+
+  const companiesToShowInImport = useMemo(() => {
+    if (!companiesForImport) return [];
+    if (importCompanyFilter === 'all') return companiesForImport;
+    return companiesForImport.filter(c => {
+      const hasEmail = !!(c.general_email && String(c.general_email).trim());
+      const hasPhone = !!(c.company_phone && String(c.company_phone).trim());
+      switch (importCompanyFilter) {
+        case 'missing-email': return !hasEmail;
+        case 'missing-phone': return !hasPhone;
+        case 'missing-email-and-phone': return !hasEmail && !hasPhone;
+        default: return true;
+      }
+    });
+  }, [companiesForImport, importCompanyFilter]);
+
+  // Fetch people (with company) for Import from People dialog
+  type PersonForImport = {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    phone: string | null;
+    company_id: string | null;
+    companies: { name: string; website?: string; industry?: string; geography?: string } | null;
+  };
+  const { data: peopleForImport } = useQuery({
+    queryKey: ['people-for-enrichment-import'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('people')
+        .select('id, first_name, last_name, email, phone, company_id, companies(name, website, industry, geography)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []) as PersonForImport[];
+    },
+    enabled: importFromPeopleOpen,
+  });
+
+  const peopleToShowInImport = useMemo(() => {
+    if (!peopleForImport) return [];
+    if (importPeopleFilter === 'all') return peopleForImport;
+    return peopleForImport.filter(p => {
+      const hasEmail = !!(p.email && String(p.email).trim());
+      const hasPhone = !!(p.phone && String(p.phone).trim());
+      switch (importPeopleFilter) {
+        case 'missing-email': return !hasEmail;
+        case 'missing-phone': return !hasPhone;
+        case 'missing-email-and-phone': return !hasEmail && !hasPhone;
+        default: return true;
+      }
+    });
+  }, [peopleForImport, importPeopleFilter]);
+
+  // Import from Companies mutation
+  const importFromCompaniesMutation = useMutation({
+    mutationFn: async ({ companyIds, autoRun }: { companyIds: string[]; autoRun: boolean }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const toInsert = (companiesForImport || []).filter(c => companyIds.includes(c.id));
+      const inserts = toInsert.map(c => ({
+        user_id: user.id,
+        name: c.name,
+        website: c.website || null,
+        industry: c.industry || null,
+        geography: c.geography || null,
+        email: c.general_email || null,
+        phone: c.company_phone || null,
+        source: 'import',
+        source_metadata: { from: 'companies', company_id: c.id },
+        enrichment_status: 'pending',
+        email_extraction_status: (c.website && !c.general_email) ? 'pending' : 'not_needed',
+      }));
+      const { data, error } = await (supabase as any).from('enrichment_queue').insert(inserts).select('id');
+      if (error) throw error;
+      const ids = (data || []).map((r: { id: string }) => r.id);
+      return { ids, autoRun };
+    },
+    onSuccess: async (result) => {
+      queryClient.invalidateQueries({ queryKey: ['enrichment-queue'] });
+      setImportFromCompaniesOpen(false);
+      setImportSelectedIds(new Set());
+      toast({
+        title: 'Imported to queue',
+        description: `${result.ids.length} companies added. ${result.autoRun ? 'Starting enrichment…' : 'Run Enrich then Extract Emails when ready.'}`,
+      });
+      if (result.autoRun && result.ids.length > 0) {
+        enrichMutation.mutate(result.ids);
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message || 'Import failed', variant: 'destructive' });
+    },
+  });
+
+  // Import from People mutation
+  const importFromPeopleMutation = useMutation({
+    mutationFn: async ({ personIds, autoRun }: { personIds: string[]; autoRun: boolean }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const toInsert = (peopleForImport || []).filter(p => personIds.includes(p.id));
+      const inserts = toInsert.map(p => {
+        const company = p.companies;
+        const name = (company?.name || [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Unknown').trim();
+        return {
+          user_id: user.id,
+          name,
+          website: company?.website || null,
+          industry: company?.industry || null,
+          geography: company?.geography || null,
+          email: p.email || null,
+          phone: p.phone || null,
+          source: 'import',
+          source_metadata: { from: 'people', person_id: p.id, company_id: p.company_id },
+          enrichment_status: 'pending',
+          email_extraction_status: (company?.website && !p.email) ? 'pending' : 'not_needed',
+        };
+      });
+      const { data, error } = await (supabase as any).from('enrichment_queue').insert(inserts).select('id');
+      if (error) throw error;
+      const ids = (data || []).map((r: { id: string }) => r.id);
+      return { ids, autoRun };
+    },
+    onSuccess: async (result) => {
+      queryClient.invalidateQueries({ queryKey: ['enrichment-queue'] });
+      setImportFromPeopleOpen(false);
+      setImportPeopleSelectedIds(new Set());
+      toast({
+        title: 'Imported to queue',
+        description: `${result.ids.length} people/companies added. ${result.autoRun ? 'Starting enrichment…' : 'Run Enrich then Extract Emails when ready.'}`,
+      });
+      if (result.autoRun && result.ids.length > 0) {
+        enrichMutation.mutate(result.ids);
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message || 'Import failed', variant: 'destructive' });
     },
   });
 
@@ -116,7 +293,7 @@ export default function Enrichment() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('enrichment_queue')
         .insert({
           user_id: user.id,
@@ -190,7 +367,7 @@ export default function Enrichment() {
       const items = filteredItems.filter(item => itemIds.includes(item.id) && item.website && !item.email && !item.extracted_email);
       
       // Update status to extracting
-      await supabase
+      await (supabase as any)
         .from('enrichment_queue')
         .update({ email_extraction_status: 'extracting' })
         .in('id', items.map(i => i.id));
@@ -212,7 +389,7 @@ export default function Enrichment() {
 
           if (data?.success && data.email) {
             // Update item with extracted email
-            await supabase
+            await (supabase as any)
               .from('enrichment_queue')
               .update({
                 extracted_email: data.email,
@@ -224,7 +401,7 @@ export default function Enrichment() {
             results.push({ id: item.id, email: data.email });
           } else {
             // Mark as failed
-            await supabase
+            await (supabase as any)
               .from('enrichment_queue')
               .update({
                 email_extraction_status: 'failed',
@@ -234,7 +411,7 @@ export default function Enrichment() {
           }
         } catch (error: any) {
           console.error(`Error extracting email for ${item.name}:`, error);
-          await supabase
+          await (supabase as any)
             .from('enrichment_queue')
             .update({
               email_extraction_status: 'failed',
@@ -302,7 +479,7 @@ export default function Enrichment() {
   // Delete items
   const deleteMutation = useMutation({
     mutationFn: async (itemIds: string[]) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('enrichment_queue')
         .delete()
         .in('id', itemIds);
@@ -378,6 +555,14 @@ export default function Enrichment() {
             Enrich leads with Perplexity/Exa and extract emails before moving to CRM
           </p>
         </div>
+        <Button variant="outline" onClick={() => setImportFromCompaniesOpen(true)}>
+          <Upload className="h-4 w-4 mr-2" />
+          Import from Companies
+        </Button>
+        <Button variant="outline" onClick={() => setImportFromPeopleOpen(true)}>
+          <Upload className="h-4 w-4 mr-2" />
+          Import from People
+        </Button>
         <Dialog open={addLeadDialogOpen} onOpenChange={setAddLeadDialogOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -445,6 +630,285 @@ export default function Enrichment() {
                     Add to Queue
                   </>
                 )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import from Companies dialog */}
+        <Dialog open={importFromCompaniesOpen} onOpenChange={setImportFromCompaniesOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Import from Companies</DialogTitle>
+              <DialogDescription>
+                Add companies from your CRM to the enrichment queue. Optionally run enrichment and email extraction after adding.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select
+                  value={importCompanyFilter}
+                  onValueChange={(v: ImportFilter) => {
+                    setImportCompanyFilter(v);
+                    setImportSelectedIds(new Set());
+                  }}
+                >
+                  <SelectTrigger className="w-56">
+                    <SelectValue placeholder="Filter companies" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="missing-email-and-phone">Missing email and phone</SelectItem>
+                    <SelectItem value="missing-email">Missing email</SelectItem>
+                    <SelectItem value="missing-phone">Missing phone</SelectItem>
+                    <SelectItem value="all">All companies</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground">
+                  {companiesToShowInImport.length} companies
+                </span>
+                <span className="text-xs text-muted-foreground ml-auto">Green = has data, gray = missing</span>
+              </div>
+              <ScrollArea className="h-[320px] border rounded-md shrink-0">
+                <div className="p-2 space-y-1 min-h-0">
+                  {(() => {
+                    const visibleIds = companiesToShowInImport.slice(0, 200).map((c) => c.id);
+                    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => importSelectedIds.has(id));
+                    return (
+                      <>
+                        <div
+                          className="flex items-center gap-2 rounded p-2 bg-muted/60 hover:bg-muted cursor-pointer sticky top-0 z-10"
+                          onClick={() => setImportSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            if (allVisibleSelected) visibleIds.forEach((id) => next.delete(id));
+                            else visibleIds.forEach((id) => next.add(id));
+                            return next;
+                          })}
+                        >
+                          <Checkbox
+                            checked={allVisibleSelected}
+                            onCheckedChange={(checked) => {
+                              setImportSelectedIds((prev) => {
+                                const next = new Set(prev);
+                                if (checked) visibleIds.forEach((id) => next.add(id));
+                                else visibleIds.forEach((id) => next.delete(id));
+                                return next;
+                              });
+                            }}
+                          />
+                          <span className="text-sm font-medium text-muted-foreground">Select all ({companiesToShowInImport.length} companies)</span>
+                        </div>
+                        {companiesToShowInImport.slice(0, 200).map((c) => {
+                          const hasEmail = !!(c.general_email && String(c.general_email).trim());
+                          const hasPhone = !!(c.company_phone && String(c.company_phone).trim());
+                          return (
+                            <div
+                              key={c.id}
+                              className="flex items-center gap-2 rounded p-2 hover:bg-muted/50 cursor-pointer"
+                              onClick={() => setImportSelectedIds(prev => {
+                                const next = new Set(prev);
+                                if (next.has(c.id)) next.delete(c.id);
+                                else next.add(c.id);
+                                return next;
+                              })}
+                            >
+                              <Checkbox
+                                checked={importSelectedIds.has(c.id)}
+                                onCheckedChange={(checked) => {
+                                  setImportSelectedIds(prev => {
+                                    const next = new Set(prev);
+                                    if (checked) next.add(c.id);
+                                    else next.delete(c.id);
+                                    return next;
+                                  });
+                                }}
+                              />
+                              <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <span className="font-medium truncate flex-1 min-w-0">{c.name}</span>
+                              {c.website && <span className="text-xs text-muted-foreground truncate max-w-[100px] shrink-0">{c.website}</span>}
+                              <span className={hasEmail ? "text-green-600 shrink-0" : "text-muted-foreground shrink-0"} title={hasEmail ? "Has email" : "Missing email"}>
+                                <Mail className="h-3.5 w-3.5 inline mr-0.5" />
+                                <span className="text-[10px] hidden sm:inline">{hasEmail ? "Email" : "No email"}</span>
+                              </span>
+                              <span className={hasPhone ? "text-green-600 shrink-0" : "text-muted-foreground shrink-0"} title={hasPhone ? "Has phone" : "Missing phone"}>
+                                <Phone className="h-3.5 w-3.5 inline mr-0.5" />
+                                <span className="text-[10px] hidden sm:inline">{hasPhone ? "Phone" : "No phone"}</span>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </div>
+              </ScrollArea>
+              {companiesToShowInImport.length > 200 && (
+                <p className="text-xs text-muted-foreground">Showing first 200. Select from list above.</p>
+              )}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="import-auto-run"
+                  checked={importAutoRun}
+                  onCheckedChange={(v) => setImportAutoRun(!!v)}
+                />
+                <Label htmlFor="import-auto-run" className="text-sm cursor-pointer">
+                  Start enrichment after adding
+                </Label>
+              </div>
+              <Button
+                className="w-full"
+                disabled={importSelectedIds.size === 0 || importFromCompaniesMutation.isPending}
+                onClick={() => importFromCompaniesMutation.mutate({
+                  companyIds: Array.from(importSelectedIds),
+                  autoRun: importAutoRun,
+                })}
+              >
+                {importFromCompaniesMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4 mr-2" />
+                )}
+                Add {importSelectedIds.size} to queue
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import from People dialog */}
+        <Dialog open={importFromPeopleOpen} onOpenChange={setImportFromPeopleOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Import from People</DialogTitle>
+              <DialogDescription>
+                Add people (and their companies) from your CRM to the enrichment queue. Optionally run enrichment and email extraction after adding.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select
+                  value={importPeopleFilter}
+                  onValueChange={(v: ImportFilter) => {
+                    setImportPeopleFilter(v);
+                    setImportPeopleSelectedIds(new Set());
+                  }}
+                >
+                  <SelectTrigger className="w-56">
+                    <SelectValue placeholder="Filter people" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="missing-email-and-phone">Missing email and phone</SelectItem>
+                    <SelectItem value="missing-email">Missing email</SelectItem>
+                    <SelectItem value="missing-phone">Missing phone</SelectItem>
+                    <SelectItem value="all">All people</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground">
+                  {peopleToShowInImport.length} people
+                </span>
+                <span className="text-xs text-muted-foreground ml-auto">Green = has data, gray = missing</span>
+              </div>
+              <ScrollArea className="h-[320px] border rounded-md shrink-0">
+                <div className="p-2 space-y-1 min-h-0">
+                  {(() => {
+                    const visiblePeopleIds = peopleToShowInImport.slice(0, 200).map((p) => p.id);
+                    const allPeopleSelected = visiblePeopleIds.length > 0 && visiblePeopleIds.every((id) => importPeopleSelectedIds.has(id));
+                    return (
+                      <>
+                        <div
+                          className="flex items-center gap-2 rounded p-2 bg-muted/60 hover:bg-muted cursor-pointer sticky top-0 z-10"
+                          onClick={() => setImportPeopleSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            if (allPeopleSelected) visiblePeopleIds.forEach((id) => next.delete(id));
+                            else visiblePeopleIds.forEach((id) => next.add(id));
+                            return next;
+                          })}
+                        >
+                          <Checkbox
+                            checked={allPeopleSelected}
+                            onCheckedChange={(checked) => {
+                              setImportPeopleSelectedIds((prev) => {
+                                const next = new Set(prev);
+                                if (checked) visiblePeopleIds.forEach((id) => next.add(id));
+                                else visiblePeopleIds.forEach((id) => next.delete(id));
+                                return next;
+                              });
+                            }}
+                          />
+                          <span className="text-sm font-medium text-muted-foreground">Select all ({peopleToShowInImport.length} people)</span>
+                        </div>
+                        {peopleToShowInImport.slice(0, 200).map((p) => {
+                          const displayName = [p.first_name, p.last_name].filter(Boolean).join(' ') || p.companies?.name || 'Unknown';
+                          const hasEmail = !!(p.email && String(p.email).trim());
+                          const hasPhone = !!(p.phone && String(p.phone).trim());
+                          return (
+                            <div
+                              key={p.id}
+                              className="flex items-center gap-2 rounded p-2 hover:bg-muted/50 cursor-pointer"
+                              onClick={() => setImportPeopleSelectedIds(prev => {
+                                const next = new Set(prev);
+                                if (next.has(p.id)) next.delete(p.id);
+                                else next.add(p.id);
+                                return next;
+                              })}
+                            >
+                              <Checkbox
+                                checked={importPeopleSelectedIds.has(p.id)}
+                                onCheckedChange={(checked) => {
+                                  setImportPeopleSelectedIds(prev => {
+                                    const next = new Set(prev);
+                                    if (checked) next.add(p.id);
+                                    else next.delete(p.id);
+                                    return next;
+                                  });
+                                }}
+                              />
+                              <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <span className="font-medium truncate flex-1 min-w-0">{displayName}</span>
+                              {p.companies?.name && (
+                                <span className="text-xs text-muted-foreground truncate max-w-[100px] shrink-0">{p.companies.name}</span>
+                              )}
+                              <span className={hasEmail ? "text-green-600 shrink-0" : "text-muted-foreground shrink-0"} title={hasEmail ? "Has email" : "Missing email"}>
+                                <Mail className="h-3.5 w-3.5 inline mr-0.5" />
+                                <span className="text-[10px] hidden sm:inline">{hasEmail ? "Email" : "No email"}</span>
+                              </span>
+                              <span className={hasPhone ? "text-green-600 shrink-0" : "text-muted-foreground shrink-0"} title={hasPhone ? "Has phone" : "Missing phone"}>
+                                <Phone className="h-3.5 w-3.5 inline mr-0.5" />
+                                <span className="text-[10px] hidden sm:inline">{hasPhone ? "Phone" : "No phone"}</span>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </div>
+              </ScrollArea>
+              {peopleToShowInImport.length > 200 && (
+                <p className="text-xs text-muted-foreground">Showing first 200. Select from list above.</p>
+              )}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="import-people-auto-run"
+                  checked={importAutoRun}
+                  onCheckedChange={(v) => setImportAutoRun(!!v)}
+                />
+                <Label htmlFor="import-people-auto-run" className="text-sm cursor-pointer">
+                  Start enrichment after adding
+                </Label>
+              </div>
+              <Button
+                className="w-full"
+                disabled={importPeopleSelectedIds.size === 0 || importFromPeopleMutation.isPending}
+                onClick={() => importFromPeopleMutation.mutate({
+                  personIds: Array.from(importPeopleSelectedIds),
+                  autoRun: importAutoRun,
+                })}
+              >
+                {importFromPeopleMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4 mr-2" />
+                )}
+                Add {importPeopleSelectedIds.size} to queue
               </Button>
             </div>
           </DialogContent>

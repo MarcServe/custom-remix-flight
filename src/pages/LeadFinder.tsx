@@ -45,6 +45,17 @@ const SIZE_OPTIONS = [
   { value: "500+", label: "500+ employees" },
 ];
 
+/** Only show as main "website" if it's a real org site, not LinkedIn/Crunchbase. */
+function isRealCompanyWebsite(url: string | null | undefined): boolean {
+  if (!url || !url.trim()) return false;
+  try {
+    const host = new URL(url.startsWith("http") ? url : `https://${url}`).hostname.toLowerCase();
+    return !host.includes("linkedin.com") && !host.includes("crunchbase.com");
+  } catch {
+    return false;
+  }
+}
+
 export default function LeadFinder() {
   const [sizes, setSizes] = useState<string[]>([]);
   const [geography, setGeography] = useState("");
@@ -181,11 +192,10 @@ export default function LeadFinder() {
           // Check if company already exists by website or name
           let existingCompany = null;
 
-          // If website exists, check by website
-          if (company.website && company.website.trim()) {
-            const {
-              data
-            } = await supabase.from('companies').select('id').eq('website', company.website).maybeSingle();
+          // If website is a real org site (not LinkedIn/Crunchbase), check by website
+          if (isRealCompanyWebsite(company.website)) {
+            const normalized = company.website!.startsWith('http') ? company.website! : `https://${company.website}`;
+            const { data } = await supabase.from('companies').select('id').eq('website', normalized).maybeSingle();
             existingCompany = data;
           }
 
@@ -202,9 +212,8 @@ export default function LeadFinder() {
             continue;
           }
 
-          // Create company
-          // Generate unique website placeholder if none exists
-          const websiteValue = company.website && company.website.trim() ? company.website : `no-website-${crypto.randomUUID()}`;
+          // Create company — only use real org website, not LinkedIn/Crunchbase
+          const websiteValue = isRealCompanyWebsite(company.website) ? (company.website!.startsWith('http') ? company.website! : `https://${company.website}`) : `no-website-${crypto.randomUUID()}`;
 
           // Get current user
           const {
@@ -1403,11 +1412,11 @@ export default function LeadFinder() {
                                 {company.qualityScore !== undefined && <QualityScoreBadge score={company.qualityScore} />}
                               </div>
                               {company.qualityScore !== undefined && <QualityStars score={company.qualityScore} />}
-                              {/* Website, Email, Phone row */}
+                              {/* Website, Email, Phone row — only show real org website, not LinkedIn/Crunchbase */}
                               <div className="flex flex-wrap items-center gap-3">
-                                {company.website && <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono" onClick={e => e.stopPropagation()}>
+                                {isRealCompanyWebsite(company.website) && <a href={company.website!.startsWith('http') ? company.website! : `https://${company.website}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-mono" onClick={e => e.stopPropagation()}>
                                     <Globe className="h-3 w-3" />
-                                    {company.website.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}
+                                    {company.website!.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}
                                     <ExternalLink className="h-2.5 w-2.5" />
                                   </a>}
                                 {company.generalEmail && <a href={`mailto:${company.generalEmail}`} className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1" onClick={e => e.stopPropagation()}>

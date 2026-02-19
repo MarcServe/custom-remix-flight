@@ -82,17 +82,17 @@ export function ProspectAnalyzer({ companies, onAnalysisComplete }: ProspectAnal
           AI Prospect Analyzer
         </CardTitle>
         <CardDescription>
-          Automatically categorize prospects as Hot/Warm/Cold and get AI-powered next actions
+          Automatically categorize prospects as Hot/Warm/Cold and get AI-powered next actions. Choose a use case below — prospects are rated <strong>against that goal</strong> (e.g. “Hot” = strong fit for cold outreach; “Cold” = poor fit).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
           <div className="flex items-center gap-2 text-sm font-medium">
             <Settings2 className="h-4 w-4 text-muted-foreground" />
-            Analysis criteria (best fit for)
+            Analysis criteria (best fit for) — <span className="text-muted-foreground font-normal">“As against what?”</span>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="fit-preset" className="text-xs text-muted-foreground">Use case</Label>
+            <Label htmlFor="fit-preset" className="text-xs text-muted-foreground">Use case (what to rate prospects against)</Label>
             <select
               id="fit-preset"
               value={fitPreset}
@@ -103,6 +103,11 @@ export function ProspectAnalyzer({ companies, onAnalysisComplete }: ProspectAnal
                 <option key={p.value || 'none'} value={p.value}>{p.label}</option>
               ))}
             </select>
+            {getFitCriteria() && (
+              <p className="text-xs text-muted-foreground">
+                Analysis will rate prospects for: <strong>{getFitCriteria()}</strong>
+              </p>
+            )}
             {(fitPreset === 'custom' || fitCriteriaCustom) && (
               <>
                 <Label htmlFor="fit-custom" className="text-xs text-muted-foreground">Describe who is a best fit (e.g. companies suited for retail email campaigns)</Label>
