@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -42,6 +42,7 @@ export function FileAttachmentSelector({
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [selectedExistingIds, setSelectedExistingIds] = useState<string[]>([]);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: existingFiles, isLoading } = useQuery({
     queryKey: ["crm-files-for-email"],
@@ -73,8 +74,30 @@ export function FileAttachmentSelector({
 
       if (uploadError) throw uploadError;
 
-      // Add to selected files
+      // Save to crm_files so it appears on Files page and can be reused in future campaigns
+      const { data: fileRow, error: insertError } = await supabase
+        .from("crm_files")
+        .insert({
+          user_id: user.id,
+          file_name: uploadFile.name,
+          file_type: uploadFile.type,
+          file_size: uploadFile.size,
+          storage_path: fileName,
+          description: "Used in email campaign",
+        })
+        .select("id")
+        .single();
+
+      if (insertError) {
+        console.warn("File saved to storage but not to Files list:", insertError);
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["crm-files"] });
+        queryClient.invalidateQueries({ queryKey: ["crm-files-for-email"] });
+      }
+
+      // Add to selected files (include id so it matches existing-file shape when reused)
       const newAttachment: FileAttachment = {
+        id: fileRow?.id,
         file_name: uploadFile.name,
         file_type: uploadFile.type,
         file_size: uploadFile.size,
@@ -87,7 +110,7 @@ export function FileAttachmentSelector({
       
       toast({
         title: "Success",
-        description: "File uploaded successfully",
+        description: "File uploaded and saved to Files for reuse in future campaigns",
       });
     } catch (error: any) {
       toast({

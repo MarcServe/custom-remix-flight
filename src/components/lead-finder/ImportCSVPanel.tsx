@@ -21,6 +21,7 @@ import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
+import { COMPANY_SOURCE_TAGS } from '@/lib/company-sources';
 
 interface ParsedRow {
   name?: string;
@@ -325,7 +326,7 @@ export function ImportCSVPanel() {
             insertData.recent_news = enrichedData.recentNews;
             
             // Auto-apply suggested tags from enrichment, plus industry tag
-            const tagsToApply = new Set<string>();
+            const tagsToApply = new Set<string>([COMPANY_SOURCE_TAGS.CSV_IMPORT]);
             
             // Add suggested tags from enrichment
             if (enrichedData.suggestedTags && enrichedData.suggestedTags.length > 0) {
@@ -345,6 +346,8 @@ export function ImportCSVPanel() {
             if (tagsToApply.size > 0) {
               insertData.tags = Array.from(tagsToApply);
             }
+          } else {
+            insertData.tags = [COMPANY_SOURCE_TAGS.CSV_IMPORT];
           }
 
           const { error } = await supabase

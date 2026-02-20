@@ -9,6 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { 
   Search, 
   MapPin, 
@@ -19,12 +20,16 @@ import {
   Phone,
   Globe,
   Inbox,
-  Database
+  Database,
+  AlertCircle,
+  ArrowRightCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
+import { COMPANY_SOURCE_TAGS } from '@/lib/company-sources';
 
 interface ScrapedLead {
   name: string;
@@ -64,8 +69,11 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
   // Import state
   const [isImporting, setIsImporting] = useState(false);
   const [isSendingToInbox, setIsSendingToInbox] = useState(false);
+  const [isSendingToEnrichment, setIsSendingToEnrichment] = useState(false);
+  const [lastScrapeError, setLastScrapeError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
-  const handleStartScraping = async () => {
+  const handleStartScraping = async (isRetry = false) => {
     if (!searchQuery.trim()) {
       toast.error('Please enter a search query');
       return;
@@ -75,15 +83,17 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
       return;
     }
 
+    setLastScrapeError(null);
     setStep('scraping');
     setProgress(10);
-    setStatusMessage('Initializing Apify scraper...');
+    setStatusMessage(isRetry ? 'Retrying...' : 'Initializing Apify scraper...');
     setScrapedLeads([]);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast.error('Please log in');
+        setStep('config');
         return;
       }
 
@@ -99,6 +109,10 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
         },
       });
 
+      // Surface server error message (e.g. APIFY_API_TOKEN not configured)
+      if (response.data?.error && typeof response.data.error === 'string') {
+        throw new Error(response.data.error);
+      }
       if (response.error) throw response.error;
 
       const leads = response.data?.leads || [];
@@ -115,7 +129,20 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
       toast.success(`Scraped ${leads.length} businesses from Google Maps`);
     } catch (error: any) {
       console.error('Scraping error:', error);
-      toast.error(error.message || 'Failed to scrape data');
+      const msg = error?.message || 'Failed to scrape data';
+      const isEdgeFunctionUnreachable = msg.includes('Failed to send a request to the Edge Function') || msg.includes('fetch failed');
+      if (isEdgeFunctionUnreachable && !isRetry) {
+        setStatusMessage('Connection issue. Retrying once...');
+        await new Promise((r) => setTimeout(r, 2000));
+        return handleStartScraping(true);
+      }
+      const hint = isEdgeFunctionUnreachable
+        ? ' Check that the apify-google-scraper Edge Function is deployed and try again.'
+        : msg.includes('APIFY_API_TOKEN')
+        ? ' Add APIFY_API_TOKEN in Supabase Dashboard → Project Settings → Edge Functions → Secrets.'
+        : '';
+      setLastScrapeError(msg + hint);
+      toast.error(msg + hint);
       setStep('config');
     }
   };
@@ -173,6 +200,7 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
               headquarters: lead.address,
               geography: lead.city,
               industry: lead.category,
+              tags: [COMPANY_SOURCE_TAGS.GOOGLE_MAPS],
               enrichment_data: {
                 google_rating: lead.rating,
                 google_reviews: lead.reviews,
@@ -309,6 +337,38 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
     setSelectedLeads(new Set());
   };
 
+  const handleSendToEnrichment = async () => {
+    if (selectedLeads.size === 0 || !user) {
+      toast.error('Please select at least one lead');
+      return;
+    }
+    setIsSendingToEnrichment(true);
+    const leadsToSend = scrapedLeads.filter((_, i) => selectedLeads.has(i));
+    try {
+      const inserts = leadsToSend.map(lead => ({
+        user_id: user.id,
+        name: lead.name,
+        website: lead.website || null,
+        industry: lead.category || null,
+        geography: lead.city || lead.address || null,
+        email: lead.email || null,
+        phone: lead.phone || null,
+        source: 'google_maps',
+        source_metadata: { from: 'google_maps_scraper' },
+        enrichment_status: 'pending',
+        email_extraction_status: (lead.website && !lead.email) ? 'pending' : 'not_needed',
+      }));
+      const { error } = await (supabase as any).from('enrichment_queue').insert(inserts).select('id');
+      if (error) throw error;
+      toast.success(`${inserts.length} lead(s) sent to Enrichment page. Run enrichment there.`);
+      navigate('/enrichment');
+    } catch (e) {
+      toast.error((e as Error)?.message ?? 'Failed to send to Enrichment');
+    } finally {
+      setIsSendingToEnrichment(false);
+    }
+  };
+
   const calculateQualityScore = (lead: ScrapedLead): number => {
     let score = 30;
     if (lead.email) score += 25;
@@ -320,6 +380,7 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
   };
 
   const resetScraper = () => {
+    setLastScrapeError(null);
     setStep('config');
     setSearchQuery('');
     setLocation('');
@@ -333,6 +394,13 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
     <div className="space-y-4">
       {step === 'config' && (
         <div className="space-y-4">
+          {lastScrapeError && (
+            <Alert variant="destructive" className="mb-2">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Scraping failed</AlertTitle>
+              <AlertDescription>{lastScrapeError}</AlertDescription>
+            </Alert>
+          )}
           <div className="space-y-2">
             <Label htmlFor="search-query">Search Query</Label>
             <div className="relative">
@@ -511,23 +579,33 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
             </div>
           </ScrollArea>
 
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={resetScraper} className="flex-1">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+            <Button variant="outline" onClick={resetScraper} className="flex-1 min-w-[140px]">
               Start New Search
+            </Button>
+            <Button 
+              variant="default"
+              onClick={handleSendToEnrichment}
+              disabled={selectedLeads.size === 0 || isSendingToEnrichment}
+              className="flex-1 min-w-[140px]"
+            >
+              {isSendingToEnrichment ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ArrowRightCircle className="h-4 w-4 mr-2" />}
+              Move to Enrichment ({selectedLeads.size})
             </Button>
             <Button 
               variant="outline"
               onClick={handleSendToInbox} 
               disabled={selectedLeads.size === 0 || isSendingToInbox}
-              className="flex-1"
+              className="flex-1 min-w-[140px]"
             >
               {isSendingToInbox ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Inbox className="h-4 w-4 mr-2" />}
               Send to Inbox ({selectedLeads.size})
             </Button>
             <Button 
+              variant="outline"
               onClick={handleAddToCRM} 
               disabled={selectedLeads.size === 0 || isImporting}
-              className="flex-1"
+              className="flex-1 min-w-[140px]"
             >
               {isImporting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Database className="h-4 w-4 mr-2" />}
               Add to CRM ({selectedLeads.size})

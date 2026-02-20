@@ -25,6 +25,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
+import { COMPANY_SOURCE_TAGS } from '@/lib/company-sources';
 
 interface ApifyScraperDialogProps {
   open: boolean;
@@ -181,6 +182,7 @@ export function ApifyScraperDialog({ open, onOpenChange, onComplete }: ApifyScra
               headquarters: lead.address,
               geography: lead.city,
               industry: lead.category,
+              tags: [COMPANY_SOURCE_TAGS.GOOGLE_MAPS],
               enrichment_data: {
                 google_rating: lead.rating,
                 google_reviews: lead.reviews,

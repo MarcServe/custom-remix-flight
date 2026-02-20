@@ -16,11 +16,15 @@ import {
   Globe,
   FileText,
   Sparkles,
-  MapPin
+  MapPin,
+  Mail,
+  Wand2,
+  ArrowRightCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface CompanyListSearchProps {
   onLeadsFound?: (leads: any[]) => void;
@@ -29,6 +33,7 @@ interface CompanyListSearchProps {
 export function CompanyListSearch({ onLeadsFound }: CompanyListSearchProps) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [companyList, setCompanyList] = useState('');
   const [location, setLocation] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -38,6 +43,9 @@ export function CompanyListSearch({ onLeadsFound }: CompanyListSearchProps) {
   const [searchMode, setSearchMode] = useState<'names' | 'websites'>('names');
   const [useApify, setUseApify] = useState(true);
   const [enrichAll, setEnrichAll] = useState(true);
+  const [isEnriching, setIsEnriching] = useState(false);
+  const [isExtractingEmails, setIsExtractingEmails] = useState(false);
+  const [isMovingToEnrichment, setIsMovingToEnrichment] = useState(false);
 
   const parseCompanyList = (text: string): string[] => {
     return text
@@ -64,14 +72,11 @@ export function CompanyListSearch({ onLeadsFound }: CompanyListSearchProps) {
 
   const searchCompanyWithApify = async (query: string, locationQuery?: string): Promise<any[]> => {
     try {
-      // Build search string - use location if provided, otherwise just query
-      const searchString = locationQuery ? `${query} in ${locationQuery}` : query;
-      
       const { data, error } = await supabase.functions.invoke('apify-google-scraper', {
         body: {
           query: query,
-          location: locationQuery || 'United States', // Default location if not provided
-          maxResults: 10, // Get multiple results per company
+          location: locationQuery || 'United States',
+          maxResults: 10,
           scrapeEmails: true,
         },
       });
@@ -80,9 +85,14 @@ export function CompanyListSearch({ onLeadsFound }: CompanyListSearchProps) {
         console.error(`Apify error for ${query}:`, error);
         return [];
       }
-
-      if (data?.results && data.results.length > 0) {
-        return data.results.map((result: any) => ({
+      if (data?.error && typeof data.error === 'string') {
+        console.error(`Apify function error for ${query}:`, data.error);
+        return [];
+      }
+      // Edge function returns { success, leads, stats } (not "results")
+      const leads = data?.leads ?? data?.results ?? [];
+      if (leads.length > 0) {
+        return leads.map((result: any) => ({
           name: result.name || query,
           website: result.website || null,
           phone: result.phone || null,
@@ -90,13 +100,12 @@ export function CompanyListSearch({ onLeadsFound }: CompanyListSearchProps) {
           address: result.address || null,
           city: result.city || null,
           category: result.category || null,
-          rating: result.rating || null,
-          reviews: result.reviews || null,
+          rating: result.rating ?? null,
+          reviews: result.reviews ?? null,
           source: 'apify',
           searchQuery: query,
         }));
       }
-
       return [];
     } catch (error) {
       console.error(`Error searching Apify for ${query}:`, error);
@@ -137,14 +146,10 @@ export function CompanyListSearch({ onLeadsFound }: CompanyListSearchProps) {
     }
   };
 
-  const enrichLeadsBatch = async (leads: any[]): Promise<any[]> => {
-    if (!enrichAll || leads.length === 0) {
-      return leads.map(lead => ({ ...lead, wasEnriched: false }));
-    }
-
+  /** Run AI enrichment on leads (used after search or from "Enrich all" button) */
+  const runEnrichment = async (leads: any[]): Promise<any[]> => {
+    if (leads.length === 0) return leads;
     try {
-      setStatusMessage(`Enriching ${leads.length} leads with AI...`);
-      
       const { data, error } = await supabase.functions.invoke('enrich-leads', {
         body: {
           leads: leads.map(lead => ({
@@ -162,29 +167,23 @@ export function CompanyListSearch({ onLeadsFound }: CompanyListSearchProps) {
         return leads.map(lead => ({ ...lead, wasEnriched: false }));
       }
 
-      // Handle streaming response
       if (data instanceof ReadableStream) {
         const reader = data.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
-        let enrichedLeads: any[] = [];
-
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
-
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               try {
                 const event = JSON.parse(line.slice(6));
                 if (event.type === 'complete' && event.enrichedLeads) {
-                  // Merge enriched data with original leads
                   return leads.map(lead => {
-                    const enriched = event.enrichedLeads.find((e: any) => 
+                    const enriched = event.enrichedLeads.find((e: any) =>
                       e.name === lead.name || (e.website && e.website === lead.website)
                     );
                     return enriched ? { ...lead, ...enriched, wasEnriched: true } : { ...lead, wasEnriched: false };
@@ -197,11 +196,99 @@ export function CompanyListSearch({ onLeadsFound }: CompanyListSearchProps) {
           }
         }
       }
-
       return leads.map(lead => ({ ...lead, wasEnriched: false }));
     } catch (error) {
       console.error('Enrichment error:', error);
       return leads.map(lead => ({ ...lead, wasEnriched: false }));
+    }
+  };
+
+  const enrichLeadsBatch = async (leads: any[]): Promise<any[]> => {
+    if (!enrichAll || leads.length === 0) {
+      return leads.map(lead => ({ ...lead, wasEnriched: false }));
+    }
+    setStatusMessage(`Enriching ${leads.length} leads with AI...`);
+    return runEnrichment(leads);
+  };
+
+  const handleEnrichAllClick = async () => {
+    if (foundLeads.length === 0) return;
+    setIsEnriching(true);
+    try {
+      const updated = await runEnrichment(foundLeads);
+      setFoundLeads(updated);
+      const count = updated.filter(l => l.wasEnriched).length;
+      toast({ title: 'Enrichment complete', description: `${count} of ${updated.length} leads enriched.` });
+    } catch (e) {
+      toast({ title: 'Enrichment failed', description: (e as Error)?.message, variant: 'destructive' });
+    } finally {
+      setIsEnriching(false);
+    }
+  };
+
+  const handleExtractEmailsClick = async () => {
+    const toExtract = foundLeads.filter(l => l.website && !l.email);
+    if (toExtract.length === 0) {
+      toast({ title: 'No leads to extract', description: 'Only leads with a website and no email are processed.', variant: 'destructive' });
+      return;
+    }
+    setIsExtractingEmails(true);
+    let extracted = 0;
+    const updated = [...foundLeads];
+    try {
+      for (let i = 0; i < toExtract.length; i++) {
+        const lead = toExtract[i];
+        try {
+          const { data, error } = await supabase.functions.invoke('extract-website-email', {
+            body: { companyId: null, website: lead.website, companyName: lead.name || '' },
+          });
+          if (!error && data?.success && data.email) {
+            const idx = updated.findIndex(l => l === lead || (l.name === lead.name && l.website === lead.website));
+            if (idx !== -1) {
+              updated[idx] = { ...updated[idx], email: data.email };
+              extracted++;
+            }
+          }
+        } catch (_) {
+          /* skip failed */
+        }
+      }
+      setFoundLeads(updated);
+      toast({ title: 'Email extraction complete', description: `Found ${extracted} email(s) from ${toExtract.length} website(s).` });
+    } finally {
+      setIsExtractingEmails(false);
+    }
+  };
+
+  const handleMoveToEnrichment = async () => {
+    if (foundLeads.length === 0 || !user) return;
+    setIsMovingToEnrichment(true);
+    try {
+      const inserts = foundLeads.map(lead => ({
+        user_id: user.id,
+        name: lead.name || 'Unknown',
+        website: lead.website || null,
+        industry: lead.industry || lead.category || null,
+        geography: lead.geography || lead.city || lead.address || location || null,
+        email: lead.email || null,
+        phone: lead.phone || null,
+        source: 'lead_finder',
+        source_metadata: { from: 'company_list' },
+        enrichment_status: 'pending',
+        email_extraction_status: (lead.website && !lead.email) ? 'pending' : 'not_needed',
+      }));
+      const { error } = await (supabase as any).from('enrichment_queue').insert(inserts).select('id');
+      if (error) throw error;
+      const count = inserts.length;
+      toast({
+        title: 'Moved to Enrichment',
+        description: `${count} lead(s) added to Enrichment queue. Run enrichment on the Enrichment page.`,
+      });
+      navigate('/enrichment');
+    } catch (e) {
+      toast({ title: 'Error', description: (e as Error)?.message ?? 'Failed to add to Enrichment', variant: 'destructive' });
+    } finally {
+      setIsMovingToEnrichment(false);
     }
   };
 
@@ -501,16 +588,57 @@ export function CompanyListSearch({ onLeadsFound }: CompanyListSearchProps) {
           {foundLeads.length > 0 && !isSearching && (
             <Card className="p-4">
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-sm font-semibold">Search Results</h3>
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary">{foundLeads.length} found</Badge>
-                    {enrichAll && (
-                      <Badge variant="outline" className="text-xs">
-                        {foundLeads.filter(l => l.wasEnriched).length} enriched
-                      </Badge>
-                    )}
+                    <Badge variant="outline" className="text-xs">
+                      {foundLeads.filter(l => l.wasEnriched).length} enriched
+                    </Badge>
                   </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleEnrichAllClick}
+                    disabled={isEnriching}
+                  >
+                    {isEnriching ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 mr-1.5" />
+                    )}
+                    Enrich all
+                  </Button>
+                  {foundLeads.filter(l => l.website && !l.email).length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExtractEmailsClick}
+                      disabled={isExtractingEmails}
+                    >
+                      {isExtractingEmails ? (
+                        <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                      ) : (
+                        <Mail className="h-4 w-4 mr-1.5" />
+                      )}
+                      Extract emails ({foundLeads.filter(l => l.website && !l.email).length})
+                    </Button>
+                  )}
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handleMoveToEnrichment}
+                    disabled={isMovingToEnrichment}
+                  >
+                    {isMovingToEnrichment ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <ArrowRightCircle className="h-4 w-4 mr-1.5" />
+                    )}
+                    Move to Enrichment page ({foundLeads.length})
+                  </Button>
                 </div>
                 <div className="space-y-2 max-h-[300px] overflow-y-auto">
                   {foundLeads.map((lead, index) => (
@@ -522,6 +650,12 @@ export function CompanyListSearch({ onLeadsFound }: CompanyListSearchProps) {
                           <div className="text-xs text-muted-foreground flex items-center gap-1">
                             <Globe className="h-3 w-3" />
                             {lead.website}
+                          </div>
+                        )}
+                        {lead.email && (
+                          <div className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Mail className="h-3 w-3" />
+                            {lead.email}
                           </div>
                         )}
                         {lead.description && (

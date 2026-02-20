@@ -7,6 +7,8 @@ export const COMPANY_SOURCE_TAGS = {
   LEAD_FINDER: "Lead Finder",
   LEAD_INBOX: "Lead Inbox",
   AUTOPILOT: "Autopilot",
+  CSV_IMPORT: "CSV Import",
+  GOOGLE_MAPS: "Google Maps",
 } as const;
 
 export const SOURCE_TAG_LIST = Object.values(COMPANY_SOURCE_TAGS);

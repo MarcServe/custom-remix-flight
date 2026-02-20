@@ -24,6 +24,7 @@ import {
   extractDomain,
   normalizeCompanyName
 } from '@/lib/utils/csv-parser';
+import { COMPANY_SOURCE_TAGS } from '@/lib/company-sources';
 import { useNavigate } from 'react-router-dom';
 
 interface ApifyCSVUploaderProps {
@@ -45,6 +46,8 @@ export function ApifyCSVUploader({ open, onOpenChange }: ApifyCSVUploaderProps) 
   const [importStats, setImportStats] = useState({ companies: 0, contacts: 0, skipped: 0 });
   const [importedCompanyIds, setImportedCompanyIds] = useState<string[]>([]);
   const [dragActive, setDragActive] = useState(false);
+  const [previewPage, setPreviewPage] = useState(1);
+  const [previewPageSize, setPreviewPageSize] = useState(10);
 
   const handleFileSelect = useCallback((file: File) => {
     if (!file.name.endsWith('.csv')) {
@@ -83,7 +86,8 @@ export function ApifyCSVUploader({ open, onOpenChange }: ApifyCSVUploaderProps) 
         }
       });
       setSuggestedMappings(suggestions);
-      
+      setPreviewPage(1);
+      setPreviewPageSize(10);
       setStep('mapping');
       toast.success(`Loaded ${parsed.rows.length} rows from CSV`);
     };
@@ -225,6 +229,7 @@ export function ApifyCSVUploader({ open, onOpenChange }: ApifyCSVUploaderProps) 
             linkedin_url: companyData.linkedin_url,
             description: companyData.description,
             employee_count: companyData.employee_count,
+            tags: [COMPANY_SOURCE_TAGS.CSV_IMPORT],
           };
           
           const { data: newCompany, error } = await supabase
@@ -313,37 +318,66 @@ export function ApifyCSVUploader({ open, onOpenChange }: ApifyCSVUploaderProps) 
 
         <div className="flex-1 overflow-hidden">
           {step === 'upload' && (
-            <Label
-              htmlFor="csv-upload"
-              className={`
-                flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-12 text-center transition-colors cursor-pointer
-                ${dragActive ? 'border-primary bg-primary/10' : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/30'}
-              `}
-              onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
-              onDragLeave={() => setDragActive(false)}
-              onDrop={handleDrop}
-            >
-              <Input
-                id="csv-upload"
-                type="file"
-                accept=".csv,text/csv,application/csv,text/comma-separated-values"
-                className="hidden"
-                onChange={handleInputChange}
-              />
-              <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground pointer-events-none" />
-              <h3 className="text-lg font-medium mb-2 pointer-events-none">Drop your CSV file here</h3>
-              <p className="text-sm text-muted-foreground mb-4 pointer-events-none">
-                or click anywhere to browse. Supports Research Chat exports, Apify, and standard CSV.
-              </p>
-              <Button type="button" variant="outline" className="pointer-events-none" asChild>
-                <span>Select CSV File</span>
-              </Button>
-            </Label>
+            <div className="space-y-4">
+              <Label
+                htmlFor="csv-upload"
+                className={`
+                  flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-12 text-center transition-colors cursor-pointer
+                  ${dragActive ? 'border-primary bg-primary/10' : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/30'}
+                `}
+                onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={handleDrop}
+              >
+                <Input
+                  id="csv-upload"
+                  type="file"
+                  accept=".csv,text/csv,application/csv,text/comma-separated-values"
+                  className="hidden"
+                  onChange={handleInputChange}
+                />
+                <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground pointer-events-none" />
+                <h3 className="text-lg font-medium mb-2 pointer-events-none">Drop your CSV file here</h3>
+                <p className="text-sm text-muted-foreground mb-4 pointer-events-none">
+                  or click anywhere to browse. Supports Research Chat exports, Apify, and standard CSV.
+                </p>
+                <Button type="button" variant="outline" className="pointer-events-none" asChild>
+                  <span>Select CSV File</span>
+                </Button>
+              </Label>
+              <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                <p className="font-medium mb-2">CSV header requirements for mapping</p>
+                <p className="text-muted-foreground mb-2">
+                  Use these column names in your first row for auto-mapping. First row = headers only; data starts on row 2.
+                </p>
+                <p className="mb-1">
+                  <span className="font-medium">Required:</span>{' '}
+                  <code className="bg-muted px-1 rounded">Name</code> or <code className="bg-muted px-1 rounded">Company Name</code>
+                </p>
+                <p className="mb-2">
+                  <span className="font-medium">Optional (any of these):</span>{' '}
+                  <code className="bg-muted px-1 rounded">Website</code>, <code className="bg-muted px-1 rounded">Email</code>,{' '}
+                  <code className="bg-muted px-1 rounded">Phone</code>, <code className="bg-muted px-1 rounded">Industry</code>,{' '}
+                  <code className="bg-muted px-1 rounded">Geography</code>, <code className="bg-muted px-1 rounded">Address</code>,{' '}
+                  <code className="bg-muted px-1 rounded">Company Size</code>, <code className="bg-muted px-1 rounded">LinkedIn URL</code>,{' '}
+                  <code className="bg-muted px-1 rounded">Description</code>
+                </p>
+                <p className="text-muted-foreground">
+                  Example header row: <code className="bg-muted px-1 rounded text-xs">Name,Website,Email,Phone,Industry,Geography</code>
+                </p>
+              </div>
+            </div>
           )}
 
           {step === 'mapping' && csvData && (
-            <Tabs defaultValue="mapped" className="h-full">
-              <TabsList className="mb-4">
+            <Tabs defaultValue="mapped" className="h-full flex flex-col">
+              <div className="rounded-md border bg-muted/20 px-3 py-2 mb-3 shrink-0">
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">CSV headers for next time:</span>{' '}
+                  Required: <code className="bg-muted px-0.5 rounded">Name</code>. Optional: <code className="bg-muted px-0.5 rounded">Website</code>, <code className="bg-muted px-0.5 rounded">Email</code>, <code className="bg-muted px-0.5 rounded">Phone</code>, <code className="bg-muted px-0.5 rounded">Industry</code>, <code className="bg-muted px-0.5 rounded">Geography</code>, <code className="bg-muted px-0.5 rounded">Address</code> — use these in your first row for auto-mapping.
+                </p>
+              </div>
+              <TabsList className="mb-4 shrink-0">
                 <TabsTrigger value="mapped">
                   Mapped Columns ({mappings.length})
                 </TabsTrigger>
@@ -453,34 +487,84 @@ export function ApifyCSVUploader({ open, onOpenChange }: ApifyCSVUploaderProps) 
                 </ScrollArea>
               </TabsContent>
 
-              <TabsContent value="preview" className="h-[400px]">
-                <ScrollArea className="h-full">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        {csvData.headers.slice(0, 6).map(h => (
-                          <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {csvData.rows.slice(0, 10).map((row, idx) => (
-                        <TableRow key={idx}>
-                          {csvData.headers.slice(0, 6).map(h => (
-                            <TableCell key={h} className="max-w-[200px] truncate">
-                              {row[h] || '-'}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  {csvData.rows.length > 10 && (
-                    <p className="text-center text-sm text-muted-foreground py-2">
-                      Showing 10 of {csvData.rows.length} rows
-                    </p>
-                  )}
-                </ScrollArea>
+              <TabsContent value="preview" className="h-[400px] flex flex-col">
+                {(() => {
+                  const totalRows = csvData.rows.length;
+                  const totalPages = Math.max(1, Math.ceil(totalRows / previewPageSize));
+                  const startIndex = (previewPage - 1) * previewPageSize;
+                  const endIndex = Math.min(startIndex + previewPageSize, totalRows);
+                  const pageRows = csvData.rows.slice(startIndex, endIndex);
+                  return (
+                    <>
+                      <div className="flex items-center justify-between gap-2 py-2 border-b shrink-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground whitespace-nowrap">Rows per page</span>
+                          <Select
+                            value={String(previewPageSize)}
+                            onValueChange={(v) => {
+                              setPreviewPageSize(Number(v));
+                              setPreviewPage(1);
+                            }}
+                          >
+                            <SelectTrigger className="w-[72px] h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {[10, 25, 50, 100].map((n) => (
+                                <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <span className="text-sm text-muted-foreground whitespace-nowrap">
+                          Showing {totalRows === 0 ? 0 : startIndex + 1}–{endIndex} of {totalRows} rows
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => setPreviewPage((p) => Math.max(1, p - 1))}
+                            disabled={previewPage <= 1}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => setPreviewPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={previewPage >= totalPages}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                      <ScrollArea className="flex-1 min-h-0">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              {csvData.headers.slice(0, 6).map(h => (
+                                <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {pageRows.map((row, idx) => (
+                              <TableRow key={startIndex + idx}>
+                                {csvData.headers.slice(0, 6).map(h => (
+                                  <TableCell key={h} className="max-w-[200px] truncate">
+                                    {row[h] || '-'}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    </>
+                  );
+                })()}
               </TabsContent>
             </Tabs>
           )}
