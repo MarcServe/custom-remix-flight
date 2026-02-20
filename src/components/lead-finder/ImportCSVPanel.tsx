@@ -382,40 +382,39 @@ export function ImportCSVPanel() {
   return (
     <div className="space-y-4">
       {!file && (
-        <div
+        <label
+          htmlFor="csv-upload"
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           className={`
-            border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
-            ${isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'}
+            flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer block
+            ${isDragging ? 'border-primary bg-primary/10' : 'border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30'}
           `}
         >
           <input
             type="file"
-            accept=".csv"
+            accept=".csv,text/csv,application/csv,text/comma-separated-values"
             onChange={handleFileSelect}
             className="hidden"
             id="csv-upload"
           />
-          <label htmlFor="csv-upload" className="cursor-pointer">
-            <div className="flex flex-col items-center gap-4">
-              <div className="p-4 rounded-full bg-primary/10">
-                <Upload className="h-8 w-8 text-primary" />
-              </div>
-              <div>
-                <p className="font-medium">Drop your CSV file here</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  or click to browse
-                </p>
-              </div>
-              <Badge variant="secondary">
-                <FileSpreadsheet className="h-3 w-3 mr-1" />
-                CSV files only
-              </Badge>
+          <div className="flex flex-col items-center gap-4 pointer-events-none">
+            <div className="p-4 rounded-full bg-primary/10">
+              <Upload className="h-8 w-8 text-primary" />
             </div>
-          </label>
-        </div>
+            <div>
+              <p className="font-medium">Drop your CSV file here</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                or click anywhere to browse (Research Chat, Apify, or standard CSV)
+              </p>
+            </div>
+            <Badge variant="secondary">
+              <FileSpreadsheet className="h-3 w-3 mr-1" />
+              CSV files only
+            </Badge>
+          </div>
+        </label>
       )}
 
       {file && parsedData.length > 0 && !isImporting && (

@@ -56,6 +56,7 @@ Deno.serve(async (req) => {
     for (const item of items) {
       try {
         // Create company
+        // Companies table has no "source" column
         const companyData: any = {
           user_id: userId,
           name: item.name,
@@ -66,7 +67,6 @@ Deno.serve(async (req) => {
           company_phone: item.phone || null,
           linkedin_url: item.linkedin_url || null,
           enrichment_data: item.enrichment_data || {},
-          source: item.source || 'enrichment_queue',
         };
 
         const { data: company, error: companyError } = await supabase
@@ -75,46 +75,51 @@ Deno.serve(async (req) => {
           .select()
           .single();
 
-        if (companyError) {
-          // If company already exists (duplicate), skip or update
-          if (companyError.code === '23505') { // Unique violation
-            // Try to find existing company
-            const { data: existingCompany } = await supabase
-              .from('companies')
-              .select('id')
-              .eq('user_id', userId)
-              .eq('name', item.name)
-              .single();
+        const email = item.email || item.extracted_email;
+        let companyId: string | null = null;
 
-            if (existingCompany) {
-              movedCompanies.push(existingCompany.id);
-              // Update existing company with enrichment data if needed
-              await supabase
-                .from('companies')
-                .update({
+        if (companyError) {
+          if (companyError.code === '23505') {
+            const websiteVal = item.website || null;
+            const { data: existingByWebsite } = websiteVal
+              ? await supabase.from('companies').select('id').eq('user_id', userId).eq('website', websiteVal).maybeSingle()
+              : await supabase.from('companies').select('id').eq('user_id', userId).is('website', null).maybeSingle();
+            if (existingByWebsite) {
+              companyId = existingByWebsite.id;
+              movedCompanies.push(existingByWebsite.id);
+              await supabase.from('companies').update({
+                enrichment_data: item.enrichment_data || {},
+                description: item.description || null,
+                general_email: item.email || item.extracted_email || undefined,
+              }).eq('id', existingByWebsite.id);
+            } else {
+              const { data: existingByName } = await supabase.from('companies').select('id').eq('user_id', userId).eq('name', item.name).maybeSingle();
+              if (existingByName) {
+                companyId = existingByName.id;
+                movedCompanies.push(existingByName.id);
+                await supabase.from('companies').update({
                   enrichment_data: item.enrichment_data || {},
                   description: item.description || null,
-                })
-                .eq('id', existingCompany.id);
-            } else {
-              throw companyError;
+                }).eq('id', existingByName.id);
+              } else {
+                throw companyError;
+              }
             }
           } else {
             throw companyError;
           }
         } else {
-          movedCompanies.push(company.id);
+          companyId = company!.id;
+          movedCompanies.push(company!.id);
         }
 
-        // If there's an email, create a person/contact
-        const email = item.email || item.extracted_email;
-        if (email && company) {
+        if (email && companyId) {
           const personData: any = {
             user_id: userId,
             first_name: item.name.split(' ')[0] || 'Contact',
             last_name: item.name.split(' ').slice(1).join(' ') || '',
             email: email,
-            company_id: company.id,
+            company_id: companyId,
             phone: item.phone || null,
             linkedin_url: item.linkedin_url || null,
           };

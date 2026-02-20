@@ -460,6 +460,8 @@ export default function Enrichment() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['enrichment-queue'] });
       queryClient.invalidateQueries({ queryKey: ['companies'] });
+      queryClient.invalidateQueries({ queryKey: ['companies-full'] });
+      queryClient.invalidateQueries({ queryKey: ['company-existing-tags'] });
       queryClient.invalidateQueries({ queryKey: ['people'] });
       setSelectedItems(new Set());
       toast({

@@ -25,7 +25,10 @@ import {
   Sparkles,
   FileSpreadsheet,
   Table2,
+  History,
+  Trash2,
 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -161,6 +164,9 @@ export function ResearchChatSlideOut() {
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyLoadError, setHistoryLoadError] = useState(false);
+  const [historyUpdatedAt, setHistoryUpdatedAt] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"chat" | "history">("chat");
   const [input, setInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -189,17 +195,22 @@ export function ResearchChatSlideOut() {
         .maybeSingle();
       if (cancelled) return;
       if (error) {
+        setHistoryLoadError(true);
         setMessages([]);
+        setHistoryUpdatedAt(null);
         setHistoryLoaded(true);
         return;
       }
+      setHistoryLoadError(false);
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - RESEARCH_CHAT_HISTORY_DAYS);
       const updatedAt = data?.updated_at ? new Date(data.updated_at) : null;
       if (data?.messages && Array.isArray(data.messages) && updatedAt && updatedAt >= cutoff) {
         setMessages(data.messages as ChatMessage[]);
+        setHistoryUpdatedAt(data.updated_at);
       } else {
         setMessages([]);
+        setHistoryUpdatedAt(updatedAt ? data?.updated_at ?? null : null);
       }
       setHistoryLoaded(true);
     })();
@@ -209,15 +220,31 @@ export function ResearchChatSlideOut() {
   const saveHistory = useCallback(
     async (msgs: ChatMessage[]) => {
       if (!user?.id) return;
-      await (supabase as any)
+      const now = new Date().toISOString();
+      const { error } = await (supabase as any)
         .from("research_chat_history")
         .upsert(
-          { user_id: user.id, messages: msgs, updated_at: new Date().toISOString() },
+          { user_id: user.id, messages: msgs, updated_at: now },
           { onConflict: "user_id" }
         );
+      if (!error) setHistoryUpdatedAt(now);
     },
     [user?.id]
   );
+
+  const clearHistory = useCallback(async () => {
+    if (!user?.id) return;
+    setMessages([]);
+    setHistoryUpdatedAt(null);
+    setExtractedFromChat(null);
+    await (supabase as any)
+      .from("research_chat_history")
+      .upsert(
+        { user_id: user.id, messages: [], updated_at: new Date().toISOString() },
+        { onConflict: "user_id" }
+      );
+    toast({ title: "History cleared", description: "Conversation history has been reset." });
+  }, [user?.id, toast]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -493,6 +520,14 @@ export function ResearchChatSlideOut() {
     }
   };
 
+  const formatImportToast = (created: number, merged: number, extra?: string) => {
+    const parts: string[] = [];
+    if (created > 0) parts.push(`${created} new compan${created === 1 ? "y" : "ies"} added to CRM`);
+    if (merged > 0) parts.push(`${merged} row${merged === 1 ? "" : "s"} merged into existing (same or empty website)`);
+    const base = parts.length ? parts.join(". ") : "No new companies added.";
+    return extra ? `${base}. ${extra}` : base;
+  };
+
   const downloadExtractedCsv = () => {
     if (!extractedFromChat?.length) return;
     const headers = ["name", "website", "email", "industry", "geography", "notes"];
@@ -521,7 +556,9 @@ export function ResearchChatSlideOut() {
       return;
     }
     setImporting(true);
-    let imported = 0;
+    let created = 0;
+    let merged = 0;
+    let lastError: string | null = null;
     for (const row of extractedFromChat) {
       try {
         const { data: existing } = await supabase
@@ -530,7 +567,20 @@ export function ResearchChatSlideOut() {
           .eq("user_id", user.id)
           .ilike("name", row.name)
           .maybeSingle();
-        if (existing) continue;
+        if (existing) {
+          if (row.email) {
+            const { data: hasContact } = await supabase.from("contacts").select("id").eq("company_id", existing.id).eq("email", row.email).maybeSingle();
+            if (!hasContact) {
+              await supabase.from("contacts").insert({
+                company_id: existing.id,
+                name: "Primary",
+                email: row.email,
+                is_primary_contact: true,
+              });
+            }
+          }
+          continue;
+        }
         const { data: newCompany, error } = await supabase.from("companies").insert({
           user_id: user.id,
           name: row.name,
@@ -542,8 +592,26 @@ export function ResearchChatSlideOut() {
           enrichment_data: { source: "research_chat_extract" },
           tags: [COMPANY_SOURCE_TAGS.RESEARCH_CHAT, importCategoryTag?.trim()].filter(Boolean),
         }).select("id").single();
-        if (!error && newCompany) {
-          imported++;
+        if (error) {
+          lastError = error.message;
+          if (error.code === "23505") {
+            const { data: existingByWebsite } = row.website
+              ? await supabase.from("companies").select("id").eq("user_id", user.id).eq("website", row.website).maybeSingle()
+              : await supabase.from("companies").select("id").eq("user_id", user.id).is("website", null).maybeSingle();
+            if (existingByWebsite) {
+              merged++;
+              if (row.email) {
+                await supabase.from("contacts").insert({
+                  company_id: existingByWebsite.id,
+                  name: "Primary",
+                  email: row.email,
+                  is_primary_contact: true,
+                }).then(() => {});
+              }
+            }
+          }
+        } else if (newCompany) {
+          created++;
           if (row.email) {
             await supabase.from("contacts").insert({
               company_id: newCompany.id,
@@ -553,8 +621,11 @@ export function ResearchChatSlideOut() {
             });
           }
         }
-      } catch (_) {}
+      } catch (e: any) {
+        lastError = e?.message ?? "Unknown error";
+      }
     }
+    const imported = created + merged;
     if (sendIncompleteToEnrichment) {
       const incomplete = extractedFromChat.filter((r) => !r.email?.trim());
       if (incomplete.length > 0) {
@@ -576,19 +647,26 @@ export function ResearchChatSlideOut() {
             queryClient.invalidateQueries({ queryKey: ["enrichment-queue"] });
             toast({
               title: "Import complete",
-              description: `Added ${imported} companies to CRM. ${incomplete.length} lead(s) without email sent to Enrichment Queue.`,
+              description: formatImportToast(created, merged, `${incomplete.length} lead(s) without email sent to Enrichment Queue.`),
             });
           } else {
-            toast({ title: "Import complete", description: `Added ${imported} companies to CRM. Could not add to Enrichment: ${error.message}.` });
+            toast({ title: "Import complete", description: formatImportToast(created, merged, `Could not add to Enrichment: ${error.message}.`) });
           }
         } catch (_) {
-          toast({ title: "Import complete", description: `Added ${imported} companies to CRM. Some could not be sent to Enrichment.` });
+          toast({ title: "Import complete", description: formatImportToast(created, merged, "Some could not be sent to Enrichment.") });
         }
       } else {
-        toast({ title: "Import complete", description: `Added ${imported} companies to CRM.` });
+        toast({ title: "Import complete", description: formatImportToast(created, merged) });
       }
     } else {
-      toast({ title: "Import complete", description: `Added ${imported} companies to CRM.` });
+      toast({ title: "Import complete", description: formatImportToast(created, merged) });
+    }
+    if (imported === 0 && extractedFromChat.length > 0 && lastError) {
+      toast({
+        title: "Why 0 added?",
+        description: lastError,
+        variant: "destructive",
+      });
     }
     setImporting(false);
     queryClient.invalidateQueries({ queryKey: ["companies"] });
@@ -617,7 +695,9 @@ export function ResearchChatSlideOut() {
     }
 
     setImporting(true);
-    let imported = 0;
+    let created = 0;
+    let merged = 0;
+    let lastError: string | null = null;
 
     for (const lead of searchResults) {
       try {
@@ -649,9 +729,21 @@ export function ResearchChatSlideOut() {
             .select("id")
             .single();
 
+          if (error) {
+            lastError = error.message;
+            if (error.code === "23505") {
+              const { data: existingByWebsite } = lead.website
+                ? await supabase.from("companies").select("id").eq("user_id", user.id).eq("website", lead.website).maybeSingle()
+                : await supabase.from("companies").select("id").eq("user_id", user.id).is("website", null).maybeSingle();
+              if (existingByWebsite) {
+                companyId = existingByWebsite.id;
+                merged++;
+              }
+            }
+          }
           if (!error && newCompany) {
             companyId = newCompany.id;
-            imported++;
+            created++;
           }
         }
 
@@ -692,8 +784,15 @@ export function ResearchChatSlideOut() {
     queryClient.invalidateQueries({ queryKey: ["companies"] });
     toast({
       title: "Import complete",
-      description: `Added ${imported} new companies to CRM.`,
+      description: formatImportToast(created, merged),
     });
+    if (created + merged === 0 && searchResults.length > 0 && lastError) {
+      toast({
+        title: "Why 0 added?",
+        description: lastError,
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -709,6 +808,20 @@ export function ResearchChatSlideOut() {
           </SheetTitle>
         </SheetHeader>
 
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "chat" | "history")} className="flex-1 flex flex-col min-h-0">
+          <div className="px-6 pt-2 pb-1 shrink-0">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="chat" className="gap-1.5">
+                <MessageSquare className="h-3.5 w-3.5" />
+                Chat
+              </TabsTrigger>
+              <TabsTrigger value="history" className="gap-1.5">
+                <History className="h-3.5 w-3.5" />
+                History
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="chat" className="flex-1 flex flex-col min-h-0 mt-0 data-[state=inactive]:hidden">
         <ScrollArea className="flex-1 px-4">
           <div ref={scrollRef} className="space-y-6 py-4 pb-8">
             {/* Chat */}
@@ -1007,6 +1120,45 @@ export function ResearchChatSlideOut() {
             )}
           </div>
         </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="history" className="flex-1 mt-0 px-6 py-4 data-[state=inactive]:hidden">
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium flex items-center gap-2">
+                <History className="h-4 w-4" />
+                Conversation history
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Your Research Chat messages are saved automatically and kept for {RESEARCH_CHAT_HISTORY_DAYS} days.
+              </p>
+              {historyLoadError && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 p-3 text-sm text-amber-800 dark:text-amber-200">
+                  History could not be loaded. If you use a hosted database, run the &quot;Research Chat history&quot; migration (table <code className="text-xs">research_chat_history</code>) so your conversation is saved.
+                </div>
+              )}
+              {!historyLoadError && historyUpdatedAt && (
+                <p className="text-xs text-muted-foreground">
+                  Last saved: {new Date(historyUpdatedAt).toLocaleString()}
+                </p>
+              )}
+              {!historyLoadError && messages.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {messages.length} message(s) in this conversation
+                </p>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={clearHistory}
+                className="gap-2"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Clear history & start fresh
+              </Button>
+            </div>
+          </TabsContent>
+        </Tabs>
       </SheetContent>
     </Sheet>
   );

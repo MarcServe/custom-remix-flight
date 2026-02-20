@@ -2163,7 +2163,7 @@ export default function Companies() {
               <span className="text-sm font-medium">
                 {selectedCompanyIds.size} compan{selectedCompanyIds.size !== 1 ? 'ies' : 'y'} selected
               </span>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -2171,6 +2171,19 @@ export default function Companies() {
                   disabled={bulkExtractEmailMutation.isPending}
                 >
                   Clear Selection
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteDialogOpen(true)}
+                  disabled={bulkExtractEmailMutation.isPending || bulkDeleteMutation.isPending}
+                >
+                  {bulkDeleteMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-1" />
+                  )}
+                  Delete ({selectedCompanyIds.size})
                 </Button>
                 {(() => {
                   const selectedCompanies = filteredCompanies?.filter(c => selectedCompanyIds.has(c.id)) || [];
@@ -2264,15 +2277,6 @@ export default function Companies() {
                     </>
                   );
                 })()}
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setBulkDeleteDialogOpen(true)}
-                  disabled={bulkExtractEmailMutation.isPending}
-                >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Delete Selected
-                </Button>
               </div>
             </CardContent>
           </Card>

@@ -313,33 +313,32 @@ export function ApifyCSVUploader({ open, onOpenChange }: ApifyCSVUploaderProps) 
 
         <div className="flex-1 overflow-hidden">
           {step === 'upload' && (
-            <div
+            <Label
+              htmlFor="csv-upload"
               className={`
-                border-2 border-dashed rounded-lg p-12 text-center transition-colors
-                ${dragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'}
+                flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-12 text-center transition-colors cursor-pointer
+                ${dragActive ? 'border-primary bg-primary/10' : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/30'}
               `}
               onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
               onDragLeave={() => setDragActive(false)}
               onDrop={handleDrop}
             >
-              <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-lg font-medium mb-2">Drop your CSV file here</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                or click to browse. Supports Apify exports and standard CSV files.
-              </p>
-              <Label htmlFor="csv-upload">
-                <Button variant="outline" asChild>
-                  <span>Select CSV File</span>
-                </Button>
-              </Label>
               <Input
                 id="csv-upload"
                 type="file"
-                accept=".csv"
+                accept=".csv,text/csv,application/csv,text/comma-separated-values"
                 className="hidden"
                 onChange={handleInputChange}
               />
-            </div>
+              <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground pointer-events-none" />
+              <h3 className="text-lg font-medium mb-2 pointer-events-none">Drop your CSV file here</h3>
+              <p className="text-sm text-muted-foreground mb-4 pointer-events-none">
+                or click anywhere to browse. Supports Research Chat exports, Apify, and standard CSV.
+              </p>
+              <Button type="button" variant="outline" className="pointer-events-none" asChild>
+                <span>Select CSV File</span>
+              </Button>
+            </Label>
           )}
 
           {step === 'mapping' && csvData && (
