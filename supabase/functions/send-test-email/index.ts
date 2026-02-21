@@ -13,12 +13,13 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { 
-      testEmail, 
-      subject, 
-      body, 
-      senderConnectionId, 
-      recipientName, 
+    const payload = await req.json();
+    const {
+      testEmail: testEmailParam,
+      subject,
+      body,
+      senderConnectionId,
+      recipientName,
       recipientEmail,
       templateStyle,
       brandColor,
@@ -26,24 +27,40 @@ Deno.serve(async (req) => {
       companyName,
       footerText,
       signature,
-      provider, // Provider can be specified directly for API-key providers
-    } = await req.json();
-    
+      websiteUrl: payloadWebsiteUrl,
+      provider,
+    } = payload;
+
+    // Profile "Send Test Email" sends recipientEmail only; support both
+    const testEmail = testEmailParam ?? recipientEmail;
+
     console.log('Sending test email to:', testEmail, 'using provider:', provider);
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Get user
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      throw new Error('Authorization required');
+      return new Response(
+        JSON.stringify({ error: 'Not authenticated. Please sign in again.' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    
+
     if (userError || !user) {
-      throw new Error('Invalid authorization');
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired session. Please sign in again.' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!testEmail?.trim()) {
+      return new Response(
+        JSON.stringify({ error: 'No recipient email address provided.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Get sender connection (optional for API-key providers like Resend/SendGrid)
@@ -102,13 +119,13 @@ Deno.serve(async (req) => {
     // Get user profile for signature and business email
     const { data: userProfile } = await supabase
       .from('profiles')
-      .select('full_name, job_title, email')
+      .select('full_name, job_title, email, avatar_url')
       .eq('id', user.id)
       .single();
 
     const { data: businessProfile } = await supabase
       .from('business_profiles')
-      .select('company_name, email_provider')
+      .select('company_name, email_header_name, email_provider, email_sender_image_url, email_sender_name, email_sender_title, email_sender_email, website')
       .eq('user_id', user.id)
       .single();
 
@@ -313,21 +330,105 @@ This helps ensure your automated responses maintain a consistent and professiona
 
 If you're satisfied with how this looks, you're all set! Your auto-responses will use this template.`;
 
+      const websiteUrl = payloadWebsiteUrl ?? businessProfile?.website ?? undefined;
       const html = renderEmailTemplate(templateStyle, {
         body: sampleBody,
-        senderName: userProfile?.full_name || 'Test Sender',
-        senderEmail: recipientEmail,
-        senderTitle: userProfile?.job_title,
-        companyName: companyName || businessProfile?.company_name,
+        senderName: businessProfile?.email_sender_name || userProfile?.full_name || 'Test Sender',
+        senderEmail: businessProfile?.email_sender_email || userProfile?.email || user?.email || testEmail,
+        senderTitle: businessProfile?.email_sender_title || userProfile?.job_title,
+        companyName: businessProfile?.company_name,
+        headerName: companyName || businessProfile?.email_header_name || undefined,
         logoUrl,
         brandColor: brandColor || '#8b5cf6',
         footerText,
         signature,
+        senderImageUrl: businessProfile?.email_sender_image_url || userProfile?.avatar_url,
+        websiteUrl: websiteUrl || undefined,
       });
 
       let messageId;
-      
-      if (emailProvider === 'sendgrid' && SENDGRID_API_KEY) {
+
+      if (emailProvider === 'gmail_direct' || emailProvider === 'gmail') {
+        // Find Gmail connection for this user
+        let gmailConn = connection;
+        if (!gmailConn) {
+          const { data: gc } = await supabase
+            .from('crm_connections')
+            .select('*')
+            .eq('user_id', user.id)
+            .in('provider', ['gmail_direct', 'gmail'])
+            .eq('status', 'active')
+            .maybeSingle();
+          gmailConn = gc;
+        }
+        if (!gmailConn) {
+          throw new Error('Gmail connection not found. Please reconnect your Gmail account.');
+        }
+
+        const metadata = gmailConn.metadata as any;
+        let accessToken = metadata?.access_token;
+        const expiresAt = metadata?.expires_at;
+
+        if (expiresAt && new Date(expiresAt) <= new Date()) {
+          console.log('Gmail access token expired, refreshing...');
+          const refreshResponse = await supabase.functions.invoke('gmail-oauth-refresh', {
+            body: { connection_id: gmailConn.id }
+          });
+          if (refreshResponse.error || !refreshResponse.data?.access_token) {
+            throw new Error('Failed to refresh Gmail token. Please reconnect your Gmail account.');
+          }
+          accessToken = refreshResponse.data.access_token;
+        }
+        if (!accessToken) {
+          throw new Error('Gmail access token not found. Please reconnect your Gmail account.');
+        }
+
+        const fromEmail = gmailConn.from_email || userProfile?.email || user.email;
+        const fromName = companyName || userProfile?.full_name || 'CRM';
+        const boundary = '===============' + Math.random().toString().substr(2) + '==';
+        const emailLines = [
+          `From: "${fromName}" <${fromEmail}>`,
+          `To: ${testEmail}`,
+          `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent('🎨 Test Email - Your Email Template Preview')))}?=`,
+          'MIME-Version: 1.0',
+          `Content-Type: multipart/alternative; boundary="${boundary}"`,
+          '',
+          `--${boundary}`,
+          'Content-Type: text/plain; charset=utf-8',
+          '',
+          sampleBody,
+          `--${boundary}`,
+          'Content-Type: text/html; charset=utf-8',
+          '',
+          html,
+          `--${boundary}--`
+        ];
+
+        const emailMessage = emailLines.join('\r\n');
+        const encodedMessage = btoa(unescape(encodeURIComponent(emailMessage)))
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/, '');
+
+        const gmailResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ raw: encodedMessage }),
+        });
+
+        if (!gmailResponse.ok) {
+          const errorData = await gmailResponse.text();
+          console.error('Gmail API error:', errorData);
+          throw new Error(`Failed to send via Gmail: ${errorData}`);
+        }
+
+        const gmailData = await gmailResponse.json();
+        messageId = gmailData.id || 'gmail-sent';
+        console.log('Template test email sent via Gmail Direct:', messageId);
+      } else if (emailProvider === 'sendgrid' && SENDGRID_API_KEY) {
         const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
           method: 'POST',
           headers: {
@@ -336,7 +437,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
           },
           body: JSON.stringify({
             personalizations: [{
-              to: [{ email: recipientEmail }],
+              to: [{ email: testEmail }],
               subject: '🎨 Test Email - Your Email Template Preview',
             }],
             from: {
@@ -361,9 +462,14 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
         console.log('Template test email sent via SendGrid:', messageId);
       } else {
         if (!RESEND_API_KEY) {
-          throw new Error('Email provider not configured');
+          throw new Error('Email provider not configured. Please set up Gmail, Resend, or SendGrid.');
         }
         
+        const resendFrom = apiKeyConnection?.from_email || connection?.from_email;
+        if (!resendFrom) {
+          throw new Error('No verified sending domain configured for Resend. Add a verified domain at https://resend.com/domains or switch to Gmail in Settings > Email Provider.');
+        }
+
         const resendResponse = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -371,14 +477,8 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: apiKeyConnection?.from_email 
-              ? `${companyName || 'CRM'} <${apiKeyConnection.from_email}>` 
-              : connection?.from_email 
-                ? `${companyName || 'CRM'} <${connection.from_email}>` 
-                : userProfile?.email 
-                  ? `${companyName || 'CRM'} <${userProfile.email}>` 
-                  : `${companyName || 'CRM'} <onboarding@resend.dev>`,
-            to: [recipientEmail],
+            from: `${companyName || 'CRM'} <${resendFrom}>`,
+            to: [testEmail],
             subject: '🎨 Test Email - Your Email Template Preview',
             html,
           }),
@@ -425,6 +525,8 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
       senderEmail: connection?.from_email || (connection?.metadata as any)?.email || user.email || '',
       senderTitle: userProfile?.job_title,
       companyName: businessProfile?.company_name,
+      headerName: businessProfile?.email_header_name || undefined,
+      websiteUrl: businessProfile?.website ?? undefined,
     });
 
     // Send via configured provider

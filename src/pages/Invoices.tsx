@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -8,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Plus, Download, Sparkles, DollarSign, Calendar as CalendarIcon } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FileText, Plus, Download, Sparkles, DollarSign, Calendar as CalendarIcon, Trash2, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +22,10 @@ import InvoiceDetailsDialog from "@/components/InvoiceDetailsDialog";
 import SendInvoiceEmailDialog from "@/components/SendInvoiceEmailDialog";
 
 export default function Invoices() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [aiFormData, setAiFormData] = useState({
     companyId: "",
@@ -31,12 +38,18 @@ export default function Invoices() {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [sendEmailDialogOpen, setSendEmailDialogOpen] = useState(false);
 
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importJson, setImportJson] = useState("");
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const { data: invoices, isLoading } = useQuery({
-    queryKey: ["invoices"],
+    queryKey: ["invoices", user?.id],
     queryFn: async () => {
+      if (!user?.id) return [];
       const { data, error } = await supabase
         .from("invoices")
         .select(`
@@ -44,11 +57,13 @@ export default function Invoices() {
           companies(name),
           deals(title)
         `)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
       
       if (error) throw error;
       return data;
     },
+    enabled: !!user?.id,
   });
 
   const { data: companies } = useQuery({
@@ -109,6 +124,131 @@ export default function Invoices() {
       overdue: "destructive",
     };
     return <Badge variant={variants[status] || "outline"}>{status}</Badge>;
+  };
+
+  const toggleSelectAll = () => {
+    if (!invoices?.length) return;
+    if (selectedIds.length === invoices.length) setSelectedIds([]);
+    else setSelectedIds(invoices.map((inv: any) => inv.id));
+  };
+
+  const toggleSelectOne = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const deleteSelected = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (ids.length === 0) return ids.length;
+      const { error } = await supabase.from("invoices").delete().in("id", ids);
+      if (error) throw error;
+      return ids.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      setSelectedIds([]);
+      setDeleteDialogOpen(false);
+      toast({ title: "Deleted", description: `${count} invoice(s) removed.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleImportExternal = async () => {
+    if (!user?.id) {
+      toast({ title: "Error", description: "You must be signed in to import.", variant: "destructive" });
+      return;
+    }
+    setImporting(true);
+    try {
+      let rows: any[] = [];
+      if (importFile) {
+        const text = await importFile.text();
+        const ext = (importFile.name || "").toLowerCase();
+        if (ext.endsWith(".json")) {
+          const parsed = JSON.parse(text);
+          rows = Array.isArray(parsed) ? parsed : [parsed];
+        } else if (ext.endsWith(".csv")) {
+          const lines = text.split(/\r?\n/).filter(Boolean);
+          const header = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
+          for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(",").map((v) => v.trim());
+            const row: any = {};
+            header.forEach((h, j) => { row[h] = values[j] ?? ""; });
+            rows.push(row);
+          }
+        } else {
+          toast({ title: "Unsupported file", description: "Use .json or .csv", variant: "destructive" });
+          setImporting(false);
+          return;
+        }
+      } else if (importJson.trim()) {
+        const parsed = JSON.parse(importJson);
+        rows = Array.isArray(parsed) ? parsed : [parsed];
+      } else {
+        toast({ title: "No data", description: "Upload a file or paste JSON.", variant: "destructive" });
+        setImporting(false);
+        return;
+      }
+
+      const companyNameToId: Record<string, string> = {};
+      (companies || []).forEach((c: any) => { companyNameToId[c.name?.toLowerCase() || ""] = c.id; });
+
+      let inserted = 0;
+      for (const row of rows) {
+        const invoiceNumber = row.invoice_number || row.invoice_number || row["invoice number"] || `IMP-${Date.now()}-${inserted}`;
+        const invoiceType = (row.invoice_type || row.type || row.invoice_type || "invoice") as string;
+        const issueDate = row.issue_date || row.date || row.issue_date || format(new Date(), "yyyy-MM-dd");
+        const dueDate = row.due_date || row.due_date || row.due || issueDate;
+        const totalAmount = Number(row.total_amount ?? row.total ?? row.amount ?? row.total_amount ?? 0) || 0;
+        const subtotal = Number(row.subtotal ?? row.subtotal) || totalAmount;
+        const taxRate = Number(row.tax_rate ?? row.tax_rate) ?? 0;
+        const taxAmount = Number(row.tax_amount ?? row.tax_amount) ?? 0;
+        const status = (row.status || row.status || "draft") as string;
+        const companyName = (row.company_name || row.company || row.company_name || "").trim().toLowerCase();
+        const companyId = row.company_id || (companyName ? companyNameToId[companyName] : null) || null;
+
+        let lineItems = row.line_items;
+        if (typeof lineItems === "string") {
+          try { lineItems = JSON.parse(lineItems); } catch { lineItems = [{ description: "Imported item", quantity: 1, unitPrice: totalAmount, total: totalAmount }]; }
+        }
+        if (!Array.isArray(lineItems) || lineItems.length === 0) {
+          lineItems = [{ description: row.description || "Imported", quantity: 1, unitPrice: totalAmount, total: totalAmount }];
+        }
+
+        const { error } = await supabase.from("invoices").insert({
+          user_id: user.id,
+          invoice_number: invoiceNumber,
+          invoice_type: invoiceType,
+          issue_date: issueDate,
+          due_date: dueDate,
+          total_amount: totalAmount,
+          subtotal,
+          tax_rate: taxRate || null,
+          tax_amount: taxAmount || null,
+          line_items: lineItems,
+          status: status || "draft",
+          payment_status: row.payment_status || "unpaid",
+          company_id: companyId,
+          notes: row.notes || null,
+          terms: row.terms || null,
+          ai_generated: false,
+        });
+        if (!error) inserted++;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      setImportDialogOpen(false);
+      setImportFile(null);
+      setImportJson("");
+      if (importInputRef.current) importInputRef.current.value = "";
+      toast({ title: "Imported", description: `${inserted} invoice(s) imported.` });
+    } catch (e: any) {
+      toast({ title: "Import failed", description: e?.message || "Invalid file or JSON.", variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
   };
 
   const downloadInvoicePDF = (invoice: any) => {
@@ -326,8 +466,18 @@ export default function Invoices() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>All Invoices</CardTitle>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
+              <Upload className="mr-2 h-4 w-4" />Import
+            </Button>
+            {selectedIds.length > 0 && (
+              <Button variant="destructive" size="sm" onClick={() => setDeleteDialogOpen(true)}>
+                <Trash2 className="mr-2 h-4 w-4" />Delete ({selectedIds.length})
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -336,12 +486,51 @@ export default function Invoices() {
             <div className="text-center py-12">
               <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-4 text-lg font-semibold">No invoices yet</h3>
-              <p className="text-sm text-muted-foreground mt-2">Generate your first invoice with AI</p>
+              <p className="text-sm text-muted-foreground mt-2">Generate your first invoice with AI or import external invoices</p>
+              <div className="flex flex-wrap justify-center gap-2 mt-4">
+                <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+                  <Upload className="mr-2 h-4 w-4" />Import External Invoices
+                </Button>
+                <Button onClick={() => setAiDialogOpen(true)}>
+                  <Sparkles className="mr-2 h-4 w-4" />Generate with AI
+                </Button>
+              </div>
             </div>
           ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2 py-3 border-b">
+                <Checkbox
+                  id="inv-select-all"
+                  checked={invoices.length > 0 && selectedIds.length === invoices.length}
+                  onCheckedChange={toggleSelectAll}
+                  aria-label="Select all"
+                />
+                <Label htmlFor="inv-select-all" className="text-sm cursor-pointer">
+                  {selectedIds.length === invoices.length ? "Clear selection" : "Select all"}
+                </Label>
+                <span className="text-muted-foreground text-sm mx-1">|</span>
+                <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
+                  <Upload className="mr-2 h-4 w-4" />Import external
+                </Button>
+                {selectedIds.length > 0 && (
+                  <>
+                    <span className="text-muted-foreground text-sm mx-1">|</span>
+                    <Button variant="destructive" size="sm" onClick={() => setDeleteDialogOpen(true)}>
+                      <Trash2 className="mr-2 h-4 w-4" />Delete selected ({selectedIds.length})
+                    </Button>
+                  </>
+                )}
+              </div>
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={invoices.length > 0 && selectedIds.length === invoices.length}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
                   <TableHead>Invoice #</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead>Type</TableHead>
@@ -361,6 +550,13 @@ export default function Invoices() {
                       setDetailsDialogOpen(true);
                     }}
                   >
+                    <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.includes(invoice.id)}
+                        onCheckedChange={() => {}}
+                        onClick={(e) => toggleSelectOne(invoice.id, e)}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
                     <TableCell>{invoice.companies?.name || "N/A"}</TableCell>
                     <TableCell>
@@ -370,21 +566,94 @@ export default function Invoices() {
                     <TableCell>{getStatusBadge(invoice.status)}</TableCell>
                     <TableCell>{format(new Date(invoice.issue_date), "MMM d, yyyy")}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => downloadInvoicePDF(invoice)}
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => downloadInvoicePDF(invoice)}
+                          title="Download"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); setSelectedInvoice(invoice); setDeleteDialogOpen(true); setSelectedIds([invoice.id]); }}
+                          title="Delete"
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            </>
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete selected invoices?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {selectedIds.length} invoice(s). This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteSelected.mutate(selectedIds)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteSelected.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Import External Invoices</DialogTitle>
+            <DialogDescription>
+              Upload a JSON or CSV file, or paste JSON. Each row should include: invoice_number, invoice_type, issue_date, due_date, total_amount, status, and optionally company_name, company_id, line_items, notes, terms.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>File (.json or .csv)</Label>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".json,.csv"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  setImportFile(f || null);
+                  if (f) setImportJson("");
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Or paste JSON array</Label>
+              <Textarea
+                value={importJson}
+                onChange={(e) => setImportJson(e.target.value)}
+                placeholder='[{"invoice_number":"INV-001","invoice_type":"invoice","issue_date":"2026-01-01","due_date":"2026-01-31","total_amount":1000,"status":"draft"}]'
+                rows={6}
+                className="font-mono text-xs"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleImportExternal} disabled={importing || (!importFile && !importJson.trim())}>
+              {importing ? "Importing..." : "Import"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Invoice Details Dialog */}
       {selectedInvoice && (

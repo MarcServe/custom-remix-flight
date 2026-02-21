@@ -96,6 +96,66 @@ ${senderCompany}${senderEmail ? '\n' + senderEmail : ''}${senderPhone ? '\n' + s
     let systemPrompt: string;
     let userPrompt: string;
 
+    // Check if this is a newsletter generation request
+    if (requestBody.context === 'newsletter' && requestBody.prompt) {
+      console.log('Processing newsletter generation');
+      systemPrompt = `You are an expert newsletter copywriter. Write engaging, well-structured marketing newsletter content in HTML. 
+Use semantic HTML tags: <h2> for section headings, <p> for paragraphs, <strong> for emphasis, <ul>/<li> for lists.
+Structure the newsletter with 2-4 clearly separated sections, each with its own <h2> heading.
+Between sections, insert a placeholder comment <!-- IMAGE_PLACEHOLDER --> so the user knows where to add images.
+Do NOT include a subject line, greeting, or email signature — just the newsletter body content.
+Make the content informative, valuable, and action-oriented.`;
+
+      userPrompt = requestBody.prompt;
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('OpenAI API error:', response.status, errorText);
+        if (response.status === 429) throw new Error('Rate limit exceeded. Please try again later.');
+        if (response.status === 401 || response.status === 402) throw new Error('OpenAI API key invalid or billing issue.');
+        throw new Error(`OpenAI API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      let htmlContent = data.choices?.[0]?.message?.content || '';
+
+      // Strip markdown code fences if the model wrapped it
+      if (htmlContent.includes('```html')) {
+        htmlContent = htmlContent.split('```html')[1].split('```')[0].trim();
+      } else if (htmlContent.includes('```')) {
+        htmlContent = htmlContent.split('```')[1].split('```')[0].trim();
+      }
+
+      // Replace image placeholder comments with visible drop-zone divs
+      htmlContent = htmlContent.replace(
+        /<!--\s*IMAGE_PLACEHOLDER\s*-->/g,
+        '<div class="newsletter-image-slot" style="border:2px dashed #cbd5e1;border-radius:8px;padding:24px;text-align:center;margin:16px 0;color:#94a3b8;font-size:14px;">📷 Click "Insert Image" below to add an image here</div>'
+      );
+
+      console.log('Newsletter generated, length:', htmlContent.length);
+
+      return new Response(JSON.stringify({ generatedEmail: htmlContent }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Check if this is an invoice/quotation request (has 'type' field)
     if (requestBody.type) {
       const { context, type } = requestBody;

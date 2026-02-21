@@ -11,7 +11,7 @@ export function wrapEmailContent(bodyHtml: string, senderName: string, senderEma
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-      line-height: 1.6;
+      line-height: 1.4;
       color: #333;
       background-color: #f5f5f5;
       margin: 0;
@@ -19,25 +19,27 @@ export function wrapEmailContent(bodyHtml: string, senderName: string, senderEma
     }
     .email-container {
       max-width: 600px;
-      margin: 20px auto;
+      margin: 12px auto;
       background-color: #ffffff;
       border-radius: 8px;
       overflow: hidden;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
     .email-content {
-      padding: 30px;
+      padding: 18px 24px;
+      line-height: 1.4;
     }
-    .email-content p {
-      margin: 0 0 16px 0;
+    .email-content p, .email-content div {
+      margin: 0 0 8px 0;
     }
+    .email-content p:last-child, .email-content div:last-child { margin-bottom: 0; }
     .email-content ul,
     .email-content ol {
-      margin: 0 0 16px 0;
-      padding-left: 24px;
+      margin: 8px 0;
+      padding-left: 20px;
     }
     .email-content li {
-      margin-bottom: 8px;
+      margin-bottom: 4px;
     }
     .email-content strong {
       font-weight: 600;
@@ -47,18 +49,18 @@ export function wrapEmailContent(bodyHtml: string, senderName: string, senderEma
       font-style: italic;
     }
     .signature {
-      margin-top: 24px;
-      padding-top: 16px;
+      margin-top: 14px;
+      padding-top: 10px;
       border-top: 1px solid #e9ecef;
     }
     .signature-name {
       font-weight: 600;
       color: #333;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
     .signature-email {
       color: #6c757d;
-      font-size: 14px;
+      font-size: 13px;
     }
   </style>
 </head>

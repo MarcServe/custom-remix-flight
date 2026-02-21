@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send, Plus, UserPlus, Loader2, CheckCircle2, Filter, X, Clock, Tag, ChevronDown, Search, Trash2 } from "lucide-react";
+import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send, Plus, UserPlus, Loader2, CheckCircle2, Filter, X, Clock, Tag, ChevronDown, Search, Trash2, RefreshCw } from "lucide-react";
 import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
 import { PersonDetailsDialog } from "@/components/PersonDetailsDialog";
 import BulkEmailDialog from "@/components/BulkEmailDialog";
@@ -29,10 +30,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { EmailHistoryView } from "@/components/email/EmailHistoryView";
-import { SOURCE_TAG_LIST } from "@/lib/company-sources";
+import { getCompanySource, SOURCE_TAG_LIST } from "@/lib/company-sources";
 
 export default function People() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const { allSuggestions } = useCompanyTags();
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -45,10 +47,15 @@ export default function People() {
   const [selectedIndustryFilters, setSelectedIndustryFilters] = useState<string[]>([]);
   const [selectedCampaignFilter, setSelectedCampaignFilter] = useState<string | null>(null);
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string | null>(null);
+  const [groupByCategory, setGroupByCategory] = useState(true);
   const [expandedEmailHistory, setExpandedEmailHistory] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  
+  const [openedFromDraft, setOpenedFromDraft] = useState(false);
+  useEffect(() => {
+    setOpenedFromDraft(!!window.opener);
+  }, []);
+
   const { data: people, isLoading, refetch } = useQuery({
     queryKey: ["people"],
     queryFn: async () => {
@@ -59,6 +66,37 @@ export default function People() {
       return data || [];
     },
   });
+
+  const SELECTED_PEOPLE_IDS_KEY = 'leadgenie_selected_people_ids';
+  const hasRestoredPeopleSelection = useRef(false);
+
+  // Restore selected people IDs from localStorage when people first load
+  useEffect(() => {
+    if (!people?.length || hasRestoredPeopleSelection.current) return;
+    hasRestoredPeopleSelection.current = true;
+    try {
+      const raw = localStorage.getItem(SELECTED_PEOPLE_IDS_KEY);
+      if (!raw) return;
+      const ids = JSON.parse(raw) as string[];
+      if (Array.isArray(ids) && ids.length > 0) {
+        const validIds = ids.filter(id => people.some(p => p.id === id));
+        if (validIds.length > 0) {
+          setSelectedPeopleIds(new Set(validIds));
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [people]);
+
+  // Persist selected people IDs to localStorage when selection changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(SELECTED_PEOPLE_IDS_KEY, JSON.stringify(Array.from(selectedPeopleIds)));
+    } catch {
+      // ignore
+    }
+  }, [selectedPeopleIds]);
 
   // Fetch email campaign history for all people
   const { data: emailHistory, error: emailHistoryError } = useQuery({
@@ -568,6 +606,20 @@ export default function People() {
     [categoryOptions]
   );
 
+  // Group filtered people by category/source for display (when groupByCategory is true)
+  const peopleGroupedByCategory = useMemo(() => {
+    if (!groupByCategory || !filteredPeople?.length) return null;
+    const groups: Record<string, typeof filteredPeople> = {};
+    const order = [...SOURCE_TAG_LIST, "Other"];
+    order.forEach((label) => { groups[label] = []; });
+    for (const person of filteredPeople) {
+      const source = getCompanySource(person.companies || {}) || "Other";
+      if (!groups[source]) groups[source] = [];
+      groups[source].push(person);
+    }
+    return order.filter((label) => (groups[label]?.length ?? 0) > 0).map((label) => ({ label, people: groups[label] }));
+  }, [groupByCategory, filteredPeople]);
+
   // Debug logging when filtering by tags but no results
   if (selectedTagFilters.length > 0 && filteredPeople.length === 0 && people && people.length > 0) {
     console.warn('[People Filter] ⚠️ No people matched the selected tags:', selectedTagFilters);
@@ -620,6 +672,20 @@ export default function People() {
     });
   };
 
+  const toggleCategoryGroupSelection = (personIds: string[], e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedPeopleIds(prev => {
+      const newSet = new Set(prev);
+      const allSelected = personIds.every(id => newSet.has(id));
+      if (allSelected) {
+        personIds.forEach(id => newSet.delete(id));
+      } else {
+        personIds.forEach(id => newSet.add(id));
+      }
+      return newSet;
+    });
+  };
+
   const selectablePeople = filteredPeople?.filter(p => p.email) || [];
 
   const toggleSelectAll = () => {
@@ -642,6 +708,89 @@ export default function People() {
       }
       return newSet;
     });
+  };
+
+  // NEW badge only for people added within the last 24 hours
+  const isPersonNew = (person: { created_at?: string | null }) => {
+    if (!person?.created_at) return false;
+    const createdDate = new Date(person.created_at);
+    const hoursSinceCreation = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60);
+    return hoursSinceCreation <= 24;
+  };
+
+  const renderPersonCard = (person: typeof filteredPeople[0]) => {
+    const fullName = `${person.first_name || ""} ${person.last_name || ""}`.trim() || person.email || "Unknown";
+    const isSelected = selectedPeopleIds.has(person.id);
+    const isNew = isPersonNew(person);
+    return (
+      <Card
+        key={person.id}
+        className={`cursor-pointer transition-all hover:shadow-md ${isSelected ? "ring-2 ring-primary border-primary" : ""}`}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("button")) return;
+          setSelectedPerson(person);
+          setDetailsDialogOpen(true);
+        }}
+      >
+        <CardHeader className="pb-2">
+          <div className="flex items-start gap-3">
+            <div onClick={(e) => { e.stopPropagation(); togglePersonSelection(person.id); }}>
+              <Checkbox checked={isSelected} />
+            </div>
+            <Avatar className="h-10 w-10">
+              <AvatarFallback className="bg-primary/10 text-primary">
+                {(person.first_name?.[0] || person.last_name?.[0] || person.email?.[0] || "?").toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium truncate">{fullName}</span>
+                {isNew && (
+                  <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/20">
+                    NEW
+                  </Badge>
+                )}
+              </div>
+              {person.email && (
+                <p className="text-xs text-muted-foreground truncate">{person.email}</p>
+              )}
+              {person.companies?.name && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                  <Briefcase className="h-3 w-3" />
+                  {person.companies.name}
+                </p>
+              )}
+              {person.created_at && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Added {format(new Date(person.created_at), "MMM d, yyyy 'at' h:mm a")}
+                </p>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={(e) => { e.stopPropagation(); setSelectedPerson(person); setDetailsDialogOpen(true); }}
+            >
+              View Details
+            </Button>
+            {person.email && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); /* could open send email */ }}
+              >
+                <Mail className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
 
   // Debug logging
@@ -681,16 +830,97 @@ export default function People() {
               </div>
             </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap w-full sm:w-auto">
-              {/* Always visible Bulk Email button - opens dialog even without selections */}
-              <Button 
-                onClick={() => setBulkEmailDialogOpen(true)} 
-                size="lg"
-                variant={selectedPeopleIds.size > 0 ? "default" : "outline"}
-                className="w-full sm:w-auto"
-              >
-                <Send className="mr-2 h-4 w-4" />
-                {selectedPeopleIds.size > 0 ? `Bulk Send (${selectedPeopleIds.size})` : "Send Bulk Email"}
-              </Button>
+              {openedFromDraft && selectedPeopleIds.size > 0 ? (
+                <>
+                  <Button
+                    variant="default"
+                    size="lg"
+                    className="w-full sm:w-auto"
+                    onClick={() => {
+                      try {
+                        window.opener?.postMessage?.(
+                          { type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" },
+                          window.location.origin
+                        );
+                        toast({ title: "Added to campaign", description: "Return to the campaign tab to see the updated recipient list." });
+                      } catch {
+                        toast({ title: "Could not reach campaign tab", variant: "destructive" });
+                      }
+                    }}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add to campaign
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="lg"
+                    className="w-full sm:w-auto"
+                    onClick={() => {
+                      try {
+                        window.opener?.postMessage?.(
+                          { type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" },
+                          window.location.origin
+                        );
+                        toast({ title: "Campaign list replaced", description: "Return to the campaign tab to see the updated recipient list." });
+                      } catch {
+                        toast({ title: "Could not reach campaign tab", variant: "destructive" });
+                      }
+                    }}
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Replace campaign list
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full sm:w-auto"
+                    onClick={() => setBulkEmailDialogOpen(true)}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    {selectedPeopleIds.size > 0 ? `Send new campaign (${selectedPeopleIds.size})` : "Send new campaign"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button 
+                    onClick={() => setBulkEmailDialogOpen(true)} 
+                    size="lg"
+                    variant={selectedPeopleIds.size > 0 ? "default" : "outline"}
+                    className="w-full sm:w-auto"
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    {selectedPeopleIds.size > 0 ? `Bulk Send (${selectedPeopleIds.size})` : "Send Bulk Email"}
+                  </Button>
+                  {selectedPeopleIds.size > 0 && (
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="w-full sm:w-auto"
+                      onClick={async () => {
+                        const selected = people?.filter(p => selectedPeopleIds.has(p.id) && p.email) || [];
+                        if (selected.length === 0) {
+                          toast({ title: "No emails", description: "None of the selected people have email addresses.", variant: "destructive" });
+                          return;
+                        }
+                        const prepared = selected.map((p: any) => ({
+                          id: p.id,
+                          first_name: p.first_name ?? '',
+                          last_name: p.last_name ?? '',
+                          email: p.email,
+                          company_id: p.company_id,
+                          companies: p.companies ? { id: p.companies.id, name: p.companies.name, tags: p.companies.tags || [] } : undefined,
+                        }));
+                        localStorage.setItem('leadgenie_draft_recipients', JSON.stringify(prepared));
+                        navigate("/campaigns?tab=drafts", { state: { addToDraft: true } });
+                        toast({ title: "Continue with draft", description: `${prepared.length} recipient(s) will be added to a draft.` });
+                      }}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add to draft
+                    </Button>
+                  )}
+                </>
+              )}
               {selectedPeopleIds.size > 0 && (
                 <>
                   {(() => {
@@ -752,15 +982,27 @@ export default function People() {
           </div>
           <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             {people && people.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="select-all"
-                  checked={selectedPeopleIds.size === selectablePeople.length && selectablePeople.length > 0}
-                  onCheckedChange={toggleSelectAll}
-                />
-                <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                  Select all
-                </label>
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="select-all"
+                    checked={selectedPeopleIds.size === selectablePeople.length && selectablePeople.length > 0}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                  <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                    Select all
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="group-by-category"
+                    checked={groupByCategory}
+                    onCheckedChange={(checked) => setGroupByCategory(!!checked)}
+                  />
+                  <label htmlFor="group-by-category" className="text-sm font-medium cursor-pointer">
+                    Group by category
+                  </label>
+                </div>
               </div>
             )}
             
@@ -920,164 +1162,38 @@ export default function People() {
       </div>
 
       {filteredPeople && filteredPeople.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredPeople.map((person) => {
-            if (!person || !person.id) return null;
-            
-            const personTags = ((person as any).tags && Array.isArray((person as any).tags)) ? (person as any).tags : [];
-            const companyTags = (person.companies?.tags && Array.isArray(person.companies.tags)) ? person.companies.tags : [];
-            const allPersonTags = [...personTags, ...companyTags];
-            const personEmailHistory = (emailHistory && person.id) ? (emailHistory[person.id] || []) : [];
-            const hasEmailHistory = personEmailHistory.length > 0;
-            const isEmailHistoryExpanded = person.id ? expandedEmailHistory.has(person.id) : false;
-            
-            return (
-            <Card 
-              key={person.id || `person-${Math.random()}`} 
-              className="transition-all hover:shadow-md border-2 relative"
-            >
-              <div 
-                className="absolute top-4 left-4 z-10"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Checkbox
-                  checked={person.id ? selectedPeopleIds.has(person.id) : false}
-                  onCheckedChange={() => {
-                    if (person.id) {
-                      togglePersonSelection(person.id);
-                    }
-                  }}
-                  disabled={!person.email || !person.id}
-                />
-              </div>
-              <div 
-                className="cursor-pointer"
-                onClick={() => {
-                  setSelectedPerson(person);
-                  setDetailsDialogOpen(true);
-                }}
-              >
-                <CardHeader>
-                  <div className="flex items-start gap-4 pl-8">
-                    <Avatar className="h-12 w-12">
-                      <AvatarFallback className="bg-gradient-primary text-white font-semibold">
-                        {person.first_name?.[0] || ''}
-                        {person.last_name?.[0] || ''}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 space-y-1">
-                      <CardTitle className="text-lg flex items-center gap-2 flex-wrap">
-                        {person.first_name || ''} {person.last_name || ''}
-                        {person.email && (
-                          <Badge variant="outline" className="text-xs">
-                            Has Email
-                          </Badge>
-                        )}
-                        {hasEmailHistory && (
-                          <Badge variant="secondary" className="text-xs">
-                            {personEmailHistory.length} Email{personEmailHistory.length > 1 ? 's' : ''}
-                          </Badge>
-                        )}
-                      </CardTitle>
-                      <p className="text-sm text-muted-foreground">{person.title}</p>
-                      {allPersonTags.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          <TagBadges tags={allPersonTags} maxDisplay={5} onClick={(tag) => {
-                            if (!selectedTagFilters.includes(tag)) {
-                              setSelectedTagFilters([...selectedTagFilters, tag]);
-                            }
-                          }} />
-                        </div>
-                      )}
-                      {companyTags.length > 0 && personTags.length === 0 && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Company tags: {companyTags.slice(0, 3).join(', ')}{companyTags.length > 3 ? '...' : ''}
-                        </p>
-                      )}
-                      {person.created_at && (() => {
-                        try {
-                          const createdDate = new Date(person.created_at);
-                          if (!isNaN(createdDate.getTime())) {
-                            return (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Added: {format(createdDate, 'MMM d, yyyy')}
-                              </p>
-                            );
-                          }
-                        } catch (e) {
-                          return null;
-                        }
-                        return null;
-                      })()}
-                    </div>
+        groupByCategory && peopleGroupedByCategory && peopleGroupedByCategory.length > 0 ? (
+          <div className="space-y-6">
+            {peopleGroupedByCategory.map(({ label, people: sectionPeople }) => {
+              const sectionIds = sectionPeople.filter((p) => p.id && p.email).map((p) => p.id as string);
+              const allSelected = sectionIds.length > 0 && sectionIds.every((id) => selectedPeopleIds.has(id));
+              return (
+                <div key={label} className="space-y-3">
+                  <div
+                    className="flex items-center gap-2 cursor-pointer group rounded-md py-1.5 px-1 -mx-1 hover:bg-muted/50"
+                    onClick={(e) => toggleCategoryGroupSelection(sectionIds, e)}
+                  >
+                    <Checkbox checked={allSelected} onCheckedChange={() => {}} />
+                    <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2 flex-1">
+                      {label}
+                      <Badge variant="secondary" className="text-xs">{sectionPeople.length}</Badge>
+                    </h3>
+                    <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                      {allSelected ? "Deselect all" : "Select all"}
+                    </span>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {person.companies?.name && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Briefcase className="h-4 w-4" />
-                      {person.companies.name}
-                    </div>
-                  )}
-                  {person.email && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <a
-                        href={`mailto:${person.email}`}
-                        className="text-primary hover:underline truncate"
-                      >
-                        {person.email}
-                      </a>
-                    </div>
-                  )}
-                  {person.phone && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Phone className="h-4 w-4" />
-                      {person.phone}
-                    </div>
-                  )}
-                  {person.linkedin_url && (
-                    <a
-                      href={person.linkedin_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-primary hover:underline"
-                    >
-                      <Linkedin className="h-4 w-4" />
-                      LinkedIn Profile
-                    </a>
-                  )}
-                  {person.email && (
-                    <Button
-                      variant={person.id && selectedPeopleIds.has(person.id) ? "default" : "outline"}
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (person.id) {
-                          togglePersonSelection(person.id);
-                        }
-                      }}
-                    >
-                      {selectedPeopleIds.has(person.id) ? "Added to Contact List" : "Add to Contact List"}
-                    </Button>
-                  )}
-                  
-                  {/* Email History - Enhanced with Intelligent Separation */}
-                  {hasEmailHistory && (
-                    <div className="mt-2">
-                      <EmailHistoryView 
-                        personId={person.id}
-                        showFilters={false}
-                        maxItems={10}
-                      />
-                    </div>
-                  )}
-                </CardContent>
-              </div>
-            </Card>
-            );
-          })}
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {sectionPeople.map((person) => renderPersonCard(person))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredPeople.map((person) => renderPersonCard(person))}
         </div>
+        )
       ) : (
         <Card className="border-2 border-dashed">
           <CardContent className="py-12 text-center">

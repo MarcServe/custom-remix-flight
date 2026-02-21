@@ -48,6 +48,7 @@ export function SendEmailDialog({
   const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
   const [selectedPersona, setSelectedPersona] = useState<MarketingPersona | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [senderProfileId, setSenderProfileId] = useState<string>("");
   const { toast } = useToast();
   const { allSuggestions } = useCompanyTags();
 
@@ -75,6 +76,22 @@ export function SendEmailDialog({
         .eq('user_id', user.id)
         .maybeSingle();
       return data;
+    },
+  });
+
+  const { data: senderProfiles = [] } = useQuery({
+    queryKey: ['sender-profiles-single'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('sender_profiles')
+        .select('id, name, display_name, sender_name, sender_email')
+        .eq('user_id', user.id)
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return data || [];
     },
   });
 
@@ -171,6 +188,7 @@ export function SendEmailDialog({
           companyId,
           contactId,
           sender,
+          sender_profile_id: senderProfileId || undefined,
           enableAutoResponder,
           attachments: attachments.length > 0 ? attachments : undefined,
           tags: selectedTags.length > 0 ? selectedTags : undefined,
@@ -309,6 +327,36 @@ export function SendEmailDialog({
                   ✓ Direct SMTP delivery • No tracking
                 </p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Sender Profile</Label>
+              <Select value={senderProfileId || 'default'} onValueChange={(v) => setSenderProfileId(v === 'default' ? '' : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose sender profile" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">
+                    <div className="flex flex-col">
+                      <span className="font-medium">Default</span>
+                      <span className="text-xs text-muted-foreground">{businessProfile?.company_name || 'Your company'}</span>
+                    </div>
+                  </SelectItem>
+                  {senderProfiles.map((p: any) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{p.display_name || p.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {p.sender_name || p.name}{p.sender_email ? ` · ${p.sender_email}` : ''}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Brand identity, name, and logo shown to recipients. Manage profiles in Email Branding.
+              </p>
             </div>
 
             <div className="flex items-center justify-between space-x-2 p-4 rounded-lg border bg-muted/50">

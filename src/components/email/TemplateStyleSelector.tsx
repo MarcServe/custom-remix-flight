@@ -23,6 +23,14 @@ export const EMAIL_TEMPLATE_STYLES = {
     name: "Corporate",
     description: "Traditional & Trustworthy - Enterprise-level professional styling",
   },
+  bold: {
+    name: "Bold",
+    description: "High contrast & strong typography - Dark theme, accent bar",
+  },
+  elegant: {
+    name: "Elegant",
+    description: "Refined & timeless - Serif typography, subtle accents",
+  },
 } as const;
 
 export type EmailTemplateStyle = keyof typeof EMAIL_TEMPLATE_STYLES;

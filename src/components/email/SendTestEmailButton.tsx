@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
+import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 import { Send, Loader2 } from 'lucide-react';
 
@@ -11,6 +12,7 @@ interface SendTestEmailButtonProps {
   companyName?: string;
   footerText?: string;
   signature?: string;
+  websiteUrl?: string;
 }
 
 export function SendTestEmailButton({
@@ -20,28 +22,28 @@ export function SendTestEmailButton({
   companyName,
   footerText,
   signature,
+  websiteUrl,
 }: SendTestEmailButtonProps) {
   const [sending, setSending] = useState(false);
 
   const handleSendTest = async () => {
     try {
       setSending(true);
-      
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) {
         throw new Error('No email address found');
       }
 
-      const { error } = await supabase.functions.invoke('send-test-email', {
-        body: {
-          templateStyle,
-          brandColor,
-          logoUrl,
-          companyName,
-          footerText,
-          signature,
-          recipientEmail: user.email,
-        },
+      const { data, error } = await apiClient.callFunction('send-test-email', {
+        templateStyle,
+        brandColor,
+        logoUrl,
+        companyName,
+        footerText,
+        signature,
+        websiteUrl,
+        recipientEmail: user.email,
       });
 
       if (error) throw error;
@@ -51,7 +53,7 @@ export function SendTestEmailButton({
       });
     } catch (error: any) {
       toast.error('Failed to send test email', {
-        description: error.message,
+        description: error?.message ?? 'Not authenticated or email provider not configured. Sign in again or set RESEND_API_KEY in Supabase Edge Function secrets.',
       });
     } finally {
       setSending(false);

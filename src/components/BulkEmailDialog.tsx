@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, forwardRef, useImperativeHandle } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText } from "lucide-react";
+import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { PersonaSelector, type MarketingPersona } from "./email/PersonaSelector";
 import { TagInput } from "@/components/ui/tag-input";
@@ -21,8 +21,34 @@ import { useCompanyTags } from "@/hooks/use-company-tags";
 import { RichTextEditor } from "./email/RichTextEditor";
 import { EmailTemplateSelector, EMAIL_TEMPLATES, type EmailTemplate } from "./email/EmailTemplateSelector";
 import { FileAttachmentSelector } from "./email/FileAttachmentSelector";
+import { EmailTemplatePreview, type EmailTemplatePreviewStyle } from "./email/EmailTemplatePreview";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
+
+export interface BulkEmailDialogHandle {
+  addRecipientsFromSelection: () => Promise<void>;
+  replaceRecipientsWithSelection: () => Promise<void>;
+}
+
+function previewBodyToHtml(text: string): string {
+  const raw = (text || '').trim();
+  if (!raw) return '';
+  if (raw.includes('<p>') || raw.includes('<div') || raw.includes('<ul') || raw.includes('<ol')) return raw;
+  const blocks = raw.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
+  const out: string[] = [];
+  for (const block of blocks) {
+    const lines = block.split(/\n/).map((l) => l.trimEnd());
+    const listMatch = lines.every((l) => /^(\s*)([-*•]\s*|(\d+\.)\s)/.test(l) || l === '');
+    if (listMatch && lines.some(Boolean)) {
+      const items = lines.filter(Boolean).map((l) => l.replace(/^(\s*)([-*•]\s*|(\d+\.)\s)/, '').trim());
+      if (items.length) out.push('<ul style="margin:8px 0;padding-left:20px;">' + items.map((i) => `<li style="margin-bottom:4px;">${i.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</li>`).join('') + '</ul>');
+    } else {
+      const para = lines.map((l) => l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')).join('<br>');
+      if (para) out.push(`<p style="margin:0 0 8px 0;line-height:1.4;">${para}</p>`);
+    }
+  }
+  return out.join('');
+}
 
 interface BulkEmailDialogProps {
   open: boolean;
@@ -42,7 +68,7 @@ interface BulkEmailDialogProps {
   initialDraftId?: string | null; // Optional: draft ID to auto-load when dialog opens
 }
 
-export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, initialDraftId }: BulkEmailDialogProps) {
+const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(function BulkEmailDialog({ open, onOpenChange, selectedPeople, initialDraftId }, ref) {
   const { toast } = useToast();
   const { allSuggestions } = useCompanyTags();
   const [campaignName, setCampaignName] = useState("");
@@ -51,6 +77,7 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
   const [bodyText, setBodyText] = useState("");
   const [sender, setSender] = useState<'gmail' | 'gmail_direct' | 'resend' | 'smtp' | 'sendgrid'>('resend');
   const [senderConnectionId, setSenderConnectionId] = useState<string>("");
+  const [senderProfileId, setSenderProfileId] = useState<string>("");
   const [sending, setSending] = useState(false);
   const [aiContext, setAiContext] = useState("");
   const [generatingAi, setGeneratingAi] = useState(false);
@@ -66,6 +93,8 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
   const [template, setTemplate] = useState<EmailTemplate>('blank');
   const [attachments, setAttachments] = useState<any[]>([]);
   const [enableAutoResponder, setEnableAutoResponder] = useState(false);
+  const [autoFollowUpEnabled, setAutoFollowUpEnabled] = useState(true);
+  const [followUpSequenceId, setFollowUpSequenceId] = useState<string>("");
   const [generatingPersonalized, setGeneratingPersonalized] = useState(false);
   const [personalizedEmails, setPersonalizedEmails] = useState<Record<string, { subject: string; bodyHtml: string; bodyText: string }>>({});
   const [usePersonalizedEmails, setUsePersonalizedEmails] = useState(false);
@@ -144,19 +173,9 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
   });
 
   // Get recipients to use (filtered by tags and excluded campaigns)
-  // Note: This must be after excludedRecipients query but before duplicateRecipients query
-  // When a draft is loaded (draftId exists), use filteredRecipients which includes draft recipients
-  // Otherwise, use selectedPeople when no tag filters, or filteredRecipients when tag filters are active
+  // Always use filteredRecipients so the list is editable (add/remove) in the dialog
   const recipientsToUse = useMemo(() => {
-    let baseRecipients: typeof selectedPeople;
-    
-    // If draft is loaded, always use filteredRecipients (includes draft recipients + newly added people)
-    // Otherwise, use selectedPeople when no tag filters, or filteredRecipients when tag filters are active
-    if (draftId) {
-      baseRecipients = filteredRecipients;
-    } else {
-      baseRecipients = selectedTags.length > 0 ? filteredRecipients : selectedPeople;
-    }
+    let baseRecipients = filteredRecipients;
     
     // Filter out recipients from excluded campaigns
     if (excludedRecipients && excludedRecipients.size > 0) {
@@ -174,7 +193,7 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
     }
     
     return baseRecipients;
-  }, [selectedTags, filteredRecipients, selectedPeople, excludedRecipients, draftId]);
+  }, [filteredRecipients, excludedRecipients]);
 
   // Check for duplicate emails (people who already received emails in previous campaigns)
   const { data: duplicateRecipients } = useQuery({
@@ -268,12 +287,27 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
       
       const { data } = await supabase
         .from('business_profiles')
-        .select('company_name, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_signature')
+        .select('company_name, email_header_name, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_signature, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_sender_title, email_sender_email, website')
         .eq('user_id', user.id)
         .maybeSingle();
       return data;
     },
   });
+
+  const { data: userProfile } = useQuery({
+    queryKey: ['user-profile-preview'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name, job_title, email, avatar_url')
+        .eq('id', user.id)
+        .maybeSingle();
+      return data;
+    },
+  });
+
   // Fetch draft campaigns for loading
   const { data: draftCampaigns } = useQuery({
     queryKey: ['draft-campaigns'],
@@ -283,7 +317,7 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
 
       const { data, error } = await supabase
         .from('email_campaigns')
-        .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, scheduled_at, tags')
+        .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id')
         .eq('user_id', user.id)
         .eq('status', 'draft')
         .order('updated_at', { ascending: false })
@@ -294,6 +328,40 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
         return [];
       }
 
+      return data || [];
+    },
+    enabled: open,
+  });
+
+  // Email sequences for campaign auto follow-up (reminders when no response)
+  const { data: followUpSequences = [] } = useQuery({
+    queryKey: ['email-sequences-follow-up'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('email_sequences')
+        .select('id, name')
+        .order('name');
+      if (error) return [];
+      return data || [];
+    },
+    enabled: open,
+  });
+
+  // Sender profiles for "Send as" (e.g. TALKWEB, Biz Boosters)
+  const { data: senderProfiles = [] } = useQuery({
+    queryKey: ['sender-profiles-bulk'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('sender_profiles')
+        .select('id, name, display_name, logo_url, brand_color, sender_name, sender_email, sender_title, template_style, footer_text, signature, footer_image_url, footer_logo_url, sender_image_url, website_url')
+        .eq('user_id', user.id)
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true });
+      if (error) throw error;
       return data || [];
     },
     enabled: open,
@@ -321,13 +389,61 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
   // Track previous selectedPeople to detect when new people are added while dialog is open
   const prevSelectedPeopleRef = useRef<typeof selectedPeople>(selectedPeople);
   const hasAutoLoadedDraft = useRef(false);
+  const hasRestoredLocalDraft = useRef(false);
+  const BULK_EMAIL_DRAFT_KEY = 'leadgenie_bulk_email_draft';
+
+  const draftSnapshotRef = useRef({
+    campaignName: '',
+    subject: '',
+    bodyHtml: '',
+    bodyText: '',
+    senderConnectionId: '',
+    senderProfileId: '',
+    selectedTags: [] as string[],
+    scheduleEnabled: false,
+    scheduledDate: null as string | null,
+    scheduledTime: '09:00',
+    scheduledTimezone: 'UTC',
+    autoFollowUpEnabled: true,
+    followUpSequenceId: '',
+  });
+
+  useEffect(() => {
+    draftSnapshotRef.current = {
+      campaignName,
+      subject,
+      bodyHtml,
+      bodyText,
+      senderConnectionId,
+      senderProfileId,
+      selectedTags,
+      scheduleEnabled,
+      scheduledDate: scheduledDate?.toISOString() ?? null,
+      scheduledTime,
+      scheduledTimezone,
+      autoFollowUpEnabled,
+      followUpSequenceId,
+    };
+  }, [campaignName, subject, bodyHtml, bodyText, senderConnectionId, senderProfileId, selectedTags, scheduleEnabled, scheduledDate, scheduledTime, scheduledTimezone, autoFollowUpEnabled, followUpSequenceId]);
 
   useEffect(() => {
     if (!open) {
       setDraftId(null);
       setLoadDraftOpen(false);
       prevSelectedPeopleRef.current = selectedPeople;
-      hasAutoLoadedDraft.current = false; // Reset when dialog closes
+      hasAutoLoadedDraft.current = false;
+      hasRestoredLocalDraft.current = false;
+      localStorage.removeItem('leadgenie_draft_recipients');
+      // Persist current form to localStorage on close (so we can restore later)
+      try {
+        const payload = {
+          ...draftSnapshotRef.current,
+          savedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(BULK_EMAIL_DRAFT_KEY, JSON.stringify(payload));
+      } catch {
+        // ignore
+      }
     } else {
       // When dialog opens, initialize filteredRecipients with selectedPeople
       if (prevSelectedPeopleRef.current.length === 0 && selectedPeople.length > 0) {
@@ -342,8 +458,71 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
         });
       }
       prevSelectedPeopleRef.current = selectedPeople;
+      // Restore draft from localStorage when opening without a server draft
+      if (!initialDraftId && !hasRestoredLocalDraft.current) {
+        hasRestoredLocalDraft.current = true;
+        const t = setTimeout(() => {
+          try {
+            const raw = localStorage.getItem(BULK_EMAIL_DRAFT_KEY);
+            if (!raw) return;
+            const data = JSON.parse(raw) as typeof draftSnapshotRef.current & { savedAt?: string };
+            const hasContent = (data.campaignName?.trim() || data.subject?.trim() || data.bodyText?.trim());
+            if (!hasContent) return;
+            setCampaignName(data.campaignName || '');
+            setSubject(data.subject || '');
+            setBodyHtml(data.bodyHtml || '');
+            setBodyText(data.bodyText || '');
+            if (data.senderConnectionId) setSenderConnectionId(data.senderConnectionId);
+            if (data.senderProfileId) setSenderProfileId(data.senderProfileId);
+            if (Array.isArray(data.selectedTags)) setSelectedTags(data.selectedTags);
+            setScheduleEnabled(!!data.scheduleEnabled);
+            setScheduledDate(data.scheduledDate ? new Date(data.scheduledDate) : undefined);
+            setScheduledTime(data.scheduledTime || '09:00');
+            if (data.scheduledTimezone) setScheduledTimezone(data.scheduledTimezone);
+            setAutoFollowUpEnabled(data.autoFollowUpEnabled !== false);
+            setFollowUpSequenceId(data.followUpSequenceId || '');
+            toast({ title: 'Draft restored', description: 'Your previous campaign has been restored from this device.' });
+          } catch {
+            // ignore
+          }
+        }, 300);
+        return () => clearTimeout(t);
+      }
     }
-  }, [open, selectedPeople]);
+  }, [open, selectedPeople, initialDraftId, toast]);
+
+  // Debounced persist to localStorage while dialog is open
+  useEffect(() => {
+    if (!open) return;
+    const id = setTimeout(() => {
+      try {
+        const payload = {
+          ...draftSnapshotRef.current,
+          savedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(BULK_EMAIL_DRAFT_KEY, JSON.stringify(payload));
+      } catch {
+        // ignore
+      }
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [open, campaignName, subject, bodyHtml, bodyText, senderConnectionId, senderProfileId, selectedTags, scheduleEnabled, scheduledDate, scheduledTime, scheduledTimezone, autoFollowUpEnabled, followUpSequenceId]);
+
+  // Persist to localStorage on page unload (e.g. tab close) so draft is not lost
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      try {
+        localStorage.setItem(BULK_EMAIL_DRAFT_KEY, JSON.stringify({
+          ...draftSnapshotRef.current,
+          savedAt: new Date().toISOString(),
+        }));
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   // Auto-load draft when initialDraftId is provided
   useEffect(() => {
@@ -356,7 +535,7 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
 
           const { data: draftData, error } = await supabase
             .from('email_campaigns')
-            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, scheduled_at, tags')
+            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id')
             .eq('id', initialDraftId)
             .eq('status', 'draft')
             .single();
@@ -500,13 +679,27 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
   });
 
   // Filter recipients by selected tags (check both person tags and company tags)
+  // Only applies tag filtering on top of the current filteredRecipients base.
+  // When no tags are selected, restore the full base list (selectedPeople if non-empty,
+  // otherwise keep whatever was loaded via Add/Replace/draft).
+  const prevTagsRef = useRef<string[]>([]);
+  const unfilteredRecipientsRef = useRef<typeof selectedPeople>(filteredRecipients);
+
   useEffect(() => {
+    if (selectedTags.length === 0 && prevTagsRef.current.length > 0) {
+      setFilteredRecipients(unfilteredRecipientsRef.current);
+    }
     if (selectedTags.length === 0) {
-      setFilteredRecipients(selectedPeople);
+      prevTagsRef.current = selectedTags;
       return;
     }
+    prevTagsRef.current = selectedTags;
+    // Snapshot the base list before filtering so we can restore it when tags are cleared
+    if (selectedTags.length > 0) {
+      unfilteredRecipientsRef.current = filteredRecipients.length > 0 ? filteredRecipients : selectedPeople;
+    }
+    const base = unfilteredRecipientsRef.current;
 
-    // Get company IDs that match selected tags
     const matchingCompanyIds = new Set(
       (companiesWithTags || [])
         .filter(company => {
@@ -516,20 +709,15 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
         .map(company => company.id)
     );
 
-    // Filter people whose companies OR person tags match the selected tags
-    const filtered = selectedPeople.filter((person: any) => {
-      // Check person's own tags
+    const filtered = base.filter((person: any) => {
       const personTags = person.tags || [];
       const hasPersonTag = selectedTags.some(tag => personTags.includes(tag));
-      
-      // Check company tags
       const hasCompanyTag = person.company_id && matchingCompanyIds.has(person.company_id);
-      
       return hasPersonTag || hasCompanyTag;
     });
 
     setFilteredRecipients(filtered);
-  }, [selectedTags, selectedPeople, companiesWithTags]);
+  }, [selectedTags, companiesWithTags]);
 
   // Personalize text with variables (case-insensitive to match {{firstName}}, {{FirstName}}, etc.)
   const personalizeText = (template: string, person: typeof selectedPeople[0]) => {
@@ -733,9 +921,6 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Use filteredRecipients when draft is loaded, otherwise use selectedPeople/filteredRecipients based on tag filters
-      const recipientsToUse = draftId ? filteredRecipients : (selectedTags.length > 0 ? filteredRecipients : selectedPeople);
-      
       // Get user profile and business profile for signature
       const { data: userProfile } = await supabase
         .from('profiles')
@@ -819,9 +1004,12 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
             body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
             body_text_template: bodyText,
             sender_connection_id: senderConnectionId,
+            sender_profile_id: senderProfileId || null,
             scheduled_at: scheduledAt,
             total_recipients: recipientsToUse.length,
             tags: campaignTags,
+            auto_follow_up_enabled: autoFollowUpEnabled,
+            follow_up_sequence_id: followUpSequenceId || null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', draftId);
@@ -869,10 +1057,13 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
             body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
             body_text_template: bodyText,
             sender_connection_id: senderConnectionId,
+            sender_profile_id: senderProfileId || null,
             status: 'draft',
             scheduled_at: scheduledAt,
             total_recipients: recipientsToUse.length,
             tags: campaignTags,
+            auto_follow_up_enabled: autoFollowUpEnabled,
+            follow_up_sequence_id: followUpSequenceId || null,
           })
           .select()
           .single();
@@ -967,6 +1158,7 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
       setBodyHtml(loadedBodyHtml);
       setBodyText(loadedBodyText);
       setSenderConnectionId(draft.sender_connection_id || '');
+      setSenderProfileId(draft.sender_profile_id || '');
       setDraftId(draft.id);
       
       if (draft.scheduled_at) {
@@ -980,6 +1172,9 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
       if (draft.tags && Array.isArray(draft.tags)) {
         setSelectedTags(draft.tags);
       }
+
+      setAutoFollowUpEnabled(draft.auto_follow_up_enabled !== false);
+      setFollowUpSequenceId(draft.follow_up_sequence_id || "");
 
       // Load recipients
       const { data: recipients, error: recipientsError } = await supabase
@@ -1026,6 +1221,163 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
     }
   };
 
+  const [replacingRecipients, setReplacingRecipients] = useState(false);
+
+  type Recipient = { id: string; first_name: string; last_name: string; email: string; company_id?: string; companies?: { id?: string; name?: string; tags?: string[] } };
+
+  const resolveRecipientsFromLocalStorage = async (): Promise<Recipient[] | null> => {
+    const preparedRaw = localStorage.getItem('leadgenie_draft_recipients');
+    if (preparedRaw) {
+      let list: Recipient[] = [];
+      try { list = JSON.parse(preparedRaw); } catch { list = []; }
+      if (list.length > 0) return list;
+    }
+
+    const personIdsRaw = localStorage.getItem('leadgenie_selected_people_ids');
+    const companyIdsRaw = localStorage.getItem('leadgenie_selected_company_ids');
+    const personIds: string[] = personIdsRaw ? JSON.parse(personIdsRaw) : [];
+    const companyIds: string[] = companyIdsRaw ? JSON.parse(companyIdsRaw) : [];
+
+    if (personIds.length === 0 && companyIds.length === 0) return null;
+
+    const merged: Recipient[] = [];
+    const seen = new Set<string>();
+
+    if (personIds.length > 0) {
+      const { data: byPerson } = await supabase
+        .from('people')
+        .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
+        .in('id', personIds);
+      if (byPerson) {
+        for (const p of byPerson as any[]) {
+          if (p.email && !seen.has(p.email.toLowerCase().trim())) {
+            seen.add(p.email.toLowerCase().trim());
+            merged.push({ id: p.id, first_name: p.first_name ?? '', last_name: p.last_name ?? '', email: p.email, company_id: p.company_id, companies: p.companies });
+          }
+        }
+      }
+    }
+
+    if (companyIds.length > 0) {
+      const { data: { user } } = await supabase.auth.getUser();
+      // Fetch people already linked to these companies
+      const { data: byCompany } = await supabase
+        .from('people')
+        .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
+        .in('company_id', companyIds)
+        .not('email', 'is', null);
+      if (byCompany) {
+        for (const p of byCompany as any[]) {
+          if (p.email && !seen.has(p.email.toLowerCase().trim())) {
+            seen.add(p.email.toLowerCase().trim());
+            merged.push({ id: p.id, first_name: p.first_name ?? '', last_name: p.last_name ?? '', email: p.email, company_id: p.company_id, companies: p.companies });
+          }
+        }
+      }
+      // Also resolve company-level emails (general_email / contacts) that don't have person records yet
+      const { data: companiesData } = await supabase
+        .from('companies')
+        .select('id, name, tags, general_email, contacts(*)')
+        .in('id', companyIds);
+      if (companiesData) {
+        for (const company of companiesData as any[]) {
+          const contactWithEmail = company.contacts?.find((c: any) => c.email);
+          const companyEmail = contactWithEmail?.email || company.general_email;
+          if (!companyEmail || seen.has(companyEmail.toLowerCase().trim())) continue;
+          // Try to find or create a person record for this email
+          const { data: existPerson } = await supabase.from('people').select('id, first_name, last_name, email, company_id, companies(id, name, tags)').ilike('email', companyEmail).maybeSingle();
+          if (existPerson) {
+            if (existPerson.company_id !== company.id) await supabase.from('people').update({ company_id: company.id }).eq('id', existPerson.id);
+            seen.add(existPerson.email.toLowerCase().trim());
+            merged.push({ id: existPerson.id, first_name: existPerson.first_name ?? '', last_name: existPerson.last_name ?? '', email: existPerson.email, company_id: company.id, companies: existPerson.companies ?? { id: company.id, name: company.name, tags: company.tags || [] } });
+          } else if (user) {
+            const nameParts = contactWithEmail?.name ? contactWithEmail.name.trim().split(' ') : company.name.trim().split(' ');
+            const { data: newP } = await supabase.from('people').insert({ first_name: nameParts[0] || company.name, last_name: nameParts.slice(1).join(' ') || '', email: companyEmail, company_id: company.id, user_id: user.id }).select('id, first_name, last_name, email, company_id').single();
+            if (newP) {
+              seen.add(newP.email.toLowerCase().trim());
+              merged.push({ id: newP.id, first_name: newP.first_name ?? '', last_name: newP.last_name ?? '', email: newP.email, company_id: company.id, companies: { id: company.id, name: company.name, tags: company.tags || [] } });
+            }
+          }
+        }
+      }
+    }
+
+    return merged;
+  };
+
+  const replaceRecipientsWithSelection = async () => {
+    setReplacingRecipients(true);
+    try {
+      const resolved = await resolveRecipientsFromLocalStorage();
+      if (resolved === null) {
+        toast({
+          title: "Open Companies or People to select recipients",
+          description: "A new tab will open. Select companies or people there, then return here and click Replace again to load them.",
+        });
+        const path = window.location.pathname;
+        const basePath = path !== '/' && path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+        const companiesUrl = window.location.origin + (basePath ? basePath + '/' : '/') + 'companies';
+        window.open(companiesUrl, '_blank');
+        return;
+      }
+      setFilteredRecipients(resolved);
+      unfilteredRecipientsRef.current = resolved;
+      setSelectedTags([]);
+      toast({
+        title: "Recipients updated",
+        description: `Replaced with ${resolved.length} recipient(s) from your current selection. Save draft to keep this list.`,
+      });
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message ?? "Failed to load selection", variant: "destructive" });
+    } finally {
+      setReplacingRecipients(false);
+    }
+  };
+
+  const removeRecipient = (personId: string) => {
+    setFilteredRecipients((prev) => prev.filter((p) => p.id !== personId));
+  };
+
+  const addRecipientsFromSelection = async () => {
+    setReplacingRecipients(true);
+    try {
+      const resolved = await resolveRecipientsFromLocalStorage();
+      if (resolved === null) {
+        toast({
+          title: "Select recipients first",
+          description: "Open Companies or People, select contacts, then return here and click Add.",
+        });
+        const path = window.location.pathname;
+        const basePath = path !== '/' && path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+        const companiesUrl = window.location.origin + (basePath ? basePath + '/' : '/') + 'companies';
+        window.open(companiesUrl, '_blank');
+        return;
+      }
+      const existingEmails = new Set(filteredRecipients.map((p) => p.email?.toLowerCase().trim()));
+      const newRecipients = resolved.filter((p) => !existingEmails.has(p.email?.toLowerCase().trim()));
+      setFilteredRecipients((prev) => {
+        const updated = newRecipients.length === 0 ? prev : [...prev, ...newRecipients];
+        unfilteredRecipientsRef.current = updated;
+        return updated;
+      });
+      toast({
+        title: "Recipients added",
+        description: newRecipients.length
+          ? `Added ${newRecipients.length} recipient(s) from your selection.`
+          : "No new recipients (all were already in the list).",
+      });
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message ?? "Failed to load selection", variant: "destructive" });
+    } finally {
+      setReplacingRecipients(false);
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    addRecipientsFromSelection,
+    replaceRecipientsWithSelection,
+  }), [addRecipientsFromSelection, replaceRecipientsWithSelection]);
+
   const handleSendTest = async () => {
     if (!testEmailAddress.trim()) {
       toast({
@@ -1045,8 +1397,6 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
       return;
     }
 
-    const recipientsToUse = selectedTags.length > 0 ? filteredRecipients : selectedPeople;
-    
     if (recipientsToUse.length === 0) {
       toast({
         title: "No recipients",
@@ -1127,7 +1477,8 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
           bodyHtml: testBodyHtml,
           bodyText: testBodyText,
           sender,
-          senderConnectionId: senderConnectionId || undefined, // Pass the specific connection ID
+          senderConnectionId: senderConnectionId || undefined,
+          sender_profile_id: senderProfileId || undefined, // Same profile as preview so test email matches inbox
           attachments: attachments.length > 0 ? attachments : undefined,
         },
       });
@@ -1183,8 +1534,6 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
       return;
     }
 
-    const recipientsToUse = selectedTags.length > 0 ? filteredRecipients : selectedPeople;
-    
     if (recipientsToUse.length === 0) {
       toast({
         title: "No recipients",
@@ -1306,10 +1655,13 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
             body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
             body_text_template: bodyText,
             sender_connection_id: senderConnectionId,
+            sender_profile_id: senderProfileId || null,
             status: campaignStatus,
             scheduled_at: scheduledAt,
             total_recipients: recipientsToUse.length,
             tags: campaignTags,
+            auto_follow_up_enabled: autoFollowUpEnabled,
+            follow_up_sequence_id: followUpSequenceId || null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', draftId)
@@ -1335,10 +1687,13 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
             body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
             body_text_template: bodyText,
             sender_connection_id: senderConnectionId,
+            sender_profile_id: senderProfileId || null,
             status: campaignStatus,
             scheduled_at: scheduledAt,
             total_recipients: recipientsToUse.length,
             tags: campaignTags,
+            auto_follow_up_enabled: autoFollowUpEnabled,
+            follow_up_sequence_id: followUpSequenceId || null,
           })
           .select()
           .single();
@@ -1425,6 +1780,7 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
       setBodyHtml("");
       setBodyText("");
       setSenderConnectionId("");
+      setSenderProfileId("");
       setSelectedTags([]);
       setTemplate('blank');
       setAttachments([]);
@@ -1441,8 +1797,15 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
           return 'UTC';
         }
       });
+      setAutoFollowUpEnabled(true);
+      setFollowUpSequenceId("");
       setExcludedCampaignIds([]);
       setDraftId(null);
+      try {
+        localStorage.removeItem(BULK_EMAIL_DRAFT_KEY);
+      } catch {
+        // ignore
+      }
 
     } catch (error: any) {
       console.error('Error creating campaign:', error);
@@ -1456,7 +1819,7 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
     }
   };
 
-  const previewPerson = selectedPeople[0];
+  const previewPerson = recipientsToUse[0];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1929,6 +2292,36 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
             )}
           </div>
 
+          <div className="space-y-2">
+            <Label>Sender Profile</Label>
+            <Select value={senderProfileId || 'default'} onValueChange={(v) => setSenderProfileId(v === 'default' ? '' : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose sender profile" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">
+                  <div className="flex flex-col">
+                    <span className="font-medium">Default</span>
+                    <span className="text-xs text-muted-foreground">{businessProfile?.company_name || 'Your company'}</span>
+                  </div>
+                </SelectItem>
+                {senderProfiles.map((p: any) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{p.display_name || p.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {p.sender_name || p.name}{p.sender_email ? ` · ${p.sender_email}` : ''}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Brand identity, name, and logo shown to recipients. Manage profiles in Email Branding.
+            </p>
+          </div>
+
           <div className="flex items-center justify-between space-x-2 p-4 rounded-lg border bg-muted/50">
             <div className="flex items-center gap-3">
               <Bot className="h-5 w-5 text-primary" />
@@ -2100,6 +2493,51 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
             )}
           </div>
 
+          {/* Auto follow-up: reminders when no response */}
+          <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-0.5">
+                <Label htmlFor="auto-follow-up" className="cursor-pointer font-medium">
+                  Auto follow-up
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Send reminder emails when recipients don&apos;t respond (via sequence)
+                </p>
+              </div>
+              <Switch
+                id="auto-follow-up"
+                checked={autoFollowUpEnabled}
+                onCheckedChange={setAutoFollowUpEnabled}
+                disabled={sending || generatingAi}
+              />
+            </div>
+            {autoFollowUpEnabled && (
+              <div className="space-y-2 pt-2">
+                <Label>Follow-up sequence</Label>
+                <Select
+                  value={followUpSequenceId || "none"}
+                  onValueChange={(v) => setFollowUpSequenceId(v === "none" ? "" : v)}
+                  disabled={sending || generatingAi}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select sequence for reminders..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No follow-up sequence</SelectItem>
+                    {followUpSequences.map((seq: { id: string; name: string }) => (
+                      <SelectItem key={seq.id} value={seq.id}>
+                        {seq.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Recipients who don&apos;t reply will get follow-up steps from this sequence (no-reply rules apply).
+                </p>
+              </div>
+            )}
+          </div>
+
           <EmailTemplateSelector
             value={template}
             onChange={setTemplate}
@@ -2198,38 +2636,155 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
             Use variables like {'{{firstName}}'}, {'{{lastName}}'}, {'{{fullName}}'} to personalize emails. Signature will be added automatically.
             </p>
 
-          {previewPerson && (
-            <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Info className="h-4 w-4" />
-                Preview for {previewPerson.first_name} {previewPerson.last_name}
-              </div>
-              <div className="space-y-2 text-sm">
-                <div>
-                  <strong>Subject:</strong>{' '}
-                  {personalizeText(subject, previewPerson) || 'No subject'}
+          {previewPerson && (() => {
+            const sp = senderProfiles.find(p => p.id === senderProfileId);
+            // When a sender profile is selected (e.g. TalkWeb), use that profile's branding and signature; otherwise use business (default)
+            const previewTemplate: EmailTemplatePreviewStyle =
+              (sp?.template_style as EmailTemplatePreviewStyle) ||
+              (businessProfile?.email_template_style as EmailTemplatePreviewStyle) ||
+              'professional';
+            const previewBrandColor = sp?.brand_color || businessProfile?.email_brand_color || '#4b5cf6';
+            const previewLogoUrl = sp?.logo_url || businessProfile?.email_logo_url || undefined;
+            const previewHeaderName = sp?.display_name || businessProfile?.email_header_name || undefined;
+            const previewCompanyName = businessProfile?.company_name || undefined;
+            const previewSenderName = sp?.sender_name || businessProfile?.email_sender_name || userProfile?.full_name || 'John Doe';
+            const previewSenderTitle = sp?.sender_title || businessProfile?.email_sender_title || userProfile?.job_title || '';
+            const previewSenderEmail = sp?.sender_email || businessProfile?.email_sender_email || userProfile?.email || '';
+            const previewFooterText = sp?.footer_text || businessProfile?.email_footer_text || undefined;
+            // Footer image = company logo (same as Email Branding). Founder image = person photo in signature.
+            const previewFooterImage = sp?.footer_logo_url || sp?.logo_url || businessProfile?.email_footer_logo_url || businessProfile?.email_logo_url || undefined;
+            const previewWebsiteUrl = sp?.website_url || businessProfile?.website || undefined;
+            const previewSenderImageUrl = sp?.sender_image_url || businessProfile?.email_sender_image_url || userProfile?.avatar_url || undefined;
+            const previewFounderImageUrl = sp?.footer_image_url || businessProfile?.email_footer_image_url || undefined;
+            const previewSignature = (sp?.signature ?? businessProfile?.email_signature ?? '')?.trim() || undefined;
+            const previewSubject = personalizeText(subject, previewPerson) || 'No subject';
+            const previewBody = personalizeText(bodyHtml || previewBodyToHtml(bodyText), previewPerson) || '<p>Your email body will appear here...</p>';
+
+            return (
+              <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Eye className="h-4 w-4" />
+                  Preview for {previewPerson.first_name} {previewPerson.last_name}
+                  {sp && <Badge variant="secondary" className="text-xs">{sp.name}</Badge>}
                 </div>
-                <div>
-                  <strong>Body:</strong>
-                  <div className="mt-1 whitespace-pre-wrap text-muted-foreground" dangerouslySetInnerHTML={{ __html: personalizeText(bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`, previewPerson) || 'No body' }} />
+                <div className="text-sm">
+                  <div className="mb-2">
+                    <strong>Subject:</strong> {previewSubject}
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-3 overflow-auto max-h-[500px]">
+                  <EmailTemplatePreview
+                    template={previewTemplate}
+                    brandColor={previewBrandColor}
+                    logoUrl={previewLogoUrl}
+                    companyName={previewCompanyName}
+                    headerName={previewHeaderName}
+                    senderName={previewSenderName}
+                    senderTitle={previewSenderTitle}
+                    senderEmail={previewSenderEmail}
+                    footerText={previewFooterText}
+                    footerImageUrl={previewFooterImage}
+                    senderImageUrl={previewSenderImageUrl}
+                    founderImageUrl={previewFounderImageUrl}
+                    websiteUrl={previewWebsiteUrl}
+                    signature={previewSignature}
+                    bodyHtml={previewBody}
+                  />
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div className="rounded-lg border p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <User className="h-4 w-4" />
-              <span className="text-sm font-medium">Selected Recipients</span>
-              <Badge variant="secondary">{selectedPeople.length}</Badge>
+            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4" />
+                <span className="text-sm font-medium">Selected Recipients</span>
+                <Badge variant="secondary">{recipientsToUse.length}</Badge>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addRecipientsFromSelection}
+                  disabled={replacingRecipients}
+                  className="shrink-0"
+                  title="Merge your selection into the current list"
+                >
+                  {replacingRecipients ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4 mr-1" />
+                  )}
+                  Add
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={replaceRecipientsWithSelection}
+                  disabled={replacingRecipients}
+                  title="Replace the entire list with your selection"
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Replace All
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => {
+                    window.open(window.location.origin + '/companies', '_blank');
+                    toast({ title: "Companies page opened", description: "Select companies, then return here and click Add or Replace All." });
+                  }}
+                >
+                  Open Companies
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => {
+                    window.open(window.location.origin + '/people', '_blank');
+                    toast({ title: "People page opened", description: "Select people, then return here and click Add or Replace All." });
+                  }}
+                >
+                  Open People
+                </Button>
+              </div>
             </div>
             <div className="max-h-32 overflow-y-auto space-y-1">
-              {selectedPeople.map((person) => (
-                <div key={person.id} className="text-sm text-muted-foreground">
-                  {person.first_name} {person.last_name} {person.email && `(${person.email})`}
+              {recipientsToUse.map((person) => (
+                <div
+                  key={person.id}
+                  className="flex items-center justify-between gap-2 py-1 pr-1 rounded hover:bg-muted/50 group"
+                >
+                  <span className="text-sm text-muted-foreground truncate min-w-0">
+                    {person.first_name} {person.last_name}
+                    {person.email && (
+                      <span className="text-muted-foreground/80"> ({person.email})</span>
+                    )}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 opacity-70 hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => removeRecipient(person.id)}
+                    aria-label={`Remove ${person.first_name} ${person.last_name}`}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
                 </div>
               ))}
             </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Use <Plus className="h-3 w-3 inline" /> Add to merge from Companies/People; use <Minus className="h-3 w-3 inline" /> to remove from the list.
+              {draftId && " Save draft to keep changes."}
+            </p>
             </div>
           </div>
         </div>
@@ -2322,18 +2877,18 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
               />
               </div>
 
-              {(selectedTags.length > 0 ? filteredRecipients : selectedPeople).length > 1 && (
+              {recipientsToUse.length > 1 && (
                 <div className="space-y-2">
                   <Label htmlFor="test_recipient">Test With Recipient (Optional)</Label>
                   <Select
-                    value={testRecipientId || (selectedTags.length > 0 ? filteredRecipients[0]?.id : selectedPeople[0]?.id) || ''}
+                    value={testRecipientId || recipientsToUse[0]?.id || ''}
                     onValueChange={(value) => setTestRecipientId(value)}
                   >
                     <SelectTrigger id="test_recipient">
                       <SelectValue placeholder="Select recipient..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {(selectedTags.length > 0 ? filteredRecipients : selectedPeople).map((person) => {
+                      {recipientsToUse.map((person) => {
                         const hasPersonalized = usePersonalizedEmails && personalizedEmails[person.id];
                         return (
                           <SelectItem key={person.id} value={person.id}>
@@ -2356,8 +2911,8 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
                   <p className="text-xs text-muted-foreground">
                     {(() => {
                       const selectedRecipient = testRecipientId 
-                        ? (selectedTags.length > 0 ? filteredRecipients : selectedPeople).find(p => p.id === testRecipientId)
-                        : (selectedTags.length > 0 ? filteredRecipients : selectedPeople)[0];
+                        ? recipientsToUse.find(p => p.id === testRecipientId)
+                        : recipientsToUse[0];
                       const hasPersonalized = selectedRecipient && usePersonalizedEmails && personalizedEmails[selectedRecipient.id];
                       return hasPersonalized 
                         ? `✓ Will send personalized email for ${selectedRecipient?.first_name} ${selectedRecipient?.last_name}`
@@ -2475,4 +3030,6 @@ export default function BulkEmailDialog({ open, onOpenChange, selectedPeople, in
       </DialogContent>
     </Dialog>
   );
-}
+});
+
+export default BulkEmailDialog;

@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2, Search } from "lucide-react";
+import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2, Search, Plus, RefreshCw } from "lucide-react";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
 import BulkEmailDialog from "@/components/BulkEmailDialog";
@@ -25,6 +26,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
+import { format } from "date-fns";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,8 +41,12 @@ import { useToast } from "@/hooks/use-toast";
 import type { Company } from "@/lib/api/companies";
 import { getCompanySource, SOURCE_TAG_LIST } from "@/lib/company-sources";
 
+/** Virtual tag category for filtering companies that have no tags (and no suggestedTags from enrichment) */
+const UNTAGGED_CATEGORY = "No tags";
+
 export default function Companies() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -173,24 +179,12 @@ export default function Companies() {
     return peopleEmails.has(emailMatch.email.toLowerCase());
   };
 
-  // Intelligently determine if a company should show as "NEW"
+  // NEW badge only for companies added within the last 24 hours
   const isCompanyNew = (company: Company) => {
     if (!company.created_at) return false;
-    
     const createdDate = new Date(company.created_at);
-    const updatedDate = company.updated_at ? new Date(company.updated_at) : null;
-    const now = new Date();
-    
-    // Check if created within last 7 days
-    const daysSinceCreation = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
-    const isRecentlyCreated = daysSinceCreation <= 7;
-    
-    // Check if updated within last 7 days (and update was more recent than creation)
-    const isRecentlyUpdated = updatedDate && 
-      (now.getTime() - updatedDate.getTime()) / (1000 * 60 * 60 * 24) <= 7 &&
-      updatedDate.getTime() > createdDate.getTime();
-    
-    return isRecentlyCreated || isRecentlyUpdated;
+    const hoursSinceCreation = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60);
+    return hoursSinceCreation <= 24;
   };
 
   // Bulk email extraction state
@@ -743,6 +737,20 @@ export default function Companies() {
     });
   };
 
+  const toggleSourceGroupSelection = (companyIds: string[], e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedCompanyIds(prev => {
+      const newSet = new Set(prev);
+      const allSelected = companyIds.every(id => newSet.has(id));
+      if (allSelected) {
+        companyIds.forEach(id => newSet.delete(id));
+      } else {
+        companyIds.forEach(id => newSet.add(id));
+      }
+      return newSet;
+    });
+  };
+
   // Add selected companies to Enrichment Queue (for re-enrichment / email extraction)
   const addToEnrichmentMutation = useMutation({
     mutationFn: async (companyIds: string[]) => {
@@ -827,6 +835,41 @@ export default function Companies() {
       });
     },
   });
+
+  const SELECTED_COMPANY_IDS_KEY = 'leadgenie_selected_company_ids';
+  const hasRestoredCompanySelection = useRef(false);
+  const [openedFromDraft, setOpenedFromDraft] = useState(false);
+  useEffect(() => {
+    setOpenedFromDraft(!!window.opener);
+  }, []);
+
+  // Restore selected company IDs from localStorage when companies first load
+  useEffect(() => {
+    if (!companies?.length || hasRestoredCompanySelection.current) return;
+    hasRestoredCompanySelection.current = true;
+    try {
+      const raw = localStorage.getItem(SELECTED_COMPANY_IDS_KEY);
+      if (!raw) return;
+      const ids = JSON.parse(raw) as string[];
+      if (Array.isArray(ids) && ids.length > 0) {
+        const validIds = ids.filter(id => companies.some(c => c.id === id));
+        if (validIds.length > 0) {
+          setSelectedCompanyIds(new Set(validIds));
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [companies]);
+
+  // Persist selected company IDs to localStorage when selection changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(SELECTED_COMPANY_IDS_KEY, JSON.stringify(Array.from(selectedCompanyIds)));
+    } catch {
+      // ignore
+    }
+  }, [selectedCompanyIds]);
 
   // Get all unique tags from currently loaded companies (intelligent tags)
   // Extract from both company.tags AND enrichment_data.suggestedTags
@@ -917,10 +960,11 @@ export default function Companies() {
 
   // Prioritize intelligent tags from actual company data over generic defaults
   const combinedSuggestions = useMemo(() => {
-    // Combine: prioritize actual company tags, then add presets and defaults
+    // Combine: virtual "No tags" category first, then actual company tags, then presets and defaults
     const combined = new Set<string>();
+    combined.add(UNTAGGED_CATEGORY);
     
-    // First add all tags from actual companies (intelligent tags)
+    // Add all tags from actual companies (intelligent tags)
     const intelligentTags = Array.from(allCompanyTagsFromData);
     intelligentTags.forEach(tag => combined.add(tag));
     
@@ -1081,55 +1125,25 @@ export default function Companies() {
         // Combine both sources - tags from column AND suggestedTags from enrichment
         const allCompanyTags = [...companyTags, ...suggestedTags];
         const selectedTagsLower = selectedTagFilters.map(tag => tag.trim().toLowerCase()).filter(Boolean);
-        
-        // Debug first few companies when filtering
-        if (companies.indexOf(company) < 3) {
-          console.log('[Filter] Company tag check:', {
-            name: company.name,
-            companyTags: companyTags,
-            suggestedTags: suggestedTags,
-            allCompanyTags: allCompanyTags,
-            selectedTags: selectedTagFilters,
-            selectedTagsLower: selectedTagsLower,
-            hasEnrichmentData: !!enrichmentData
-          });
-        }
-        
-        // Use OR logic with partial matching: company matches if it has ANY of the selected tags
-        // Also support partial matches (e.g., "translation" matches "translation service")
-        // Normalize tags by trimming and lowercasing, but keep special characters for exact matching
-        const normalizeTag = (tag: string) => tag
-          .toLowerCase()
-          .trim()
-          .replace(/\s+/g, ' '); // Normalize multiple spaces to single space
-        
-        const normalizedCompanyTags = allCompanyTags.map(normalizeTag);
-        const normalizedSelectedTags = selectedTagsLower.map(normalizeTag);
-        
-        const tagMatch = normalizedSelectedTags.length > 0 && normalizedSelectedTags.some(selectedTag => {
-          // Exact match (normalized)
-          if (normalizedCompanyTags.includes(selectedTag)) {
-            if (companies.indexOf(company) < 3) {
-              console.log(`[Filter] ✅ Exact match found for "${selectedTag}" in company "${company.name}"`);
-            }
-            return true;
-          }
-          
-          // Partial match - check if any company tag contains the selected tag or vice versa
-          const partialMatch = normalizedCompanyTags.some(companyTag => 
-            companyTag.includes(selectedTag) || selectedTag.includes(companyTag)
+        const untaggedSelected = selectedTagsLower.includes(UNTAGGED_CATEGORY.toLowerCase());
+        const companyHasNoTags = allCompanyTags.length === 0;
+        const otherSelectedTags = selectedTagsLower.filter(t => t !== UNTAGGED_CATEGORY.toLowerCase());
+
+        // Match "No tags" category (companies without any tags), or match any of the other selected tags (OR logic)
+        const matchNoTags = untaggedSelected && companyHasNoTags;
+        let matchOtherTags = false;
+        if (otherSelectedTags.length > 0) {
+          const normalizeTag = (tag: string) => tag.toLowerCase().trim().replace(/\s+/g, ' ');
+          const normalizedCompanyTags = allCompanyTags.map(normalizeTag);
+          matchOtherTags = otherSelectedTags.some(selectedTag =>
+            normalizedCompanyTags.includes(selectedTag) ||
+            normalizedCompanyTags.some(companyTag =>
+              companyTag.includes(selectedTag) || selectedTag.includes(companyTag)
+            )
           );
-          
-          if (partialMatch && companies.indexOf(company) < 3) {
-            console.log(`[Filter] ✅ Partial match found for "${selectedTag}" in company "${company.name}"`);
-          }
-          
-          return partialMatch;
-        });
-        
-        if (!tagMatch) {
-          return false;
         }
+        const tagMatch = matchNoTags || matchOtherTags;
+        if (!tagMatch) return false;
       }
 
     // Email status filter
@@ -2264,16 +2278,124 @@ export default function Companies() {
                           )}
                         </Button>
                       )}
-                      {/* Always visible Bulk Email button - opens grouping preview then compose */}
-                      <Button
-                        variant={companiesWithEmail.length > 0 ? "default" : "outline"}
-                        size="sm"
-                        onClick={openGroupingOrBulkEmail}
-                        disabled={bulkExtractEmailMutation.isPending}
-                      >
-                        <Mail className="h-4 w-4 mr-1" />
-                        {companiesWithEmail.length > 0 ? `Send Bulk Email (${companiesWithEmail.length})` : "Send Bulk Email"}
-                      </Button>
+                      {/* When opened from draft/campaign: prioritize Add/Replace to campaign */}
+                      {openedFromDraft ? (
+                        <>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              try {
+                                window.opener?.postMessage?.(
+                                  { type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" },
+                                  window.location.origin
+                                );
+                                toast({ title: "Added to campaign", description: "Return to the campaign tab to see the updated recipient list." });
+                              } catch {
+                                toast({ title: "Could not reach campaign tab", variant: "destructive" });
+                              }
+                            }}
+                            disabled={companiesWithEmail.length === 0}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add to campaign
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              try {
+                                window.opener?.postMessage?.(
+                                  { type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" },
+                                  window.location.origin
+                                );
+                                toast({ title: "Campaign list replaced", description: "Return to the campaign tab to see the updated recipient list." });
+                              } catch {
+                                toast({ title: "Could not reach campaign tab", variant: "destructive" });
+                              }
+                            }}
+                            disabled={companiesWithEmail.length === 0}
+                          >
+                            <RefreshCw className="h-4 w-4 mr-1" />
+                            Replace campaign list
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={openGroupingOrBulkEmail}
+                            disabled={bulkExtractEmailMutation.isPending}
+                          >
+                            <Mail className="h-4 w-4 mr-1" />
+                            {companiesWithEmail.length > 0 ? `Send new campaign (${companiesWithEmail.length})` : "Send new campaign"}
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            variant={companiesWithEmail.length > 0 ? "default" : "outline"}
+                            size="sm"
+                            onClick={openGroupingOrBulkEmail}
+                            disabled={bulkExtractEmailMutation.isPending}
+                          >
+                            <Mail className="h-4 w-4 mr-1" />
+                            {companiesWithEmail.length > 0 ? `Send Bulk Email (${companiesWithEmail.length})` : "Send Bulk Email"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              if (companiesWithEmail.length === 0) return;
+                              try {
+                                toast({ title: "Preparing recipients…", description: "Resolving email addresses for selected companies." });
+                                const companyIds = companiesWithEmail.map(c => c.id);
+                                const { data: { user } } = await supabase.auth.getUser();
+                                if (!user) throw new Error('Not authenticated');
+                                const prepared: Array<{ id: string; first_name: string; last_name: string; email: string; company_id?: string; companies?: { id?: string; name?: string; tags?: string[] } }> = [];
+                                const seen = new Set<string>();
+                                const { data: existingPeople } = await supabase
+                                  .from('people')
+                                  .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
+                                  .in('company_id', companyIds)
+                                  .not('email', 'is', null);
+                                if (existingPeople) {
+                                  for (const p of existingPeople as any[]) {
+                                    if (p.email && !seen.has(p.email.toLowerCase().trim())) {
+                                      seen.add(p.email.toLowerCase().trim());
+                                      prepared.push({ id: p.id, first_name: p.first_name ?? '', last_name: p.last_name ?? '', email: p.email, company_id: p.company_id, companies: p.companies });
+                                    }
+                                  }
+                                }
+                                for (const company of companiesWithEmail) {
+                                  const emailMatch = getCompanyEmailContact(company);
+                                  if (emailMatch?.email && !seen.has(emailMatch.email.toLowerCase().trim())) {
+                                    const { data: existPerson } = await supabase.from('people').select('id, first_name, last_name, email, company_id, companies(id, name, tags)').ilike('email', emailMatch.email).maybeSingle();
+                                    if (existPerson) {
+                                      if (existPerson.company_id !== company.id) await supabase.from('people').update({ company_id: company.id }).eq('id', existPerson.id);
+                                      seen.add(existPerson.email.toLowerCase().trim());
+                                      prepared.push({ id: existPerson.id, first_name: existPerson.first_name ?? '', last_name: existPerson.last_name ?? '', email: existPerson.email, company_id: company.id, companies: existPerson.companies ?? { id: company.id, name: company.name, tags: company.tags || [] } });
+                                    } else {
+                                      const nameParts = emailMatch.type === 'contact' && emailMatch.contact?.name ? emailMatch.contact.name.trim().split(' ') : company.name.trim().split(' ');
+                                      const { data: newP } = await supabase.from('people').insert({ first_name: nameParts[0] || company.name, last_name: nameParts.slice(1).join(' ') || '', email: emailMatch.email, company_id: company.id, user_id: user.id }).select('id, first_name, last_name, email, company_id').single();
+                                      if (newP) {
+                                        seen.add(newP.email.toLowerCase().trim());
+                                        prepared.push({ id: newP.id, first_name: newP.first_name ?? '', last_name: newP.last_name ?? '', email: newP.email, company_id: newP.company_id, companies: { id: company.id, name: company.name, tags: company.tags || [] } });
+                                      }
+                                    }
+                                  }
+                                }
+                                localStorage.setItem('leadgenie_draft_recipients', JSON.stringify(prepared));
+                                navigate("/campaigns?tab=drafts", { state: { addToDraft: true } });
+                              } catch (e: any) {
+                                toast({ title: "Error preparing recipients", description: e?.message ?? "Please try again", variant: "destructive" });
+                              }
+                            }}
+                            disabled={companiesWithEmail.length === 0}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add to draft
+                          </Button>
+                        </>
+                      )}
                     </>
                   );
                 })()}
@@ -2346,17 +2468,29 @@ export default function Companies() {
       <div className="space-y-3 px-4 md:px-0 max-h-[calc(100vh-16rem)] overflow-y-auto">
         {(groupBySource && companiesGroupedBySource?.length
           ? companiesGroupedBySource.flatMap(({ label, companies: sectionCompanies }) => [
-              { _type: 'header' as const, key: `header-${label}`, label, count: sectionCompanies.length },
+              { _type: 'header' as const, key: `header-${label}`, label, count: sectionCompanies.length, companyIds: sectionCompanies.map((c) => c.id) },
               ...sectionCompanies.map((company) => ({ _type: 'company' as const, key: company.id, company, index: filteredCompanies!.indexOf(company) })),
             ])
           : (filteredCompanies ?? []).map((company, index) => ({ _type: 'company' as const, key: company.id, company, index }))
         )?.map((item) =>
           item._type === 'header' ? (
             <div key={item.key} className="pt-3 pb-1 first:pt-0">
-              <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-                {item.label}
-                <Badge variant="secondary" className="text-xs">{item.count}</Badge>
-              </h3>
+              <div
+                className="flex items-center gap-2 cursor-pointer group rounded-md py-1.5 px-1 -mx-1 hover:bg-muted/50"
+                onClick={(e) => toggleSourceGroupSelection(item.companyIds, e)}
+              >
+                <Checkbox
+                  checked={item.companyIds.every((id) => selectedCompanyIds.has(id))}
+                  onCheckedChange={() => {}}
+                />
+                <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2 flex-1">
+                  {item.label}
+                  <Badge variant="secondary" className="text-xs">{item.count}</Badge>
+                </h3>
+                <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                  {item.companyIds.every((id) => selectedCompanyIds.has(id)) ? 'Deselect all' : 'Select all'}
+                </span>
+              </div>
             </div>
           ) : (
             (() => {
@@ -2431,6 +2565,11 @@ export default function Companies() {
                         </>
                       )}
                     </div>
+                    {company.created_at && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Added {format(new Date(company.created_at), "MMM d, yyyy 'at' h:mm a")}
+                      </p>
+                    )}
                     {/* Tags display */}
                     {companyTags.length > 0 && (
                       <div className="mt-2">

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FolderOpen, CreditCard, Inbox, Brain, Wand2, StickyNote } from "lucide-react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FolderOpen, CreditCard, Inbox, Brain, Wand2, StickyNote, Palette, Newspaper, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -62,6 +62,9 @@ const navigation: NavigationItem[] = [
       { name: "Sequences", href: "/sequences", icon: Mail },
       { name: "Active Campaigns", href: "/company-sequences", icon: Activity },
       { name: "Campaigns", href: "/campaigns", icon: Briefcase },
+      { name: "Email Branding", href: "/email-branding", icon: Palette },
+      { name: "Newsletters", href: "/newsletters", icon: Newspaper },
+      { name: "Recipient Groups", href: "/recipient-groups", icon: UsersRound },
       { name: "Notes", href: "/notes", icon: StickyNote },
     ]
   },
@@ -370,9 +373,13 @@ export const Sidebar = () => {
       
       <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
         {navigation.map((item) => {
-          // Check if current route is in this group's children
-          const isGroupActive = item.children?.some(child => location.pathname === child.href) || false;
-          const isActive = location.pathname === item.href;
+          const currentFullPath = location.pathname + location.search;
+          const matchesHref = (href: string) => {
+            if (href.includes('?')) return currentFullPath === href || (location.pathname + location.search) === href;
+            return location.pathname === href;
+          };
+          const isGroupActive = item.children?.some(child => matchesHref(child.href)) || false;
+          const isActive = matchesHref(item.href);
           
           // Render parent item with children (collapsible group)
           if (item.children) {
@@ -400,7 +407,7 @@ export const Sidebar = () => {
                 {!isCollapsed && (
                   <CollapsibleContent className="space-y-1 mt-1 ml-4">
                     {item.children.map((child) => {
-                      const isChildActive = location.pathname === child.href;
+                      const isChildActive = matchesHref(child.href);
                       
                       // Get pending count for child items
                       let pendingCount = 0;

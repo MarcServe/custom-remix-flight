@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,11 +8,14 @@ import { Upload, Loader2, Image, X } from "lucide-react";
 interface LogoUploadProps {
   currentLogoUrl?: string;
   onUploadSuccess: (url: string) => void;
+  /** When false (e.g. sender profile), only upload to storage and call onUploadSuccess; do not update business_profiles. */
+  updateBusinessProfile?: boolean;
 }
 
-export function LogoUpload({ currentLogoUrl, onUploadSuccess }: LogoUploadProps) {
+export function LogoUpload({ currentLogoUrl, onUploadSuccess, updateBusinessProfile = true }: LogoUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(currentLogoUrl);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,16 +48,20 @@ export function LogoUpload({ currentLogoUrl, onUploadSuccess }: LogoUploadProps)
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Delete old logo if exists
+      // Delete old logo if exists (extract path after bucket name from URL)
       if (currentLogoUrl) {
-        const oldPath = currentLogoUrl.split('/').slice(-2).join('/');
+        const parts = currentLogoUrl.split('/');
+        const bucketIdx = parts.indexOf('email-branding');
+        const oldPath = bucketIdx >= 0 ? parts.slice(bucketIdx + 1).join('/') : parts.slice(-2).join('/');
         await supabase.storage.from('email-branding').remove([oldPath]);
       }
 
-      // Upload new logo
+      // Upload new logo (use different path for sender profiles so they don't overwrite main logo)
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/logo-${Date.now()}.${fileExt}`;
-      
+      const fileName = updateBusinessProfile
+        ? `${user.id}/logo-${Date.now()}.${fileExt}`
+        : `${user.id}/sender-logos/${Date.now()}.${fileExt}`;
+
       const { error: uploadError } = await supabase.storage
         .from('email-branding')
         .upload(fileName, file, { upsert: true });
@@ -68,13 +75,15 @@ export function LogoUpload({ currentLogoUrl, onUploadSuccess }: LogoUploadProps)
 
       const publicUrl = data.publicUrl;
 
-      // Update business profile with new logo URL
-      const { error: updateError } = await supabase
-        .from('business_profiles')
-        .update({ email_logo_url: publicUrl })
-        .eq('user_id', user.id);
+      // Update business profile only when used for main branding (not sender profiles)
+      if (updateBusinessProfile) {
+        const { error: updateError } = await supabase
+          .from('business_profiles')
+          .update({ email_logo_url: publicUrl })
+          .eq('user_id', user.id);
 
-      if (updateError) throw updateError;
+        if (updateError) throw updateError;
+      }
 
       setPreviewUrl(publicUrl);
       toast({
@@ -101,14 +110,18 @@ export function LogoUpload({ currentLogoUrl, onUploadSuccess }: LogoUploadProps)
       if (!user) return;
 
       if (currentLogoUrl) {
-        const oldPath = currentLogoUrl.split('/').slice(-2).join('/');
+        const parts = currentLogoUrl.split('/');
+        const bucketIdx = parts.indexOf('email-branding');
+        const oldPath = bucketIdx >= 0 ? parts.slice(bucketIdx + 1).join('/') : parts.slice(-2).join('/');
         await supabase.storage.from('email-branding').remove([oldPath]);
       }
 
-      await supabase
-        .from('business_profiles')
-        .update({ email_logo_url: null })
-        .eq('user_id', user.id);
+      if (updateBusinessProfile) {
+        await supabase
+          .from('business_profiles')
+          .update({ email_logo_url: null })
+          .eq('user_id', user.id);
+      }
 
       setPreviewUrl(undefined);
       onUploadSuccess('');
@@ -157,37 +170,35 @@ export function LogoUpload({ currentLogoUrl, onUploadSuccess }: LogoUploadProps)
       )}
 
       <div className="flex items-center gap-2">
-        <Label htmlFor="logo-upload" className="cursor-pointer">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={uploading}
-            asChild
-          >
-            <span>
-              {uploading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4 mr-2" />
-                  {previewUrl ? 'Change Logo' : 'Upload Logo'}
-                </>
-              )}
-            </span>
-          </Button>
-        </Label>
         <input
+          ref={fileInputRef}
           id="logo-upload"
           type="file"
           accept="image/jpeg,image/png,image/webp,image/svg+xml"
           onChange={handleFileChange}
-          className="hidden"
+          className="sr-only"
           disabled={uploading}
+          aria-label="Upload logo"
         />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploading ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Uploading...
+            </>
+          ) : (
+            <>
+              <Upload className="h-4 w-4 mr-2" />
+              {previewUrl ? 'Change Logo' : 'Upload Logo'}
+            </>
+          )}
+        </Button>
       </div>
       
       <p className="text-xs text-muted-foreground">

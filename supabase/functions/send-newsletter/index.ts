@@ -1,0 +1,470 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { renderEmailTemplate } from "../_shared/professional-template.ts";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    let body: any;
+    try {
+      body = await req.json();
+    } catch (_) {
+      throw new Error('Invalid request body (expected JSON)');
+    }
+    if (!body || typeof body !== 'object') throw new Error('Invalid request body');
+    // Support both flat body and nested body (some clients wrap in .body)
+    const newsletterId = body.newsletterId ?? body.newsletter_id;
+    const testEmailRaw = body.testEmail ?? body.test_email ?? body.body?.testEmail ?? body.body?.test_email
+      ?? (typeof body === 'object' && Object.keys(body).find((k) => /^test_?email$/i.test(k)) ? (body as any)[Object.keys(body).find((k) => /^test_?email$/i.test(k))!] : undefined);
+    const testEmail = typeof testEmailRaw === 'string' ? testEmailRaw.trim() : '';
+    const isTest = testEmail.length > 0;
+
+    if (!newsletterId) throw new Error('Missing newsletterId');
+
+    const categoryFilter = body.categoryFilter ?? body.category_filter;
+    const recipientGroupId = body.recipientGroupId ?? body.recipient_group_id;
+    const industryFilter = body.industryFilter ?? body.industry_filter;
+    const tagCategoryIds = body.tagCategoryIds ?? body.tag_category_ids;
+    const industries: string[] = Array.isArray(industryFilter) ? industryFilter.filter((i: any) => i != null && String(i).trim()) : [];
+    const tagIds: string[] = Array.isArray(tagCategoryIds) ? tagCategoryIds.filter((id: any) => id) : [];
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const authHeader = req.headers.get('Authorization')!;
+
+    const supabaseAnon = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { data: { user } } = await supabaseAnon.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Fetch the newsletter
+    const { data: newsletter, error: nlError } = await supabaseAnon
+      .from('newsletters')
+      .select('*')
+      .eq('id', newsletterId)
+      .eq('user_id', user.id)
+      .single();
+    if (nlError || !newsletter) throw new Error('Newsletter not found');
+    // Never block test sends: if request has test email (any key) or isTest, allow regardless of newsletter status
+    const hasTestEmailInBody = !!(String(body.testEmail ?? body.test_email ?? body.body?.testEmail ?? body.body?.test_email ?? '').trim())
+      || (typeof body === 'object' && Object.keys(body).some((k) => /^test_?email$/i.test(k) && String((body as any)[k] || '').trim()));
+    if (!isTest && !hasTestEmailInBody && (newsletter.status === 'sent' || newsletter.status === 'sending')) {
+      throw new Error('Newsletter already sent or sending');
+    }
+
+    // Fetch branding
+    const { data: businessProfile } = await supabaseAnon
+      .from('business_profiles')
+      .select('company_name, email_header_name, email_provider, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_sender_title, email_sender_email, email_signature, website')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const { data: userProfile } = await supabaseAnon
+      .from('profiles')
+      .select('full_name, job_title, email, avatar_url')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    let branding: any = {
+      companyName: businessProfile?.company_name || null,
+      headerName: businessProfile?.email_header_name || null,
+      logoUrl: businessProfile?.email_logo_url || null,
+      brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+      footerText: businessProfile?.email_footer_text || null,
+      footerImageUrl: businessProfile?.email_footer_logo_url || businessProfile?.email_logo_url || null,
+      signature: businessProfile?.email_signature || null,
+      templateStyle: newsletter.template_style || 'professional',
+      senderImageUrl: businessProfile?.email_sender_image_url || null,
+      founderImageUrl: businessProfile?.email_footer_image_url || null,
+      senderName: businessProfile?.email_sender_name || null,
+      senderEmail: businessProfile?.email_sender_email || null,
+      senderTitle: businessProfile?.email_sender_title || null,
+      websiteUrl: businessProfile?.website || null,
+    };
+
+    if (newsletter.sender_profile_id) {
+      const { data: sp } = await supabaseAnon
+        .from('sender_profiles')
+        .select('name, display_name, logo_url, brand_color, footer_text, footer_image_url, footer_logo_url, signature, template_style, sender_name, sender_email, sender_title, sender_image_url, website_url')
+        .eq('id', newsletter.sender_profile_id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (sp) {
+        branding = {
+          ...branding,
+          headerName: sp.display_name || branding.headerName,
+          logoUrl: sp.logo_url || branding.logoUrl,
+          brandColor: sp.brand_color || branding.brandColor,
+          footerText: sp.footer_text || branding.footerText,
+          footerImageUrl: sp.footer_logo_url || sp.logo_url || branding.footerImageUrl,
+          signature: sp.signature || branding.signature,
+          templateStyle: sp.template_style || branding.templateStyle,
+          senderName: sp.sender_name,
+          senderEmail: sp.sender_email,
+          senderTitle: sp.sender_title,
+          senderImageUrl: sp.sender_image_url,
+          founderImageUrl: sp.footer_image_url || branding.founderImageUrl,
+          websiteUrl: sp.website_url ?? branding.websiteUrl,
+        };
+      }
+    }
+
+    // Determine subscribers (or single test recipient)
+    let targetSubscribers: { id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; unsubscribe_token: string }[];
+
+    if (isTest) {
+      // Test send: ONLY this one address. Do not fetch or use subscriber list.
+      const email = testEmail.toLowerCase();
+      targetSubscribers = [{
+        id: 'test',
+        email,
+        first_name: null,
+        last_name: null,
+        company: null,
+        unsubscribe_token: '',
+      }];
+    } else {
+      const subscriberQuery = supabaseAnon
+        .from('newsletter_subscribers')
+        .select('id, email, first_name, last_name, company, unsubscribe_token, industry')
+        .eq('user_id', user.id)
+        .eq('status', 'active');
+
+      const { data: allSubscribers } = await subscriberQuery;
+      if (!allSubscribers || allSubscribers.length === 0) {
+        throw new Error('No active subscribers found');
+      }
+
+      let subs = allSubscribers as { id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; unsubscribe_token: string; industry?: string | null }[];
+
+      // Primary audience: category, or newsletter target categories only when no group/industry selected
+      const targetCategoryIds: string[] = [];
+      if (categoryFilter) {
+        targetCategoryIds.push(categoryFilter);
+      } else if (tagIds.length === 0 && !recipientGroupId && industries.length === 0) {
+        const { data: nlCats } = await supabaseAnon
+          .from('newsletter_target_categories')
+          .select('category_id')
+          .eq('newsletter_id', newsletterId);
+        if (nlCats && nlCats.length > 0) {
+          nlCats.forEach((c: any) => targetCategoryIds.push(c.category_id));
+        }
+      }
+      if (targetCategoryIds.length > 0) {
+        const { data: subCats } = await supabaseAnon
+          .from('newsletter_subscriber_categories')
+          .select('subscriber_id')
+          .in('category_id', targetCategoryIds);
+        const subscriberIds = new Set((subCats || []).map((sc: any) => sc.subscriber_id));
+        subs = subs.filter((s: any) => subscriberIds.has(s.id));
+      }
+
+      // Optional: filter by tags (subscriber must be in at least one of these categories)
+      if (tagIds.length > 0) {
+        const { data: tagSubCats } = await supabaseAnon
+          .from('newsletter_subscriber_categories')
+          .select('subscriber_id')
+          .in('category_id', tagIds);
+        const tagSubscriberIds = new Set((tagSubCats || []).map((sc: any) => sc.subscriber_id));
+        subs = subs.filter((s: any) => tagSubscriberIds.has(s.id));
+      }
+
+      // Optional: filter by industry
+      if (industries.length > 0) {
+        const industrySet = new Set(industries.map((i: string) => String(i).trim().toLowerCase()));
+        subs = subs.filter((s: any) => s.industry && industrySet.has(String(s.industry).trim().toLowerCase()));
+      }
+
+      // Optional: limit to recipient group (subscribers whose email is in the group)
+      if (recipientGroupId) {
+        const { data: groupMembers, error: groupErr } = await supabaseAnon
+          .from('recipient_group_members')
+          .select('email')
+          .eq('group_id', recipientGroupId);
+        if (groupErr) throw new Error('Failed to load recipient group');
+        const groupEmails = new Set((groupMembers || []).map((m: any) => String(m.email).toLowerCase().trim()));
+        subs = subs.filter((s: any) => groupEmails.has(String(s.email).toLowerCase().trim()));
+      }
+
+      if (subs.length === 0) {
+        throw new Error('No subscribers match the selected filters (category, tags, industry, or group)');
+      }
+      targetSubscribers = subs;
+    }
+
+    // Mark newsletter as sending (skip for test)
+    if (!isTest) {
+      await supabaseAnon.from('newsletters').update({
+        status: 'sending',
+        total_recipients: targetSubscribers.length,
+      }).eq('id', newsletterId);
+    }
+
+    // Determine email provider and connection (match sender profile / branding email when possible)
+    const { data: connections } = await supabaseAnon
+      .from('crm_connections')
+      .select('id, provider, from_email, metadata, status, connection_id')
+      .eq('user_id', user.id)
+      .eq('status', 'active');
+
+    const desiredFromEmail = (branding.senderEmail || '').trim().toLowerCase();
+    const matchConnection = desiredFromEmail && (connections || []).length
+      ? (connections || []).find((c: any) => (c.from_email || '').trim().toLowerCase() === desiredFromEmail)
+      : null;
+    const defaultProvider = businessProfile?.email_provider || 'resend';
+    const effectiveConnection = matchConnection
+      || (connections || []).find((c: any) => ['resend', 'sendgrid', 'gmail_direct', 'gmail'].includes(c.provider) && c.status === 'active')
+      || (connections || [])[0];
+
+    if (!effectiveConnection && (connections || []).length === 0) {
+      throw new Error('No active email connection. Add an email account in Settings > Integrations or Email Providers, then try again.');
+    }
+
+    const emailProvider = effectiveConnection?.provider || defaultProvider;
+    const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'Newsletter';
+    const senderTitle = branding.senderTitle || userProfile?.job_title;
+    const senderEmail = effectiveConnection?.from_email || branding.senderEmail || userProfile?.email || user.email;
+
+    // Build the unsubscribe base URL
+    const appUrl = supabaseUrl.replace('.supabase.co', '.supabase.co');
+    const unsubscribeBaseUrl = `${supabaseUrl}/functions/v1/newsletter-unsubscribe`;
+
+    let sentCount = 0;
+    let failedCount = 0;
+
+    const bc = branding.brandColor || '#8b5cf6';
+    const companyDisplayName = branding.companyName || senderName;
+    const websiteLink = branding.websiteUrl
+      ? `<a href="${branding.websiteUrl.startsWith('http') ? branding.websiteUrl : 'https://' + branding.websiteUrl}" style="color:${bc};text-decoration:underline;">${branding.websiteUrl.replace(/^https?:\/\//i, '')}</a>`
+      : '';
+
+    for (const subscriber of targetSubscribers) {
+      try {
+        const unsubscribeUrl = `${unsubscribeBaseUrl}?token=${subscriber.unsubscribe_token}`;
+
+        let fullBody = newsletter.body_html || '';
+        if (newsletter.cta_text && newsletter.cta_url) {
+          fullBody += `
+            <div style="text-align:center;margin:28px 0;">
+              <a href="${newsletter.cta_url}" style="display:inline-block;padding:14px 36px;background:${bc};color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:16px;">${newsletter.cta_text}</a>
+            </div>`;
+        }
+
+        const firstName = subscriber.first_name || '';
+        const lastName = subscriber.last_name || '';
+        fullBody = fullBody
+          .replace(/\[first_name\]/gi, firstName)
+          .replace(/\[last_name\]/gi, lastName)
+          .replace(/\[company\]/gi, subscriber.company || '')
+          .replace(/\[email\]/gi, subscriber.email);
+
+        const newsletterFooterHtml = `
+          <div style="border-top:1px solid #e5e7eb;margin-top:8px;padding:20px 28px 16px;text-align:center;">
+            <p style="margin:0 0 6px;font-size:12px;color:#6b7280;line-height:1.5;">
+              You received this because you subscribed to <strong>${companyDisplayName}</strong> newsletters.
+            </p>
+            ${websiteLink ? `<p style="margin:0 0 10px;font-size:12px;">${websiteLink}</p>` : ''}
+            <p style="margin:0;font-size:11px;">
+              <a href="${unsubscribeUrl}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe</a>
+              <span style="color:#d1d5db;margin:0 6px;">|</span>
+              <a href="mailto:${senderEmail}" style="color:#9ca3af;text-decoration:underline;">Contact us</a>
+            </p>
+          </div>`;
+
+        const finalHtml = renderEmailTemplate(branding.templateStyle, {
+          body: fullBody,
+          senderName,
+          senderEmail,
+          senderTitle,
+          companyName: branding.companyName,
+          headerName: branding.headerName || undefined,
+          logoUrl: branding.logoUrl,
+          brandColor: bc,
+          footerText: branding.footerText,
+          footerImageUrl: branding.footerImageUrl,
+          signature: branding.signature,
+          senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
+          founderImageUrl: branding.founderImageUrl ?? undefined,
+          websiteUrl: branding.websiteUrl ?? undefined,
+          newsletterFooterHtml,
+        });
+
+        const personalizedSubject = (newsletter.subject || 'Newsletter')
+          .replace(/\[first_name\]/gi, firstName)
+          .replace(/\[last_name\]/gi, lastName)
+          .replace(/\[company\]/gi, subscriber.company || '');
+
+        // Create send record (skip for test)
+        let sendRecord: { id: string } | null = null;
+        if (!isTest) {
+          const { data: sr } = await supabaseAdmin.from('newsletter_sends').insert({
+            newsletter_id: newsletterId,
+            subscriber_id: subscriber.id,
+            status: 'pending',
+          }).select('id').single();
+          sendRecord = sr;
+        }
+
+        // Send the email via configured provider
+        let messageId: string | null = null;
+
+        if (emailProvider === 'gmail_direct' || emailProvider === 'gmail') {
+          const gmailConnection = (effectiveConnection && ['gmail', 'gmail_direct'].includes(effectiveConnection.provider))
+            ? effectiveConnection
+            : (connections || []).find((c: any) =>
+                ['gmail', 'gmail_direct'].includes(c.provider) && c.status === 'active'
+              );
+          if (gmailConnection) {
+            const metadata = gmailConnection.metadata as any;
+            let accessToken = metadata?.access_token;
+            const expiresAt = metadata?.expires_at;
+
+            if (expiresAt && new Date(expiresAt) <= new Date()) {
+              const refreshResponse = await supabaseAnon.functions.invoke('gmail-oauth-refresh', {
+                body: { connection_id: gmailConnection.id },
+              });
+              if (refreshResponse.data?.access_token) {
+                accessToken = refreshResponse.data.access_token;
+              }
+            }
+
+            if (accessToken) {
+              const fromEmail = senderEmail;
+              const fromLine = senderName ? `From: ${senderName} <${fromEmail}>` : `From: ${fromEmail}`;
+              const rawEmail = [
+                fromLine,
+                `To: ${subscriber.email}`,
+                `Subject: ${personalizedSubject}`,
+                'MIME-Version: 1.0',
+                'Content-Type: text/html; charset=utf-8',
+                `List-Unsubscribe: <${unsubscribeUrl}>`,
+                `List-Unsubscribe-Post: List-Unsubscribe=One-Click`,
+                '',
+                finalHtml,
+              ].join('\r\n');
+
+              const encodedMessage = btoa(rawEmail).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+              const gmailRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ raw: encodedMessage }),
+              });
+
+              if (gmailRes.ok) {
+                const gdata = await gmailRes.json();
+                messageId = gdata.id;
+              } else {
+                throw new Error(`Gmail send failed: ${await gmailRes.text()}`);
+              }
+            }
+          }
+        } else if (emailProvider === 'sendgrid') {
+          const sendgridApiKey = Deno.env.get('SENDGRID_API_KEY');
+          if (sendgridApiKey) {
+            const fromEmail = senderEmail;
+            const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${sendgridApiKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                personalizations: [{ to: [{ email: subscriber.email }] }],
+                from: { email: fromEmail, name: senderName },
+                subject: personalizedSubject,
+                content: [{ type: 'text/html', value: finalHtml }],
+                headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` },
+              }),
+            });
+            if (sgRes.ok || sgRes.status === 202) {
+              messageId = sgRes.headers.get('X-Message-Id') || `sg-${Date.now()}`;
+            } else {
+              throw new Error(`SendGrid failed: ${await sgRes.text()}`);
+            }
+          }
+        } else {
+          // Resend
+          const resendApiKey = Deno.env.get('RESEND_API_KEY');
+          if (!resendApiKey) throw new Error('No email provider configured');
+
+          const fromEmail = senderEmail;
+          const resendRes = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: `${senderName} <${fromEmail}>`,
+              to: [subscriber.email],
+              subject: personalizedSubject,
+              html: finalHtml,
+              headers: { 'List-Unsubscribe': unsubscribeUrl },
+            }),
+          });
+          if (resendRes.ok) {
+            const rdata = await resendRes.json();
+            messageId = rdata.id;
+          } else {
+            throw new Error(`Resend failed: ${await resendRes.text()}`);
+          }
+        }
+
+        // Update send record (skip for test)
+        if (!isTest && sendRecord) {
+          await supabaseAdmin.from('newsletter_sends').update({
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+          }).eq('id', sendRecord.id);
+        }
+        sentCount++;
+
+        // Rate limit: 100ms between sends
+        await new Promise(r => setTimeout(r, 100));
+
+      } catch (sendError: any) {
+        console.error(`Failed to send to ${subscriber.email}:`, sendError.message);
+        if (isTest) {
+          // For test send, surface the error so the user sees why it failed
+          throw new Error(sendError?.message || 'Test send failed');
+        }
+        failedCount++;
+      }
+    }
+
+    // Update newsletter status (skip for test)
+    if (!isTest) {
+      await supabaseAnon.from('newsletters').update({
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+        total_sent: sentCount,
+      }).eq('id', newsletterId);
+    } else if (sentCount > 0 && newsletter.status === 'sending') {
+      // Unstick newsletter that was left in 'sending' after a failed run so test sends work next time
+      await supabaseAnon.from('newsletters').update({ status: 'draft' }).eq('id', newsletterId);
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        recipientCount: targetSubscribers.length,
+        sent: sentCount,
+        failed: failedCount,
+        test: isTest,
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error: any) {
+    console.error('Newsletter send error:', error);
+    const message = error?.message || 'Newsletter send failed';
+    return new Response(
+      JSON.stringify({ error: message }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});

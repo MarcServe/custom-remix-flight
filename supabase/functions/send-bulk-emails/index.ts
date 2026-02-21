@@ -140,16 +140,78 @@ serve(async (req) => {
     // Get user profile for signature and business email
     const { data: userProfile } = await supabaseClient
       .from('profiles')
-      .select('full_name, job_title, email')
+      .select('full_name, job_title, email, avatar_url')
       .eq('id', userId)
       .maybeSingle();
 
     // Get business profile with email provider preference and branding settings
     const { data: businessProfile } = await supabaseClient
       .from('business_profiles')
-      .select('company_name, email_provider, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_signature')
+      .select('company_name, email_header_name, email_provider, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_sender_title, email_sender_email, email_signature, website')
       .eq('user_id', userId)
       .maybeSingle();
+
+    // Resolve branding: when a sender profile is selected, use that profile; otherwise use business (default)
+    let branding: {
+      companyName: string | null;
+      headerName: string | null;
+      logoUrl: string | null;
+      brandColor: string;
+      footerText: string | null;
+      footerImageUrl: string | null;
+      signature: string | null;
+      templateStyle: string;
+      senderName: string | null;
+      senderEmail: string | null;
+      senderTitle: string | null;
+      senderImageUrl: string | null;
+      founderImageUrl: string | null;
+      websiteUrl: string | null;
+    } = {
+      companyName: businessProfile?.company_name || null,
+      headerName: businessProfile?.email_header_name || null,
+      logoUrl: businessProfile?.email_logo_url ?? null,
+      brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+      footerText: businessProfile?.email_footer_text ?? null,
+      footerImageUrl: businessProfile?.email_footer_logo_url ?? businessProfile?.email_logo_url ?? null,
+      signature: businessProfile?.email_signature ?? null,
+      templateStyle: businessProfile?.email_template_style || 'professional',
+      senderName: businessProfile?.email_sender_name ?? null,
+      senderEmail: businessProfile?.email_sender_email ?? null,
+      senderTitle: businessProfile?.email_sender_title ?? null,
+      senderImageUrl: businessProfile?.email_sender_image_url ?? null,
+      founderImageUrl: businessProfile?.email_footer_image_url ?? null,
+      websiteUrl: businessProfile?.website ?? null,
+    };
+    // When campaign has a sender profile, email branding (business) still overrides; profile fills in only when branding has no value
+    if (campaign.sender_profile_id) {
+      const { data: senderProfile } = await supabaseClient
+        .from('sender_profiles')
+        .select('name, display_name, logo_url, brand_color, footer_text, footer_image_url, footer_logo_url, signature, template_style, sender_name, sender_email, sender_title, sender_image_url, website_url')
+        .eq('id', campaign.sender_profile_id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (senderProfile) {
+        branding = {
+          companyName: businessProfile?.company_name ?? null,
+          headerName: senderProfile.display_name ?? businessProfile?.email_header_name ?? null,
+          logoUrl: senderProfile.logo_url ?? businessProfile?.email_logo_url ?? null,
+          brandColor: senderProfile.brand_color || businessProfile?.email_brand_color ?? '#8b5cf6',
+          footerText: senderProfile.footer_text ?? businessProfile?.email_footer_text ?? null,
+          footerImageUrl: senderProfile.footer_logo_url ?? senderProfile.logo_url ?? businessProfile?.email_footer_logo_url ?? businessProfile?.email_logo_url ?? businessProfile?.email_footer_image_url ?? null,
+          signature: senderProfile.signature ?? businessProfile?.email_signature ?? null,
+          templateStyle: ['professional', 'minimal', 'modern', 'creative', 'corporate', 'bold', 'elegant'].includes(senderProfile.template_style) ? senderProfile.template_style : (businessProfile?.email_template_style || 'professional'),
+          senderName: senderProfile.sender_name ?? businessProfile?.email_sender_name ?? null,
+          senderEmail: senderProfile.sender_email ?? businessProfile?.email_sender_email ?? null,
+          senderTitle: senderProfile.sender_title ?? businessProfile?.email_sender_title ?? null,
+          senderImageUrl: senderProfile.sender_image_url ?? businessProfile?.email_sender_image_url ?? null,
+          founderImageUrl: senderProfile.footer_image_url ?? businessProfile?.email_footer_image_url ?? null,
+          websiteUrl: senderProfile.website_url ?? businessProfile?.website ?? null,
+        };
+      }
+    }
+    // Ensure we always have a name next to the logo when logo is present
+    if (branding.logoUrl && !branding.companyName) branding.companyName = businessProfile?.company_name || 'Company';
 
     // Get connection - use campaign's sender_connection_id if specified, otherwise find optimal
     let optimalConnection: any;
@@ -271,8 +333,8 @@ serve(async (req) => {
           messageId = nangoData.id || null;
         } else if (optimalConnection.provider === 'smtp') {
           // Send via SMTP with branded template
-          const senderName = businessProfile?.company_name || userProfile?.full_name || 'Your Business';
-          const fromEmail = optimalConnection.from_email || userProfile?.email || 'noreply@yourdomain.com';
+          const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'Your Business';
+          const fromEmail = branding.senderEmail || optimalConnection.from_email || userProfile?.email || 'noreply@yourdomain.com';
           
           // Extract body HTML (remove signature if already included to avoid duplicates)
           let bodyHtml = recipient.personalized_body_html || '';
@@ -303,17 +365,22 @@ serve(async (req) => {
           let wrappedHtml: string;
           try {
             wrappedHtml = renderEmailTemplate(
-              businessProfile?.email_template_style || 'professional',
+              branding.templateStyle,
               {
                 body: bodyHtml || '',
                 senderName,
                 senderEmail: fromEmail,
-                senderTitle: userProfile?.job_title,
-                companyName: businessProfile?.company_name,
-                logoUrl: businessProfile?.email_logo_url,
-                brandColor: businessProfile?.email_brand_color || '#8b5cf6',
-                footerText: businessProfile?.email_footer_text,
-                signature: businessProfile?.email_signature,
+                senderTitle: branding.senderTitle || userProfile?.job_title,
+                companyName: branding.companyName,
+                headerName: branding.headerName || undefined,
+                logoUrl: branding.logoUrl,
+                brandColor: branding.brandColor,
+                footerText: branding.footerText,
+                footerImageUrl: branding.footerImageUrl,
+                signature: branding.signature,
+                senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
+                founderImageUrl: branding.founderImageUrl ?? undefined,
+                websiteUrl: branding.websiteUrl ?? undefined,
               }
             );
           } catch (templateError: any) {
@@ -385,9 +452,8 @@ serve(async (req) => {
           const sendgridApiKey = Deno.env.get('SENDGRID_API_KEY');
           if (!sendgridApiKey) throw new Error('SendGrid not configured');
 
-          const senderName = businessProfile?.company_name || userProfile?.full_name || 'Your Business';
-          // Priority: effectiveConnection.from_email > connection.from_email > profiles.email > error
-          const fromEmail = effectiveConnection.from_email || userProfile?.email;
+          const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'Your Business';
+          const fromEmail = branding.senderEmail || effectiveConnection.from_email || userProfile?.email;
           if (!fromEmail) {
             throw new Error('Business Email not configured. Please set your business email in Settings > Profile and verify it in SendGrid.');
           }
@@ -421,17 +487,22 @@ serve(async (req) => {
           let wrappedHtml: string;
           try {
             wrappedHtml = renderEmailTemplate(
-              businessProfile?.email_template_style || 'professional',
+              branding.templateStyle,
               {
                 body: bodyHtml || '',
                 senderName,
                 senderEmail: fromEmail,
-                senderTitle: userProfile?.job_title,
-                companyName: businessProfile?.company_name,
-                logoUrl: businessProfile?.email_logo_url,
-                brandColor: businessProfile?.email_brand_color || '#8b5cf6',
-                footerText: businessProfile?.email_footer_text,
-                signature: businessProfile?.email_signature,
+                senderTitle: branding.senderTitle || userProfile?.job_title,
+                companyName: branding.companyName,
+                headerName: branding.headerName || undefined,
+                logoUrl: branding.logoUrl,
+                brandColor: branding.brandColor,
+                footerText: branding.footerText,
+                footerImageUrl: branding.footerImageUrl,
+                signature: branding.signature,
+                senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
+                founderImageUrl: branding.founderImageUrl ?? undefined,
+                websiteUrl: branding.websiteUrl ?? undefined,
               }
             );
           } catch (templateError: any) {
@@ -481,8 +552,8 @@ serve(async (req) => {
           const resendApiKey = Deno.env.get('RESEND_API_KEY');
           if (!resendApiKey) throw new Error('Resend not configured. Please add RESEND_API_KEY.');
 
-          const senderName = businessProfile?.company_name || userProfile?.full_name || 'CRM';
-          const fromEmail = effectiveConnection.from_email || userProfile?.email || 'onboarding@resend.dev';
+          const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'CRM';
+          const fromEmail = branding.senderEmail || effectiveConnection.from_email || userProfile?.email || 'onboarding@resend.dev';
           
           // Extract body HTML (remove signature if already included to avoid duplicates)
           let bodyHtml = recipient.personalized_body_html || '';
@@ -504,17 +575,22 @@ serve(async (req) => {
           let wrappedHtml: string;
           try {
             wrappedHtml = renderEmailTemplate(
-              businessProfile?.email_template_style || 'professional',
+              branding.templateStyle,
               {
                 body: bodyHtml || '',
                 senderName,
                 senderEmail: fromEmail,
-                senderTitle: userProfile?.job_title,
-                companyName: businessProfile?.company_name,
-                logoUrl: businessProfile?.email_logo_url,
-                brandColor: businessProfile?.email_brand_color || '#8b5cf6',
-                footerText: businessProfile?.email_footer_text,
-                signature: businessProfile?.email_signature,
+                senderTitle: branding.senderTitle || userProfile?.job_title,
+                companyName: branding.companyName,
+                headerName: branding.headerName || undefined,
+                logoUrl: branding.logoUrl,
+                brandColor: branding.brandColor,
+                footerText: branding.footerText,
+                footerImageUrl: branding.footerImageUrl,
+                signature: branding.signature,
+                senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
+                founderImageUrl: branding.founderImageUrl ?? undefined,
+                websiteUrl: branding.websiteUrl ?? undefined,
               }
             );
           } catch (templateError: any) {
@@ -584,6 +660,84 @@ serve(async (req) => {
               recipient_name: recipient.name,
             },
           });
+
+        // Auto follow-up: enroll recipient's company in follow-up sequence for no-reply reminders
+        const followUpSeqId = campaign.auto_follow_up_enabled && campaign.follow_up_sequence_id && recipient.person_id
+          ? campaign.follow_up_sequence_id
+          : null;
+        if (followUpSeqId) {
+          try {
+            const { data: person } = await supabaseClient
+              .from('people')
+              .select('company_id')
+              .eq('id', recipient.person_id)
+              .single();
+            const companyId = person?.company_id;
+            if (companyId) {
+              const { data: existing } = await supabaseClient
+                .from('company_sequences')
+                .select('id')
+                .eq('campaign_id', campaignId)
+                .eq('company_id', companyId)
+                .maybeSingle();
+              if (!existing) {
+                const { data: followUpSequence } = await supabaseClient
+                  .from('email_sequences')
+                  .select('steps')
+                  .eq('id', followUpSeqId)
+                  .single();
+                const steps = Array.isArray(followUpSequence?.steps) ? followUpSequence.steps : [];
+                const personalizedEmails: { stepNumber: number; subject: string; body: string; delayDays: number }[] = [
+                  { stepNumber: 0, subject: '(Campaign)', body: '', delayDays: 0 },
+                ];
+                steps.forEach((step: { subject?: string; body?: string; delayDays?: number }, i: number) => {
+                  personalizedEmails.push({
+                    stepNumber: i + 1,
+                    subject: step?.subject ?? `Follow-up ${i + 1}`,
+                    body: step?.body ?? '',
+                    delayDays: typeof step?.delayDays === 'number' ? step.delayDays : (i === 0 ? 3 : (i + 1) * 2),
+                  });
+                });
+                const { data: newCs, error: csErr } = await supabaseClient
+                  .from('company_sequences')
+                  .insert({
+                    company_id: companyId,
+                    sequence_id: followUpSeqId,
+                    campaign_id: campaignId,
+                    current_step: 0,
+                    personalized_emails: personalizedEmails,
+                    status: 'active',
+                    automation_rules: {
+                      enabled: true,
+                      rules: [
+                        { type: 'no_reply_after_open', wait_hours: 48 },
+                        { type: 'no_open', wait_hours: 72 },
+                      ],
+                    },
+                    metadata: { first_email_sent_at: new Date().toISOString(), campaign_recipient_id: recipient.id },
+                  })
+                  .select('id')
+                  .single();
+                if (!csErr && newCs?.id) {
+                  await supabaseClient.from('email_activities').insert({
+                    company_sequence_id: newCs.id,
+                    contact_id: null,
+                    step_number: 0,
+                    subject: recipient.personalized_subject,
+                    body: recipient.personalized_body_text,
+                    status: 'sent',
+                    sent_at: new Date().toISOString(),
+                    external_message_id: messageId,
+                    metadata: { campaign_id: campaignId, campaign_recipient_id: recipient.id },
+                  });
+                  console.log(`Enrolled company ${companyId} in follow-up sequence for campaign ${campaignId}`);
+                }
+              }
+            }
+          } catch (followUpErr) {
+            console.error('Campaign follow-up enrollment failed (non-fatal):', followUpErr);
+          }
+        }
 
         sentCount++;
 

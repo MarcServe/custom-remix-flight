@@ -12,19 +12,29 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { nangoClient } from "@/lib/integrations/nango";
-import { Loader2, Building2, Save, User, Mail, Palette, Sparkles, Clock } from "lucide-react";
-import { EmailTemplatePreview } from "@/components/email/EmailTemplatePreview";
+import { Loader2, Building2, Save, User, Mail, Palette, Sparkles, Clock, Plus, Pencil, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { EmailTemplatePreview, type EmailTemplatePreviewStyle } from "@/components/email/EmailTemplatePreview";
 import { SendTestEmailButton } from "@/components/email/SendTestEmailButton";
 import { AvatarUpload } from "@/components/ui/avatar-upload";
 import { LogoUpload } from "@/components/ui/logo-upload";
 import { TemplateStyleSelector, type EmailTemplateStyle } from "@/components/email/TemplateStyleSelector";
 import { format } from "date-fns";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 export default function Profile() {
   const { toast } = useToast();
   const { user, subscribed, isInTrial, trialEndsAt } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'account';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState({
@@ -57,12 +67,44 @@ export default function Profile() {
     email_template_style: "professional",
   });
 
+  const [senderProfileDialogOpen, setSenderProfileDialogOpen] = useState(false);
+  const [editingSenderProfileId, setEditingSenderProfileId] = useState<string | null>(null);
+  const [senderProfileForm, setSenderProfileForm] = useState({
+    name: "",
+    display_name: "",
+    logo_url: "",
+    brand_color: "#8b5cf6",
+    footer_text: "",
+    signature: "",
+    template_style: "professional" as "professional" | "minimal" | "modern" | "creative" | "corporate" | "bold" | "elegant",
+    sender_name: "",
+    sender_email: "",
+    sender_title: "",
+  });
+  const [savingSenderProfile, setSavingSenderProfile] = useState(false);
+
   const { data: connections } = useQuery({
     queryKey: ['nango-connections'],
     queryFn: async () => {
       const { data } = await nangoClient.getConnections();
       return data || [];
     },
+  });
+
+  const { data: senderProfiles = [], refetch: refetchSenderProfiles } = useQuery({
+    queryKey: ['sender-profiles', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from('sender_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
   });
 
   useEffect(() => {
@@ -183,7 +225,24 @@ export default function Profile() {
         .from("business_profiles")
         .upsert({
           user_id: user.id,
-          ...businessProfile,
+          company_name: businessProfile.company_name,
+          industry: businessProfile.industry,
+          services_description: businessProfile.services_description,
+          target_audience: businessProfile.target_audience,
+          value_proposition: businessProfile.value_proposition,
+          tone_preference: businessProfile.tone_preference,
+          email_provider: businessProfile.email_provider,
+          auto_response_daily_limit: businessProfile.auto_response_daily_limit,
+          auto_response_paused: businessProfile.auto_response_paused,
+          ai_model: businessProfile.ai_model,
+          ai_temperature: businessProfile.ai_temperature,
+          ai_max_tokens: businessProfile.ai_max_tokens,
+          ai_response_style: businessProfile.ai_response_style,
+          email_logo_url: businessProfile.email_logo_url || null,
+          email_brand_color: businessProfile.email_brand_color,
+          email_footer_text: businessProfile.email_footer_text || null,
+          email_signature: businessProfile.email_signature || null,
+          email_template_style: businessProfile.email_template_style,
         }, {
           onConflict: 'user_id'
         });
@@ -206,6 +265,95 @@ export default function Profile() {
     }
   };
 
+  const openAddSenderProfile = () => {
+    setEditingSenderProfileId(null);
+    setSenderProfileForm({ name: "", display_name: "", logo_url: "", brand_color: "#8b5cf6", footer_text: "", signature: "", template_style: "professional", sender_name: "", sender_email: "", sender_title: "" });
+    setSenderProfileDialogOpen(true);
+  };
+
+  const senderTemplateStyles = ["professional", "minimal", "modern", "creative", "corporate", "bold", "elegant"] as const;
+  const openEditSenderProfile = (p: { id: string; name: string; display_name?: string | null; logo_url: string | null; brand_color: string | null; footer_text: string | null; signature: string | null; template_style?: string | null; sender_name?: string | null; sender_email?: string | null; sender_title?: string | null }) => {
+    setEditingSenderProfileId(p.id);
+    setSenderProfileForm({
+      name: p.name,
+      display_name: p.display_name || "",
+      logo_url: p.logo_url || "",
+      brand_color: p.brand_color || "#8b5cf6",
+      footer_text: p.footer_text || "",
+      signature: p.signature || "",
+      template_style: (senderTemplateStyles.includes(p.template_style as any) ? p.template_style : "professional") as "professional" | "minimal" | "modern" | "creative" | "corporate" | "bold" | "elegant",
+      sender_name: p.sender_name || "",
+      sender_email: p.sender_email || "",
+      sender_title: p.sender_title || "",
+    });
+    setSenderProfileDialogOpen(true);
+  };
+
+  const handleSaveSenderProfile = async () => {
+    if (!user?.id || !senderProfileForm.name.trim()) return;
+    try {
+      setSavingSenderProfile(true);
+      if (editingSenderProfileId) {
+        const { error } = await supabase
+          .from("sender_profiles")
+          .update({
+            name: senderProfileForm.name.trim(),
+            display_name: senderProfileForm.display_name.trim() || null,
+            logo_url: senderProfileForm.logo_url || null,
+            brand_color: senderProfileForm.brand_color || null,
+            footer_text: senderProfileForm.footer_text || null,
+            signature: senderProfileForm.signature || null,
+            template_style: senderProfileForm.template_style,
+            sender_name: senderProfileForm.sender_name.trim() || null,
+            sender_email: senderProfileForm.sender_email.trim() || null,
+            sender_title: senderProfileForm.sender_title.trim() || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", editingSenderProfileId)
+          .eq("user_id", user.id);
+        if (error) throw error;
+        toast({ title: "Saved", description: "Sender profile updated." });
+      } else {
+        const { error } = await supabase.from("sender_profiles").insert({
+          user_id: user.id,
+          name: senderProfileForm.name.trim(),
+          display_name: senderProfileForm.display_name.trim() || null,
+          logo_url: senderProfileForm.logo_url || null,
+          brand_color: senderProfileForm.brand_color || null,
+          footer_text: senderProfileForm.footer_text || null,
+          signature: senderProfileForm.signature || null,
+          template_style: senderProfileForm.template_style,
+          sender_name: senderProfileForm.sender_name.trim() || null,
+          sender_email: senderProfileForm.sender_email.trim() || null,
+          sender_title: senderProfileForm.sender_title.trim() || null,
+          sort_order: senderProfiles.length,
+        });
+        if (error) throw error;
+        toast({ title: "Created", description: "Sender profile added. Use it in \"Send as\" when composing emails." });
+      }
+      refetchSenderProfiles();
+      setSenderProfileDialogOpen(false);
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "Failed to save sender profile", variant: "destructive" });
+    } finally {
+      setSavingSenderProfile(false);
+    }
+  };
+
+  const handleDeleteSenderProfile = async (id: string) => {
+    if (!user?.id) return;
+    if (!confirm("Remove this sender profile? Campaigns that used it will keep their content but future sends will use the default profile.")) return;
+    try {
+      const { error } = await supabase.from("sender_profiles").delete().eq("id", id).eq("user_id", user.id);
+      if (error) throw error;
+      toast({ title: "Removed", description: "Sender profile deleted." });
+      refetchSenderProfiles();
+      setSenderProfileDialogOpen(false);
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "Failed to delete", variant: "destructive" });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -215,7 +363,7 @@ export default function Profile() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
+    <div className="container mx-auto p-6 max-w-4xl min-h-0 overflow-y-auto">
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
@@ -230,7 +378,7 @@ export default function Profile() {
         </div>
       </div>
 
-      <Tabs defaultValue="account" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(value) => setSearchParams({ tab: value }, { replace: true })} className="space-y-4">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
           <TabsTrigger value="account" className="text-xs sm:text-sm">Account</TabsTrigger>
           <TabsTrigger value="business" className="text-xs sm:text-sm">Business Profile</TabsTrigger>
@@ -834,6 +982,7 @@ export default function Profile() {
               <LogoUpload
                 currentLogoUrl={businessProfile.email_logo_url}
                 onUploadSuccess={(url) => setBusinessProfile({ ...businessProfile, email_logo_url: url })}
+                updateBusinessProfile={true}
               />
 
               <div className="space-y-2">
@@ -894,8 +1043,58 @@ export default function Profile() {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle>Sender Profiles</CardTitle>
+              <CardDescription>
+                Each sender profile has its own email header (name + logo), footer text, brand color, and template style—so you can use different designs per product. Create profiles (e.g. TALKWEB, Biz Boosters) and choose one when sending bulk or single emails.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {senderProfiles.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No sender profiles yet. Add one to send as a different brand.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {senderProfiles.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center gap-3">
+                        {p.logo_url ? (
+                          <img src={p.logo_url} alt="" className="h-8 w-auto object-contain" />
+                        ) : (
+                          <div className="h-8 w-8 rounded bg-muted flex items-center justify-center text-xs font-medium" style={{ backgroundColor: (p.brand_color || "#8b5cf6") + "20", color: p.brand_color || "#8b5cf6" }}>{p.name.slice(0, 2).toUpperCase()}</div>
+                        )}
+                        <div>
+                          <span className="font-medium">{p.name}</span>
+                          <span className="ml-2 text-xs text-muted-foreground capitalize">{p.template_style || 'professional'}</span>
+                          {(p.sender_name || p.sender_email) && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {p.sender_name}{p.sender_name && p.sender_email ? ' · ' : ''}{p.sender_email}
+                              {p.sender_title ? ` · ${p.sender_title}` : ''}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="icon" onClick={() => openEditSenderProfile(p)} aria-label="Edit">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteSenderProfile(p.id)} aria-label="Delete">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Button variant="outline" onClick={openAddSenderProfile} className="w-full sm:w-auto">
+                <Plus className="h-4 w-4 mr-2" />
+                Add sender profile
+              </Button>
+            </CardContent>
+          </Card>
+
           <EmailTemplatePreview
-            template={businessProfile.email_template_style as 'professional' | 'minimal' | 'modern'}
+            template={(businessProfile.email_template_style || 'professional') as EmailTemplatePreviewStyle}
             brandColor={businessProfile.email_brand_color}
             logoUrl={businessProfile.email_logo_url || undefined}
             companyName={businessProfile.company_name || undefined}
@@ -904,6 +1103,139 @@ export default function Profile() {
             senderEmail={user?.email || undefined}
             footerText={businessProfile.email_footer_text || undefined}
           />
+
+          <Dialog open={senderProfileDialogOpen} onOpenChange={setSenderProfileDialogOpen}>
+            <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>{editingSenderProfileId ? "Edit sender profile" : "Add sender profile"}</DialogTitle>
+                <DialogDescription>Name and logo shown in the email header when you send as this profile.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4 overflow-y-auto min-h-0 pr-2">
+                <div className="space-y-2">
+                  <Label>Profile Label <span className="text-muted-foreground font-normal">(internal only)</span></Label>
+                  <Input
+                    value={senderProfileForm.name}
+                    onChange={(e) => setSenderProfileForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. TalkWeb Campaign, Biz Boosters Sales"
+                  />
+                  <p className="text-xs text-muted-foreground">For your reference only — never shown in emails.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Brand / Company Name <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input
+                    value={senderProfileForm.display_name}
+                    onChange={(e) => setSenderProfileForm((f) => ({ ...f, display_name: e.target.value }))}
+                    placeholder="e.g. Biz Boosters Ltd"
+                  />
+                  <p className="text-xs text-muted-foreground">Shown in the email header and footer. Leave empty to use default business name or hide it.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Sender Name</Label>
+                  <Input
+                    value={senderProfileForm.sender_name}
+                    onChange={(e) => setSenderProfileForm((f) => ({ ...f, sender_name: e.target.value }))}
+                    placeholder="e.g. Michael Orji"
+                  />
+                  <p className="text-xs text-muted-foreground">Display name in the "From" field. Leave empty to use your account name.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Sender Email</Label>
+                  <Input
+                    type="email"
+                    value={senderProfileForm.sender_email}
+                    onChange={(e) => setSenderProfileForm((f) => ({ ...f, sender_email: e.target.value }))}
+                    placeholder="e.g. michael@bizboosters.com"
+                  />
+                  <p className="text-xs text-muted-foreground">From email address. Leave empty to use the sending connection's email.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Sender Title</Label>
+                  <Input
+                    value={senderProfileForm.sender_title}
+                    onChange={(e) => setSenderProfileForm((f) => ({ ...f, sender_title: e.target.value }))}
+                    placeholder="e.g. Founder & CEO"
+                  />
+                  <p className="text-xs text-muted-foreground">Job title used in the email signature. Leave empty to use your account title.</p>
+                </div>
+                <div>
+                  <Label>Logo</Label>
+                  <LogoUpload
+                    currentLogoUrl={senderProfileForm.logo_url || undefined}
+                    onUploadSuccess={(url) => setSenderProfileForm((f) => ({ ...f, logo_url: url }))}
+                    updateBusinessProfile={false}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Brand color</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="color"
+                      value={senderProfileForm.brand_color}
+                      onChange={(e) => setSenderProfileForm((f) => ({ ...f, brand_color: e.target.value }))}
+                      className="w-14 h-10"
+                    />
+                    <Input
+                      value={senderProfileForm.brand_color}
+                      onChange={(e) => setSenderProfileForm((f) => ({ ...f, brand_color: e.target.value }))}
+                      placeholder="#8b5cf6"
+                      className="flex-1"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Email template style</Label>
+                  <Select
+                    value={senderProfileForm.template_style}
+                    onValueChange={(v) => setSenderProfileForm((f) => ({ ...f, template_style: v as typeof senderProfileForm.template_style }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="professional">Professional – Classic & polished</SelectItem>
+                      <SelectItem value="minimal">Minimal – Simple & clean</SelectItem>
+                      <SelectItem value="modern">Modern – Contemporary & sleek</SelectItem>
+                      <SelectItem value="creative">Creative – Bold & expressive</SelectItem>
+                      <SelectItem value="corporate">Corporate – Traditional & trustworthy</SelectItem>
+                      <SelectItem value="bold">Bold – High contrast & strong typography</SelectItem>
+                      <SelectItem value="elegant">Elegant – Refined & timeless</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Style for this product’s emails so you don’t have to redesign when switching products.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Footer text (optional)</Label>
+                  <Textarea
+                    value={senderProfileForm.footer_text}
+                    onChange={(e) => setSenderProfileForm((f) => ({ ...f, footer_text: e.target.value }))}
+                    placeholder="© 2025 Company. All rights reserved."
+                    rows={2}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Signature (optional HTML)</Label>
+                  <Textarea
+                    value={senderProfileForm.signature}
+                    onChange={(e) => setSenderProfileForm((f) => ({ ...f, signature: e.target.value }))}
+                    placeholder="Leave empty to use default"
+                    rows={2}
+                    className="font-mono text-sm"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                {editingSenderProfileId && (
+                  <Button variant="destructive" onClick={() => handleDeleteSenderProfile(editingSenderProfileId)} className="mr-auto">
+                    Delete
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setSenderProfileDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleSaveSenderProfile} disabled={savingSenderProfile || !senderProfileForm.name.trim()}>
+                  {savingSenderProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-4">

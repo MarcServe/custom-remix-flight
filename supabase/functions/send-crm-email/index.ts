@@ -28,6 +28,7 @@ interface EmailRequest {
   invoiceNumber?: string; // Invoice/Quotation number
   attachInvoice?: boolean; // Whether to attach the invoice
   useInboundReplyTo?: boolean; // Use Resend inbound email as Reply-To for tracking replies
+  sender_profile_id?: string | null; // Optional sender profile (name/logo) for this email
   attachments?: Array<{ // File attachments
     id?: string;
     file_name: string;
@@ -86,22 +87,81 @@ serve(async (req) => {
       throw new Error('Invalid JSON in request body');
     }
     
-    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, senderConnectionId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, useInboundReplyTo = false, attachments = [] } = emailRequest;
+    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, senderConnectionId, sender_profile_id: requestSenderProfileId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, useInboundReplyTo = false, attachments = [] } = emailRequest;
     
     // Fetch user profile for signature and business email
     const { data: userProfile } = await supabaseClient
       .from('profiles')
-      .select('full_name, job_title, email')
+      .select('full_name, job_title, email, avatar_url')
       .eq('id', user.id)
       .single();
 
     // Fetch business profile for company name, email provider preference, and branding settings
     const { data: businessProfile } = await supabaseClient
       .from('business_profiles')
-      .select('company_name, email_provider, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_signature')
+      .select('company_name, email_header_name, email_provider, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_sender_title, email_sender_email, email_signature, website')
       .eq('user_id', user.id)
       .maybeSingle();
-    
+
+    // Resolve branding: use sender_profile when requested, else business profile
+    let branding: {
+      companyName: string | null;
+      headerName: string | null;
+      logoUrl: string | null;
+      brandColor: string;
+      footerText: string | null;
+      footerImageUrl: string | null;
+      signature: string | null;
+      templateStyle: string;
+      senderName: string | null;
+      senderEmail: string | null;
+      senderTitle: string | null;
+      senderImageUrl: string | null;
+      founderImageUrl: string | null;
+      websiteUrl: string | null;
+    } = {
+      companyName: businessProfile?.company_name || null,
+      headerName: businessProfile?.email_header_name || null,
+      logoUrl: businessProfile?.email_logo_url ?? null,
+      brandColor: businessProfile?.email_brand_color || '#8b5cf6',
+      footerText: businessProfile?.email_footer_text ?? null,
+      footerImageUrl: businessProfile?.email_footer_logo_url ?? businessProfile?.email_logo_url ?? null,
+      signature: businessProfile?.email_signature ?? null,
+      templateStyle: businessProfile?.email_template_style || templateStyle || 'professional',
+      senderName: businessProfile?.email_sender_name ?? null,
+      senderEmail: businessProfile?.email_sender_email ?? null,
+      senderTitle: businessProfile?.email_sender_title ?? null,
+      senderImageUrl: businessProfile?.email_sender_image_url ?? null,
+      founderImageUrl: businessProfile?.email_footer_image_url ?? null,
+      websiteUrl: businessProfile?.website ?? null,
+    };
+    if (requestSenderProfileId) {
+      const { data: senderProfile } = await supabaseClient
+        .from('sender_profiles')
+        .select('name, display_name, logo_url, brand_color, footer_text, footer_image_url, footer_logo_url, signature, template_style, sender_name, sender_email, sender_title, sender_image_url, website_url')
+        .eq('id', requestSenderProfileId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (senderProfile) {
+        branding = {
+          companyName: businessProfile?.company_name || null,
+          headerName: senderProfile.display_name || businessProfile?.email_header_name || null,
+          logoUrl: senderProfile.logo_url ?? null,
+          brandColor: senderProfile.brand_color || '#8b5cf6',
+          footerText: senderProfile.footer_text ?? null,
+          footerImageUrl: senderProfile.footer_logo_url ?? senderProfile.logo_url ?? null,
+          signature: senderProfile.signature ?? null,
+          templateStyle: ['professional', 'minimal', 'modern', 'creative', 'corporate', 'bold', 'elegant'].includes(senderProfile.template_style) ? senderProfile.template_style : 'professional',
+          senderName: senderProfile.sender_name ?? null,
+          senderEmail: senderProfile.sender_email ?? null,
+          senderTitle: senderProfile.sender_title ?? null,
+          senderImageUrl: senderProfile.sender_image_url ?? null,
+          founderImageUrl: senderProfile.footer_image_url ?? businessProfile?.email_footer_image_url ?? null,
+          websiteUrl: senderProfile.website_url ?? businessProfile?.website ?? null,
+        };
+      }
+    }
+
     // Determine sender based on business profile preference
     let sender: 'gmail' | 'gmail_direct' | 'resend' | 'smtp' | 'sendgrid' = emailRequest.sender || businessProfile?.email_provider || 'resend';
     
@@ -279,18 +339,18 @@ serve(async (req) => {
         throw new Error('Gmail access token not found. Please reconnect your Gmail account.');
       }
 
-      // Get from email
-      const fromEmail = connection.from_email || userProfile?.email || user.email;
+      const fromEmail = branding.senderEmail || connection.from_email || userProfile?.email || user.email;
       if (!fromEmail) {
         throw new Error('Could not determine sender email address.');
       }
+      const fromName = branding.senderName || branding.companyName || userProfile?.full_name;
 
-      console.log(`Sending via Gmail Direct API from: ${fromEmail}`);
+      console.log(`Sending via Gmail Direct API from: ${fromName ? fromName + ' ' : ''}<${fromEmail}>`);
 
       // Build Gmail API message with attachments
       const boundary = '===============' + Math.random().toString().substr(2) + '==';
       const emailLines = [
-        `From: ${fromEmail}`,
+        fromName ? `From: ${fromName} <${fromEmail}>` : `From: ${fromEmail}`,
         `To: ${toEmail}`,
         `Subject: ${subject}`,
         'MIME-Version: 1.0',
@@ -365,29 +425,33 @@ serve(async (req) => {
       // Use businessProfile from top-level fetch (already has all needed fields)
       // No need to fetch again - businessProfile is already available in scope
 
-      // Priority: connection.from_email > profiles.email > error
-      const fromEmail = connection.from_email || userProfile?.email;
+      const fromEmail = branding.senderEmail || connection.from_email || userProfile?.email;
       if (!fromEmail) {
         throw new Error('Business Email not configured. Please set your business email in Settings > Profile.');
       }
 
-      const senderName = businessProfile?.company_name || userProfile?.full_name || 'Your Business';
+      const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'Your Business';
       
       // Render with branded template
       let wrappedHtml: string;
       try {
         wrappedHtml = renderEmailTemplate(
-          businessProfile?.email_template_style || templateStyle || 'professional',
+          branding.templateStyle,
           {
             body: emailBodyContent || '',
             senderName,
             senderEmail: fromEmail,
-            senderTitle: userProfile?.job_title,
-            companyName: businessProfile?.company_name,
-            logoUrl: businessProfile?.email_logo_url,
-            brandColor: businessProfile?.email_brand_color || '#8b5cf6',
-            footerText: businessProfile?.email_footer_text,
-            signature: businessProfile?.email_signature,
+            senderTitle: branding.senderTitle || userProfile?.job_title,
+                companyName: branding.companyName,
+                headerName: branding.headerName || undefined,
+                logoUrl: branding.logoUrl,
+                brandColor: branding.brandColor,
+                footerText: branding.footerText,
+                footerImageUrl: branding.footerImageUrl,
+                signature: branding.signature,
+            senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
+            founderImageUrl: branding.founderImageUrl ?? undefined,
+            websiteUrl: branding.websiteUrl ?? undefined,
           }
         );
       } catch (templateError: any) {
@@ -463,28 +527,32 @@ serve(async (req) => {
         .eq('user_id', user.id)
         .maybeSingle();
 
-      // Priority: connection.from_email > profiles.email > error
-      const fromEmail = connection?.from_email || userProfile?.email;
+      const fromEmail = branding.senderEmail || connection?.from_email || userProfile?.email;
       if (!fromEmail) {
         throw new Error('Business Email not configured. Please set your business email in Settings > Profile and verify it in SendGrid.');
       }
-      const senderName = businessProfile?.company_name || userProfile?.full_name || 'Your Business';
+      const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'Your Business';
       
       // Render with branded template
       let wrappedHtml: string;
       try {
         wrappedHtml = renderEmailTemplate(
-          businessProfile?.email_template_style || templateStyle || 'professional',
+          branding.templateStyle,
           {
             body: emailBodyContent || '',
             senderName,
             senderEmail: fromEmail,
-            senderTitle: userProfile?.job_title,
-            companyName: businessProfile?.company_name,
-            logoUrl: businessProfile?.email_logo_url,
-            brandColor: businessProfile?.email_brand_color || '#8b5cf6',
-            footerText: businessProfile?.email_footer_text,
-            signature: businessProfile?.email_signature,
+            senderTitle: branding.senderTitle || userProfile?.job_title,
+                companyName: branding.companyName,
+                headerName: branding.headerName || undefined,
+                logoUrl: branding.logoUrl,
+                brandColor: branding.brandColor,
+                footerText: branding.footerText,
+                footerImageUrl: branding.footerImageUrl,
+                signature: branding.signature,
+            senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
+            founderImageUrl: branding.founderImageUrl ?? undefined,
+            websiteUrl: branding.websiteUrl ?? undefined,
           }
         );
       } catch (templateError: any) {
@@ -568,8 +636,8 @@ serve(async (req) => {
       
       const { data: resendConnection } = await resendConnectionQuery.maybeSingle();
 
-      const fromEmail = resendConnection?.from_email || userProfile?.email || 'onboarding@resend.dev';
-      const senderName = businessProfile?.company_name || 'CRM';
+      const fromEmail = branding.senderEmail || resendConnection?.from_email || userProfile?.email || 'onboarding@resend.dev';
+      const senderName = branding.senderName || branding.companyName || 'CRM';
 
       console.log(`Sending via Resend from: ${senderName} <${fromEmail}>`);
 
@@ -577,17 +645,22 @@ serve(async (req) => {
       let renderedHtml: string;
       try {
         renderedHtml = renderEmailTemplate(
-          businessProfile?.email_template_style || templateStyle || 'professional',
+          branding.templateStyle,
           {
             body: emailBodyContent || '',
             senderName,
             senderEmail: fromEmail,
-            senderTitle: userProfile?.job_title,
-            companyName: businessProfile?.company_name,
-            logoUrl: businessProfile?.email_logo_url,
-            brandColor: businessProfile?.email_brand_color || '#8b5cf6',
-            footerText: businessProfile?.email_footer_text,
-            signature: businessProfile?.email_signature,
+            senderTitle: branding.senderTitle || userProfile?.job_title,
+                companyName: branding.companyName,
+                headerName: branding.headerName || undefined,
+                logoUrl: branding.logoUrl,
+                brandColor: branding.brandColor,
+                footerText: branding.footerText,
+                footerImageUrl: branding.footerImageUrl,
+                signature: branding.signature,
+            senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
+            founderImageUrl: branding.founderImageUrl ?? undefined,
+            websiteUrl: branding.websiteUrl ?? undefined,
           }
         );
       } catch (templateError: any) {
@@ -760,8 +833,7 @@ serve(async (req) => {
           console.error('Error fetching connection for email thread:', connError);
         }
 
-        // Priority: connection.from_email > profiles.email > user.email
-        const fromEmail = connection?.from_email || userProfile?.email || user.email || 'noreply@crm.com';
+        const fromEmail = branding.senderEmail || connection?.from_email || userProfile?.email || user.email || 'noreply@crm.com';
 
         console.log(`Creating email thread - From: ${fromEmail}, To: ${toEmail}, ThreadID: ${threadId}`);
 

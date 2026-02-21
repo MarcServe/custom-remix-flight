@@ -75,6 +75,46 @@ serve(async (req) => {
           .single();
 
         if (findError || !activity) {
+          // Try to find a campaign recipient directly by external_message_id
+          const { data: directRecipient } = await supabase
+            .from('email_campaign_recipients')
+            .select('id, campaign_id')
+            .eq('external_message_id', emailId)
+            .maybeSingle();
+          if (directRecipient) {
+            const recipientUpdates: Record<string, any> = {};
+            if (eventType === 'email.opened') {
+              recipientUpdates.opened_at = new Date().toISOString();
+              recipientUpdates.status = 'opened';
+            } else if (eventType === 'email.clicked') {
+              recipientUpdates.opened_at = new Date().toISOString();
+              recipientUpdates.status = 'clicked';
+            } else if (eventType === 'email.bounced') {
+              recipientUpdates.status = 'bounced';
+            }
+            if (Object.keys(recipientUpdates).length > 0) {
+              await supabase
+                .from('email_campaign_recipients')
+                .update(recipientUpdates)
+                .eq('id', directRecipient.id);
+              if (eventType === 'email.opened' || eventType === 'email.clicked') {
+                const { count } = await supabase
+                  .from('email_campaign_recipients')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('campaign_id', directRecipient.campaign_id)
+                  .in('status', ['opened', 'clicked']);
+                if (count !== null) {
+                  await supabase
+                    .from('email_campaigns')
+                    .update({ opened_count: count })
+                    .eq('id', directRecipient.campaign_id);
+                }
+              }
+              console.log(`✅ Updated campaign recipient directly for ${emailId}`);
+              results.push({ success: true, recipientId: directRecipient.id, event: eventType });
+              continue;
+            }
+          }
           console.error('Email activity not found:', emailId);
           results.push({ success: false, error: 'Activity not found', emailId, payload });
           continue;
@@ -233,6 +273,50 @@ serve(async (req) => {
 
         if (updateError) {
           throw new Error(`Failed to update activity: ${updateError.message}`);
+        }
+
+        // Also update the campaign recipient if this email belongs to a bulk campaign
+        try {
+          const campaignRecipientUpdates: Record<string, any> = {};
+          if (eventType === 'email.opened') {
+            campaignRecipientUpdates.opened_at = new Date().toISOString();
+            campaignRecipientUpdates.status = 'opened';
+          } else if (eventType === 'email.clicked') {
+            campaignRecipientUpdates.opened_at = new Date().toISOString();
+            campaignRecipientUpdates.status = 'clicked';
+          } else if (eventType === 'email.bounced') {
+            campaignRecipientUpdates.status = 'bounced';
+          }
+          if (Object.keys(campaignRecipientUpdates).length > 0) {
+            const { data: campaignRecipient } = await supabase
+              .from('email_campaign_recipients')
+              .select('id, campaign_id')
+              .eq('external_message_id', emailId)
+              .maybeSingle();
+            if (campaignRecipient) {
+              await supabase
+                .from('email_campaign_recipients')
+                .update(campaignRecipientUpdates)
+                .eq('id', campaignRecipient.id);
+              // Update campaign-level opened_count
+              if (eventType === 'email.opened' || eventType === 'email.clicked') {
+                const { count } = await supabase
+                  .from('email_campaign_recipients')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('campaign_id', campaignRecipient.campaign_id)
+                  .in('status', ['opened', 'clicked']);
+                if (count !== null) {
+                  await supabase
+                    .from('email_campaigns')
+                    .update({ opened_count: count })
+                    .eq('id', campaignRecipient.campaign_id);
+                }
+              }
+              console.log(`✅ Also updated campaign recipient for ${emailId}`);
+            }
+          }
+        } catch (crErr) {
+          console.error('Non-fatal: failed to update campaign recipient:', crErr);
         }
 
         console.log(`✅ Updated email activity ${activity.id} for event ${eventType}`);

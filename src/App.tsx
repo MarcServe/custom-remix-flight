@@ -38,6 +38,9 @@ import Files from "./pages/Files";
 import Invoices from "./pages/Invoices";
 import Auth from "./pages/Auth";
 import Subscription from "./pages/Subscription";
+import EmailBranding from "./pages/EmailBranding";
+import Newsletters from "./pages/Newsletters";
+import RecipientGroups from "./pages/RecipientGroups";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -85,6 +88,9 @@ const App = () => (
           <Route path="/all-campaigns" element={<UnifiedCampaigns />} />
           <Route path="/auto-responses" element={<AutoResponseHub />} />
           <Route path="/campaigns" element={<Campaigns />} />
+                          <Route path="/email-branding" element={<EmailBranding />} />
+                          <Route path="/newsletters" element={<Newsletters />} />
+                          <Route path="/recipient-groups" element={<RecipientGroups />} />
                           <Route path="/notes" element={<Notes />} />
                           <Route path="/conversations" element={<Conversations />} />
                           <Route path="/events" element={<Events />} />
