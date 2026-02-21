@@ -10,6 +10,19 @@ const corsHeaders = {
 // Resend inbound email for receiving replies
 const RESEND_INBOUND_EMAIL = 'leadgenie@eldapgraaa.resend.app';
 
+function parseResendError(status: number, bodyText: string): string {
+  try {
+    const j = JSON.parse(bodyText);
+    const msg = j?.message || j?.error || bodyText;
+    if (status === 403 && typeof msg === 'string' && (msg.includes('not verified') || msg.includes('domain'))) {
+      return `${msg} Add and verify your domain at https://resend.com/domains and use an email from that domain as "Send from" in Settings → Email Providers.`;
+    }
+    return typeof msg === 'string' ? msg : bodyText;
+  } catch {
+    return bodyText;
+  }
+}
+
 interface EmailRequest {
   toEmail: string;
   toName: string;
@@ -492,7 +505,7 @@ serve(async (req) => {
       if (!resendResponse.ok) {
         const errorData = await resendResponse.text();
         console.error('Resend API error:', errorData);
-        throw new Error(`Failed to send email: ${errorData}`);
+        throw new Error(parseResendError(resendResponse.status, errorData));
       }
 
       const resendData = await resendResponse.json();
@@ -726,7 +739,7 @@ serve(async (req) => {
           statusText: resendResponse.statusText,
           errorData,
         });
-        throw new Error(`Failed to send via Resend (${resendResponse.status}): ${errorData}`);
+        throw new Error(parseResendError(resendResponse.status, errorData));
       }
 
       let resendData: any;
