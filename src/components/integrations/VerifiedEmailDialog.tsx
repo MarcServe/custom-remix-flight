@@ -50,64 +50,52 @@ export function VerifiedEmailDialog({ open, onOpenChange, provider, onSuccess }:
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Check if connection already exists
-      const { data: existingConnection } = await supabase
+      const normalizedEmail = fromEmail.trim().toLowerCase();
+
+      // Check for duplicate: same provider + same from_email (case-insensitive)
+      const { data: duplicate } = await supabase
         .from('crm_connections')
         .select('id')
         .eq('user_id', user.id)
         .eq('provider', provider)
         .eq('status', 'active')
+        .ilike('from_email', normalizedEmail)
         .maybeSingle();
 
-      if (existingConnection) {
-        // Update existing connection
-        const { error: updateError } = await supabase
-          .from('crm_connections')
-          .update({
-            from_email: fromEmail,
-            updated_at: new Date().toISOString(),
-            metadata: {
-              updated_via: 'ui',
-              last_updated: new Date().toISOString(),
-            }
-          })
-          .eq('id', existingConnection.id);
-
-        if (updateError) throw updateError;
-
-        toast.success(`${providerName} email updated`, {
-          description: `Now sending from ${fromEmail}`,
-        });
-      } else {
-        // Create new connection
-        const { error: insertError } = await supabase
-          .from('crm_connections')
-          .insert({
-            user_id: user.id,
-            provider,
-            connection_id: `${provider}_${Date.now()}`,
-            status: 'active',
-            from_email: fromEmail,
-            sending_method: 'api',
-            tracking_enabled: true,
-            capabilities: {
-              opens: true,
-              clicks: true,
-              replies: true,
-              bounces: true,
-            },
-            metadata: {
-              configured_via: 'ui',
-              configured_at: new Date().toISOString(),
-            }
-          });
-
-        if (insertError) throw insertError;
-
-        toast.success(`${providerName} configured`, {
-          description: `Now sending from ${fromEmail}`,
-        });
+      if (duplicate) {
+        setError(`You already have a ${providerName} sender with ${fromEmail}`);
+        setIsSubmitting(false);
+        return;
       }
+
+      // Always create a new connection so user can have multiple senders (e.g. sales@talkweb.io + michael.o@bizboosters.co.uk)
+      const { error: insertError } = await supabase
+        .from('crm_connections')
+        .insert({
+          user_id: user.id,
+          provider,
+          connection_id: `${provider}_${Date.now()}`,
+          status: 'active',
+          from_email: normalizedEmail,
+          sending_method: 'api',
+          tracking_enabled: true,
+          capabilities: {
+            opens: true,
+            clicks: true,
+            replies: true,
+            bounces: true,
+          },
+          metadata: {
+            configured_via: 'ui',
+            configured_at: new Date().toISOString(),
+          }
+        });
+
+      if (insertError) throw insertError;
+
+      toast.success(`${providerName} sender added`, {
+        description: `Sending from ${fromEmail}`,
+      });
 
       onSuccess?.();
       onOpenChange(false);
@@ -125,9 +113,9 @@ export function VerifiedEmailDialog({ open, onOpenChange, provider, onSuccess }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Configure {providerName} Sender Email</DialogTitle>
+          <DialogTitle>Add {providerName} Sender</DialogTitle>
           <DialogDescription>
-            Enter the verified email address you want to use for sending with {providerName}
+            Add a verified sender email. You can have multiple senders (e.g. different domains) once each is verified in {providerName}.
           </DialogDescription>
         </DialogHeader>
 

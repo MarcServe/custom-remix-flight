@@ -262,13 +262,16 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     enabled: recipientsToUse.length > 0 && open,
   });
 
-  // Fetch email connections
+  // Fetch email connections (all senders: multiple Resend/SendGrid per user)
   const { data: connections } = useQuery({
     queryKey: ['crm-connections'],
     queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
       const { data, error } = await supabase
         .from('crm_connections')
         .select('*')
+        .eq('user_id', user.id)
         .eq('status', 'active')
         .in('provider', ['gmail', 'gmail_direct', 'outlook', 'smtp', 'resend', 'sendgrid'])
         .order('created_at', { ascending: false });
@@ -276,6 +279,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       if (error) throw error;
       return data || [];
     },
+    enabled: open,
   });
 
   // Fetch business profile for sender display
@@ -2216,58 +2220,42 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 <SelectValue placeholder="Select email account" />
               </SelectTrigger>
               <SelectContent>
-                {connections?.some(c => c.provider === 'resend' && c.status === 'active') && (
-                  <SelectItem value={connections.find(c => c.provider === 'resend')?.id || ''}>
-                    <div className="flex items-center gap-2">
-                      <span>🚀</span>
-                      <div>
-                        <div className="font-medium">Resend</div>
-                        <div className="text-xs text-muted-foreground">
-                          {businessProfile?.company_name || 'Your Business'} &lt;{connections.find(c => c.provider === 'resend')?.from_email}&gt;
+                {connections
+                  ?.filter((c) => c.status === 'active')
+                  .map((conn) => {
+                    const fromEmail = conn.from_email || '';
+                    const matchProfile = senderProfiles.find(
+                      (p: { sender_email?: string }) => p.sender_email && fromEmail && String(p.sender_email).toLowerCase() === fromEmail.toLowerCase()
+                    );
+                    const displayName = matchProfile?.display_name || matchProfile?.name || businessProfile?.company_name || 'Your Business';
+                    const providerLabel =
+                      conn.provider === 'resend'
+                        ? 'Resend'
+                        : conn.provider === 'sendgrid'
+                          ? 'SendGrid'
+                          : conn.provider === 'smtp'
+                            ? 'SMTP Direct'
+                            : conn.provider === 'gmail' || conn.provider === 'gmail_direct'
+                              ? 'Gmail'
+                              : conn.provider === 'outlook'
+                                ? 'Outlook'
+                                : conn.provider;
+                    const icon =
+                      conn.provider === 'resend' ? '🚀' : conn.provider === 'sendgrid' ? '📬' : conn.provider === 'smtp' ? '⚙️' : conn.provider === 'gmail' || conn.provider === 'gmail_direct' ? '📧' : '✉️';
+                    return (
+                      <SelectItem key={conn.id} value={conn.id}>
+                        <div className="flex items-center gap-2">
+                          <span>{icon}</span>
+                          <div>
+                            <div className="font-medium">{providerLabel}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {displayName} &lt;{fromEmail || 'Connected account'}&gt;
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  </SelectItem>
-                )}
-                {connections?.some(c => c.provider === 'sendgrid' && c.status === 'active') && (
-                  <SelectItem value={connections.find(c => c.provider === 'sendgrid')?.id || ''}>
-                    <div className="flex items-center gap-2">
-                      <span>📬</span>
-                      <div>
-                        <div className="font-medium">SendGrid</div>
-                        <div className="text-xs text-muted-foreground">
-                          {businessProfile?.company_name || 'Your Business'} &lt;{connections.find(c => c.provider === 'sendgrid')?.from_email}&gt;
-                        </div>
-                      </div>
-                    </div>
-                  </SelectItem>
-                )}
-                {connections?.some(c => (c.provider === 'gmail' || c.provider === 'gmail_direct') && c.status === 'active') && (
-                  <SelectItem value={connections.find(c => c.provider === 'gmail' || c.provider === 'gmail_direct')?.id || ''}>
-                    <div className="flex items-center gap-2">
-                      <span>📧</span>
-                      <div>
-                        <div className="font-medium">Gmail</div>
-                        <div className="text-xs text-muted-foreground">
-                          {connections.find(c => c.provider === 'gmail' || c.provider === 'gmail_direct')?.from_email || 'Connected account'}
-                        </div>
-                      </div>
-                    </div>
-                  </SelectItem>
-                )}
-                {connections?.some(c => c.provider === 'smtp' && c.status === 'active') && (
-                  <SelectItem value={connections.find(c => c.provider === 'smtp')?.id || ''}>
-                    <div className="flex items-center gap-2">
-                      <span>⚙️</span>
-                      <div>
-                        <div className="font-medium">SMTP Direct</div>
-                        <div className="text-xs text-muted-foreground">
-                          {businessProfile?.company_name || 'Your Business'} &lt;{connections.find(c => c.provider === 'smtp')?.from_email}&gt;
-                        </div>
-                      </div>
-                    </div>
-                  </SelectItem>
-                )}
+                      </SelectItem>
+                    );
+                  })}
               </SelectContent>
             </Select>
             {sender === 'resend' && (

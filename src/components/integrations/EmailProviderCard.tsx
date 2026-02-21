@@ -46,17 +46,30 @@ interface EmailProvider {
 interface EmailProviderCardProps {
   provider: EmailProvider;
   connection?: NangoConnection;
+  /** For API providers (Resend/SendGrid), multiple connections so user can have multiple senders */
+  connections?: NangoConnection[];
   onConnect: () => void;
   onDisconnect: (connectionId: string) => void;
 }
 
-export function EmailProviderCard({ provider, connection, onConnect, onDisconnect }: EmailProviderCardProps) {
+export function EmailProviderCard({ provider, connection, connections, onConnect, onDisconnect }: EmailProviderCardProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [isUpdatingMode, setIsUpdatingMode] = useState(false);
 
-  const isConnected = connection && connection.status === 'active';
-  const isPending = connection && connection.status === 'pending';
-  const hasIssue = connection && connection.status === 'error';
+  const apiConnections = connections ?? (connection ? [connection] : []);
+  const isApiProvider = ['resend', 'sendgrid'].includes(provider.id);
+  const activeConnectionsRaw = apiConnections.filter((c) => c.status === 'active');
+  // One row per sender email (case-insensitive) so duplicate DB rows don’t show twice
+  const seenEmails = new Set<string>();
+  const activeConnections = activeConnectionsRaw.filter((c) => {
+    const key = (c.from_email || '').trim().toLowerCase();
+    if (!key || seenEmails.has(key)) return false;
+    seenEmails.add(key);
+    return true;
+  });
+  const isConnected = isApiProvider ? activeConnectionsRaw.length > 0 : connection?.status === 'active';
+  const isPending = !isApiProvider && connection && connection.status === 'pending';
+  const hasIssue = !isApiProvider && connection && connection.status === 'error';
   
   // Assign different gradient styles to each provider
   const getCardStyle = () => {
@@ -197,19 +210,30 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
         )}
 
         {/* Connection Details - Always show for API providers, collapsible for others */}
-        {isConnected && connection && (
+        {isConnected && (connection || activeConnections.length > 0) && (
           <>
-            {['resend', 'sendgrid'].includes(provider.id) ? (
-              // Always show email for API providers
+            {isApiProvider ? (
+              // API providers: list each sender with its own Disconnect
               <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
-                {connection.from_email && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Sending from:</span>
-                    <span className="font-mono font-medium">{connection.from_email}</span>
+                {activeConnections.map((conn) => (
+                  <div key={conn.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-border/50 last:border-0">
+                    <div className="min-w-0">
+                      <span className="text-xs text-muted-foreground">Sending from:</span>
+                      <span className="ml-2 font-mono text-sm font-medium truncate block">{conn.from_email || '—'}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => conn.id && onDisconnect(conn.id)}
+                    >
+                      Disconnect
+                    </Button>
                   </div>
-                )}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <CheckCircle2 className="h-3 w-3 text-success" />
+                ))}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
+                  <CheckCircle2 className="h-3 w-3 text-success shrink-0" />
                   <span>Configured and ready to send</span>
                 </div>
               </div>
@@ -268,10 +292,10 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
         )}
 
         {/* Connection Test - Only show for connected providers */}
-        {isConnected && connection && (
+        {isConnected && (connection || activeConnections[0]) && (
           <ProviderConnectionTest
             provider={provider.id}
-            connectionId={connection.connection_id || ''}
+            connectionId={(connection || activeConnections[0]).connection_id || ''}
           />
         )}
 
@@ -282,7 +306,12 @@ export function EmailProviderCard({ provider, connection, onConnect, onDisconnec
               Connect
             </Button>
           )}
-          {isConnected && (
+          {isConnected && isApiProvider && (
+            <Button onClick={onConnect} size="sm" variant={getButtonVariant() as any} className="w-full">
+              Add sender
+            </Button>
+          )}
+          {isConnected && !isApiProvider && (
             <Button 
               variant="outline" 
               size="sm"

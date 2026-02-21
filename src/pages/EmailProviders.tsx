@@ -314,15 +314,19 @@ export default function EmailProviders() {
                 return true;
               })
               .map((provider) => {
-                const connection = connections?.find(
+                const isApiProvider = provider.id === 'resend' || provider.id === 'sendgrid';
+                const providerConnections = connections?.filter(
                   (c) => c.provider === provider.id && c.status !== 'disconnected'
-                );
-                
+                ) ?? [];
+                const connection = isApiProvider ? undefined : providerConnections[0];
+                const apiConnections = isApiProvider ? providerConnections : undefined;
+
                 return (
                   <EmailProviderCard
                     key={provider.id}
                     provider={provider}
                     connection={connection}
+                    connections={apiConnections}
                     onConnect={() => handleConnect(provider.id)}
                     onDisconnect={handleDisconnect}
                   />
