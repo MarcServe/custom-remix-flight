@@ -1473,7 +1473,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         testBodyText = personalizeText(bodyText, testPerson);
       }
 
-      const { error } = await supabase.functions.invoke('send-crm-email', {
+      const { data: invokeData, error } = await supabase.functions.invoke('send-crm-email', {
         body: {
           toEmail: testEmailAddress,
           toName: 'Test Recipient',
@@ -1487,7 +1487,17 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        let msg = (invokeData as any)?.error ?? error?.message ?? "Edge Function returned a non-2xx status code";
+        const ctx = (error as { context?: Response })?.context;
+        if (ctx && typeof (ctx as Response).json === "function") {
+          try {
+            const body = await (ctx as Response).json();
+            if (body && typeof body === "object" && typeof body.error === "string") msg = body.error;
+          } catch (_) {}
+        }
+        throw new Error(msg);
+      }
 
       toast({
         title: "Test email sent",

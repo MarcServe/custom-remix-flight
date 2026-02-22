@@ -493,7 +493,9 @@ serve(async (req) => {
           html: wrappedHtml,
           reply_to: useInboundReplyTo ? RESEND_INBOUND_EMAIL : fromEmail, // Use inbound email for reply tracking if enabled
           headers: {
-            'X-Entity-Ref-ID': threadId, // Custom header for tracking
+            'X-Entity-Ref-ID': threadId,
+            'X-Priority': '3',
+            'Importance': 'normal',
           },
           attachments: attachmentData.length > 0 ? attachmentData.map(att => ({
             filename: att.filename,
@@ -693,6 +695,8 @@ serve(async (req) => {
           reply_to: useInboundReplyTo ? RESEND_INBOUND_EMAIL : fromEmail,
           headers: {
             'X-Entity-Ref-ID': threadId,
+            'X-Priority': '3',
+            'Importance': 'normal',
           },
         };
         

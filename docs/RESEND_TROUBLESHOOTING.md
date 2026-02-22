@@ -23,12 +23,26 @@ If the domain isn’t verified, Resend may return an error (e.g. 403) or accept 
 - Confirm the email was **accepted** and see delivery status
 - If it’s “delivered”, the issue may be spam or the recipient address
 
-## 4. **Spam and recipient address**
+## 4. **Emails in Promotions instead of Inbox**
 
-- Ask the recipient to check **spam/junk**
+Gmail often routes cold outreach or marketing-style mail to **Promotions**. To improve primary **Inbox** placement:
+
+- **From name** – Use a real person’s name (e.g. “Michael Orji” or “Sarah from TalkWeb”) in **Email Branding → Sender profiles** rather than only a company name. Avoid “noreply” or “Marketing”.
+- **Reply-To** – Campaigns use your real From address for replies; that encourages engagement and helps Gmail treat mail as 1:1.
+- **Subject lines** – Avoid all caps, heavy sales language, or “FREE / Act now”. Keep them concise and conversational.
+- **Content** – More 1:1, personal tone and less “broadcast” or template-heavy copy. Personalization (e.g. first name, company) helps.
+- **Domain authentication** – Verify your sending domain in Resend with **SPF and DKIM**; add **DMARC** in your DNS if you can. See [resend.com/domains](https://resend.com/domains). Strong auth improves trust and can help Inbox placement.
+- **Domain reputation** – New or low-volume domains are filtered more. Warm up by sending to engaged contacts first; avoid big blasts or sudden volume spikes.
+- **Recipient action** – Ask recipients to move one message to **Primary** and/or click “Not spam”; that trains Gmail for future emails from you.
+
+Outgoing campaign/CRM emails from this app send with `X-Priority: 3` and `Importance: normal` so they look like normal mail rather than bulk marketing. You can’t force Gmail to put every email in Inbox, but the above improves the odds.
+
+## 5. **Spam and recipient address**
+
+- Ask the recipient to check **spam/junk** and **Promotions**
 - Confirm the **To** address is correct and has no typos
 
-## 5. **Redeploy after changes**
+## 6. **Redeploy after changes**
 
 After setting `RESEND_API_KEY` or changing secrets:
 

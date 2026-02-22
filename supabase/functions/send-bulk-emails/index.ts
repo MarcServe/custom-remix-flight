@@ -209,7 +209,7 @@ serve(async (req) => {
           companyName: businessProfile?.company_name ?? null,
           headerName: senderProfile.display_name ?? businessProfile?.email_header_name ?? null,
           logoUrl: senderProfile.logo_url ?? businessProfile?.email_logo_url ?? null,
-          brandColor: senderProfile.brand_color || businessProfile?.email_brand_color ?? '#8b5cf6',
+          brandColor: (senderProfile.brand_color || businessProfile?.email_brand_color) ?? '#8b5cf6',
           footerText: senderProfile.footer_text ?? businessProfile?.email_footer_text ?? null,
           footerImageUrl: senderProfile.footer_logo_url ?? senderProfile.logo_url ?? businessProfile?.email_footer_logo_url ?? businessProfile?.email_logo_url ?? businessProfile?.email_footer_image_url ?? null,
           signature: senderProfile.signature ?? businessProfile?.email_signature ?? null,
@@ -625,6 +625,10 @@ serve(async (req) => {
               subject: recipient.personalized_subject,
               text: recipient.personalized_body_text || '',
               html: wrappedHtml,
+              headers: {
+                'X-Priority': '3',
+                'Importance': 'normal',
+              },
             }),
           });
 
