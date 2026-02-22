@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderEmailTemplate } from "../_shared/professional-template.ts";
+import { encodeRfc2047 } from "../_shared/gmail-utils.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -112,7 +113,7 @@ serve(async (req) => {
     // Fetch business profile for company name, email provider preference, and branding settings
     const { data: businessProfile } = await supabaseClient
       .from('business_profiles')
-      .select('company_name, email_header_name, email_provider, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_sender_title, email_sender_email, email_signature, website')
+      .select('company_name, email_header_name, email_provider, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_signature_name, email_sender_title, email_sender_email, email_signature, website')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -127,10 +128,10 @@ serve(async (req) => {
       signature: string | null;
       templateStyle: string;
       senderName: string | null;
+      signatureName: string | null;
       senderEmail: string | null;
       senderTitle: string | null;
       senderImageUrl: string | null;
-      founderImageUrl: string | null;
       websiteUrl: string | null;
     } = {
       companyName: businessProfile?.company_name || null,
@@ -142,16 +143,16 @@ serve(async (req) => {
       signature: businessProfile?.email_signature ?? null,
       templateStyle: businessProfile?.email_template_style || templateStyle || 'professional',
       senderName: businessProfile?.email_sender_name ?? null,
+      signatureName: businessProfile?.email_signature_name ?? null,
       senderEmail: businessProfile?.email_sender_email ?? null,
       senderTitle: businessProfile?.email_sender_title ?? null,
       senderImageUrl: businessProfile?.email_sender_image_url ?? null,
-      founderImageUrl: businessProfile?.email_footer_image_url ?? null,
       websiteUrl: businessProfile?.website ?? null,
     };
     if (requestSenderProfileId) {
       const { data: senderProfile } = await supabaseClient
         .from('sender_profiles')
-        .select('name, display_name, logo_url, brand_color, footer_text, footer_image_url, footer_logo_url, signature, template_style, sender_name, sender_email, sender_title, sender_image_url, website_url')
+        .select('name, display_name, logo_url, brand_color, footer_text, footer_image_url, footer_logo_url, signature, template_style, sender_name, signature_name, sender_email, sender_title, sender_image_url, website_url')
         .eq('id', requestSenderProfileId)
         .eq('user_id', user.id)
         .maybeSingle();
@@ -166,10 +167,10 @@ serve(async (req) => {
           signature: senderProfile.signature ?? null,
           templateStyle: ['professional', 'minimal', 'modern', 'creative', 'corporate', 'bold', 'elegant'].includes(senderProfile.template_style) ? senderProfile.template_style : 'professional',
           senderName: senderProfile.sender_name ?? null,
+          signatureName: senderProfile.signature_name ?? null,
           senderEmail: senderProfile.sender_email ?? null,
           senderTitle: senderProfile.sender_title ?? null,
           senderImageUrl: senderProfile.sender_image_url ?? null,
-          founderImageUrl: senderProfile.footer_image_url ?? businessProfile?.email_footer_image_url ?? null,
           websiteUrl: senderProfile.website_url ?? businessProfile?.website ?? null,
         };
       }
@@ -360,24 +361,65 @@ serve(async (req) => {
 
       console.log(`Sending via Gmail Direct API from: ${fromName ? fromName + ' ' : ''}<${fromEmail}>`);
 
-      // Build Gmail API message with attachments
-      const boundary = '===============' + Math.random().toString().substr(2) + '==';
+      // Render full branded HTML (same as Resend/SendGrid) so Gmail shows styled email
+      let wrappedHtml: string;
+      try {
+        wrappedHtml = renderEmailTemplate(
+          branding.templateStyle,
+          {
+            body: emailBodyContent || '',
+            senderName: fromName || 'Your Business',
+            signatureName: branding.signatureName ?? undefined,
+            senderEmail: fromEmail,
+            senderTitle: branding.senderTitle || userProfile?.job_title,
+            companyName: branding.companyName,
+            headerName: branding.headerName || undefined,
+            logoUrl: branding.logoUrl,
+            brandColor: branding.brandColor,
+            footerText: branding.footerText,
+            footerImageUrl: branding.footerImageUrl,
+            signature: branding.signature,
+            senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
+            websiteUrl: branding.websiteUrl ?? undefined,
+          }
+        );
+      } catch (templateError: unknown) {
+        console.error('Error rendering email template (Gmail):', templateError);
+        throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
+      }
+
+      const fromLine = fromName
+        ? `From: ${encodeRfc2047(fromName)} <${fromEmail}>`
+        : `From: ${fromEmail}`;
+      const subjectLine = `Subject: ${encodeRfc2047(subject)}`;
+
+      // Build Gmail API message: multipart/mixed with body as multipart/alternative (text + html), then attachments
+      const mixedBoundary = '===============' + Math.random().toString().substr(2) + '==';
+      const altBoundary = '===============' + Math.random().toString().substr(2) + '==';
       const emailLines = [
-        fromName ? `From: ${fromName} <${fromEmail}>` : `From: ${fromEmail}`,
+        fromLine,
         `To: ${toEmail}`,
-        `Subject: ${subject}`,
+        subjectLine,
         'MIME-Version: 1.0',
-        `Content-Type: multipart/mixed; boundary="${boundary}"`,
+        `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`,
         '',
-        `--${boundary}`,
+        `--${mixedBoundary}`,
+        `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+        '',
+        `--${altBoundary}`,
         'Content-Type: text/plain; charset=utf-8',
         '',
         emailBodyText,
+        `--${altBoundary}`,
+        'Content-Type: text/html; charset=utf-8',
+        '',
+        wrappedHtml,
+        `--${altBoundary}--`,
       ];
 
       // Add attachments if any
       for (const attachment of attachmentData) {
-        emailLines.push(`--${boundary}`);
+        emailLines.push(`--${mixedBoundary}`);
         emailLines.push(`Content-Type: ${attachment.type}; name="${attachment.filename}"`);
         emailLines.push('Content-Transfer-Encoding: base64');
         emailLines.push(`Content-Disposition: attachment; filename="${attachment.filename}"`);
@@ -385,10 +427,13 @@ serve(async (req) => {
         emailLines.push(attachment.content);
       }
 
-      emailLines.push(`--${boundary}--`);
+      emailLines.push(`--${mixedBoundary}--`);
 
       const emailMessage = emailLines.join('\r\n');
-      const encodedMessage = btoa(emailMessage)
+      // Gmail API raw is base64url of the UTF-8 bytes; btoa() only accepts Latin1 so encode UTF-8 first
+      const utf8Bytes = new TextEncoder().encode(emailMessage);
+      const binary = Array.from(utf8Bytes).map((b) => String.fromCharCode(b)).join('');
+      const encodedMessage = btoa(binary)
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=+$/, '');
@@ -453,6 +498,7 @@ serve(async (req) => {
           {
             body: emailBodyContent || '',
             senderName,
+            signatureName: branding.signatureName ?? undefined,
             senderEmail: fromEmail,
             senderTitle: branding.senderTitle || userProfile?.job_title,
                 companyName: branding.companyName,
@@ -463,7 +509,6 @@ serve(async (req) => {
                 footerImageUrl: branding.footerImageUrl,
                 signature: branding.signature,
             senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
-            founderImageUrl: branding.founderImageUrl ?? undefined,
             websiteUrl: branding.websiteUrl ?? undefined,
           }
         );
@@ -556,6 +601,7 @@ serve(async (req) => {
           {
             body: emailBodyContent || '',
             senderName,
+            signatureName: branding.signatureName ?? undefined,
             senderEmail: fromEmail,
             senderTitle: branding.senderTitle || userProfile?.job_title,
                 companyName: branding.companyName,
@@ -566,7 +612,6 @@ serve(async (req) => {
                 footerImageUrl: branding.footerImageUrl,
                 signature: branding.signature,
             senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
-            founderImageUrl: branding.founderImageUrl ?? undefined,
             websiteUrl: branding.websiteUrl ?? undefined,
           }
         );
@@ -664,6 +709,7 @@ serve(async (req) => {
           {
             body: emailBodyContent || '',
             senderName,
+            signatureName: branding.signatureName ?? undefined,
             senderEmail: fromEmail,
             senderTitle: branding.senderTitle || userProfile?.job_title,
                 companyName: branding.companyName,
@@ -674,7 +720,6 @@ serve(async (req) => {
                 footerImageUrl: branding.footerImageUrl,
                 signature: branding.signature,
             senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
-            founderImageUrl: branding.founderImageUrl ?? undefined,
             websiteUrl: branding.websiteUrl ?? undefined,
           }
         );

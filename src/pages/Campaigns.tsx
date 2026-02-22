@@ -102,6 +102,8 @@ export default function Campaigns() {
   const [savingAsGroup, setSavingAsGroup] = useState(false);
   const [addFromGroupOpen, setAddFromGroupOpen] = useState(false);
   const [addingFromGroup, setAddingFromGroup] = useState(false);
+  const [cancelScheduleConfirmOpen, setCancelScheduleConfirmOpen] = useState(false);
+  const [cancellingSchedule, setCancellingSchedule] = useState(false);
 
   const { data: campaigns, isLoading } = useQuery({
     queryKey: ['email-campaigns'],
@@ -626,6 +628,26 @@ export default function Campaigns() {
     }
   };
 
+  const handleCancelScheduleCampaign = async () => {
+    if (!selectedCampaign) return;
+    setCancellingSchedule(true);
+    try {
+      const { error } = await supabase
+        .from('email_campaigns')
+        .update({ status: 'draft', scheduled_at: null })
+        .eq('id', selectedCampaign);
+      if (error) throw error;
+      setCancelScheduleConfirmOpen(false);
+      setSelectedCampaign(null);
+      await queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+      toast.success('Schedule cancelled. Campaign is back to draft.');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to cancel schedule');
+    } finally {
+      setCancellingSchedule(false);
+    }
+  };
+
   const handleAddFromGroup = async (groupId: string) => {
     if (!selectedCampaign || !selectedCampaignData) return;
     setAddingFromGroup(true);
@@ -1081,6 +1103,40 @@ export default function Campaigns() {
               </DialogDescription>
             </DialogHeader>
 
+            {selectedCampaignData?.status?.toLowerCase() === 'scheduled' && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/50 px-4 py-3 text-sm">
+                <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">Scheduled for</span>
+                <span className="font-medium">
+                  {selectedCampaignData.scheduled_at
+                    ? format(new Date(selectedCampaignData.scheduled_at), "PPp")
+                    : "—"}
+                </span>
+                <div className="flex gap-2 ml-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDraftToEdit(selectedCampaign);
+                      setBulkEmailDialogOpen(true);
+                      setSelectedCampaign(null);
+                    }}
+                  >
+                    <Edit className="h-4 w-4 mr-1" />
+                    Edit campaign
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setCancelScheduleConfirmOpen(true)}
+                  >
+                    Cancel schedule
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {canEditRecipients && (
               <div className="space-y-2 py-2 border-b">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1346,6 +1402,38 @@ export default function Campaigns() {
                   </>
                 ) : (
                   "Clear list"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Cancel schedule confirmation */}
+        <AlertDialog open={cancelScheduleConfirmOpen} onOpenChange={() => !cancellingSchedule && setCancelScheduleConfirmOpen(false)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cancel schedule?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This campaign will be moved back to draft. It will not send at the scheduled time. You can edit it and schedule again later.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={cancellingSchedule}>Keep scheduled</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleCancelScheduleCampaign();
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={cancellingSchedule}
+              >
+                {cancellingSchedule ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Cancelling...
+                  </>
+                ) : (
+                  "Cancel schedule"
                 )}
               </AlertDialogAction>
             </AlertDialogFooter>

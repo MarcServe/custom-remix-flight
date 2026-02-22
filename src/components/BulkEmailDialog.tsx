@@ -541,14 +541,14 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             .from('email_campaigns')
             .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id')
             .eq('id', initialDraftId)
-            .eq('status', 'draft')
+            .in('status', ['draft', 'scheduled'])
             .single();
 
           if (error || !draftData) {
-            console.error('Error fetching draft:', error);
+            console.error('Error fetching campaign:', error);
             toast({
               title: "Error",
-              description: "Failed to load draft. It may have been deleted or is no longer a draft.",
+              description: "Failed to load campaign. It may have been deleted or is already sending/sent.",
               variant: "destructive",
             });
             return;
@@ -569,7 +569,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         }
       };
 
-      // Try to find in draftCampaigns first (faster), otherwise fetch directly
+      // Try to find in draftCampaigns first (faster for drafts), otherwise fetch directly (covers scheduled)
       if (draftCampaigns && draftCampaigns.length > 0) {
         const draftToLoad = draftCampaigns.find((d: any) => d.id === initialDraftId);
         if (draftToLoad) {
@@ -578,11 +578,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             handleLoadDraft(draftToLoad);
           }, 150);
         } else {
-          // Not in the list, fetch it directly
+          // Not in draft list (e.g. scheduled campaign), fetch by id
           loadDraftById();
         }
       } else {
-        // Drafts not loaded yet, fetch directly
         loadDraftById();
       }
     }
@@ -2653,7 +2652,6 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             const previewFooterImage = sp?.footer_logo_url || sp?.logo_url || businessProfile?.email_footer_logo_url || businessProfile?.email_logo_url || undefined;
             const previewWebsiteUrl = sp?.website_url || businessProfile?.website || undefined;
             const previewSenderImageUrl = sp?.sender_image_url || businessProfile?.email_sender_image_url || userProfile?.avatar_url || undefined;
-            const previewFounderImageUrl = sp?.footer_image_url || businessProfile?.email_footer_image_url || undefined;
             const previewSignature = (sp?.signature ?? businessProfile?.email_signature ?? '')?.trim() || undefined;
             const previewSubject = personalizeText(subject, previewPerson) || 'No subject';
             const previewBody = personalizeText(bodyHtml || previewBodyToHtml(bodyText), previewPerson) || '<p>Your email body will appear here...</p>';
@@ -2683,7 +2681,6 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                     footerText={previewFooterText}
                     footerImageUrl={previewFooterImage}
                     senderImageUrl={previewSenderImageUrl}
-                    founderImageUrl={previewFounderImageUrl}
                     websiteUrl={previewWebsiteUrl}
                     signature={previewSignature}
                     bodyHtml={previewBody}

@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.78.0';
 import { corsHeaders } from '../_shared/cors.ts';
 import { renderEmailTemplate } from '../_shared/professional-template.ts';
+import { encodeRfc2047 } from '../_shared/gmail-utils.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -125,7 +126,7 @@ Deno.serve(async (req) => {
 
     const { data: businessProfile } = await supabase
       .from('business_profiles')
-      .select('company_name, email_header_name, email_provider, email_sender_image_url, email_sender_name, email_sender_title, email_sender_email, website')
+      .select('company_name, email_header_name, email_provider, email_sender_image_url, email_sender_name, email_signature_name, email_sender_title, email_sender_email, website')
       .eq('user_id', user.id)
       .single();
 
@@ -191,11 +192,11 @@ Deno.serve(async (req) => {
 
         const fromEmail = connection.from_email || userProfile?.email || user.email;
         
-        // Build Gmail API message
+        // Build Gmail API message (Subject encoded for non-ASCII)
         const emailLines = [
           `From: ${fromEmail}`,
           `To: ${testEmail}`,
-          `Subject: ${testSubject}`,
+          `Subject: ${encodeRfc2047(testSubject)}`,
           'MIME-Version: 1.0',
           'Content-Type: text/plain; charset=utf-8',
           '',
@@ -203,10 +204,9 @@ Deno.serve(async (req) => {
         ];
 
         const emailMessage = emailLines.join('\r\n');
-        const encodedMessage = btoa(emailMessage)
-          .replace(/\+/g, '-')
-          .replace(/\//g, '_')
-          .replace(/=+$/, '');
+        const utf8Bytes = new TextEncoder().encode(emailMessage);
+        const binary = Array.from(utf8Bytes).map((b) => String.fromCharCode(b)).join('');
+        const encodedMessage = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
         // Send via Gmail API
         const gmailResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
@@ -334,6 +334,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
       const html = renderEmailTemplate(templateStyle, {
         body: sampleBody,
         senderName: businessProfile?.email_sender_name || userProfile?.full_name || 'Test Sender',
+        signatureName: businessProfile?.email_signature_name ?? undefined,
         senderEmail: businessProfile?.email_sender_email || userProfile?.email || user?.email || testEmail,
         senderTitle: businessProfile?.email_sender_title || userProfile?.job_title,
         companyName: businessProfile?.company_name,
@@ -387,9 +388,9 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
         const fromName = companyName || userProfile?.full_name || 'CRM';
         const boundary = '===============' + Math.random().toString().substr(2) + '==';
         const emailLines = [
-          `From: "${fromName}" <${fromEmail}>`,
+          `From: ${encodeRfc2047(fromName)} <${fromEmail}>`,
           `To: ${testEmail}`,
-          `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent('🎨 Test Email - Your Email Template Preview')))}?=`,
+          `Subject: ${encodeRfc2047('🎨 Test Email - Your Email Template Preview')}`,
           'MIME-Version: 1.0',
           `Content-Type: multipart/alternative; boundary="${boundary}"`,
           '',
@@ -405,10 +406,9 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
         ];
 
         const emailMessage = emailLines.join('\r\n');
-        const encodedMessage = btoa(unescape(encodeURIComponent(emailMessage)))
-          .replace(/\+/g, '-')
-          .replace(/\//g, '_')
-          .replace(/=+$/, '');
+        const utf8Bytes = new TextEncoder().encode(emailMessage);
+        const binary = Array.from(utf8Bytes).map((b) => String.fromCharCode(b)).join('');
+        const encodedMessage = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
         const gmailResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
           method: 'POST',
@@ -522,6 +522,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
     const bodyHtml = renderEmailTemplate('professional', {
       body: personalizedBody2 + signatureText,
       senderName: userProfile?.full_name || 'Team',
+      signatureName: businessProfile?.email_signature_name ?? undefined,
       senderEmail: connection?.from_email || (connection?.metadata as any)?.email || user.email || '',
       senderTitle: userProfile?.job_title,
       companyName: businessProfile?.company_name,
@@ -562,13 +563,15 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
       }
 
       const fromEmail = connection.from_email || userProfile?.email || user.email;
-      
-      // Build Gmail API message with HTML
+      const fromName = userProfile?.full_name || 'CRM';
+      const fromLine = fromName ? `${encodeRfc2047(fromName)} <${fromEmail}>` : fromEmail;
+
+      // Build Gmail API message with HTML (Subject/From encoded for non-ASCII)
       const boundary = '===============' + Math.random().toString().substr(2) + '==';
       const emailLines = [
-        `From: ${fromEmail}`,
+        `From: ${fromLine}`,
         `To: ${testEmail}`,
-        `Subject: [TEST] ${personalizedSubject2}`,
+        `Subject: ${encodeRfc2047('[TEST] ' + personalizedSubject2)}`,
         'MIME-Version: 1.0',
         `Content-Type: multipart/alternative; boundary="${boundary}"`,
         '',
@@ -584,10 +587,9 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
       ];
 
       const emailMessage = emailLines.join('\r\n');
-      const encodedMessage = btoa(emailMessage)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
+      const utf8Bytes = new TextEncoder().encode(emailMessage);
+      const binary = Array.from(utf8Bytes).map((b) => String.fromCharCode(b)).join('');
+      const encodedMessage = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
       // Send via Gmail API
       const gmailResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {

@@ -18,6 +18,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
  * Endpoints:
  * - POST { action: "discovery" } - Triggers autonomous-lead-discovery
  * - POST { action: "send-campaigns" } - Triggers send-bulk-emails for scheduled campaigns
+ * - POST { action: "send-newsletters" } - Sends newsletters with status=scheduled and scheduled_at <= now
  * - POST { action: "process-sequences" } - Triggers process-sequence-steps
  */
 Deno.serve(async (req) => {
@@ -118,6 +119,62 @@ Deno.serve(async (req) => {
           results 
         }), { 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+      }
+
+      case 'send-newsletters': {
+        // Find and send scheduled newsletters (status = scheduled, scheduled_at <= now)
+        console.log('[cron-trigger] Processing scheduled newsletters');
+
+        const { data: scheduledNewsletters, error: nlError } = await supabase
+          .from('newsletters')
+          .select('id, user_id, title, scheduled_at')
+          .eq('status', 'scheduled')
+          .lte('scheduled_at', new Date().toISOString());
+
+        if (nlError) {
+          console.error('[cron-trigger] Error fetching scheduled newsletters:', nlError);
+          return new Response(JSON.stringify({
+            success: false,
+            error: nlError.message,
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        console.log(`[cron-trigger] Found ${scheduledNewsletters?.length || 0} scheduled newsletters ready to send`);
+
+        const results: any[] = [];
+        for (const nl of scheduledNewsletters || []) {
+          try {
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/send-newsletter`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                newsletterId: nl.id,
+                triggeredByCron: true,
+              }),
+            });
+            const result = await response.json().catch(() => ({}));
+            results.push({ newsletterId: nl.id, title: nl.title, result });
+            console.log(`[cron-trigger] Newsletter ${nl.title} result:`, result);
+          } catch (err) {
+            console.error(`[cron-trigger] Error sending newsletter ${nl.id}:`, err);
+            results.push({ newsletterId: nl.id, error: err instanceof Error ? err.message : 'Unknown error' });
+          }
+        }
+
+        return new Response(JSON.stringify({
+          success: true,
+          action: 'send-newsletters',
+          newslettersProcessed: scheduledNewsletters?.length || 0,
+          results,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 

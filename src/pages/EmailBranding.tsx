@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { EmailTemplatePreview, type EmailTemplatePreviewStyle } from "@/components/email/EmailTemplatePreview";
 import { SendTestEmailButton } from "@/components/email/SendTestEmailButton";
+import { PreviewErrorBoundary } from "@/components/PreviewErrorBoundary";
 import { LogoUpload } from "@/components/ui/logo-upload";
 import { TemplateStyleSelector, type EmailTemplateStyle } from "@/components/email/TemplateStyleSelector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -69,6 +70,7 @@ export default function EmailBranding() {
     email_footer_logo_url: "",
     email_sender_image_url: "",
     email_sender_name: "",
+    email_signature_name: "",
     email_sender_title: "",
     email_sender_email: "",
     email_signature: "",
@@ -98,6 +100,7 @@ export default function EmailBranding() {
     signature_company: "",
     template_style: "professional" as "professional" | "minimal" | "modern" | "creative" | "corporate" | "bold" | "elegant",
     sender_name: "",
+    signature_name: "",
     sender_email: "",
     sender_title: "",
     sender_image_url: "",
@@ -106,52 +109,13 @@ export default function EmailBranding() {
   const [savingSenderProfile, setSavingSenderProfile] = useState(false);
   const [previewProfileId, setPreviewProfileId] = useState<string>("default");
 
-  const defaultFooterImgRef = useRef<HTMLInputElement>(null);
   const defaultFooterLogoRef = useRef<HTMLInputElement>(null);
   const defaultSenderImgRef = useRef<HTMLInputElement>(null);
-  const senderFooterImgRef = useRef<HTMLInputElement>(null);
   const senderFooterLogoRef = useRef<HTMLInputElement>(null);
   const senderImageRef = useRef<HTMLInputElement>(null);
-  const [uploadingFooterImg, setUploadingFooterImg] = useState<"default" | "sender" | null>(null);
   const [uploadingFooterLogo, setUploadingFooterLogo] = useState<"default" | "sender" | null>(null);
   const [uploadingDefaultSenderImg, setUploadingDefaultSenderImg] = useState(false);
   const [uploadingSenderImage, setUploadingSenderImage] = useState(false);
-
-  const handleFooterImageUpload = async (file: File, target: "default" | "sender") => {
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Please select an image under 5MB", variant: "destructive" });
-      return;
-    }
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
-    if (!validTypes.includes(file.type)) {
-      toast({ title: "Invalid file type", description: "Please select JPG, PNG, WEBP, or SVG", variant: "destructive" });
-      return;
-    }
-    try {
-      setUploadingFooterImg(target);
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) throw new Error("Not authenticated");
-
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${authUser.id}/footer-images/${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from('email-branding').upload(fileName, file, { upsert: true });
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage.from('email-branding').getPublicUrl(fileName);
-      const publicUrl = data.publicUrl;
-
-      if (target === "default") {
-        setBusinessProfile(bp => ({ ...bp, email_footer_image_url: publicUrl }));
-      } else {
-        setSenderProfileForm(f => ({ ...f, footer_image_url: publicUrl }));
-      }
-      toast({ title: "Uploaded", description: "Footer image uploaded successfully" });
-    } catch (error: any) {
-      toast({ title: "Upload failed", description: error.message || "Failed to upload image", variant: "destructive" });
-    } finally {
-      setUploadingFooterImg(null);
-    }
-  };
 
   const handleFooterLogoUpload = async (file: File, target: "default" | "sender") => {
     if (file.size > 5 * 1024 * 1024) {
@@ -255,7 +219,10 @@ export default function EmailBranding() {
         .eq('user_id', user.id)
         .order('sort_order', { ascending: true })
         .order('name', { ascending: true });
-      if (error) throw error;
+      if (error) {
+        console.error('Sender profiles fetch error:', error);
+        return [];
+      }
       return data || [];
     },
     enabled: !!user?.id,
@@ -268,7 +235,10 @@ export default function EmailBranding() {
   const loadData = async () => {
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
+      if (!authUser) {
+        setLoading(false);
+        return;
+      }
 
       const { data: profileData } = await supabase
         .from("profiles")
@@ -286,7 +256,7 @@ export default function EmailBranding() {
 
       const { data, error } = await supabase
         .from("business_profiles")
-        .select("company_name, services_description, email_header_name, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_sender_title, email_sender_email, email_signature, email_signature_closing, email_sender_phone, email_sender_address, email_signature_use_structured, email_template_style, website")
+        .select("company_name, services_description, email_header_name, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_signature_name, email_sender_title, email_sender_email, email_signature, email_signature_closing, email_sender_phone, email_sender_address, email_signature_use_structured, email_template_style, website")
         .eq("user_id", authUser.id)
         .single();
 
@@ -304,6 +274,7 @@ export default function EmailBranding() {
           email_footer_logo_url: data.email_footer_logo_url || "",
           email_sender_image_url: data.email_sender_image_url || "",
           email_sender_name: data.email_sender_name || "",
+          email_signature_name: data.email_signature_name || "",
           email_sender_title: data.email_sender_title || "",
           email_sender_email: data.email_sender_email || "",
           email_signature: data.email_signature || "",
@@ -332,7 +303,7 @@ export default function EmailBranding() {
       const signatureToSave = businessProfile.email_signature_use_structured
         ? buildStructuredSignatureHtml({
             closing: businessProfile.email_signature_closing,
-            name: businessProfile.email_sender_name,
+            name: businessProfile.email_signature_name || businessProfile.email_sender_name,
             title: businessProfile.email_sender_title,
             company: businessProfile.company_name,
             phone: businessProfile.email_sender_phone,
@@ -353,6 +324,7 @@ export default function EmailBranding() {
         email_footer_logo_url: businessProfile.email_footer_logo_url || null,
         email_sender_image_url: businessProfile.email_sender_image_url || null,
         email_sender_name: businessProfile.email_sender_name || null,
+        email_signature_name: businessProfile.email_signature_name ?? null,
         email_sender_title: businessProfile.email_sender_title || null,
         email_sender_email: businessProfile.email_sender_email || null,
         email_signature: signatureToSave,
@@ -394,7 +366,7 @@ export default function EmailBranding() {
 
   const openAddSenderProfile = () => {
     setEditingSenderProfileId(null);
-    setSenderProfileForm({ name: "", display_name: "", logo_url: "", brand_color: "#8b5cf6", footer_text: "", footer_image_url: "", footer_logo_url: "", signature: "", signature_closing: "Best regards,", sender_phone: "", sender_address: "", signature_use_structured: true, signature_company: "", template_style: "professional", sender_name: "", sender_email: "", sender_title: "", sender_image_url: "", website_url: "" });
+    setSenderProfileForm({ name: "", display_name: "", logo_url: "", brand_color: "#8b5cf6", footer_text: "", footer_image_url: "", footer_logo_url: "", signature: "", signature_closing: "Best regards,", sender_phone: "", sender_address: "", signature_use_structured: true, signature_company: "", template_style: "professional", sender_name: "", signature_name: "", sender_email: "", sender_title: "", sender_image_url: "", website_url: "" });
     setSenderProfileDialogOpen(true);
   };
 
@@ -416,6 +388,7 @@ export default function EmailBranding() {
       signature_company: p.signature_company || "",
       template_style: (senderTemplateStyles.includes(p.template_style as any) ? p.template_style : "professional") as typeof senderProfileForm.template_style,
       sender_name: p.sender_name || "",
+      signature_name: p.signature_name || "",
       sender_email: p.sender_email || "",
       sender_title: p.sender_title || "",
       sender_image_url: p.sender_image_url || "",
@@ -431,7 +404,7 @@ export default function EmailBranding() {
       const signatureToSave = senderProfileForm.signature_use_structured
         ? buildStructuredSignatureHtml({
             closing: senderProfileForm.signature_closing,
-            name: senderProfileForm.sender_name,
+            name: senderProfileForm.signature_name || senderProfileForm.sender_name,
             title: senderProfileForm.sender_title,
             company: senderProfileForm.signature_company,
             phone: senderProfileForm.sender_phone,
@@ -457,6 +430,7 @@ export default function EmailBranding() {
         signature_company: senderProfileForm.signature_company.trim() || null,
         template_style: senderProfileForm.template_style,
         sender_name: senderProfileForm.sender_name.trim() || null,
+        signature_name: senderProfileForm.signature_name.trim() || null,
         sender_email: senderProfileForm.sender_email.trim() || null,
         sender_title: senderProfileForm.sender_title.trim() || null,
         sender_image_url: senderProfileForm.sender_image_url || null,
@@ -585,11 +559,11 @@ export default function EmailBranding() {
             updateBusinessProfile={true}
           />
 
-          {/* Email footer (founder / company footer at bottom of email) */}
+          {/* Email footer (company footer at bottom of email) */}
           <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
             <div>
               <h3 className="text-sm font-semibold">Email footer</h3>
-              <p className="text-xs text-muted-foreground">Text and optional image at the bottom of every email (e.g. copyright, founder photo).</p>
+              <p className="text-xs text-muted-foreground">Text and optional logo at the bottom of every email (e.g. copyright).</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="email_footer_text">Footer text</Label>
@@ -600,60 +574,6 @@ export default function EmailBranding() {
                 placeholder={`© ${new Date().getFullYear()} ${businessProfile.company_name || 'Your Company'}. All rights reserved.`}
                 rows={2}
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Founder image (optional)</Label>
-              <div className="flex flex-wrap gap-3 items-center">
-                {businessProfile.email_footer_image_url ? (
-                  <div className="relative shrink-0">
-                    <img src={businessProfile.email_footer_image_url} alt="" className="h-14 w-14 rounded-full object-cover border-2" />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute -top-1 -right-1 h-5 w-5 rounded-full"
-                      onClick={() => setBusinessProfile({ ...businessProfile, email_footer_image_url: "" })}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="h-14 w-14 rounded-full border-2 border-dashed flex items-center justify-center bg-muted/50 shrink-0">
-                    <Upload className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-1.5">
-                  <input
-                    ref={defaultFooterImgRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/svg+xml"
-                    className="sr-only"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFooterImageUpload(file, "default");
-                      e.target.value = "";
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    disabled={uploadingFooterImg === "default"}
-                    onClick={() => defaultFooterImgRef.current?.click()}
-                  >
-                    {uploadingFooterImg === "default" ? (
-                      <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" />Uploading...</>
-                    ) : (
-                      <><Upload className="h-3 w-3 mr-1.5" />{businessProfile.email_footer_image_url ? 'Change' : 'Upload'}</>
-                    )}
-                  </Button>
-                  {businessProfile.email_sender_image_url && (
-                    <Button type="button" variant="ghost" size="sm" className="text-xs h-8" onClick={() => setBusinessProfile({ ...businessProfile, email_footer_image_url: businessProfile.email_sender_image_url })}>Use sender photo</Button>
-                  )}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">Person photo shown next to footer text. Leave empty to use the sender profile photo from the section below.</p>
             </div>
             <div className="space-y-2">
               <Label>Footer business logo (optional)</Label>
@@ -707,7 +627,7 @@ export default function EmailBranding() {
                   )}
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">Company logo shown in the email footer. Separate from the founder image above.</p>
+              <p className="text-xs text-muted-foreground">Company logo shown in the email footer next to the footer text.</p>
             </div>
           </div>
 
@@ -736,13 +656,24 @@ export default function EmailBranding() {
               </div>
               <div className="flex-1 grid gap-3 sm:grid-cols-1 w-full min-w-0">
                 <div className="space-y-1.5">
-                  <Label htmlFor="from_display_name" className="text-xs">Sender display name</Label>
+                  <Label htmlFor="from_display_name" className="text-xs">From name</Label>
                   <Input
                     id="from_display_name"
                     value={businessProfile.email_sender_name}
                     onChange={(e) => setBusinessProfile({ ...businessProfile, email_sender_name: e.target.value })}
+                    placeholder="e.g. Sales Team"
+                  />
+                  <p className="text-xs text-muted-foreground">Name shown as the sender (From line). Independent of the signature name below.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="signature_display_name" className="text-xs">Signature name</Label>
+                  <Input
+                    id="signature_display_name"
+                    value={businessProfile.email_signature_name}
+                    onChange={(e) => setBusinessProfile({ ...businessProfile, email_signature_name: e.target.value })}
                     placeholder="e.g. Michael Orji"
                   />
+                  <p className="text-xs text-muted-foreground">Name shown in the email signature block only. Leave blank to use From name.</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="from_email" className="text-xs">From email address</Label>
@@ -763,7 +694,7 @@ export default function EmailBranding() {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h3 className="text-sm font-semibold">Footer signature</h3>
-                <p className="text-xs text-muted-foreground">The block at the bottom of the email body (e.g. Best regards, name, title, company). Uses the sender profile photo, name and email above unless you use Custom HTML.</p>
+                <p className="text-xs text-muted-foreground">The block at the bottom of the email body (e.g. Best regards, name, title, company). The <strong>name</strong> line comes from &quot;Signature name&quot; above (or From name if blank). Closing line, title, company and contact details are set below.</p>
               </div>
               <Button
                 type="button"
@@ -921,7 +852,8 @@ export default function EmailBranding() {
         </CardContent>
       </Card>
 
-      {/* Preview with profile switcher */}
+      {/* Preview with profile switcher – wrapped so a preview error doesn't break the whole page */}
+      <PreviewErrorBoundary>
       {(() => {
         const selectedProfile = previewProfileId !== "default"
           ? senderProfiles.find((p) => p.id === previewProfileId)
@@ -940,14 +872,13 @@ export default function EmailBranding() {
         const previewFooter = selectedProfile?.footer_text || businessProfile.email_footer_text || undefined;
         const previewFooterImage = selectedProfile?.footer_logo_url || selectedProfile?.logo_url || businessProfile.email_footer_logo_url || businessProfile.email_logo_url || undefined;
         const previewSenderImage = selectedProfile?.sender_image_url || businessProfile.email_sender_image_url || profile.avatar_url || undefined;
-        const previewFounderImage = selectedProfile?.footer_image_url || businessProfile.email_footer_image_url || undefined;
         const previewWebsite = selectedProfile?.website_url || businessProfile.website || undefined;
         const previewSignature = (() => {
           if (selectedProfile) {
             if (selectedProfile.signature_use_structured) {
               const built = buildStructuredSignatureHtml({
                 closing: selectedProfile.signature_closing,
-                name: selectedProfile.sender_name,
+                name: selectedProfile.signature_name || selectedProfile.sender_name,
                 title: selectedProfile.sender_title,
                 company: selectedProfile.signature_company,
                 phone: selectedProfile.sender_phone,
@@ -962,7 +893,7 @@ export default function EmailBranding() {
           if (businessProfile.email_signature_use_structured) {
             const built = buildStructuredSignatureHtml({
               closing: businessProfile.email_signature_closing,
-              name: businessProfile.email_sender_name,
+              name: businessProfile.email_signature_name || businessProfile.email_sender_name,
               title: businessProfile.email_sender_title,
               company: businessProfile.company_name,
               phone: businessProfile.email_sender_phone,
@@ -986,7 +917,6 @@ export default function EmailBranding() {
             senderTitle={previewSenderTitle}
             senderEmail={previewSenderEmail}
             senderImageUrl={previewSenderImage}
-            founderImageUrl={previewFounderImage}
             footerText={previewFooter}
             footerImageUrl={previewFooterImage || undefined}
             websiteUrl={previewWebsite}
@@ -1009,6 +939,7 @@ export default function EmailBranding() {
           />
         );
       })()}
+      </PreviewErrorBoundary>
 
       {/* Sender profile dialog */}
       <Dialog open={senderProfileDialogOpen} onOpenChange={setSenderProfileDialogOpen}>
@@ -1075,7 +1006,7 @@ export default function EmailBranding() {
             <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
               <div>
                 <h3 className="text-sm font-semibold">Email footer</h3>
-                <p className="text-xs text-muted-foreground">Text and optional image at the bottom of every email (e.g. copyright, founder photo).</p>
+                <p className="text-xs text-muted-foreground">Text and optional logo at the bottom of every email (e.g. copyright).</p>
               </div>
               <div className="space-y-2">
                 <Label className="text-xs font-medium">Footer text</Label>
@@ -1086,57 +1017,6 @@ export default function EmailBranding() {
                   rows={2}
                   className="resize-none"
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Founder image (optional)</Label>
-                <div className="flex flex-wrap gap-3 items-center">
-                  {senderProfileForm.footer_image_url ? (
-                    <div className="relative shrink-0">
-                      <img src={senderProfileForm.footer_image_url} alt="" className="h-14 w-14 rounded-full object-cover border-2 border-border shadow-sm" />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon"
-                        className="absolute -top-0.5 -right-0.5 h-5 w-5 rounded-full"
-                        onClick={() => setSenderProfileForm((f) => ({ ...f, footer_image_url: "" }))}
-                      >
-                        <X className="h-2.5 w-2.5" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="h-14 w-14 rounded-full border-2 border-dashed flex items-center justify-center bg-muted/50 shrink-0">
-                      <Upload className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-1.5">
-                    <input
-                      ref={senderFooterImgRef}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/svg+xml"
-                      className="sr-only"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleFooterImageUpload(file, "sender");
-                        e.target.value = "";
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-8"
-                      disabled={uploadingFooterImg === "sender"}
-                      onClick={() => senderFooterImgRef.current?.click()}
-                    >
-                      {uploadingFooterImg === "sender" ? <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" />Uploading...</> : <><Upload className="h-3 w-3 mr-1.5" />{senderProfileForm.footer_image_url ? "Change" : "Upload"}</>}
-                    </Button>
-                    {senderProfileForm.sender_image_url && (
-                      <Button type="button" variant="ghost" size="sm" className="text-xs h-8" onClick={() => setSenderProfileForm((f) => ({ ...f, footer_image_url: f.sender_image_url }))}>Use sender photo</Button>
-                    )}
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">Person photo shown next to footer text. Leave empty to use the sender profile photo from the section below.</p>
               </div>
               <div className="space-y-2">
                 <Label className="text-xs font-medium">Footer business logo (optional)</Label>
@@ -1186,7 +1066,7 @@ export default function EmailBranding() {
                     )}
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">Company logo shown in the email footer. Separate from the founder image above.</p>
+                <p className="text-xs text-muted-foreground">Company logo shown in the email footer next to the footer text.</p>
               </div>
             </div>
 
@@ -1215,12 +1095,22 @@ export default function EmailBranding() {
                 </div>
                 <div className="flex-1 grid gap-3 sm:grid-cols-1 w-full min-w-0">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Sender display name</Label>
+                    <Label className="text-xs">From name</Label>
                     <Input
                       value={senderProfileForm.sender_name}
                       onChange={(e) => setSenderProfileForm((f) => ({ ...f, sender_name: e.target.value }))}
+                      placeholder="e.g. Sales Team"
+                    />
+                    <p className="text-xs text-muted-foreground">Name shown as the sender (From line). Independent of the signature name below.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Signature name</Label>
+                    <Input
+                      value={senderProfileForm.signature_name}
+                      onChange={(e) => setSenderProfileForm((f) => ({ ...f, signature_name: e.target.value }))}
                       placeholder="e.g. Michael Orji"
                     />
+                    <p className="text-xs text-muted-foreground">Name shown in the email signature block only. Leave blank to use From name.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">From email address</Label>
@@ -1240,7 +1130,7 @@ export default function EmailBranding() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-semibold">Footer signature</h3>
-                  <p className="text-xs text-muted-foreground">The block at the bottom of the email body (e.g. Best regards, name, title, company). Uses the sender profile photo, name and email above unless you use Custom HTML.</p>
+                  <p className="text-xs text-muted-foreground">The block at the bottom of the email body (e.g. Best regards, name, title, company). The <strong>name</strong> line comes from &quot;Signature name&quot; above (or From name if blank). Closing line, title, company, phone, website and address are set below.</p>
                 </div>
                 <Button
                   type="button"

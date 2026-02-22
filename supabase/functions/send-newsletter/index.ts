@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderEmailTemplate } from "../_shared/professional-template.ts";
+import { encodeRfc2047 } from "../_shared/gmail-utils.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,6 +34,7 @@ serve(async (req) => {
     const recipientGroupId = body.recipientGroupId ?? body.recipient_group_id;
     const industryFilter = body.industryFilter ?? body.industry_filter;
     const tagCategoryIds = body.tagCategoryIds ?? body.tag_category_ids;
+    const senderConnectionId = body.sender_connection_id ?? body.senderConnectionId ?? null;
     const industries: string[] = Array.isArray(industryFilter) ? industryFilter.filter((i: any) => i != null && String(i).trim()) : [];
     const tagIds: string[] = Array.isArray(tagCategoryIds) ? tagCategoryIds.filter((id: any) => id) : [];
 
@@ -45,17 +47,42 @@ serve(async (req) => {
     });
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { data: { user } } = await supabaseAnon.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const triggeredByCron = body.triggeredByCron === true && authHeader === `Bearer ${supabaseServiceKey}`;
+    let user: { id: string; email?: string } | null = null;
+    let newsletter: any = null;
+    let nlError: any = null;
 
-    // Fetch the newsletter
-    const { data: newsletter, error: nlError } = await supabaseAnon
-      .from('newsletters')
-      .select('*')
-      .eq('id', newsletterId)
-      .eq('user_id', user.id)
-      .single();
+    if (triggeredByCron) {
+      const { data: nl, error: err } = await supabaseAdmin
+        .from('newsletters')
+        .select('*')
+        .eq('id', newsletterId)
+        .single();
+      newsletter = nl;
+      nlError = err;
+      if (nlError || !newsletter) throw new Error('Newsletter not found');
+      if (newsletter.status !== 'scheduled') {
+        throw new Error(`Newsletter is not scheduled (status: ${newsletter.status})`);
+      }
+      const { data: profile } = await supabaseAdmin.from('profiles').select('email').eq('id', newsletter.user_id).maybeSingle();
+      user = { id: newsletter.user_id, email: profile?.email };
+    } else {
+      const { data: { user: authUser } } = await supabaseAnon.auth.getUser();
+      user = authUser;
+      if (!user) throw new Error('Not authenticated');
+      const { data: nl, error: err } = await supabaseAnon
+        .from('newsletters')
+        .select('*')
+        .eq('id', newsletterId)
+        .eq('user_id', user.id)
+        .single();
+      newsletter = nl;
+      nlError = err;
+    }
     if (nlError || !newsletter) throw new Error('Newsletter not found');
+
+    const db = triggeredByCron ? supabaseAdmin : supabaseAnon;
+
     // Never block test sends: if request has test email (any key) or isTest, allow regardless of newsletter status
     const hasTestEmailInBody = !!(String(body.testEmail ?? body.test_email ?? body.body?.testEmail ?? body.body?.test_email ?? '').trim())
       || (typeof body === 'object' && Object.keys(body).some((k) => /^test_?email$/i.test(k) && String((body as any)[k] || '').trim()));
@@ -64,13 +91,13 @@ serve(async (req) => {
     }
 
     // Fetch branding
-    const { data: businessProfile } = await supabaseAnon
+    const { data: businessProfile } = await db
       .from('business_profiles')
-      .select('company_name, email_header_name, email_provider, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_sender_title, email_sender_email, email_signature, website')
+      .select('company_name, email_header_name, email_provider, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_signature_name, email_sender_title, email_sender_email, email_signature, website')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    const { data: userProfile } = await supabaseAnon
+    const { data: userProfile } = await db
       .from('profiles')
       .select('full_name, job_title, email, avatar_url')
       .eq('id', user.id)
@@ -86,17 +113,17 @@ serve(async (req) => {
       signature: businessProfile?.email_signature || null,
       templateStyle: newsletter.template_style || 'professional',
       senderImageUrl: businessProfile?.email_sender_image_url || null,
-      founderImageUrl: businessProfile?.email_footer_image_url || null,
       senderName: businessProfile?.email_sender_name || null,
+      signatureName: businessProfile?.email_signature_name || null,
       senderEmail: businessProfile?.email_sender_email || null,
       senderTitle: businessProfile?.email_sender_title || null,
       websiteUrl: businessProfile?.website || null,
     };
 
     if (newsletter.sender_profile_id) {
-      const { data: sp } = await supabaseAnon
+      const { data: sp } = await db
         .from('sender_profiles')
-        .select('name, display_name, logo_url, brand_color, footer_text, footer_image_url, footer_logo_url, signature, template_style, sender_name, sender_email, sender_title, sender_image_url, website_url')
+        .select('name, display_name, logo_url, brand_color, footer_text, footer_image_url, footer_logo_url, signature, template_style, sender_name, signature_name, sender_email, sender_title, sender_image_url, website_url')
         .eq('id', newsletter.sender_profile_id)
         .eq('user_id', user.id)
         .maybeSingle();
@@ -111,10 +138,10 @@ serve(async (req) => {
           signature: sp.signature || branding.signature,
           templateStyle: sp.template_style || branding.templateStyle,
           senderName: sp.sender_name,
+          signatureName: sp.signature_name ?? branding.signatureName,
           senderEmail: sp.sender_email,
           senderTitle: sp.sender_title,
           senderImageUrl: sp.sender_image_url,
-          founderImageUrl: sp.footer_image_url || branding.founderImageUrl,
           websiteUrl: sp.website_url ?? branding.websiteUrl,
         };
       }
@@ -135,7 +162,7 @@ serve(async (req) => {
         unsubscribe_token: '',
       }];
     } else {
-      const subscriberQuery = supabaseAnon
+      const subscriberQuery = db
         .from('newsletter_subscribers')
         .select('id, email, first_name, last_name, company, unsubscribe_token, industry')
         .eq('user_id', user.id)
@@ -153,7 +180,7 @@ serve(async (req) => {
       if (categoryFilter) {
         targetCategoryIds.push(categoryFilter);
       } else if (tagIds.length === 0 && !recipientGroupId && industries.length === 0) {
-        const { data: nlCats } = await supabaseAnon
+        const { data: nlCats } = await db
           .from('newsletter_target_categories')
           .select('category_id')
           .eq('newsletter_id', newsletterId);
@@ -162,7 +189,7 @@ serve(async (req) => {
         }
       }
       if (targetCategoryIds.length > 0) {
-        const { data: subCats } = await supabaseAnon
+        const { data: subCats } = await db
           .from('newsletter_subscriber_categories')
           .select('subscriber_id')
           .in('category_id', targetCategoryIds);
@@ -172,7 +199,7 @@ serve(async (req) => {
 
       // Optional: filter by tags (subscriber must be in at least one of these categories)
       if (tagIds.length > 0) {
-        const { data: tagSubCats } = await supabaseAnon
+        const { data: tagSubCats } = await db
           .from('newsletter_subscriber_categories')
           .select('subscriber_id')
           .in('category_id', tagIds);
@@ -188,7 +215,7 @@ serve(async (req) => {
 
       // Optional: limit to recipient group (subscribers whose email is in the group)
       if (recipientGroupId) {
-        const { data: groupMembers, error: groupErr } = await supabaseAnon
+        const { data: groupMembers, error: groupErr } = await db
           .from('recipient_group_members')
           .select('email')
           .eq('group_id', recipientGroupId);
@@ -205,29 +232,40 @@ serve(async (req) => {
 
     // Mark newsletter as sending (skip for test)
     if (!isTest) {
-      await supabaseAnon.from('newsletters').update({
+      await db.from('newsletters').update({
         status: 'sending',
         total_recipients: targetSubscribers.length,
       }).eq('id', newsletterId);
     }
 
-    // Determine email provider and connection (match sender profile / branding email when possible)
-    const { data: connections } = await supabaseAnon
+    // Determine email provider and connection (user-selected, or match sender profile / branding email)
+    const { data: connections } = await db
       .from('crm_connections')
       .select('id, provider, from_email, metadata, status, connection_id')
       .eq('user_id', user.id)
+      .in('provider', ['gmail', 'gmail_direct', 'resend', 'sendgrid'])
       .eq('status', 'active');
 
-    const desiredFromEmail = (branding.senderEmail || '').trim().toLowerCase();
-    const matchConnection = desiredFromEmail && (connections || []).length
-      ? (connections || []).find((c: any) => (c.from_email || '').trim().toLowerCase() === desiredFromEmail)
-      : null;
-    const defaultProvider = businessProfile?.email_provider || 'resend';
-    const effectiveConnection = matchConnection
-      || (connections || []).find((c: any) => ['resend', 'sendgrid', 'gmail_direct', 'gmail'].includes(c.provider) && c.status === 'active')
-      || (connections || [])[0];
+    const connList = connections || [];
+    let effectiveConnection: any = null;
+    if (senderConnectionId) {
+      effectiveConnection = connList.find((c: any) => c.id === senderConnectionId) || null;
+      if (!effectiveConnection && connList.length > 0) {
+        throw new Error('Selected sender connection not found. Choose another in Send from.');
+      }
+    }
+    if (!effectiveConnection) {
+      const desiredFromEmail = (branding.senderEmail || '').trim().toLowerCase();
+      const matchConnection = desiredFromEmail && connList.length
+        ? connList.find((c: any) => (c.from_email || '').trim().toLowerCase() === desiredFromEmail)
+        : null;
+      effectiveConnection = matchConnection
+        || connList.find((c: any) => ['resend', 'sendgrid', 'gmail_direct', 'gmail'].includes(c.provider))
+        || connList[0];
+    }
 
-    if (!effectiveConnection && (connections || []).length === 0) {
+    const defaultProvider = businessProfile?.email_provider || 'resend';
+    if (!effectiveConnection && connList.length === 0) {
       throw new Error('No active email connection. Add an email account in Settings > Integrations or Email Providers, then try again.');
     }
 
@@ -285,6 +323,7 @@ serve(async (req) => {
         const finalHtml = renderEmailTemplate(branding.templateStyle, {
           body: fullBody,
           senderName,
+          signatureName: branding.signatureName ?? undefined,
           senderEmail,
           senderTitle,
           companyName: branding.companyName,
@@ -295,7 +334,6 @@ serve(async (req) => {
           footerImageUrl: branding.footerImageUrl,
           signature: branding.signature,
           senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
-          founderImageUrl: branding.founderImageUrl ?? undefined,
           websiteUrl: branding.websiteUrl ?? undefined,
           newsletterFooterHtml,
         });
@@ -308,7 +346,7 @@ serve(async (req) => {
         // Create send record (skip for test)
         let sendRecord: { id: string } | null = null;
         if (!isTest) {
-          const { data: sr } = await supabaseAdmin.from('newsletter_sends').insert({
+          const { data: sr } = await db.from('newsletter_sends').insert({
             newsletter_id: newsletterId,
             subscriber_id: subscriber.id,
             status: 'pending',
@@ -331,7 +369,7 @@ serve(async (req) => {
             const expiresAt = metadata?.expires_at;
 
             if (expiresAt && new Date(expiresAt) <= new Date()) {
-              const refreshResponse = await supabaseAnon.functions.invoke('gmail-oauth-refresh', {
+              const refreshResponse = await (triggeredByCron ? supabaseAdmin : supabaseAnon).functions.invoke('gmail-oauth-refresh', {
                 body: { connection_id: gmailConnection.id },
               });
               if (refreshResponse.data?.access_token) {
@@ -341,11 +379,11 @@ serve(async (req) => {
 
             if (accessToken) {
               const fromEmail = senderEmail;
-              const fromLine = senderName ? `From: ${senderName} <${fromEmail}>` : `From: ${fromEmail}`;
+              const fromLine = senderName ? `From: ${encodeRfc2047(senderName)} <${fromEmail}>` : `From: ${fromEmail}`;
               const rawEmail = [
                 fromLine,
                 `To: ${subscriber.email}`,
-                `Subject: ${personalizedSubject}`,
+                `Subject: ${encodeRfc2047(personalizedSubject)}`,
                 'MIME-Version: 1.0',
                 'Content-Type: text/html; charset=utf-8',
                 `List-Unsubscribe: <${unsubscribeUrl}>`,
@@ -354,7 +392,9 @@ serve(async (req) => {
                 finalHtml,
               ].join('\r\n');
 
-              const encodedMessage = btoa(rawEmail).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+              const utf8Bytes = new TextEncoder().encode(rawEmail);
+              const binary = Array.from(utf8Bytes).map((b) => String.fromCharCode(b)).join('');
+              const encodedMessage = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
               const gmailRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -439,14 +479,14 @@ serve(async (req) => {
 
     // Update newsletter status (skip for test)
     if (!isTest) {
-      await supabaseAnon.from('newsletters').update({
+      await db.from('newsletters').update({
         status: 'sent',
         sent_at: new Date().toISOString(),
         total_sent: sentCount,
       }).eq('id', newsletterId);
     } else if (sentCount > 0 && newsletter.status === 'sending') {
       // Unstick newsletter that was left in 'sending' after a failed run so test sends work next time
-      await supabaseAnon.from('newsletters').update({ status: 'draft' }).eq('id', newsletterId);
+      await db.from('newsletters').update({ status: 'draft' }).eq('id', newsletterId);
     }
 
     return new Response(

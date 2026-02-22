@@ -15,7 +15,6 @@ interface EmailTemplatePreviewProps {
   footerText?: string;
   footerImageUrl?: string;
   senderImageUrl?: string;
-  founderImageUrl?: string;
   websiteUrl?: string;
   /** When set, overrides the default name/title/company/email signature block with this HTML */
   signature?: string;
@@ -38,7 +37,6 @@ export function EmailTemplatePreview({
   footerText,
   footerImageUrl,
   senderImageUrl,
-  founderImageUrl,
   websiteUrl,
   signature: customSignature,
   headerExtra,
@@ -168,27 +166,11 @@ export function EmailTemplatePreview({
 
     const wrapperStyle = { marginTop: '24px', paddingTop: '16px', borderTop: '2px solid #e5e7eb', ...style } as React.CSSProperties;
 
-    const sigImgUrl = founderImageUrl || senderImageUrl;
-    const signatureImage = sigImgUrl ? (
-      <img src={sigImgUrl} alt={senderName} style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover' as const, display: 'block', border: `2px solid ${brandColor}30` }} />
-    ) : null;
-
     if (customSignature && String(customSignature).trim() !== '') {
       const customContent = <div style={{ fontSize: '14px', lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: customSignature.trim() }} />;
       return (
         <div style={wrapperStyle} className="email-signature-custom">
-          {signatureImage ? (
-            <table style={{ borderCollapse: 'collapse' as const }}>
-              <tbody>
-                <tr>
-                  <td style={{ verticalAlign: 'top', paddingRight: '14px' }}>{signatureImage}</td>
-                  <td style={{ verticalAlign: 'top' }}>{customContent}</td>
-                </tr>
-              </tbody>
-            </table>
-          ) : (
-            customContent
-          )}
+          {customContent}
         </div>
       );
     }
@@ -209,24 +191,9 @@ export function EmailTemplatePreview({
       </div>
     );
 
-    if (!signatureImage) {
-      return (
-        <div style={wrapperStyle}>
-          {textBlock}
-        </div>
-      );
-    }
-
     return (
       <div style={wrapperStyle}>
-        <table style={{ borderCollapse: 'collapse' as const }}>
-          <tbody>
-            <tr>
-              <td style={{ verticalAlign: 'top', paddingRight: '14px' }}>{signatureImage}</td>
-              <td style={{ verticalAlign: 'top' }}>{textBlock}</td>
-            </tr>
-          </tbody>
-        </table>
+        {textBlock}
       </div>
     );
   };

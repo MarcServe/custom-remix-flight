@@ -14,6 +14,7 @@ import {
   Loader2, Plus, Pencil, Trash2, Send, Eye, Sparkles, Users, Tag,
   MailOpen, MousePointerClick, ArrowLeft, Link2, FileText, Copy,
   UserPlus, Upload, ChevronDown, ImagePlus, FolderInput, FlaskConical,
+  Clock, CalendarClock,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -138,6 +139,15 @@ export default function Newsletters() {
   const [testEmail, setTestEmail] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
 
+  // Schedule dialog
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [scheduleDateTime, setScheduleDateTime] = useState("");
+  const [scheduling, setScheduling] = useState(false);
+  const [cancellingSchedule, setCancellingSchedule] = useState(false);
+
+  // Send from (email connection: Gmail, Resend, SendGrid, etc.)
+  const [senderConnectionId, setSenderConnectionId] = useState("");
+
   // Queries
   const { data: newsletters = [], isLoading: loadingNewsletters } = useQuery({
     queryKey: ["newsletters"],
@@ -226,6 +236,30 @@ export default function Newsletters() {
       return data;
     },
   });
+
+  const { data: connections = [] } = useQuery({
+    queryKey: ["crm-connections-newsletter"],
+    queryFn: async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) return [];
+      const { data, error } = await supabase
+        .from("crm_connections")
+        .select("id, provider, from_email, status")
+        .eq("user_id", u.id)
+        .eq("status", "active")
+        .in("provider", ["gmail", "gmail_direct", "resend", "sendgrid"])
+        .order("created_at", { ascending: false });
+      if (error) return [];
+      return data || [];
+    },
+    enabled: view === "editor" || showTestDialog || showSendDialog,
+  });
+
+  useEffect(() => {
+    if (connections.length > 0 && !senderConnectionId) {
+      setSenderConnectionId(connections[0].id);
+    }
+  }, [connections, senderConnectionId]);
 
   const { data: newsletterCategoryMap = {} } = useQuery({
     queryKey: ["newsletter-target-categories", editingId],
@@ -783,6 +817,7 @@ Return ONLY the HTML body content.`,
           recipientGroupId,
           industryFilter: industryFilter.length ? industryFilter : undefined,
           tagCategoryIds: sendTagIds.length ? sendTagIds : undefined,
+          sender_connection_id: senderConnectionId || undefined,
         },
       });
       if (error) throw error;
@@ -795,6 +830,53 @@ Return ONLY the HTML body content.`,
       toast({ title: "Send Error", description: err.message, variant: "destructive" });
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleScheduleNewsletter = async () => {
+    if (!scheduleDateTime.trim() || !user) return;
+    const at = new Date(scheduleDateTime);
+    if (isNaN(at.getTime()) || at <= new Date()) {
+      toast({ title: "Invalid time", description: "Choose a future date and time.", variant: "destructive" });
+      return;
+    }
+    try {
+      setScheduling(true);
+      const id = await handleSaveNewsletter();
+      if (!id) return;
+      const { error } = await supabase
+        .from("newsletters")
+        .update({ status: "scheduled", scheduled_at: at.toISOString() })
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["newsletters"] });
+      setShowScheduleDialog(false);
+      setScheduleDateTime("");
+      toast({ title: "Scheduled", description: `Newsletter will send at ${at.toLocaleString()}.` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const handleCancelSchedule = async (newsletterId: string) => {
+    if (!user) return;
+    try {
+      setCancellingSchedule(true);
+      const { error } = await supabase
+        .from("newsletters")
+        .update({ status: "draft", scheduled_at: null })
+        .eq("id", newsletterId)
+        .eq("user_id", user.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["newsletters"] });
+      toast({ title: "Schedule cancelled", description: "Newsletter is back to draft." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setCancellingSchedule(false);
     }
   };
 
@@ -821,6 +903,7 @@ Return ONLY the HTML body content.`,
           newsletterId: id,
           testEmail: email,
           test_email: email,
+          sender_connection_id: senderConnectionId || undefined,
         },
       });
       // Prefer server error message from response body (FunctionsHttpError.context is the Response)
@@ -877,7 +960,6 @@ Return ONLY the HTML body content.`,
       senderTitle: sp?.sender_title || businessProfile?.email_sender_title || userProfile?.job_title || undefined,
       senderEmail,
       senderImageUrl: sp?.sender_image_url || businessProfile?.email_sender_image_url || userProfile?.avatar_url || undefined,
-      founderImageUrl: sp?.footer_image_url || businessProfile?.email_footer_image_url || undefined,
       footerText: sp?.footer_text || businessProfile?.email_footer_text || undefined,
       footerImageUrl: sp?.footer_logo_url || sp?.logo_url || businessProfile?.email_footer_logo_url || businessProfile?.email_logo_url || undefined,
       websiteUrl: sp?.website_url || businessProfile?.website || undefined,
@@ -1258,11 +1340,25 @@ Return ONLY the HTML body content.`,
               <Button variant="outline" onClick={() => { setTestEmail(user?.email ?? ""); setShowTestDialog(true); }} disabled={!subject.trim()}>
                 <FlaskConical className="h-4 w-4 mr-1.5" />Send test
               </Button>
+              <Button variant="outline" onClick={() => { if (!subject.trim()) { toast({ title: "Subject required", variant: "destructive" }); return; } setScheduleDateTime(() => { const d = new Date(); d.setMinutes(d.getMinutes() + 30); d.setSeconds(0, 0); return d.toISOString().slice(0, 16); }); setShowScheduleDialog(true); }} disabled={!editingId && !subject.trim()}>
+                <CalendarClock className="h-4 w-4 mr-1.5" />Schedule
+              </Button>
               <Button onClick={() => { if (!subject.trim()) { toast({ title: "Subject required", variant: "destructive" }); return; } setShowSendDialog(true); }} disabled={!editingId && !subject.trim()}>
                 <Send className="h-4 w-4 mr-1.5" />Send
               </Button>
             </div>
           </div>
+
+          {editingId && newsletters.find(n => n.id === editingId)?.status === "scheduled" && (
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-4 py-2 text-sm">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Scheduled for</span>
+              <span className="font-medium">{newsletters.find(n => n.id === editingId)?.scheduled_at ? new Date(newsletters.find(n => n.id === editingId)!.scheduled_at!).toLocaleString() : ""}</span>
+              <Button variant="ghost" size="sm" className="ml-2" onClick={() => handleCancelSchedule(editingId)} disabled={cancellingSchedule}>
+                {cancellingSchedule ? <Loader2 className="h-3 w-3 animate-spin" /> : "Cancel schedule"}
+              </Button>
+            </div>
+          )}
 
           <div className={`grid gap-6 min-w-0 ${showPreview ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1"}`}>
             {/* Left: Editor */}
@@ -1308,6 +1404,33 @@ Return ONLY the HTML body content.`,
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  <div className="space-y-1.5 mt-3">
+                    <Label>Send from</Label>
+                    <Select value={senderConnectionId || (connections[0]?.id ?? "")} onValueChange={setSenderConnectionId}>
+                      <SelectTrigger><SelectValue placeholder="Choose email account" /></SelectTrigger>
+                      <SelectContent>
+                        {connections.map((conn: { id: string; provider: string; from_email?: string }) => {
+                          const fromEmail = (conn.from_email || "").trim();
+                          const matchProfile = senderProfiles.find((p: { sender_email?: string }) => p.sender_email && fromEmail && String(p.sender_email).toLowerCase() === fromEmail.toLowerCase());
+                          const displayName = matchProfile?.display_name || matchProfile?.name || businessProfile?.company_name || "Your Business";
+                          const providerLabel = conn.provider === "resend" ? "Resend" : conn.provider === "sendgrid" ? "SendGrid" : conn.provider === "gmail" || conn.provider === "gmail_direct" ? "Gmail" : conn.provider;
+                          const icon = conn.provider === "resend" ? "🚀" : conn.provider === "sendgrid" ? "📬" : conn.provider === "gmail" || conn.provider === "gmail_direct" ? "📧" : "✉️";
+                          return (
+                            <SelectItem key={conn.id} value={conn.id}>
+                              <div className="flex items-center gap-2">
+                                <span>{icon}</span>
+                                <div>
+                                  <div className="font-medium">{providerLabel}</div>
+                                  <div className="text-xs text-muted-foreground">{displayName} &lt;{fromEmail || "—"}&gt;</div>
+                                </div>
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Account used to send this newsletter and test emails. Configure in <Link to="/integrations/email-providers" className="text-primary hover:underline">Settings → Email Providers</Link>.</p>
                   </div>
                 </CardContent>
               </Card>
@@ -1536,18 +1659,40 @@ Return ONLY the HTML body content.`,
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 py-2">
-              <Label htmlFor="test-email">Send to</Label>
-              <Input
-                id="test-email"
-                type="email"
-                placeholder="you@example.com"
-                value={testEmail}
-                onChange={(e) => setTestEmail(e.target.value)}
-              />
+              <div className="space-y-1.5">
+                <Label htmlFor="test-email">Send to</Label>
+                <Input
+                  id="test-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Send from</Label>
+                <Select value={senderConnectionId || (connections[0]?.id ?? "")} onValueChange={setSenderConnectionId}>
+                  <SelectTrigger><SelectValue placeholder="Choose email account" /></SelectTrigger>
+                  <SelectContent>
+                    {connections.map((conn: { id: string; provider: string; from_email?: string }) => {
+                      const fromEmail = (conn.from_email || "").trim();
+                      const matchProfile = senderProfiles.find((p: { sender_email?: string }) => p.sender_email && fromEmail && String(p.sender_email).toLowerCase() === fromEmail.toLowerCase());
+                      const displayName = matchProfile?.display_name || matchProfile?.name || businessProfile?.company_name || "Your Business";
+                      const providerLabel = conn.provider === "resend" ? "Resend" : conn.provider === "sendgrid" ? "SendGrid" : conn.provider === "gmail" || conn.provider === "gmail_direct" ? "Gmail" : conn.provider;
+                      const icon = conn.provider === "resend" ? "🚀" : conn.provider === "sendgrid" ? "📬" : conn.provider === "gmail" || conn.provider === "gmail_direct" ? "📧" : "✉️";
+                      return (
+                        <SelectItem key={conn.id} value={conn.id}>
+                          <span>{icon} {providerLabel}</span> — <span className="text-muted-foreground">{displayName} &lt;{fromEmail || "—"}&gt;</span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowTestDialog(false)}>Cancel</Button>
-              <Button onClick={handleSendTest} disabled={sendingTest || !testEmail.trim()}>
+              <Button onClick={handleSendTest} disabled={sendingTest || !testEmail.trim() || connections.length === 0}>
                 {sendingTest ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <FlaskConical className="h-4 w-4 mr-1.5" />}
                 Send test
               </Button>
@@ -1634,15 +1779,63 @@ Return ONLY the HTML body content.`,
                   })}
                 </div>
               )}
+              <div className="space-y-1.5">
+                <Label>Send from</Label>
+                <Select value={senderConnectionId || (connections[0]?.id ?? "")} onValueChange={setSenderConnectionId}>
+                  <SelectTrigger><SelectValue placeholder="Choose email account" /></SelectTrigger>
+                  <SelectContent>
+                    {connections.map((conn: { id: string; provider: string; from_email?: string }) => {
+                      const fromEmail = (conn.from_email || "").trim();
+                      const matchProfile = senderProfiles.find((p: { sender_email?: string }) => p.sender_email && fromEmail && String(p.sender_email).toLowerCase() === fromEmail.toLowerCase());
+                      const displayName = matchProfile?.display_name || matchProfile?.name || businessProfile?.company_name || "Your Business";
+                      const providerLabel = conn.provider === "resend" ? "Resend" : conn.provider === "sendgrid" ? "SendGrid" : conn.provider === "gmail" || conn.provider === "gmail_direct" ? "Gmail" : conn.provider;
+                      const icon = conn.provider === "resend" ? "🚀" : conn.provider === "sendgrid" ? "📬" : conn.provider === "gmail" || conn.provider === "gmail_direct" ? "📧" : "✉️";
+                      return (
+                        <SelectItem key={conn.id} value={conn.id}>
+                          <span>{icon} {providerLabel}</span> — <span className="text-muted-foreground">{displayName} &lt;{fromEmail || "—"}&gt;</span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="rounded-lg bg-muted/50 border p-3 text-sm">
                 <strong>Subject:</strong> {subject || "(no subject)"}<br />
-                <strong>From:</strong> {senderProfiles.find((p: any) => p.id === senderProfileId)?.display_name || businessProfile?.company_name || "Default"}
+                <strong>From (branding):</strong> {senderProfiles.find((p: any) => p.id === senderProfileId)?.display_name || businessProfile?.company_name || "Default"}
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowSendDialog(false)}>Cancel</Button>
-              <Button onClick={handleSendNewsletter} disabled={sending}>
+              <Button onClick={handleSendNewsletter} disabled={sending || connections.length === 0}>
                 {sending ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Sending...</> : <><Send className="h-4 w-4 mr-1.5" />Send Now</>}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showScheduleDialog} onOpenChange={setShowScheduleDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><CalendarClock className="h-5 w-5" />Schedule send</DialogTitle>
+              <DialogDescription>Choose when to send this newsletter. It will be sent automatically at the selected time (check runs every 15 minutes).</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="schedule-datetime">Date & time</Label>
+                <input
+                  id="schedule-datetime"
+                  type="datetime-local"
+                  value={scheduleDateTime}
+                  onChange={e => setScheduleDateTime(e.target.value)}
+                  min={new Date(new Date().getTime() + 15 * 60 * 1000).toISOString().slice(0, 16)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowScheduleDialog(false)}>Cancel</Button>
+              <Button onClick={handleScheduleNewsletter} disabled={scheduling || !scheduleDateTime.trim()}>
+                {scheduling ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Scheduling...</> : <><CalendarClock className="h-4 w-4 mr-1.5" />Schedule</>}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1723,7 +1916,7 @@ Return ONLY the HTML body content.`,
                         <Badge variant={statusColor(nl.status) as any} className="text-[10px] h-5">{nl.status}</Badge>
                       </div>
                       <div className="text-sm text-muted-foreground truncate">{nl.subject || "(no subject)"}</div>
-                      <div className="flex gap-4 text-xs text-muted-foreground mt-1">
+                      <div className="flex gap-4 text-xs text-muted-foreground mt-1 flex-wrap items-center">
                         {nl.status === "sent" && (
                           <>
                             <span className="flex items-center gap-1"><Send className="h-3 w-3" />{nl.total_sent} sent</span>
@@ -1731,10 +1924,18 @@ Return ONLY the HTML body content.`,
                             <span className="flex items-center gap-1"><MousePointerClick className="h-3 w-3" />{nl.total_clicked} clicked</span>
                           </>
                         )}
+                        {nl.status === "scheduled" && nl.scheduled_at && (
+                          <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Scheduled for {new Date(nl.scheduled_at).toLocaleString()}</span>
+                        )}
                         <span>{new Date(nl.updated_at).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <div className="flex gap-1 shrink-0 ml-3">
+                    <div className="flex gap-1 shrink-0 ml-3 items-center">
+                      {nl.status === "scheduled" && (
+                        <Button variant="ghost" size="sm" className="text-xs" onClick={(e) => { e.stopPropagation(); handleCancelSchedule(nl.id); }} disabled={cancellingSchedule}>
+                          {cancellingSchedule ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Cancel schedule"}
+                        </Button>
+                      )}
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditNewsletter(nl)}><Pencil className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicate(nl)}><Copy className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteNewsletter(nl.id)}><Trash2 className="h-3.5 w-3.5" /></Button>

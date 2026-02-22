@@ -42,17 +42,27 @@ interface TemplateStyleSelectorProps {
   showPreview?: boolean;
 }
 
+const VALID_TEMPLATE_KEYS = Object.keys(EMAIL_TEMPLATE_STYLES) as EmailTemplateStyle[];
+
+function safeTemplateStyle(value: string | undefined): EmailTemplateStyle {
+  if (value && VALID_TEMPLATE_KEYS.includes(value as EmailTemplateStyle)) {
+    return value as EmailTemplateStyle;
+  }
+  return "professional";
+}
+
 export function TemplateStyleSelector({
   value,
   onChange,
   disabled = false,
   showPreview = true,
 }: TemplateStyleSelectorProps) {
+  const safeValue = safeTemplateStyle(value);
   return (
     <div className="space-y-3">
       <Label htmlFor="template-style">Email Template Style</Label>
       <Select
-        value={value}
+        value={safeValue}
         onValueChange={(val) => onChange(val as EmailTemplateStyle)}
         disabled={disabled}
       >
@@ -77,10 +87,10 @@ export function TemplateStyleSelector({
         <Card className="p-4 bg-muted/50">
           <div className="space-y-2">
             <p className="text-sm font-medium">
-              {EMAIL_TEMPLATE_STYLES[value].name}
+              {EMAIL_TEMPLATE_STYLES[safeValue].name}
             </p>
             <p className="text-xs text-muted-foreground">
-              {EMAIL_TEMPLATE_STYLES[value].description}
+              {EMAIL_TEMPLATE_STYLES[safeValue].description}
             </p>
           </div>
         </Card>

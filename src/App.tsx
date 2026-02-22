@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ResearchChatProvider } from "./contexts/ResearchChatContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { PageErrorBoundary } from "./components/PageErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
 import { ResearchChatSlideOut } from "./components/ResearchChatSlideOut";
 import { useAllRealtime } from "./hooks/use-realtime";
@@ -88,7 +89,7 @@ const App = () => (
           <Route path="/all-campaigns" element={<UnifiedCampaigns />} />
           <Route path="/auto-responses" element={<AutoResponseHub />} />
           <Route path="/campaigns" element={<Campaigns />} />
-                          <Route path="/email-branding" element={<EmailBranding />} />
+                          <Route path="/email-branding" element={<PageErrorBoundary fallbackTitle="Email Branding failed to load"><EmailBranding /></PageErrorBoundary>} />
                           <Route path="/newsletters" element={<Newsletters />} />
                           <Route path="/recipient-groups" element={<RecipientGroups />} />
                           <Route path="/notes" element={<Notes />} />

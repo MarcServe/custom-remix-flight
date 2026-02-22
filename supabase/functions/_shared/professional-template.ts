@@ -1,6 +1,8 @@
 export interface EmailTemplateProps {
   body: string;
   senderName: string;
+  /** Name shown in the signature block only. If set, overrides senderName for the signature line. */
+  signatureName?: string;
   senderEmail: string;
   senderTitle?: string;
   companyName?: string;
@@ -11,7 +13,6 @@ export interface EmailTemplateProps {
   signature?: string;
   footerImageUrl?: string;
   senderImageUrl?: string;
-  founderImageUrl?: string;
   websiteUrl?: string;
   newsletterFooterHtml?: string;
 }
@@ -42,13 +43,13 @@ function renderFooterWithImage(footerImageUrl: string | undefined, footerText: s
 
 function renderSignatureBlock(opts: {
   signature?: string;
-  senderImageUrl?: string;
   senderName: string;
+  /** Name shown in the signature block. Defaults to senderName. */
+  signatureName?: string;
   senderTitle?: string;
   companyName?: string;
   senderEmail: string;
   websiteUrl?: string;
-  brandColor?: string;
   nameClass?: string;
   titleClass?: string;
   companyClass?: string;
@@ -56,26 +57,13 @@ function renderSignatureBlock(opts: {
 }): string {
   if (opts.signature) return opts.signature;
 
-  const nameEl = `<div class="${opts.nameClass || 'signature-name'}">${opts.senderName}</div>`;
+  const displayName = (opts.signatureName != null && opts.signatureName.trim() !== '') ? opts.signatureName.trim() : opts.senderName;
+  const nameEl = `<div class="${opts.nameClass || 'signature-name'}">${displayName}</div>`;
   const titleEl = opts.senderTitle ? `<div class="${opts.titleClass || 'signature-title'}">${opts.senderTitle}</div>` : '';
   const companyEl = opts.companyName ? `<div class="${opts.companyClass || 'signature-company'}">${opts.companyName}</div>` : '';
   const contactEl = `<div class="${opts.contactClass || 'signature-contact'}">${opts.senderEmail}</div>`;
   const websiteEl = opts.websiteUrl ? `<div class="signature-website" style="font-size:12px;margin-top:4px;"><a href="${opts.websiteUrl.startsWith('http') ? opts.websiteUrl : 'https://' + opts.websiteUrl}" style="color:inherit;text-decoration:underline;">${opts.websiteUrl.replace(/^https?:\/\//i, '')}</a></div>` : '';
-  const textBlock = `${nameEl}${titleEl}${companyEl}${contactEl}${websiteEl}`;
-
-  if (!opts.senderImageUrl) return textBlock;
-
-  const bc = opts.brandColor || '#8b5cf6';
-  return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-  <tr>
-    <td style="vertical-align:top;padding-right:14px;">
-      <img src="${opts.senderImageUrl}" alt="${opts.senderName}" style="width:52px;height:52px;border-radius:50%;object-fit:cover;display:block;border:2px solid ${bc}30;">
-    </td>
-    <td style="vertical-align:top;">
-      ${textBlock}
-    </td>
-  </tr>
-</table>`;
+  return `${nameEl}${titleEl}${companyEl}${contactEl}${websiteEl}`;
 }
 
 /**
@@ -111,6 +99,7 @@ function escapeHtml(s: string): string {
 export function renderProfessionalTemplate({
   body,
   senderName,
+  signatureName,
   senderEmail,
   senderTitle,
   companyName,
@@ -121,7 +110,6 @@ export function renderProfessionalTemplate({
   signature,
   footerImageUrl,
   senderImageUrl,
-  founderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
 }: EmailTemplateProps): string {
@@ -243,7 +231,7 @@ export function renderProfessionalTemplate({
         ${bodyHtml}
       </div>
       
-      ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderImageUrl: founderImageUrl || senderImageUrl, senderName, senderTitle, companyName, senderEmail, websiteUrl, brandColor })}</div>`}
+      ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderName, signatureName, senderTitle, companyName, senderEmail, websiteUrl })}</div>`}
     </div>
     
     ${renderFooterWithImage(footerImageUrl, footerText || `© ${new Date().getFullYear()} ${companyName || 'Company'}. All rights reserved.`, brandColor, 'background-color:#f9fafb', '#111827', newsletterFooterHtml)}
@@ -256,6 +244,7 @@ export function renderProfessionalTemplate({
 export function renderMinimalTemplate({
   body,
   senderName,
+  signatureName,
   senderEmail,
   senderTitle,
   companyName,
@@ -266,7 +255,6 @@ export function renderMinimalTemplate({
   signature,
   footerImageUrl,
   senderImageUrl,
-  founderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
 }: EmailTemplateProps): string {
@@ -355,7 +343,7 @@ export function renderMinimalTemplate({
       ${bodyHtml}
     </div>
     
-    ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderImageUrl: founderImageUrl || senderImageUrl, senderName, senderTitle, companyName, senderEmail, websiteUrl, brandColor })}</div>`}
+    ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderName, signatureName, senderTitle, companyName, senderEmail, websiteUrl })}</div>`}
     
     ${footerText || footerImageUrl || newsletterFooterHtml ? renderFooterWithImage(footerImageUrl, footerText || '', brandColor, 'background-color:#f9fafb', '#111827', newsletterFooterHtml) : ''}
   </div>
@@ -367,6 +355,7 @@ export function renderMinimalTemplate({
 export function renderModernTemplate({
   body,
   senderName,
+  signatureName,
   senderEmail,
   senderTitle,
   companyName,
@@ -377,7 +366,6 @@ export function renderModernTemplate({
   signature,
   footerImageUrl,
   senderImageUrl,
-  founderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
 }: EmailTemplateProps): string {
@@ -489,7 +477,7 @@ export function renderModernTemplate({
         ${bodyHtml}
       </div>
       
-      ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderImageUrl: founderImageUrl || senderImageUrl, senderName, senderTitle, companyName, senderEmail, websiteUrl, brandColor })}</div>`}
+      ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderName, signatureName, senderTitle, companyName, senderEmail, websiteUrl })}</div>`}
     </div>
     
     ${renderFooterWithImage(footerImageUrl, footerText || `© ${new Date().getFullYear()} ${companyName || 'Company'}. All rights reserved.`, brandColor, 'background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%)', '#94a3b8', newsletterFooterHtml)}
@@ -503,6 +491,7 @@ export function renderModernTemplate({
 export function renderCreativeTemplate({
   body,
   senderName,
+  signatureName,
   senderEmail,
   senderTitle,
   companyName,
@@ -513,7 +502,6 @@ export function renderCreativeTemplate({
   signature,
   footerImageUrl,
   senderImageUrl,
-  founderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
 }: EmailTemplateProps): string {
@@ -575,7 +563,7 @@ export function renderCreativeTemplate({
     </div>
     <div class="email-body">
       <div class="email-content">${bodyHtml}</div>
-      ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderImageUrl: founderImageUrl || senderImageUrl, senderName, senderTitle, companyName, senderEmail, websiteUrl, brandColor })}</div>`}
+      ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderName, signatureName, senderTitle, companyName, senderEmail, websiteUrl })}</div>`}
     </div>
     ${renderFooterWithImage(footerImageUrl, footerText || `© ${new Date().getFullYear()} ${companyName || 'Company'}. All rights reserved.`, brandColor, 'background:linear-gradient(135deg,#1f2937 0%,#111827 100%)', '#9ca3af', newsletterFooterHtml)}
   </div>
@@ -588,6 +576,7 @@ export function renderCreativeTemplate({
 export function renderCorporateTemplate({
   body,
   senderName,
+  signatureName,
   senderEmail,
   senderTitle,
   companyName,
@@ -598,7 +587,6 @@ export function renderCorporateTemplate({
   signature,
   footerImageUrl,
   senderImageUrl,
-  founderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
 }: EmailTemplateProps): string {
@@ -648,7 +636,7 @@ export function renderCorporateTemplate({
     </div>
     <div class="email-body">
       <div class="email-content">${bodyHtml}</div>
-      ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderImageUrl: founderImageUrl || senderImageUrl, senderName, senderTitle, companyName, senderEmail, websiteUrl, brandColor })}</div>`}
+      ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderName, signatureName, senderTitle, companyName, senderEmail, websiteUrl })}</div>`}
     </div>
     ${renderFooterWithImage(footerImageUrl, footerText || `© ${new Date().getFullYear()} ${companyName || 'Company'}. All rights reserved.`, brandColor, 'background:#f9fafb', '#111827', newsletterFooterHtml)}
   </div>
@@ -661,6 +649,7 @@ export function renderCorporateTemplate({
 export function renderBoldTemplate({
   body,
   senderName,
+  signatureName,
   senderEmail,
   senderTitle,
   companyName,
@@ -671,7 +660,6 @@ export function renderBoldTemplate({
   signature,
   footerImageUrl,
   senderImageUrl,
-  founderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
 }: EmailTemplateProps): string {
@@ -720,7 +708,7 @@ export function renderBoldTemplate({
     </div>
     <div class="email-body">
       <div class="email-content">${bodyHtml}</div>
-      ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderImageUrl: founderImageUrl || senderImageUrl, senderName, senderTitle, companyName, senderEmail, websiteUrl, brandColor })}</div>`}
+      ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderName, signatureName, senderTitle, companyName, senderEmail, websiteUrl })}</div>`}
     </div>
     ${renderFooterWithImage(footerImageUrl, footerText || `© ${new Date().getFullYear()} ${companyName || 'Company'}. All rights reserved.`, brandColor, 'background:#27272a', '#a1a1aa', newsletterFooterHtml)}
   </div>
@@ -733,6 +721,7 @@ export function renderBoldTemplate({
 export function renderElegantTemplate({
   body,
   senderName,
+  signatureName,
   senderEmail,
   senderTitle,
   companyName,
@@ -743,7 +732,6 @@ export function renderElegantTemplate({
   signature,
   footerImageUrl,
   senderImageUrl,
-  founderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
 }: EmailTemplateProps): string {
@@ -789,7 +777,7 @@ export function renderElegantTemplate({
     </div>
     <div class="email-body">
       <div class="email-content">${bodyHtml}</div>
-      ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderImageUrl: founderImageUrl || senderImageUrl, senderName, senderTitle, companyName, senderEmail, websiteUrl, brandColor })}</div>`}
+      ${newsletterFooterHtml ? '' : `<div class="email-signature">${renderSignatureBlock({ signature, senderName, signatureName, senderTitle, companyName, senderEmail, websiteUrl })}</div>`}
     </div>
     ${renderFooterWithImage(footerImageUrl, footerText || `© ${new Date().getFullYear()} ${companyName || 'Company'}. All rights reserved.`, brandColor, 'background:#faf9f7', '#111827', newsletterFooterHtml)}
   </div>

@@ -160,7 +160,7 @@ serve(async (req) => {
     // Get business profile with email provider preference and branding settings
     const { data: businessProfile } = await supabaseClient
       .from('business_profiles')
-      .select('company_name, email_header_name, email_provider, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_sender_title, email_sender_email, email_signature, website')
+      .select('company_name, email_header_name, email_provider, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_signature_name, email_sender_title, email_sender_email, email_signature, website')
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -175,10 +175,10 @@ serve(async (req) => {
       signature: string | null;
       templateStyle: string;
       senderName: string | null;
+      signatureName: string | null;
       senderEmail: string | null;
       senderTitle: string | null;
       senderImageUrl: string | null;
-      founderImageUrl: string | null;
       websiteUrl: string | null;
     } = {
       companyName: businessProfile?.company_name || null,
@@ -190,17 +190,17 @@ serve(async (req) => {
       signature: businessProfile?.email_signature ?? null,
       templateStyle: businessProfile?.email_template_style || 'professional',
       senderName: businessProfile?.email_sender_name ?? null,
+      signatureName: businessProfile?.email_signature_name ?? null,
       senderEmail: businessProfile?.email_sender_email ?? null,
       senderTitle: businessProfile?.email_sender_title ?? null,
       senderImageUrl: businessProfile?.email_sender_image_url ?? null,
-      founderImageUrl: businessProfile?.email_footer_image_url ?? null,
       websiteUrl: businessProfile?.website ?? null,
     };
     // When campaign has a sender profile, email branding (business) still overrides; profile fills in only when branding has no value
     if (campaign.sender_profile_id) {
       const { data: senderProfile } = await supabaseClient
         .from('sender_profiles')
-        .select('name, display_name, logo_url, brand_color, footer_text, footer_image_url, footer_logo_url, signature, template_style, sender_name, sender_email, sender_title, sender_image_url, website_url')
+        .select('name, display_name, logo_url, brand_color, footer_text, footer_image_url, footer_logo_url, signature, template_style, sender_name, signature_name, sender_email, sender_title, sender_image_url, website_url')
         .eq('id', campaign.sender_profile_id)
         .eq('user_id', userId)
         .maybeSingle();
@@ -215,10 +215,10 @@ serve(async (req) => {
           signature: senderProfile.signature ?? businessProfile?.email_signature ?? null,
           templateStyle: ['professional', 'minimal', 'modern', 'creative', 'corporate', 'bold', 'elegant'].includes(senderProfile.template_style) ? senderProfile.template_style : (businessProfile?.email_template_style || 'professional'),
           senderName: senderProfile.sender_name ?? businessProfile?.email_sender_name ?? null,
+          signatureName: senderProfile.signature_name ?? businessProfile?.email_signature_name ?? null,
           senderEmail: senderProfile.sender_email ?? businessProfile?.email_sender_email ?? null,
           senderTitle: senderProfile.sender_title ?? businessProfile?.email_sender_title ?? null,
           senderImageUrl: senderProfile.sender_image_url ?? businessProfile?.email_sender_image_url ?? null,
-          founderImageUrl: senderProfile.footer_image_url ?? businessProfile?.email_footer_image_url ?? null,
           websiteUrl: senderProfile.website_url ?? businessProfile?.website ?? null,
         };
       }
@@ -382,6 +382,7 @@ serve(async (req) => {
               {
                 body: bodyHtml || '',
                 senderName,
+                signatureName: branding.signatureName ?? undefined,
                 senderEmail: fromEmail,
                 senderTitle: branding.senderTitle || userProfile?.job_title,
                 companyName: branding.companyName,
@@ -392,7 +393,6 @@ serve(async (req) => {
                 footerImageUrl: branding.footerImageUrl,
                 signature: branding.signature,
                 senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
-                founderImageUrl: branding.founderImageUrl ?? undefined,
                 websiteUrl: branding.websiteUrl ?? undefined,
               }
             );
@@ -506,6 +506,7 @@ serve(async (req) => {
               {
                 body: bodyHtml || '',
                 senderName,
+                signatureName: branding.signatureName ?? undefined,
                 senderEmail: fromEmail,
                 senderTitle: branding.senderTitle || userProfile?.job_title,
                 companyName: branding.companyName,
@@ -516,7 +517,6 @@ serve(async (req) => {
                 footerImageUrl: branding.footerImageUrl,
                 signature: branding.signature,
                 senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
-                founderImageUrl: branding.founderImageUrl ?? undefined,
                 websiteUrl: branding.websiteUrl ?? undefined,
               }
             );
@@ -594,6 +594,7 @@ serve(async (req) => {
               {
                 body: bodyHtml || '',
                 senderName,
+                signatureName: branding.signatureName ?? undefined,
                 senderEmail: fromEmail,
                 senderTitle: branding.senderTitle || userProfile?.job_title,
                 companyName: branding.companyName,
@@ -604,7 +605,6 @@ serve(async (req) => {
                 footerImageUrl: branding.footerImageUrl,
                 signature: branding.signature,
                 senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
-                founderImageUrl: branding.founderImageUrl ?? undefined,
                 websiteUrl: branding.websiteUrl ?? undefined,
               }
             );
