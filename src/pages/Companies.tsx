@@ -26,6 +26,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
 import {
   AlertDialog,
@@ -40,6 +41,17 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import type { Company } from "@/lib/api/companies";
 import { getCompanySource, SOURCE_TAG_LIST } from "@/lib/company-sources";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TimePicker } from "@/components/ui/time-picker";
+import { Calendar } from "@/components/ui/calendar";
 
 /** Virtual tag category for filtering companies that have no tags (and no suggestedTags from enrichment) */
 const UNTAGGED_CATEGORY = "No tags";
@@ -85,9 +97,13 @@ export default function Companies() {
   const [groupingDialogCompanies, setGroupingDialogCompanies] = useState<CompanyForGrouping[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string | null>(null);
   const [groupBySource, setGroupBySource] = useState(true);
-  const [dateAddedPreset, setDateAddedPreset] = useState<'all' | 'last7' | 'last30' | 'last90' | 'custom'>('all');
+  const [dateAddedPreset, setDateAddedPreset] = useState<'all' | 'today' | 'yesterday' | 'last7' | 'last30' | 'last90' | 'custom'>('all');
   const [dateAddedFrom, setDateAddedFrom] = useState<string>('');
   const [dateAddedTo, setDateAddedTo] = useState<string>('');
+  const [dateAddedFromTime, setDateAddedFromTime] = useState<string>('');
+  const [dateAddedToTime, setDateAddedToTime] = useState<string>('');
+  const [companiesPage, setCompaniesPage] = useState(1);
+  const [companiesPageSize, setCompaniesPageSize] = useState(50);
   const [emailRecipient, setEmailRecipient] = useState<{
     email: string;
     name: string;
@@ -148,6 +164,7 @@ export default function Companies() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['companies-full'] });
+      queryClient.invalidateQueries({ queryKey: ['companies-total-count'] });
       queryClient.invalidateQueries({ queryKey: ['company-existing-tags'] });
       toast({
         title: 'Tags Migrated',
@@ -420,6 +437,7 @@ export default function Companies() {
 
       // Invalidate and refetch to ensure consistency
       await queryClient.invalidateQueries({ queryKey: ['companies-full'] });
+      queryClient.invalidateQueries({ queryKey: ['companies-total-count'] });
       await queryClient.refetchQueries({ queryKey: ['companies-full'] });
       
       // Final summary toast with detailed breakdown
@@ -489,21 +507,29 @@ export default function Companies() {
     },
   });
 
-  // Bulk delete mutation
+  // Bulk delete mutation (batched to avoid URL/query size limits with 1000+ IDs)
+  const BULK_DELETE_BATCH_SIZE = 100;
   const bulkDeleteMutation = useMutation({
     mutationFn: async (companyIds: string[]) => {
-      const { error } = await supabase
-        .from('companies')
-        .delete()
-        .in('id', companyIds);
-      if (error) throw error;
+      let deleted = 0;
+      for (let i = 0; i < companyIds.length; i += BULK_DELETE_BATCH_SIZE) {
+        const batch = companyIds.slice(i, i + BULK_DELETE_BATCH_SIZE);
+        const { error } = await supabase
+          .from('companies')
+          .delete()
+          .in('id', batch);
+        if (error) throw error;
+        deleted += batch.length;
+      }
+      return { deleted };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['companies-full'] });
+      queryClient.invalidateQueries({ queryKey: ['companies-total-count'] });
       queryClient.invalidateQueries({ queryKey: ['company-existing-tags'] });
       setSelectedCompanyIds(new Set());
       setBulkDeleteDialogOpen(false);
-      toast({ title: 'Success', description: `Deleted ${selectedCompanyIds.size} companies` });
+      toast({ title: 'Success', description: `Deleted ${result.deleted} companies` });
     },
     onError: (error: any) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -791,10 +817,28 @@ export default function Companies() {
   });
 
   const toggleSelectAll = () => {
-    if (selectedCompanyIds.size === (filteredCompanies?.length || 0)) {
-      setSelectedCompanyIds(new Set());
+    if (selectedCompanyIds.size === (paginatedCompanies?.length || 0) && (paginatedCompanies?.length || 0) > 0) {
+      const onPage = new Set(paginatedCompanies!.map(c => c.id));
+      const allOnPageSelected = onPage.size > 0 && [...onPage].every(id => selectedCompanyIds.has(id));
+      if (allOnPageSelected) {
+        setSelectedCompanyIds(prev => { const next = new Set(prev); onPage.forEach(id => next.delete(id)); return next; });
+      } else {
+        setSelectedCompanyIds(prev => { const next = new Set(prev); onPage.forEach(id => next.add(id)); return next; });
+      }
     } else {
-      setSelectedCompanyIds(new Set((filteredCompanies || []).map(c => c.id)));
+      const onPage = new Set((paginatedCompanies || []).map(c => c.id));
+      setSelectedCompanyIds(prev => { const next = new Set(prev); onPage.forEach(id => next.add(id)); return next; });
+    }
+  };
+
+  const toggleSelectAllFiltered = () => {
+    if (!filteredCompanies?.length) return;
+    const allFilteredIds = new Set(filteredCompanies.map(c => c.id));
+    const allSelected = allFilteredIds.size > 0 && [...allFilteredIds].every(id => selectedCompanyIds.has(id));
+    if (allSelected) {
+      setSelectedCompanyIds(prev => { const next = new Set(prev); allFilteredIds.forEach(id => next.delete(id)); return next; });
+    } else {
+      setSelectedCompanyIds(prev => { const next = new Set(prev); allFilteredIds.forEach(id => next.add(id)); return next; });
     }
   };
 
@@ -802,40 +846,157 @@ export default function Companies() {
     bulkDeleteMutation.mutate(Array.from(selectedCompanyIds));
   };
 
+  const mapCompanyRow = (company: any): Company => {
+    const enrichmentData = company.enrichment_data as any;
+    return {
+      ...company,
+      enrichment_data: company.enrichment_data,
+      linkedinUrl: company.linkedin_url,
+      companyPhone: company.company_phone,
+      generalEmail: company.general_email,
+      employeeCount: company.employee_count,
+      socialProfiles: company.social_profiles as any,
+      keyExecutives: company.key_executives as any,
+      techStack: company.tech_stack,
+      tags: company.tags || [],
+      products: enrichmentData?.products,
+      recentNews: company.recent_news || enrichmentData?.recentNews,
+      fundingInfo: enrichmentData?.fundingInfo ||
+        (company.funding_stage || company.funding_total
+          ? `${company.funding_stage || ''}${company.funding_stage && company.funding_total ? ' - ' : ''}${company.funding_total || ''}`
+          : undefined),
+      wasEnriched: company.enrichment_status === 'completed',
+    } as unknown as Company;
+  };
+
+  // Supabase/PostgREST returns max 1000 rows per request; fetch in chunks to support 2000+ per page
+  const ROWS_PER_CHUNK = 1000;
+  const MAX_COMPANIES_LOAD = 15000;
+
   const { data: companies, isLoading } = useQuery({
     queryKey: ["companies-full"],
     queryFn: async () => {
-      const { data } = await supabase
+      const all: any[] = [];
+      let offset = 0;
+      while (offset < MAX_COMPANIES_LOAD) {
+        const { data, error } = await supabase
+          .from("companies")
+          .select("*, contacts(*), deals(*), people(*)")
+          .order("created_at", { ascending: false })
+          .range(offset, offset + ROWS_PER_CHUNK - 1);
+        if (error) throw error;
+        const chunk = data || [];
+        all.push(...chunk);
+        if (chunk.length < ROWS_PER_CHUNK) break;
+        offset += ROWS_PER_CHUNK;
+      }
+      return all.map(mapCompanyRow);
+    },
+  });
+
+  // When search/date/source filters are active, fetch matching companies from the whole DB (holistic) so "Select all filtered" includes every match
+  const hasServerFilters = !!(
+    searchQuery.trim() ||
+    (dateAddedPreset !== "all" || dateAddedFrom || dateAddedTo) ||
+    sourceFilter
+  );
+  const { data: companiesFiltered, isLoading: isLoadingFiltered } = useQuery({
+    queryKey: [
+      "companies-filtered",
+      searchQuery.trim(),
+      dateAddedPreset,
+      dateAddedFrom ?? "",
+      dateAddedTo ?? "",
+      dateAddedFromTime ?? "",
+      dateAddedToTime ?? "",
+      sourceFilter ?? "",
+    ],
+    enabled: hasServerFilters,
+    queryFn: async ({ queryKey }) => {
+      const [, search, datePreset, dateFrom, dateTo, dateFromTime, dateToTime, source] = queryKey as [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
+      let builder = supabase
         .from("companies")
         .select("*, contacts(*), deals(*), people(*)")
         .order("created_at", { ascending: false });
-      
-      // Map database columns to camelCase properties for the dialog
-      return (data || []).map(company => {
-        const enrichmentData = company.enrichment_data as any;
-        return {
-          ...company,
-          // Explicitly preserve enrichment_data for tag extraction
-          enrichment_data: company.enrichment_data,
-          // Map snake_case to camelCase
-          linkedinUrl: company.linkedin_url,
-          companyPhone: company.company_phone,
-          generalEmail: company.general_email,
-          employeeCount: company.employee_count,
-          socialProfiles: company.social_profiles as any,
-          keyExecutives: company.key_executives as any,
-          techStack: company.tech_stack,
-          tags: company.tags || [],
-          // Extract from enrichment_data JSONB if it exists
-          products: enrichmentData?.products,
-          recentNews: company.recent_news || enrichmentData?.recentNews,
-          fundingInfo: enrichmentData?.fundingInfo || 
-                       (company.funding_stage || company.funding_total 
-                         ? `${company.funding_stage || ''}${company.funding_stage && company.funding_total ? ' - ' : ''}${company.funding_total || ''}` 
-                         : undefined),
-          wasEnriched: company.enrichment_status === 'completed',
-        } as unknown as Company;
-      });
+
+      if (search) {
+        const safe = search
+          .replace(/'/g, "''")
+          .replace(/\\/g, "\\\\")
+          .replace(/%/g, "\\%")
+          .replace(/_/g, "\\_")
+          .replace(/,/g, " ");
+        const pattern = `%${safe}%`;
+        builder = builder.or(
+          `name.ilike.${pattern},website.ilike.${pattern},description.ilike.${pattern},industry.ilike.${pattern},general_email.ilike.${pattern}`
+        );
+      }
+
+      let fromIso: string | null = null;
+      let toIso: string | null = null;
+      if (datePreset === "custom" && (dateFrom || dateTo)) {
+        if (dateFrom) fromIso = dateFromTime ? `${dateFrom}T${dateFromTime}:00` : `${dateFrom}T00:00:00`;
+        if (dateTo) toIso = dateToTime ? `${dateTo}T${dateToTime}:59.999` : `${dateTo}T23:59:59.999`;
+      } else if (datePreset === "today") {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        fromIso = d.toISOString();
+        toIso = new Date().toISOString();
+      } else if (datePreset === "yesterday") {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        d.setHours(0, 0, 0, 0);
+        fromIso = d.toISOString();
+        d.setHours(23, 59, 59, 999);
+        toIso = d.toISOString();
+      } else if (datePreset === "last7") {
+        fromIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        toIso = new Date().toISOString();
+      } else if (datePreset === "last30") {
+        fromIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        toIso = new Date().toISOString();
+      } else if (datePreset === "last90") {
+        fromIso = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+        toIso = new Date().toISOString();
+      }
+      if (fromIso) builder = builder.gte("created_at", fromIso);
+      if (toIso) builder = builder.lte("created_at", toIso);
+      if (source) builder = builder.contains("tags", [source]);
+
+      // Fetch in chunks (PostgREST max 1000 per request) to get up to 50k rows
+      const MAX_FILTERED_LOAD = 50000;
+      const all: any[] = [];
+      let offset = 0;
+      while (offset < MAX_FILTERED_LOAD) {
+        const { data: chunk, error } = await builder
+          .range(offset, offset + ROWS_PER_CHUNK - 1);
+        if (error) throw error;
+        const rows = chunk || [];
+        all.push(...rows);
+        if (rows.length < ROWS_PER_CHUNK) break;
+        offset += ROWS_PER_CHUNK;
+      }
+      return all.map(mapCompanyRow);
+    },
+  });
+
+  // Base list: when server filters are active use the filtered fetch (whole DB); otherwise use default load
+  const baseCompanies = hasServerFilters && companiesFiltered != null ? companiesFiltered : companies ?? [];
+
+  const { data: companiesTotalCount } = useQuery({
+    queryKey: ["companies-total-count"],
+    queryFn: async () => {
+      const { count } = await supabase.from("companies").select("*", { count: "exact", head: true });
+      return count ?? 0;
     },
   });
 
@@ -1034,12 +1195,12 @@ export default function Companies() {
     }
   }, [companies, selectedCompany?.id]);
 
-  // Filter companies by selected tags and email status
+  // Filter companies by selected tags and email status (runs on baseCompanies: full DB when server filters active, else loaded set)
   const filteredCompanies = useMemo(() => {
-    if (!companies) return [];
+    if (!baseCompanies?.length) return [];
     
     // Debug: Check how many companies have tags
-    const companiesWithTags = companies.filter(c => {
+    const companiesWithTags = baseCompanies.filter(c => {
       const hasTags = (c.tags && Array.isArray(c.tags) && c.tags.length > 0);
       const enrichmentData = c.enrichment_data as any;
       const hasSuggestedTags = enrichmentData?.suggestedTags && Array.isArray(enrichmentData.suggestedTags) && enrichmentData.suggestedTags.length > 0;
@@ -1047,18 +1208,18 @@ export default function Companies() {
     });
     
     console.log('[Filter] Starting filter with:', {
-      totalCompanies: companies.length,
+      totalCompanies: baseCompanies.length,
       companiesWithTags: companiesWithTags.length,
       selectedTagFilters,
       selectedTagFiltersCount: selectedTagFilters.length,
-      sampleCompanyTags: companies.slice(0, 5).map(c => ({
+      sampleCompanyTags: baseCompanies.slice(0, 5).map(c => ({
         name: c.name,
         tags: c.tags,
         suggestedTags: (c.enrichment_data as any)?.suggestedTags
       }))
     });
     
-    const filtered = companies.filter(company => {
+    const filtered = baseCompanies.filter(company => {
       // Search filter - search across company name, website, description, industry, email, and tags (group/category)
       if (searchQuery.trim()) {
         const query = searchQuery.trim().toLowerCase();
@@ -1185,21 +1346,30 @@ export default function Companies() {
       let fromTs: number | null = null;
       let toTs: number | null = null;
       if (dateAddedPreset === 'custom' && (dateAddedFrom || dateAddedTo)) {
-        if (dateAddedFrom) fromTs = new Date(dateAddedFrom + 'T00:00:00').getTime();
-        if (dateAddedTo) toTs = new Date(dateAddedTo + 'T23:59:59.999').getTime();
-      } else if (dateAddedPreset !== 'all') {
-        const now = Date.now();
-        const day = 24 * 60 * 60 * 1000;
-        if (dateAddedPreset === 'last7') {
-          fromTs = now - 7 * day;
-          toTs = now;
-        } else if (dateAddedPreset === 'last30') {
-          fromTs = now - 30 * day;
-          toTs = now;
-        } else if (dateAddedPreset === 'last90') {
-          fromTs = now - 90 * day;
-          toTs = now;
-        }
+        if (dateAddedFrom) fromTs = new Date(dateAddedFrom + (dateAddedFromTime ? `T${dateAddedFromTime}` : 'T00:00:00')).getTime();
+        if (dateAddedTo) toTs = new Date(dateAddedTo + (dateAddedToTime ? `T${dateAddedToTime}` : 'T23:59:59.999')).getTime();
+      } else if (dateAddedPreset === 'today') {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        fromTs = d.getTime();
+        toTs = dateAddedToTime ? new Date(d.toDateString() + 'T' + dateAddedToTime).getTime() : Date.now();
+        if (dateAddedFromTime) fromTs = new Date(d.toDateString() + 'T' + dateAddedFromTime).getTime();
+      } else if (dateAddedPreset === 'yesterday') {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        d.setHours(0, 0, 0, 0);
+        fromTs = dateAddedFromTime ? new Date(d.toDateString() + 'T' + dateAddedFromTime).getTime() : d.getTime();
+        d.setHours(23, 59, 59, 999);
+        toTs = dateAddedToTime ? new Date(d.toDateString() + 'T' + dateAddedToTime).getTime() : d.getTime();
+      } else if (dateAddedPreset === 'last7') {
+        fromTs = Date.now() - 7 * (24 * 60 * 60 * 1000);
+        toTs = Date.now();
+      } else if (dateAddedPreset === 'last30') {
+        fromTs = Date.now() - 30 * (24 * 60 * 60 * 1000);
+        toTs = Date.now();
+      } else if (dateAddedPreset === 'last90') {
+        fromTs = Date.now() - 90 * (24 * 60 * 60 * 1000);
+        toTs = Date.now();
       }
       if (fromTs !== null && created < fromTs) return false;
       if (toTs !== null && created > toTs) return false;
@@ -1209,7 +1379,7 @@ export default function Companies() {
     });
     
     console.log('[Filter] Filter result:', {
-      totalCompanies: companies.length,
+      totalCompanies: baseCompanies.length,
       filteredCount: filtered.length,
       selectedTags: selectedTagFilters,
       companiesWithAnyTags: companiesWithTags.length
@@ -1220,7 +1390,7 @@ export default function Companies() {
       console.warn('[Filter] ⚠️ No companies matched the selected tags:', selectedTagFilters);
       
       // Find companies that might have similar tags - improved extraction
-      const potentialMatches = companies.slice(0, 10).map(c => {
+      const potentialMatches = baseCompanies.slice(0, 10).map(c => {
         const enrichmentData = c.enrichment_data as any;
         const companyTags = ((c.tags || []) as string[]).map((t: string) => typeof t === 'string' ? t.toLowerCase() : String(t).toLowerCase());
         
@@ -1275,21 +1445,33 @@ export default function Companies() {
     });
     
     return sorted;
-  }, [companies, selectedTagFilters, emailStatusFilter, peopleEmails, searchQuery, sourceFilter, dateAddedPreset, dateAddedFrom, dateAddedTo]);
+  }, [baseCompanies, selectedTagFilters, emailStatusFilter, peopleEmails, searchQuery, sourceFilter, dateAddedPreset, dateAddedFrom, dateAddedTo, dateAddedFromTime, dateAddedToTime]);
 
-  // Group filtered companies by source for display (when groupBySource is true)
+  const totalCompaniesPages = Math.max(1, Math.ceil((filteredCompanies?.length ?? 0) / companiesPageSize));
+  const paginatedCompanies = useMemo(() => {
+    if (!filteredCompanies?.length) return [];
+    const start = (companiesPage - 1) * companiesPageSize;
+    return filteredCompanies.slice(start, start + companiesPageSize);
+  }, [filteredCompanies, companiesPage, companiesPageSize]);
+
+  // Group filtered companies by source for display (when groupBySource is true) — use paginated list
   const companiesGroupedBySource = useMemo(() => {
-    if (!groupBySource || !filteredCompanies.length) return null;
+    if (!groupBySource || !paginatedCompanies.length) return null;
     const groups: Record<string, Company[]> = {};
     const order = [...SOURCE_TAG_LIST, "Other"];
     order.forEach((label) => { groups[label] = []; });
-    for (const company of filteredCompanies) {
+    for (const company of paginatedCompanies) {
       const source = getCompanySource(company) || "Other";
       if (!groups[source]) groups[source] = [];
       groups[source].push(company);
     }
     return order.filter((label) => (groups[label]?.length ?? 0) > 0).map((label) => ({ label, companies: groups[label] }));
-  }, [groupBySource, filteredCompanies]);
+  }, [groupBySource, paginatedCompanies]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCompaniesPage(1);
+  }, [searchQuery, selectedTagFilters, emailStatusFilter, sourceFilter, dateAddedPreset, dateAddedFrom, dateAddedTo, dateAddedFromTime, dateAddedToTime]);
 
   const handleTagFilterClick = (tag: string) => {
     setSelectedTagFilters(prev => 
@@ -1313,12 +1495,13 @@ export default function Companies() {
   };
 
   const handleNavigate = (direction: 'prev' | 'next') => {
-    if (!companies) return;
+    const list = filteredCompanies ?? companies;
+    if (!list?.length) return;
     
     const newIndex = direction === 'prev' ? currentIndex - 1 : currentIndex + 1;
-    if (newIndex >= 0 && newIndex < companies.length) {
+    if (newIndex >= 0 && newIndex < list.length) {
       setCurrentIndex(newIndex);
-      setSelectedCompany(companies[newIndex]);
+      setSelectedCompany(list[newIndex]);
     }
   };
 
@@ -1589,15 +1772,26 @@ export default function Companies() {
     }
   };
 
+  const BULK_EMAIL_QUERY_BATCH = 200;
+
   const openBulkEmailForCompanyIds = async (companyIds: string[]) => {
     if (companyIds.length === 0) return;
+    const loadingToast =
+      companyIds.length > BULK_EMAIL_QUERY_BATCH
+        ? toast({ title: "Opening campaign…", description: `Loading ${companyIds.length} companies. This may take a moment.` })
+        : null;
     try {
-      const { data: companiesData, error: fetchErr } = await supabase
-        .from("companies")
-        .select("*, contacts(*)")
-        .in("id", companyIds);
-      if (fetchErr) throw fetchErr;
-      const companies = (companiesData || []) as Company[];
+      const companiesData: any[] = [];
+      for (let i = 0; i < companyIds.length; i += BULK_EMAIL_QUERY_BATCH) {
+        const batch = companyIds.slice(i, i + BULK_EMAIL_QUERY_BATCH);
+        const { data, error: fetchErr } = await supabase
+          .from("companies")
+          .select("*, contacts(*)")
+          .in("id", batch);
+        if (fetchErr) throw fetchErr;
+        if (data?.length) companiesData.push(...data);
+      }
+      const companies = companiesData as Company[];
       const companiesWithEmail = companies.filter((company) => {
         const match = getCompanyEmailContact(company);
         return !!match?.email;
@@ -1621,11 +1815,17 @@ export default function Companies() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
       const ids = companiesWithEmail.map((c) => c.id);
-      const { data: existingPeople } = await supabase
-        .from("people")
-        .select("id, first_name, last_name, email, company_id, companies(id, name, tags)")
-        .in("company_id", ids)
-        .not("email", "is", null);
+      const existingPeopleBatch: any[] = [];
+      for (let i = 0; i < ids.length; i += BULK_EMAIL_QUERY_BATCH) {
+        const batch = ids.slice(i, i + BULK_EMAIL_QUERY_BATCH);
+        const { data } = await supabase
+          .from("people")
+          .select("id, first_name, last_name, email, company_id, companies(id, name, tags)")
+          .in("company_id", batch)
+          .not("email", "is", null);
+        if (data?.length) existingPeopleBatch.push(...data);
+      }
+      const existingPeople = existingPeopleBatch.length ? existingPeopleBatch : null;
       const peopleByCompanyId = new Map<string, any[]>();
       if (existingPeople) {
         existingPeople.forEach((p: any) => {
@@ -1706,10 +1906,30 @@ export default function Companies() {
         });
         return;
       }
-      const { data: companiesOverview } = await supabase
-        .from("companies")
-        .select("id, name, description, industry, website, enrichment_data, recent_news, funding_stage, funding_total, employee_count, tech_stack, key_executives, tags")
-        .in("id", ids);
+      const totalCompanies = companyIds.length;
+      const withEmail = companiesWithEmail.length;
+      if (peopleForEmail.length < totalCompanies) {
+        toast({
+          title: "Campaign opened with partial list",
+          description: `${peopleForEmail.length} recipient${peopleForEmail.length === 1 ? "" : "s"} from ${withEmail} companies that had email. ${totalCompanies - withEmail} companies had no email — add company email or contacts in Companies to include them.`,
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Campaign opened",
+          description: `${peopleForEmail.length} recipient${peopleForEmail.length === 1 ? "" : "s"} from ${totalCompanies} companies.`,
+        });
+      }
+      const companiesOverviewBatch: any[] = [];
+      for (let i = 0; i < ids.length; i += BULK_EMAIL_QUERY_BATCH) {
+        const batch = ids.slice(i, i + BULK_EMAIL_QUERY_BATCH);
+        const { data } = await supabase
+          .from("companies")
+          .select("id, name, description, industry, website, enrichment_data, recent_news, funding_stage, funding_total, employee_count, tech_stack, key_executives, tags")
+          .in("id", batch);
+        if (data?.length) companiesOverviewBatch.push(...data);
+      }
+      const companiesOverview = companiesOverviewBatch.length ? companiesOverviewBatch : undefined;
       const enrichedPeople = peopleForEmail.map((person) => {
         const companyData = companiesOverview?.find((c) => c.id === person.company_id);
         if (companyData) {
@@ -1746,7 +1966,9 @@ export default function Companies() {
       });
       setBulkEmailPeople(enrichedPeople);
       setBulkEmailDialogOpen(true);
+      if (loadingToast) loadingToast.dismiss();
     } catch (error: any) {
+      if (loadingToast) loadingToast.dismiss();
       toast({
         title: "Error",
         description: error.message || "Failed to open bulk email",
@@ -1797,7 +2019,7 @@ export default function Companies() {
     setAddContactDialogOpen(true);
   };
 
-  if (isLoading) {
+  if (isLoading && !hasServerFilters) {
     return <div className="flex items-center justify-center h-96">Loading...</div>;
   }
 
@@ -1855,9 +2077,18 @@ export default function Companies() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 md:px-0">
         <div>
           <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Companies</h1>
-          <p className="text-muted-foreground mt-1 md:mt-2 text-sm md:text-base">
-            {filteredCompanies?.length || 0} of {companies?.length || 0} companies
+          <p className="text-muted-foreground mt-1 md:mt-2 text-sm md:text-base flex items-center gap-2 flex-wrap">
+            {hasServerFilters && isLoadingFiltered && (
+              <span className="inline-flex items-center gap-1.5 text-primary">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Applying filters to all companies…
+              </span>
+            )}
+            {filteredCompanies?.length ?? 0} of {companiesTotalCount ?? baseCompanies?.length ?? 0} companies
             {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all' || searchQuery.trim() || dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && " (filtered)"}
+          </p>
+          <p className="text-muted-foreground/80 text-xs mt-0.5">
+            Search and filters apply to all companies. Use &quot;Select all filtered&quot; to select every matching company for bulk email.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -2122,16 +2353,32 @@ export default function Companies() {
                 )}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-56" align="end">
+            <PopoverContent className="w-64" align="end">
               <div className="space-y-2">
                 <h4 className="font-medium text-sm">Filter by date added</h4>
                 <Button
                   variant={dateAddedPreset === 'all' ? 'secondary' : 'ghost'}
                   size="sm"
                   className="w-full justify-start"
-                  onClick={() => { setDateAddedPreset('all'); setDateAddedFrom(''); setDateAddedTo(''); }}
+                  onClick={() => { setDateAddedPreset('all'); setDateAddedFrom(''); setDateAddedTo(''); setDateAddedFromTime(''); setDateAddedToTime(''); }}
                 >
                   All time
+                </Button>
+                <Button
+                  variant={dateAddedPreset === 'today' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setDateAddedPreset('today')}
+                >
+                  Today
+                </Button>
+                <Button
+                  variant={dateAddedPreset === 'yesterday' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setDateAddedPreset('yesterday')}
+                >
+                  Yesterday
                 </Button>
                 <Button
                   variant={dateAddedPreset === 'last7' ? 'secondary' : 'ghost'}
@@ -2157,28 +2404,107 @@ export default function Companies() {
                 >
                   Last 90 days
                 </Button>
+                {(dateAddedPreset === 'today' || dateAddedPreset === 'yesterday') && (
+                  <div className="pt-2 border-t space-y-2">
+                    <p className="text-xs text-muted-foreground">Time range (optional)</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">From</Label>
+                        <TimePicker
+                          value={dateAddedFromTime}
+                          onChange={setDateAddedFromTime}
+                          className="w-full text-xs"
+                          aria-label="Time from"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">To</Label>
+                        <TimePicker
+                          value={dateAddedToTime}
+                          onChange={setDateAddedToTime}
+                          className="w-full text-xs"
+                          aria-label="Time to"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="pt-2 border-t space-y-2">
                   <p className="text-xs text-muted-foreground">Custom range</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      type="date"
-                      value={dateAddedFrom}
-                      onChange={(e) => { setDateAddedFrom(e.target.value); setDateAddedPreset('custom'); }}
-                      className="text-xs"
-                    />
-                    <Input
-                      type="date"
-                      value={dateAddedTo}
-                      onChange={(e) => { setDateAddedTo(e.target.value); setDateAddedPreset('custom'); }}
-                      className="text-xs"
-                    />
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="h-9 w-full justify-start text-left font-normal text-xs"
+                        >
+                          <CalendarDays className="mr-2 h-3.5 w-3.5" />
+                          {dateAddedFrom ? format(new Date(dateAddedFrom + "T00:00:00"), "MMM d, yyyy") : "From date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dateAddedFrom ? new Date(dateAddedFrom + "T12:00:00") : undefined}
+                          onSelect={(d) => {
+                            setDateAddedFrom(d ? format(d, "yyyy-MM-dd") : "");
+                            setDateAddedPreset("custom");
+                          }}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="h-9 w-full justify-start text-left font-normal text-xs"
+                        >
+                          <CalendarDays className="mr-2 h-3.5 w-3.5" />
+                          {dateAddedTo ? format(new Date(dateAddedTo + "T00:00:00"), "MMM d, yyyy") : "To date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dateAddedTo ? new Date(dateAddedTo + "T12:00:00") : undefined}
+                          onSelect={(d) => {
+                            setDateAddedTo(d ? format(d, "yyyy-MM-dd") : "");
+                            setDateAddedPreset("custom");
+                          }}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
+                  {(dateAddedPreset === 'custom') && (dateAddedFrom || dateAddedTo) && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">From time</Label>
+                        <TimePicker
+                          value={dateAddedFromTime}
+                          onChange={setDateAddedFromTime}
+                          className="w-full text-xs"
+                          aria-label="Time from"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">To time</Label>
+                        <TimePicker
+                          value={dateAddedToTime}
+                          onChange={setDateAddedToTime}
+                          className="w-full text-xs"
+                          aria-label="Time to"
+                        />
+                      </div>
+                    </div>
+                  )}
                   {(dateAddedFrom || dateAddedTo) && (
                     <Button
                       variant="ghost"
                       size="sm"
                       className="w-full text-xs"
-                      onClick={() => { setDateAddedFrom(''); setDateAddedTo(''); setDateAddedPreset('all'); }}
+                      onClick={() => { setDateAddedFrom(''); setDateAddedTo(''); setDateAddedPreset('all'); setDateAddedFromTime(''); setDateAddedToTime(''); }}
                     >
                       Clear range
                     </Button>
@@ -2203,20 +2529,23 @@ export default function Companies() {
       {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all' || sourceFilter || dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && (
         <div className="flex flex-wrap gap-2 px-4 md:px-0 items-center">
           <span className="text-sm text-muted-foreground">Filtering by:</span>
-          {(dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && (
-            <Badge
-              variant="secondary"
-              className="gap-1 cursor-pointer"
-              onClick={() => { setDateAddedPreset('all'); setDateAddedFrom(''); setDateAddedTo(''); }}
-            >
-              <CalendarDays className="h-3 w-3" />
-              {dateAddedPreset === 'last7' && 'Last 7 days'}
-              {dateAddedPreset === 'last30' && 'Last 30 days'}
-              {dateAddedPreset === 'last90' && 'Last 90 days'}
-              {dateAddedPreset === 'custom' && (dateAddedFrom || dateAddedTo) && `${dateAddedFrom || '…'} to ${dateAddedTo || '…'}`}
-              <X className="h-3 w-3 ml-1" />
-            </Badge>
-          )}
+{(dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && (
+                <Badge
+                  variant="secondary"
+                  className="gap-1 cursor-pointer"
+                  onClick={() => { setDateAddedPreset('all'); setDateAddedFrom(''); setDateAddedTo(''); setDateAddedFromTime(''); setDateAddedToTime(''); }}
+                >
+                  <CalendarDays className="h-3 w-3" />
+                  {dateAddedPreset === 'today' && 'Today'}
+                  {dateAddedPreset === 'yesterday' && 'Yesterday'}
+                  {dateAddedPreset === 'last7' && 'Last 7 days'}
+                  {dateAddedPreset === 'last30' && 'Last 30 days'}
+                  {dateAddedPreset === 'last90' && 'Last 90 days'}
+                  {dateAddedPreset === 'custom' && (dateAddedFrom || dateAddedTo) && `${dateAddedFrom || '…'} to ${dateAddedTo || '…'}`}
+                  {(dateAddedFromTime || dateAddedToTime) && ` ${dateAddedFromTime || ''}–${dateAddedToTime || ''}`}
+                  <X className="h-3 w-3 ml-1" />
+                </Badge>
+              )}
           {sourceFilter && (
             <Badge
               variant="secondary"
@@ -2284,7 +2613,10 @@ export default function Companies() {
         <div className="px-4 md:px-0">
           <ProspectAnalyzer 
             companies={filteredCompanies} 
-            onAnalysisComplete={() => queryClient.invalidateQueries({ queryKey: ["companies-full"] })}
+            onAnalysisComplete={() => {
+              queryClient.invalidateQueries({ queryKey: ["companies-full"] });
+              queryClient.invalidateQueries({ queryKey: ["companies-total-count"] });
+            }}
           />
         </div>
       )}
@@ -2572,16 +2904,86 @@ export default function Companies() {
         </div>
       )}
 
+      {/* Pagination + Select: at top so visible without scrolling */}
+      {filteredCompanies && filteredCompanies.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-4 px-4 md:px-0 py-3 border-b">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Per page</span>
+              <Select
+                value={String(companiesPageSize)}
+                onValueChange={(v) => {
+                  setCompaniesPageSize(Number(v));
+                  setCompaniesPage(1);
+                }}
+              >
+                <SelectTrigger className="w-24 h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="200">200</SelectItem>
+                  <SelectItem value="500">500</SelectItem>
+                  <SelectItem value="1000">1000</SelectItem>
+                  <SelectItem value="2000">2000</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {totalCompaniesPages > 1 && (
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(e) => { e.preventDefault(); if (companiesPage > 1) setCompaniesPage(p => p - 1); }}
+                      className={companiesPage <= 1 ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
+                  <PaginationItem>
+                    <span className="px-4 py-2 text-sm">
+                      Page {companiesPage} of {totalCompaniesPages}
+                    </span>
+                  </PaginationItem>
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(e) => { e.preventDefault(); if (companiesPage < totalCompaniesPages) setCompaniesPage(p => p + 1); }}
+                      className={companiesPage >= totalCompaniesPages ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Select All Header */}
       {filteredCompanies && filteredCompanies.length > 0 && (
-        <div className="flex items-center gap-3 px-4 md:px-0">
+        <div className="flex flex-wrap items-center gap-3 px-4 md:px-0">
           <Checkbox
-            checked={selectedCompanyIds.size === filteredCompanies.length && filteredCompanies.length > 0}
+            checked={paginatedCompanies.length > 0 && paginatedCompanies.every(c => selectedCompanyIds.has(c.id))}
             onCheckedChange={toggleSelectAll}
           />
           <span className="text-sm text-muted-foreground">
-            {selectedCompanyIds.size === filteredCompanies.length ? 'Deselect all' : 'Select all'}
+            {paginatedCompanies.every(c => selectedCompanyIds.has(c.id)) && paginatedCompanies.length > 0 ? 'Deselect page' : 'Select page'}
           </span>
+          <span className="text-xs text-muted-foreground">
+            ({(companiesPage - 1) * companiesPageSize + 1}–{Math.min(companiesPage * companiesPageSize, filteredCompanies!.length)} of {filteredCompanies!.length})
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+            onClick={toggleSelectAllFiltered}
+          >
+            {filteredCompanies!.length > 0 && [...filteredCompanies].every(c => selectedCompanyIds.has(c.id))
+              ? 'Deselect all filtered'
+              : `Select all filtered (${filteredCompanies!.length})`}
+          </Button>
         </div>
       )}
 
@@ -2591,7 +2993,7 @@ export default function Companies() {
               { _type: 'header' as const, key: `header-${label}`, label, count: sectionCompanies.length, companyIds: sectionCompanies.map((c) => c.id) },
               ...sectionCompanies.map((company) => ({ _type: 'company' as const, key: company.id, company, index: filteredCompanies!.indexOf(company) })),
             ])
-          : (filteredCompanies ?? []).map((company, index) => ({ _type: 'company' as const, key: company.id, company, index }))
+          : (paginatedCompanies ?? []).map((company, i) => ({ _type: 'company' as const, key: company.id, company, index: (companiesPage - 1) * companiesPageSize + i }))
         )?.map((item) =>
           item._type === 'header' ? (
             <div key={item.key} className="pt-3 pb-1 first:pt-0">
@@ -2813,7 +3215,7 @@ export default function Companies() {
           company={selectedCompany}
           open={!!selectedCompany}
           onOpenChange={(open) => !open && setSelectedCompany(null)}
-          allCompanies={companies}
+          allCompanies={filteredCompanies ?? companies}
           currentIndex={currentIndex}
           onNavigate={handleNavigate}
         />
@@ -2844,6 +3246,7 @@ export default function Companies() {
           queryClient.invalidateQueries({ queryKey: ["people"] });
           queryClient.invalidateQueries({ queryKey: ["people-emails"] });
           queryClient.invalidateQueries({ queryKey: ["companies-full"] });
+          queryClient.invalidateQueries({ queryKey: ["companies-total-count"] });
           setAddContactDialogOpen(false);
           setCompanyForContact(null);
           setContactInitialValues(undefined);
@@ -2853,11 +3256,21 @@ export default function Companies() {
       <ApifyCSVUploader
         open={csvUploaderOpen}
         onOpenChange={setCsvUploaderOpen}
+        onComplete={(companyIds) => {
+          setCsvUploaderOpen(false);
+          setBulkEmailDialogOpen(false); // close first so dialog opens fresh with imported list
+          openBulkEmailForCompanyIds(companyIds);
+        }}
       />
 
       <ApifyScraperDialog
         open={scraperDialogOpen}
         onOpenChange={setScraperDialogOpen}
+        onComplete={(companyIds) => {
+          setScraperDialogOpen(false);
+          setBulkEmailDialogOpen(false); // close first so dialog opens fresh with imported list
+          openBulkEmailForCompanyIds(companyIds);
+        }}
       />
 
       <BulkEmailDialog

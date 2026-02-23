@@ -267,30 +267,43 @@ export const Sidebar = () => {
         />
       )}
 
-      {/* Sidebar */}
-      <div className={cn(
-        "flex h-full flex-col border-r bg-card transition-all duration-300 shrink-0",
-        "fixed lg:relative inset-y-0 left-0 z-[56]",
-        isCollapsed ? "lg:w-16" : "w-[280px] sm:w-64",
-        // Mobile: hidden by default, slide in when open
-        isMobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"
-      )}>
-        <div className="flex h-16 items-center border-b px-3 justify-between">
+      {/* Sidebar - collapse only minimizes width; page content on the right stays open */}
+      <aside
+        data-sidebar="main"
+        role="navigation"
+        aria-label="Main navigation"
+        className={cn(
+          "flex h-full flex-col border-r bg-card transition-[width] duration-300 shrink-0",
+          "fixed lg:relative inset-y-0 left-0 z-[56]",
+          isCollapsed ? "w-16" : "w-[280px] sm:w-64",
+          // Mobile: hidden by default, slide in when open
+          isMobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"
+        )}
+      >
+        <div className="flex h-16 items-center border-b px-3 justify-between min-w-0">
         {!isCollapsed && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <img src={leadGenieLogo} alt="LeadGenie CRM" className="h-10 w-auto" />
           </div>
         )}
         {isCollapsed && (
-          <div className="flex justify-center w-full">
+          <div className="flex justify-center w-full flex-1 min-w-0">
             <img src={leadGenieLogo} alt="LeadGenie CRM" className="h-8 w-auto" />
           </div>
         )}
         <Button
+          type="button"
           variant="ghost"
           size="icon"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="h-8 w-8 hidden md:flex"
+          className="h-8 w-8 shrink-0 hidden md:flex"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsCollapsed((c) => !c);
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {isCollapsed ? (
             <ChevronRight className="h-4 w-4" />
@@ -579,7 +592,7 @@ export const Sidebar = () => {
           </DropdownMenu>
         </div>
       )}
-      </div>
+      </aside>
     </>
   );
 };

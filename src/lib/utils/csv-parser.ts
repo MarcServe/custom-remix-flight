@@ -8,29 +8,46 @@ export interface ParsedCSV {
   rawRows: string[][];
 }
 
+export interface ParseCSVOptions {
+  /** If false, first row is data; use synthetic headers (Column 1, Column 2, ...). Default true. */
+  firstRowIsHeaders?: boolean;
+}
+
 /**
- * Parse CSV string into structured data
+ * Parse CSV string into structured data.
+ * Handles quoted fields so commas inside a cell (e.g. multiple emails) don't split columns.
  */
-export function parseCSV(csvText: string): ParsedCSV {
+export function parseCSV(csvText: string, options: ParseCSVOptions = {}): ParsedCSV {
+  const { firstRowIsHeaders = true } = options;
   const lines = csvText.split(/\r?\n/).filter(line => line.trim());
   if (lines.length === 0) {
     return { headers: [], rows: [], rawRows: [] };
   }
 
-  // Parse headers
-  const headers = parseCSVLine(lines[0]);
-  
-  // Parse data rows
+  let headers: string[];
+  let dataStartIndex: number;
+
+  if (firstRowIsHeaders) {
+    headers = parseCSVLine(lines[0]);
+    dataStartIndex = 1;
+  } else {
+    // Headerless: use first data row to determine column count, synthetic headers for mapping
+    const firstValues = parseCSVLine(lines[0]);
+    const colCount = firstValues.length;
+    headers = Array.from({ length: Math.max(colCount, 1) }, (_, i) => `Column ${i + 1}`);
+    dataStartIndex = 0;
+  }
+
   const rawRows: string[][] = [];
   const rows: Record<string, string>[] = [];
-  
-  for (let i = 1; i < lines.length; i++) {
+
+  for (let i = dataStartIndex; i < lines.length; i++) {
     const values = parseCSVLine(lines[i]);
     if (values.length > 0 && values.some(v => v.trim())) {
       rawRows.push(values);
       const row: Record<string, string> = {};
       headers.forEach((header, idx) => {
-        row[header] = values[idx] || '';
+        row[header] = values[idx] ?? '';
       });
       rows.push(row);
     }
@@ -68,6 +85,40 @@ function parseCSVLine(line: string): string[] {
   
   result.push(current.trim());
   return result;
+}
+
+/** Basic email regex - requires @ and at least one dot in domain */
+const EMAIL_LIKE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Reject obvious non-email strings (filenames, tracking domains, etc.) */
+function looksLikeEmail(s: string): boolean {
+  if (!s || !s.includes('@')) return false;
+  const lower = s.toLowerCase();
+  // Skip file names / image refs
+  if (/\.(png|jpg|jpeg|gif|svg|webp|ico)(\s|$)/i.test(s)) return false;
+  // Skip known non-contact domains
+  if (/\@(sentry|wixpress|wix\.|googleanalytics|googletagmanager|gravatar|example\.com)/i.test(lower)) return false;
+  // Require at least one dot in the part after @ (real domain)
+  const afterAt = s.split('@')[1] || '';
+  if (!afterAt.includes('.')) return false;
+  return true;
+}
+
+/**
+ * Split a string that may contain multiple emails (comma or semicolon separated)
+ * into an array of trimmed, valid-looking emails. Invalid or empty entries are dropped.
+ * Handles cells like "greenpark@x.com, media@x.com, info@x.com" and filters noise
+ * (e.g. image filenames, tracking domains).
+ */
+export function parseMultipleEmails(value: string | null | undefined): string[] {
+  if (!value || typeof value !== 'string') return [];
+  const raw = value.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+  const out: string[] = [];
+  for (const s of raw) {
+    if (EMAIL_LIKE.test(s) && looksLikeEmail(s)) out.push(s);
+    else if (looksLikeEmail(s)) out.push(s);
+  }
+  return out;
 }
 
 /**
@@ -169,7 +220,7 @@ export function autoDetectMappings(headers: string[]): ColumnMapping[] {
     geography: /^(geography|location|country|region|city|state|area|locality|neighborhood)$/i,
     headquarters: /^(address|headquarters|hq|street|full\s*address|fullAddress|streetAddress|completeAddress)$/i,
     linkedin_url: /^(linkedin|linkedin\s*url|company\s*linkedin|linkedinUrl)$/i,
-    description: /^(description|about|summary|bio|businessDescription|placeDescription)$/i,
+    description: /^(description|about|summary|bio|businessDescription|placeDescription|specialism|specialty|specialty\s*type)$/i,
     rating: /^(rating|score|totalScore|stars|googleRating|averageRating)$/i,
     reviews_count: /^(reviews|reviewsCount|reviewCount|numReviews|totalReviews)$/i,
   };
@@ -283,6 +334,45 @@ export function extractDomain(value: string): string | null {
   }
   
   return null;
+}
+
+/**
+ * Normalize a website URL for consistent storage and uniqueness (e.g. strip trailing slash, lowercase host).
+ * So https://www.visiting-angels.co.uk/ and https://www.visiting-angels.co.uk are treated as the same.
+ */
+export function normalizeWebsiteUrl(value: string | null | undefined): string {
+  const s = (value ?? '').trim();
+  if (!s) return '';
+  try {
+    const url = new URL(s.startsWith('http') ? s : `https://${s}`);
+    const host = url.hostname.toLowerCase();
+    let path = url.pathname.replace(/\/+$/, '') || '';
+    const pathname = path ? `/${path.replace(/^\/+/, '')}` : '';
+    const protocol = url.protocol;
+    const rest = url.search && url.search.length > 1 ? url.search : '';
+    return `${protocol}//${host}${pathname}${rest}`;
+  } catch {
+    return s;
+  }
+}
+
+/**
+ * Derive a display company name from website/URL when CSV has no name column.
+ * e.g. "orchardcarehomes.com" → "Orchard Care Homes", "ww.oakcottagecare.co.uk" → "Oak Cottage Care"
+ */
+export function companyNameFromWebsite(website: string | null | undefined): string | null {
+  const domain = extractDomain(website ?? '');
+  if (!domain) return null;
+  // Strip path and common prefixes
+  const host = domain.replace(/^ww\./i, '').split('/')[0];
+  if (!host) return null;
+  // Take the main part (before the TLD) and title-case words
+  const parts = host.split('.');
+  const main = parts.length >= 2 ? parts.slice(0, -1).join(' ') : host;
+  const name = main
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return name.trim() || null;
 }
 
 /**

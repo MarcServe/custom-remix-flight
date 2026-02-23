@@ -70,7 +70,7 @@ const App = () => (
                     <ResearchChatProvider>
                       <div className="flex h-screen overflow-hidden">
                         <Sidebar />
-                        <main className="flex-1 overflow-auto overflow-x-hidden bg-gradient-to-br from-background to-muted/20 p-4 pt-16 lg:pt-6 lg:p-6 xl:p-8 min-w-0 pb-20 sm:pb-6">
+                        <main className="flex-1 overflow-auto overflow-x-hidden bg-gradient-to-br from-background to-muted/20 p-4 pt-16 lg:pt-6 lg:p-6 xl:p-8 min-w-0 pb-20 sm:pb-6 transition-[flex] duration-300">
                           <div className="max-w-full min-w-0">
                           <Routes>
                           <Route path="/" element={<Dashboard />} />

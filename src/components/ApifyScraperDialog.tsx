@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { COMPANY_SOURCE_TAGS } from '@/lib/company-sources';
+import { useNavigate } from 'react-router-dom';
 
 interface ApifyScraperDialogProps {
   open: boolean;
@@ -49,6 +50,7 @@ type ScraperStep = 'config' | 'scraping' | 'review' | 'importing' | 'complete';
 
 export function ApifyScraperDialog({ open, onOpenChange, onComplete }: ApifyScraperDialogProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [step, setStep] = useState<ScraperStep>('config');
   
   // Config state
@@ -66,6 +68,7 @@ export function ApifyScraperDialog({ open, onOpenChange, onComplete }: ApifyScra
   // Import state
   const [importProgress, setImportProgress] = useState(0);
   const [importedCount, setImportedCount] = useState(0);
+  const [lastImportedCompanyIds, setLastImportedCompanyIds] = useState<string[]>([]);
 
   const handleStartScraping = async () => {
     if (!searchQuery.trim()) {
@@ -207,6 +210,7 @@ export function ApifyScraperDialog({ open, onOpenChange, onComplete }: ApifyScra
 
     queryClient.invalidateQueries({ queryKey: ['companies'] });
     setStep('complete');
+    setLastImportedCompanyIds(companyIds);
     
     if (onComplete) {
       onComplete(companyIds);
@@ -438,7 +442,11 @@ export function ApifyScraperDialog({ open, onOpenChange, onComplete }: ApifyScra
                 </Button>
                 <Button onClick={() => {
                   handleClose();
-                  // TODO: Navigate to campaign creation
+                  if (onComplete && lastImportedCompanyIds.length > 0) {
+                    onComplete(lastImportedCompanyIds);
+                  } else {
+                    navigate('/campaigns');
+                  }
                 }}>
                   Create Email Campaign
                 </Button>

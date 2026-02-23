@@ -51,6 +51,8 @@ export default function People() {
   const [dateAddedPreset, setDateAddedPreset] = useState<'all' | 'last7' | 'last30' | 'last90' | 'custom'>('all');
   const [dateAddedFrom, setDateAddedFrom] = useState<string>('');
   const [dateAddedTo, setDateAddedTo] = useState<string>('');
+  const [peoplePage, setPeoplePage] = useState(1);
+  const [peoplePageSize, setPeoplePageSize] = useState(50);
   const [expandedEmailHistory, setExpandedEmailHistory] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -636,19 +638,30 @@ export default function People() {
     [categoryOptions]
   );
 
-  // Group filtered people by category/source for display (when groupByCategory is true)
+  const totalPeoplePages = Math.max(1, Math.ceil((filteredPeople?.length ?? 0) / peoplePageSize));
+  const paginatedPeople = useMemo(() => {
+    if (!filteredPeople?.length) return [];
+    const start = (peoplePage - 1) * peoplePageSize;
+    return filteredPeople.slice(start, start + peoplePageSize);
+  }, [filteredPeople, peoplePage, peoplePageSize]);
+
+  // Group filtered people by category/source for display (when groupByCategory is true) — use paginated list
   const peopleGroupedByCategory = useMemo(() => {
-    if (!groupByCategory || !filteredPeople?.length) return null;
+    if (!groupByCategory || !paginatedPeople?.length) return null;
     const groups: Record<string, typeof filteredPeople> = {};
     const order = [...SOURCE_TAG_LIST, "Other"];
     order.forEach((label) => { groups[label] = []; });
-    for (const person of filteredPeople) {
+    for (const person of paginatedPeople) {
       const source = getCompanySource(person.companies || {}) || "Other";
       if (!groups[source]) groups[source] = [];
       groups[source].push(person);
     }
     return order.filter((label) => (groups[label]?.length ?? 0) > 0).map((label) => ({ label, people: groups[label] }));
-  }, [groupByCategory, filteredPeople]);
+  }, [groupByCategory, paginatedPeople]);
+
+  useEffect(() => {
+    setPeoplePage(1);
+  }, [searchQuery, selectedTagFilters, selectedIndustryFilters, selectedCampaignFilter, selectedGroupFilter, dateAddedPreset, dateAddedFrom, dateAddedTo]);
 
   // Debug logging when filtering by tags but no results
   if (selectedTagFilters.length > 0 && filteredPeople.length === 0 && people && people.length > 0) {
@@ -717,12 +730,15 @@ export default function People() {
   };
 
   const selectablePeople = filteredPeople?.filter(p => p.email) || [];
+  const selectableOnPage = paginatedPeople?.filter(p => p.email) || [];
 
   const toggleSelectAll = () => {
-    if (selectedPeopleIds.size === selectablePeople.length) {
-      setSelectedPeopleIds(new Set());
+    const onPage = selectableOnPage.map(p => p.id);
+    const allOnPageSelected = onPage.length > 0 && onPage.every(id => selectedPeopleIds.has(id));
+    if (allOnPageSelected) {
+      setSelectedPeopleIds(prev => { const next = new Set(prev); onPage.forEach(id => next.delete(id)); return next; });
     } else {
-      setSelectedPeopleIds(new Set(selectablePeople.map(p => p.id)));
+      setSelectedPeopleIds(prev => { const next = new Set(prev); selectableOnPage.forEach(p => next.add(p.id)); return next; });
     }
   };
 

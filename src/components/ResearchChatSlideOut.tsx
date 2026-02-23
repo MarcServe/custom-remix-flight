@@ -37,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { COMPANY_SOURCE_TAGS } from "@/lib/company-sources";
 import { useCompanyTags } from "@/hooks/use-company-tags";
+import { parseCSV } from "@/lib/utils/csv-parser";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -157,6 +158,25 @@ function formatChatContent(content: string) {
 
 const RESEARCH_CHAT_HISTORY_DAYS = 30;
 
+function getCsvRowValue(row: Record<string, string>, ...keys: string[]): string {
+  const lower = (s: string) => s.toLowerCase().trim();
+  for (const k of keys) {
+    const found = Object.entries(row).find(([h]) => lower(h) === lower(k) || lower(h).includes(lower(k)));
+    if (found && found[1]?.trim()) return found[1].trim();
+  }
+  return "";
+}
+
+function csvRowsToExtracted(rows: Record<string, string>[]): ExtractedRow[] {
+  return rows.map((row) => ({
+    name: getCsvRowValue(row, "name", "company", "company name", "business") || "Unknown",
+    website: getCsvRowValue(row, "website", "url", "site", "web") || undefined,
+    email: getCsvRowValue(row, "email", "e-mail", "email address") || undefined,
+    industry: getCsvRowValue(row, "industry", "category", "sector") || undefined,
+    geography: getCsvRowValue(row, "geography", "location", "city", "address", "region") || undefined,
+  })).filter((r) => r.name !== "Unknown");
+}
+
 export function ResearchChatSlideOut() {
   const { open, setOpen } = useResearchChat();
   const { user } = useAuth();
@@ -177,6 +197,8 @@ export function ResearchChatSlideOut() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [importCategoryTag, setImportCategoryTag] = useState("");
   const [sendIncompleteToEnrichment, setSendIncompleteToEnrichment] = useState(false);
+  const [uploadedCsv, setUploadedCsv] = useState<{ headers: string[]; rows: Record<string, string>[] } | null>(null);
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
   const { allSuggestions: categoryTagSuggestions } = useCompanyTags();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -537,19 +559,21 @@ export function ResearchChatSlideOut() {
         return typeof v === "string" && (v.includes(",") || v.includes('"') || v.includes("\n")) ? `"${v.replace(/"/g, '""')}"` : v;
       }).join(",")
     );
-    const csv = [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const csvContent = [headers.join(","), ...rows].join("\r\n");
+    const BOM = "\uFEFF";
+    const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `research-leads-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Downloaded", description: "CSV saved." });
+    toast({ title: "Downloaded", description: "CSV saved (Excel-compatible)." });
   };
 
-  const importExtractedToCrm = async () => {
-    if (!extractedFromChat?.length) return;
+  const importExtractedToCrm = async (rowsOverride?: ExtractedRow[]) => {
+    const rows = rowsOverride ?? extractedFromChat;
+    if (!rows?.length) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast({ title: "Please sign in", variant: "destructive" });
@@ -559,7 +583,7 @@ export function ResearchChatSlideOut() {
     let created = 0;
     let merged = 0;
     let lastError: string | null = null;
-    for (const row of extractedFromChat) {
+    for (const row of rows) {
       try {
         const { data: existing } = await supabase
           .from("companies")
@@ -670,6 +694,8 @@ export function ResearchChatSlideOut() {
     }
     setImporting(false);
     queryClient.invalidateQueries({ queryKey: ["companies"] });
+      queryClient.invalidateQueries({ queryKey: ["companies-full"] });
+      queryClient.invalidateQueries({ queryKey: ["companies-total-count"] });
     setExtractedFromChat(null);
   };
 
@@ -782,6 +808,8 @@ export function ResearchChatSlideOut() {
 
     setImporting(false);
     queryClient.invalidateQueries({ queryKey: ["companies"] });
+      queryClient.invalidateQueries({ queryKey: ["companies-full"] });
+      queryClient.invalidateQueries({ queryKey: ["companies-total-count"] });
     toast({
       title: "Import complete",
       description: formatImportToast(created, merged),
@@ -902,7 +930,123 @@ export function ResearchChatSlideOut() {
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
+            <div className="flex items-center gap-2">
+                <input
+                  ref={csvFileInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const text = reader.result as string;
+                      const parsed = parseCSV(text);
+                      if (parsed.rows.length === 0) {
+                        toast({ title: "CSV empty or invalid", variant: "destructive" });
+                        return;
+                      }
+                      setUploadedCsv({ headers: parsed.headers, rows: parsed.rows });
+                      const withoutEmail = parsed.rows.filter((r) => !getCsvRowValue(r, "email", "e-mail", "email address"));
+                      setMessages((prev) => [
+                        ...prev,
+                        {
+                          role: "user",
+                          content: `I uploaded a CSV: ${parsed.rows.length} rows, columns: ${parsed.headers.join(", ")}. ${withoutEmail.length > 0 ? `${withoutEmail.length} rows have no email.` : ""} Help me clean it or import to companies.`,
+                        },
+                      ]);
+                      toast({ title: "CSV loaded", description: `${parsed.rows.length} rows, ${withoutEmail.length} without email` });
+                    };
+                    reader.readAsText(file);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-1.5"
+                  onClick={() => csvFileInputRef.current?.click()}
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Upload CSV
+                </Button>
+              </div>
             </section>
+
+            {/* Uploaded CSV: clean up and import */}
+            {uploadedCsv && uploadedCsv.rows.length > 0 && (
+              <section>
+                <h3 className="text-sm font-medium flex items-center gap-2 mb-2">
+                  <Table2 className="h-4 w-4" />
+                  Uploaded CSV ({uploadedCsv.rows.length} rows)
+                </h3>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Columns: {uploadedCsv.headers.join(", ")}. 
+                  {(() => {
+                    const noEmail = uploadedCsv.rows.filter((r) => !getCsvRowValue(r, "email", "e-mail", "email address"));
+                    return noEmail.length > 0 ? ` ${noEmail.length} rows without email.` : " All rows have an email field.";
+                  })()}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const withEmail = uploadedCsv.rows.filter((r) => getCsvRowValue(r, "email", "e-mail", "email address"));
+                      if (withEmail.length === 0) {
+                        toast({ title: "No rows with email", variant: "destructive" });
+                        return;
+                      }
+                      setUploadedCsv({ ...uploadedCsv, rows: withEmail });
+                      toast({ title: "Filtered", description: `Kept ${withEmail.length} rows with email` });
+                    }}
+                  >
+                    Remove rows without email
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const extracted = csvRowsToExtracted(uploadedCsv.rows);
+                      if (extracted.length === 0) {
+                        toast({ title: "No valid rows (need name column)", variant: "destructive" });
+                        return;
+                      }
+                      setExtractedFromChat(extracted);
+                      setUploadedCsv(null);
+                      toast({ title: "Ready to import", description: `${extracted.length} rows in table below. Click "Import to CRM".` });
+                    }}
+                  >
+                    Use for import (table below)
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setUploadedCsv(null)}>
+                    Clear CSV
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={async () => {
+                      const extracted = csvRowsToExtracted(uploadedCsv.rows);
+                      if (extracted.length === 0) {
+                        toast({ title: "No valid rows (need name column)", variant: "destructive" });
+                        return;
+                      }
+                      setExtractedFromChat(extracted);
+                      setUploadedCsv(null);
+                      importExtractedToCrm(extracted);
+                    }}
+                    disabled={importing}
+                  >
+                    {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Building2 className="h-3.5 w-3.5 mr-1.5" />}
+                    Import to Companies
+                  </Button>
+                </div>
+              </section>
+            )}
 
             {/* Extracted from chat → table + CSV + CRM */}
             {extractedFromChat && extractedFromChat.length > 0 && (

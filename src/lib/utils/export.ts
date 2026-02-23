@@ -81,11 +81,11 @@ export function generateCSVContent(companies: CompanyExportData[]): string {
     ];
   });
 
-  // Combine headers and rows
+  // Combine headers and rows (CRLF for Excel compatibility)
   const csvContent = [
     headers.join(','),
     ...rows.map(row => row.join(','))
-  ].join('\n');
+  ].join('\r\n');
 
   return csvContent;
 }
@@ -108,7 +108,8 @@ function escapeCSV(value: string): string {
  * Download CSV file
  */
 export function downloadCSV(content: string, filename: string): void {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + content], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
   
