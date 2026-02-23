@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2, Search, Plus, RefreshCw } from "lucide-react";
+import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2, Search, Plus, RefreshCw, CalendarDays } from "lucide-react";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
 import BulkEmailDialog from "@/components/BulkEmailDialog";
@@ -85,6 +85,9 @@ export default function Companies() {
   const [groupingDialogCompanies, setGroupingDialogCompanies] = useState<CompanyForGrouping[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string | null>(null);
   const [groupBySource, setGroupBySource] = useState(true);
+  const [dateAddedPreset, setDateAddedPreset] = useState<'all' | 'last7' | 'last30' | 'last90' | 'custom'>('all');
+  const [dateAddedFrom, setDateAddedFrom] = useState<string>('');
+  const [dateAddedTo, setDateAddedTo] = useState<string>('');
   const [emailRecipient, setEmailRecipient] = useState<{
     email: string;
     name: string;
@@ -1175,6 +1178,33 @@ export default function Companies() {
       }
     }
 
+    // Date added filter
+    if (dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) {
+      const created = company.created_at ? new Date(company.created_at).getTime() : 0;
+      if (!created) return false;
+      let fromTs: number | null = null;
+      let toTs: number | null = null;
+      if (dateAddedPreset === 'custom' && (dateAddedFrom || dateAddedTo)) {
+        if (dateAddedFrom) fromTs = new Date(dateAddedFrom + 'T00:00:00').getTime();
+        if (dateAddedTo) toTs = new Date(dateAddedTo + 'T23:59:59.999').getTime();
+      } else if (dateAddedPreset !== 'all') {
+        const now = Date.now();
+        const day = 24 * 60 * 60 * 1000;
+        if (dateAddedPreset === 'last7') {
+          fromTs = now - 7 * day;
+          toTs = now;
+        } else if (dateAddedPreset === 'last30') {
+          fromTs = now - 30 * day;
+          toTs = now;
+        } else if (dateAddedPreset === 'last90') {
+          fromTs = now - 90 * day;
+          toTs = now;
+        }
+      }
+      if (fromTs !== null && created < fromTs) return false;
+      if (toTs !== null && created > toTs) return false;
+    }
+
       return true;
     });
     
@@ -1245,7 +1275,7 @@ export default function Companies() {
     });
     
     return sorted;
-  }, [companies, selectedTagFilters, emailStatusFilter, peopleEmails, searchQuery, sourceFilter]);
+  }, [companies, selectedTagFilters, emailStatusFilter, peopleEmails, searchQuery, sourceFilter, dateAddedPreset, dateAddedFrom, dateAddedTo]);
 
   // Group filtered companies by source for display (when groupBySource is true)
   const companiesGroupedBySource = useMemo(() => {
@@ -1827,7 +1857,7 @@ export default function Companies() {
           <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Companies</h1>
           <p className="text-muted-foreground mt-1 md:mt-2 text-sm md:text-base">
             {filteredCompanies?.length || 0} of {companies?.length || 0} companies
-            {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all' || searchQuery.trim()) && " (filtered)"}
+            {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all' || searchQuery.trim() || dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && " (filtered)"}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -2081,6 +2111,82 @@ export default function Companies() {
               </div>
             </PopoverContent>
           </Popover>
+          {/* Date added filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <CalendarDays className="h-4 w-4" />
+                Date added
+                {(dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && (
+                  <Badge variant="secondary" className="ml-1">1</Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56" align="end">
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm">Filter by date added</h4>
+                <Button
+                  variant={dateAddedPreset === 'all' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => { setDateAddedPreset('all'); setDateAddedFrom(''); setDateAddedTo(''); }}
+                >
+                  All time
+                </Button>
+                <Button
+                  variant={dateAddedPreset === 'last7' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setDateAddedPreset('last7')}
+                >
+                  Last 7 days
+                </Button>
+                <Button
+                  variant={dateAddedPreset === 'last30' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setDateAddedPreset('last30')}
+                >
+                  Last 30 days
+                </Button>
+                <Button
+                  variant={dateAddedPreset === 'last90' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setDateAddedPreset('last90')}
+                >
+                  Last 90 days
+                </Button>
+                <div className="pt-2 border-t space-y-2">
+                  <p className="text-xs text-muted-foreground">Custom range</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="date"
+                      value={dateAddedFrom}
+                      onChange={(e) => { setDateAddedFrom(e.target.value); setDateAddedPreset('custom'); }}
+                      className="text-xs"
+                    />
+                    <Input
+                      type="date"
+                      value={dateAddedTo}
+                      onChange={(e) => { setDateAddedTo(e.target.value); setDateAddedPreset('custom'); }}
+                      className="text-xs"
+                    />
+                  </div>
+                  {(dateAddedFrom || dateAddedTo) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-xs"
+                      onClick={() => { setDateAddedFrom(''); setDateAddedTo(''); setDateAddedPreset('all'); }}
+                    >
+                      Clear range
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
           <CampaignFitAnalyzer onOpenBulkEmail={openBulkEmailForCompanyIds} />
           <Button onClick={() => setCsvUploaderOpen(true)} variant="outline">
             <Upload className="h-4 w-4 mr-2" />
@@ -2094,9 +2200,23 @@ export default function Companies() {
       </div>
 
       {/* Active Filters */}
-      {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all' || sourceFilter) && (
+      {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all' || sourceFilter || dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && (
         <div className="flex flex-wrap gap-2 px-4 md:px-0 items-center">
           <span className="text-sm text-muted-foreground">Filtering by:</span>
+          {(dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && (
+            <Badge
+              variant="secondary"
+              className="gap-1 cursor-pointer"
+              onClick={() => { setDateAddedPreset('all'); setDateAddedFrom(''); setDateAddedTo(''); }}
+            >
+              <CalendarDays className="h-3 w-3" />
+              {dateAddedPreset === 'last7' && 'Last 7 days'}
+              {dateAddedPreset === 'last30' && 'Last 30 days'}
+              {dateAddedPreset === 'last90' && 'Last 90 days'}
+              {dateAddedPreset === 'custom' && (dateAddedFrom || dateAddedTo) && `${dateAddedFrom || '…'} to ${dateAddedTo || '…'}`}
+              <X className="h-3 w-3 ml-1" />
+            </Badge>
+          )}
           {sourceFilter && (
             <Badge
               variant="secondary"

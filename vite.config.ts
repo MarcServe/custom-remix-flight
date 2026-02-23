@@ -21,11 +21,11 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       host: "127.0.0.1",
-      port: 8080,
+      port: 5173,
       strictPort: false,
       open: true,
       hmr: {
-        clientPort: 8080,
+        clientPort: 5173,
       },
     },
     plugins: [

@@ -195,14 +195,19 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     return baseRecipients;
   }, [filteredRecipients, excludedRecipients]);
 
+  // Synthetic recipient ids (rec-*) are not valid UUIDs; use null for person_id in DB inserts.
+  const personIdForDb = (person: { id?: string }) =>
+    person?.id && !String(person.id).startsWith('rec-') ? person.id : null;
+
   // Check for duplicate emails (people who already received emails in previous campaigns)
   const { data: duplicateRecipients } = useQuery({
     queryKey: ['duplicate-recipients', recipientsToUse.map(p => p.id).sort().join(',')],
     queryFn: async () => {
       if (recipientsToUse.length === 0) return [];
       
+      // Only real UUIDs (exclude synthetic "rec-*" ids) for person_id query
       const personIds = recipientsToUse
-        .filter(p => p.id)
+        .filter(p => p.id && !String(p.id).startsWith('rec-'))
         .map(p => p.id);
       
       if (personIds.length === 0) return [];
@@ -394,6 +399,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const prevSelectedPeopleRef = useRef<typeof selectedPeople>(selectedPeople);
   const hasAutoLoadedDraft = useRef(false);
   const hasRestoredLocalDraft = useRef(false);
+  const contentOnlyEditRef = useRef(false); // true when editing a sending/completed campaign (update content only, don't replace recipients)
   const BULK_EMAIL_DRAFT_KEY = 'leadgenie_bulk_email_draft';
 
   const draftSnapshotRef = useRef({
@@ -437,6 +443,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       prevSelectedPeopleRef.current = selectedPeople;
       hasAutoLoadedDraft.current = false;
       hasRestoredLocalDraft.current = false;
+      contentOnlyEditRef.current = false;
       localStorage.removeItem('leadgenie_draft_recipients');
       // Persist current form to localStorage on close (so we can restore later)
       try {
@@ -528,6 +535,18 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
 
+  // Reset load flag when initialDraftId changes so we load the new campaign (not skip because we already loaded a previous one)
+  const prevInitialDraftIdRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (open && initialDraftId !== prevInitialDraftIdRef.current) {
+      prevInitialDraftIdRef.current = initialDraftId;
+      hasAutoLoadedDraft.current = false;
+      // Clear recipients immediately so we don't show the previous campaign's list while loading
+      setFilteredRecipients([]);
+      localStorage.removeItem('leadgenie_draft_recipients');
+    }
+  }, [open, initialDraftId]);
+
   // Auto-load draft when initialDraftId is provided
   useEffect(() => {
     if (open && initialDraftId && !hasAutoLoadedDraft.current) {
@@ -539,22 +558,23 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
           const { data: draftData, error } = await supabase
             .from('email_campaigns')
-            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id')
+            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, status')
             .eq('id', initialDraftId)
-            .in('status', ['draft', 'scheduled'])
+            .in('status', ['draft', 'scheduled', 'sending', 'completed'])
             .single();
 
           if (error || !draftData) {
             console.error('Error fetching campaign:', error);
             toast({
               title: "Error",
-              description: "Failed to load campaign. It may have been deleted or is already sending/sent.",
+              description: "Failed to load campaign. It may have been deleted.",
               variant: "destructive",
             });
             return;
           }
 
           hasAutoLoadedDraft.current = true;
+          contentOnlyEditRef.current = ['sending', 'completed'].includes((draftData as any).status?.toLowerCase?.() ?? '');
           // Use setTimeout to ensure dialog is fully open before loading
           setTimeout(() => {
             handleLoadDraft(draftData);
@@ -569,16 +589,16 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         }
       };
 
-      // Try to find in draftCampaigns first (faster for drafts), otherwise fetch directly (covers scheduled)
+      // Try to find in draftCampaigns first (faster for drafts), otherwise fetch directly (covers scheduled, sending, completed)
       if (draftCampaigns && draftCampaigns.length > 0) {
         const draftToLoad = draftCampaigns.find((d: any) => d.id === initialDraftId);
         if (draftToLoad) {
           hasAutoLoadedDraft.current = true;
+          contentOnlyEditRef.current = false;
           setTimeout(() => {
             handleLoadDraft(draftToLoad);
           }, 150);
         } else {
-          // Not in draft list (e.g. scheduled campaign), fetch by id
           loadDraftById();
         }
       } else {
@@ -998,57 +1018,68 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       }
 
       if (draftId) {
-        // Update existing draft
+        const contentOnly = contentOnlyEditRef.current;
+        // Update existing campaign (content only for sending/completed; full update for draft/scheduled)
+        const updatePayload: Record<string, unknown> = {
+          name: campaignName,
+          subject_template: subject,
+          body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
+          body_text_template: bodyText,
+          sender_connection_id: senderConnectionId,
+          sender_profile_id: senderProfileId || null,
+          tags: campaignTags,
+          auto_follow_up_enabled: autoFollowUpEnabled,
+          follow_up_sequence_id: followUpSequenceId || null,
+          updated_at: new Date().toISOString(),
+        };
+        if (!contentOnly) {
+          updatePayload.scheduled_at = scheduledAt;
+          updatePayload.total_recipients = recipientsToUse.length;
+        }
         const { error: updateError } = await supabase
           .from('email_campaigns')
-          .update({
-            name: campaignName,
-            subject_template: subject,
-            body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
-            body_text_template: bodyText,
-            sender_connection_id: senderConnectionId,
-            sender_profile_id: senderProfileId || null,
-            scheduled_at: scheduledAt,
-            total_recipients: recipientsToUse.length,
-            tags: campaignTags,
-            auto_follow_up_enabled: autoFollowUpEnabled,
-            follow_up_sequence_id: followUpSequenceId || null,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updatePayload)
           .eq('id', draftId);
 
         if (updateError) throw updateError;
 
-        // Update recipients - delete old ones and add new ones
-        await supabase
-          .from('email_campaign_recipients')
-          .delete()
-          .eq('campaign_id', draftId);
+        if (!contentOnly) {
+          // Update recipients - delete old ones and add new ones (draft/scheduled only)
+          await supabase
+            .from('email_campaign_recipients')
+            .delete()
+            .eq('campaign_id', draftId);
 
-        const recipients = recipientsToUse
-          .filter(person => person.email)
-          .map((person: any) => ({
-            campaign_id: draftId,
-            person_id: person.id,
-            email: person.email,
-            name: `${person.first_name} ${person.last_name}`.trim(),
-            personalized_subject: personalizeText(subject, person),
-            personalized_body_html: personalizeText(bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`, person),
-            personalized_body_text: personalizeText(bodyText, person),
-            status: 'pending',
-            email_period: 'new',
-          }));
+          const recipients = recipientsToUse
+            .filter(person => person.email)
+            .map((person: any) => ({
+              campaign_id: draftId,
+              person_id: personIdForDb(person),
+              email: person.email,
+              name: `${person.first_name} ${person.last_name}`.trim(),
+              personalized_subject: personalizeText(subject, person),
+              personalized_body_html: personalizeText(bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`, person),
+              personalized_body_text: personalizeText(bodyText, person),
+              status: 'pending',
+              email_period: 'new',
+            }));
 
-        const { error: recipientsError } = await supabase
-          .from('email_campaign_recipients')
-          .insert(recipients);
+          const { error: recipientsError } = await supabase
+            .from('email_campaign_recipients')
+            .insert(recipients);
 
-        if (recipientsError) throw recipientsError;
+          if (recipientsError) throw recipientsError;
 
-        toast({
-          title: "Draft updated",
-          description: `Draft "${campaignName}" has been saved with ${recipients.length} recipients`,
-        });
+          toast({
+            title: "Draft updated",
+            description: `Draft "${campaignName}" has been saved with ${recipients.length} recipients`,
+          });
+        } else {
+          toast({
+            title: "Content updated",
+            description: `Campaign "${campaignName}" subject and body saved. Use Reschedule in Campaigns to set a new send time.`,
+          });
+        }
       } else {
         // Create new draft
         const { data: campaign, error: campaignError } = await supabase
@@ -1075,12 +1106,12 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
         setDraftId(campaign.id);
 
-        // Create recipients
+        // Create recipients (person_id must be a real UUID; synthetic "rec-*" ids are null)
         const recipients = recipientsToUse
           .filter(person => person.email)
           .map((person: any) => ({
             campaign_id: campaign.id,
-            person_id: person.id,
+            person_id: personIdForDb(person),
             email: person.email,
             name: `${person.first_name} ${person.last_name}`.trim(),
             personalized_subject: personalizeText(subject, person),
@@ -1179,40 +1210,68 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setAutoFollowUpEnabled(draft.auto_follow_up_enabled !== false);
       setFollowUpSequenceId(draft.follow_up_sequence_id || "");
 
-      // Load recipients
-      const { data: recipients, error: recipientsError } = await supabase
-        .from('email_campaign_recipients')
-        .select('person_id, people!inner(id, first_name, last_name, email, company_id, companies(id, name, tags))')
-        .eq('campaign_id', draft.id)
-        .eq('status', 'pending');
+      // Load recipients. Support rows without person_id (e.g. added from Campaign Details) for all campaign types.
+      const isContentOnlyEdit = ['sending', 'completed'].includes((draft as any).status?.toLowerCase?.() ?? '');
+      let newRecipients: Array<{ id: string; first_name: string; last_name: string; email: string; company_id?: string; companies?: any }> = [];
 
-      if (recipientsError) {
-        console.error('Error loading recipients:', recipientsError);
-      } else if (recipients && recipients.length > 0) {
-        // Merge with current filteredRecipients (which may include newly added people)
-        // This allows adding new contacts to a loaded draft
-        const existingIds = new Set(filteredRecipients.map(p => p.id));
-        const newRecipients = recipients
-          .map((r: any) => r.people)
-          .filter((p: any) => p && !existingIds.has(p.id))
-          .map((p: any) => ({
-            id: p.id,
-            first_name: p.first_name,
-            last_name: p.last_name,
-            email: p.email,
-            company_id: p.company_id,
-            companies: p.companies,
-          }));
-        
-        if (newRecipients.length > 0) {
-          // Merge draft recipients with current recipients (preserving any newly added people)
-          setFilteredRecipients([...filteredRecipients, ...newRecipients]);
+      // Load ALL recipient rows for this campaign (no status filter) so we never show 0 when rows exist.
+      // Some rows may have been stored with null/different status or added from Campaign Details.
+      const { data: recipientRows, error: recError } = await supabase
+        .from('email_campaign_recipients')
+        .select('id, person_id, email, name')
+        .eq('campaign_id', draft.id);
+
+      if (recError) {
+        console.error('Error loading recipients:', recError);
+      } else if ((draft.total_recipients ?? 0) > 0 && (!recipientRows || recipientRows.length === 0)) {
+        console.warn('[BulkEmailDialog] Campaign has total_recipients =', draft.total_recipients, 'but email_campaign_recipients returned 0 rows for campaign_id', draft.id, '- possible RLS or data mismatch');
+      }
+      if (recipientRows && recipientRows.length > 0) {
+        const personIds = [...new Set((recipientRows as any[]).map((r: any) => r.person_id).filter(Boolean))];
+        let peopleMap: Record<string, any> = {};
+        if (personIds.length > 0) {
+          const { data: peopleData } = await supabase
+            .from('people')
+            .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
+            .in('id', personIds);
+          if (peopleData) peopleData.forEach((p: any) => { peopleMap[p.id] = p; });
+        }
+        const seenKeys = new Set<string>();
+        for (const r of recipientRows as any[]) {
+          const existingKey = r.person_id ? r.person_id : 'rec-' + r.id;
+          if (seenKeys.has(existingKey)) continue;
+          seenKeys.add(existingKey);
+          if (r.person_id && peopleMap[r.person_id]) {
+            const p = peopleMap[r.person_id];
+            newRecipients.push({
+              id: p.id,
+              first_name: p.first_name ?? '',
+              last_name: p.last_name ?? '',
+              email: p.email ?? r.email,
+              company_id: p.company_id,
+              companies: p.companies,
+            });
+          } else {
+            const parts = (r.name || '').trim().split(/\s+/);
+            newRecipients.push({
+              id: 'rec-' + r.id,
+              first_name: parts[0] || r.email || '',
+              last_name: parts.slice(1).join(' ') || '',
+              email: r.email,
+            });
+          }
         }
       }
 
+      // Replace recipients with this campaign's list (do not merge with previous campaign's recipients)
+      setFilteredRecipients(newRecipients);
+
+      const totalShown = newRecipients.length;
       toast({
-        title: "Draft loaded",
-        description: `Loaded draft "${draft.name}" with ${draft.total_recipients || 0} recipients`,
+        title: isContentOnlyEdit ? "Campaign loaded for editing" : "Draft loaded",
+        description: isContentOnlyEdit
+          ? `"${draft.name}" — ${totalShown} recipients (content only; manage recipients in Campaign Details)`
+          : `Loaded draft "${draft.name}" with ${totalShown} recipients`,
       });
     } catch (error: any) {
       console.error('Error loading draft:', error);
@@ -1715,12 +1774,12 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         campaign = newCampaign;
       }
 
-      // Create recipients with personalized content
+      // Create recipients with personalized content (person_id must be a real UUID; synthetic "rec-*" ids are null)
       const recipients = recipientsToUse
         .filter(person => person.email) // Only include people with emails
         .map((person: any) => ({
           campaign_id: campaign.id,
-          person_id: person.id,
+          person_id: personIdForDb(person),
           email: person.email,
           name: `${person.first_name} ${person.last_name}`.trim(),
           personalized_subject: personalizeText(subject, person),

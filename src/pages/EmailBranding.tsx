@@ -486,7 +486,7 @@ export default function EmailBranding() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl space-y-6">
+    <div className="container mx-auto p-4 sm:p-6 max-w-4xl space-y-6 min-w-0">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center">
           <Palette className="h-5 w-5 text-white" />
@@ -784,7 +784,7 @@ export default function EmailBranding() {
             </Tabs>
           </div>
 
-          <div className="flex justify-between pt-4">
+          <div className="flex flex-wrap gap-2 items-center justify-end sm:justify-between pt-4">
             <SendTestEmailButton
               templateStyle={businessProfile.email_template_style}
               brandColor={businessProfile.email_brand_color}
@@ -794,7 +794,7 @@ export default function EmailBranding() {
               signature={businessProfile.email_signature || undefined}
               websiteUrl={businessProfile.website || undefined}
             />
-            <Button onClick={handleSaveBranding} disabled={saving}>
+            <Button onClick={handleSaveBranding} disabled={saving} className="shrink-0">
               {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : <><Save className="h-4 w-4 mr-2" />Save Branding</>}
             </Button>
           </div>

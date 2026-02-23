@@ -63,32 +63,54 @@ Deno.serve(async (req) => {
       }
 
       case 'send-campaigns': {
-        // Find and send scheduled campaigns
-        console.log('[cron-trigger] Processing scheduled campaigns');
-        
-        // Get all scheduled campaigns that are ready to send
-        const { data: campaigns, error: campaignsError } = await supabase
+        // 1) Start newly scheduled campaigns; 2) Continue sending campaigns that still have pending recipients
+        console.log('[cron-trigger] Processing scheduled and in-progress campaigns');
+
+        const { data: scheduledCampaigns, error: scheduledError } = await supabase
           .from('email_campaigns')
           .select('id, user_id, name, scheduled_at')
           .eq('status', 'scheduled')
           .lte('scheduled_at', new Date().toISOString());
-        
-        if (campaignsError) {
-          console.error('[cron-trigger] Error fetching campaigns:', campaignsError);
-          return new Response(JSON.stringify({ 
-            success: false, 
-            error: campaignsError.message 
-          }), { 
+
+        if (scheduledError) {
+          console.error('[cron-trigger] Error fetching scheduled campaigns:', scheduledError);
+          return new Response(JSON.stringify({
+            success: false,
+            error: scheduledError.message
+          }), {
             status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
         }
-        
-        console.log(`[cron-trigger] Found ${campaigns?.length || 0} scheduled campaigns ready to send`);
-        
+
+        // Campaign IDs that still have pending recipients (for continue logic)
+        const { data: pendingByCampaign, error: pendingError } = await supabase
+          .from('email_campaign_recipients')
+          .select('campaign_id')
+          .eq('status', 'pending');
+        const campaignIdsWithPending = [...new Set((pendingByCampaign || []).map((r: any) => r.campaign_id))];
+
+        const { data: sendingCampaigns, error: sendingError } = campaignIdsWithPending.length > 0
+          ? await supabase
+              .from('email_campaigns')
+              .select('id, user_id, name, scheduled_at')
+              .eq('status', 'sending')
+              .in('id', campaignIdsWithPending)
+          : { data: [] as any[], error: null };
+
+        if (sendingError) {
+          console.error('[cron-trigger] Error fetching sending campaigns:', sendingError);
+        }
+
+        const campaigns = [
+          ...(scheduledCampaigns || []),
+          ...(sendingCampaigns || []).filter((s: any) => !(scheduledCampaigns || []).some((sc: any) => sc.id === s.id))
+        ];
+        console.log(`[cron-trigger] Found ${scheduledCampaigns?.length || 0} scheduled, ${(sendingCampaigns || []).length} in-progress with pending → ${campaigns.length} campaigns to process`);
+
         const results: any[] = [];
-        
-        for (const campaign of (campaigns || [])) {
+
+        for (const campaign of campaigns) {
           try {
             // Get user's auth token or use service role for sending
             const response = await fetch(`${SUPABASE_URL}/functions/v1/send-bulk-emails`, {

@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical, Phone, Plus, Settings, FileText, Edit, Trash2, Building2, Copy, Save, FolderInput } from "lucide-react";
+import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical, Phone, Plus, Settings, FileText, Edit, Trash2, Building2, Copy, Save, FolderInput, CalendarClock, RotateCcw } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,6 +50,7 @@ interface Campaign {
   updated_at?: string;
   started_at?: string;
   completed_at?: string;
+  scheduled_at?: string | null;
   subject_template?: string;
   body_html_template?: string;
   body_text_template?: string;
@@ -104,6 +105,10 @@ export default function Campaigns() {
   const [addingFromGroup, setAddingFromGroup] = useState(false);
   const [cancelScheduleConfirmOpen, setCancelScheduleConfirmOpen] = useState(false);
   const [cancellingSchedule, setCancellingSchedule] = useState(false);
+  const [showRescheduleDialog, setShowRescheduleDialog] = useState(false);
+  const [rescheduleDateTime, setRescheduleDateTime] = useState("");
+  const [retryingFailed, setRetryingFailed] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
 
   const { data: campaigns, isLoading } = useQuery({
     queryKey: ['email-campaigns'],
@@ -239,9 +244,19 @@ export default function Campaigns() {
     () => campaigns?.find((c) => c.id === selectedCampaign),
     [campaigns, selectedCampaign]
   );
+  const failedRecipients = useMemo(
+    () => (recipients ?? []).filter((r) => r.status === 'failed'),
+    [recipients]
+  );
+  const pendingRecipientsCount = (recipients ?? []).filter((r) => r.status === 'pending').length;
+  const canResendOrReschedule =
+    selectedCampaignData &&
+    ['sending', 'completed'].includes(selectedCampaignData.status?.toLowerCase?.() ?? '') &&
+    (failedRecipients.length > 0 || pendingRecipientsCount > 0);
   const canEditRecipients =
     selectedCampaignData &&
-    ["draft", "scheduled"].includes(selectedCampaignData.status?.toLowerCase?.() ?? "");
+    (["draft", "scheduled", "completed"].includes(selectedCampaignData.status?.toLowerCase?.() ?? "") ||
+      canResendOrReschedule);
 
   const pendingRecipients = useMemo(
     () => (recipients ?? []).filter((r) => r.status === "pending"),
@@ -648,6 +663,68 @@ export default function Campaigns() {
     }
   };
 
+  const handleRetryFailed = async () => {
+    if (!selectedCampaign || failedRecipients.length === 0) return;
+    setRetryingFailed(true);
+    try {
+      const { error: updateRecipients } = await supabase
+        .from('email_campaign_recipients')
+        .update({ status: 'pending', error_message: null })
+        .eq('campaign_id', selectedCampaign)
+        .eq('status', 'failed');
+      if (updateRecipients) throw updateRecipients;
+      const { error: updateCampaign } = await supabase
+        .from('email_campaigns')
+        .update({ status: 'sending' })
+        .eq('id', selectedCampaign);
+      if (updateCampaign) throw updateCampaign;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
+      ]);
+      toast.success(`${failedRecipients.length} recipient(s) set to pending. Cron will continue sending shortly.`);
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to retry');
+    } finally {
+      setRetryingFailed(false);
+    }
+  };
+
+  const handleRescheduleCampaign = async () => {
+    if (!selectedCampaign || !rescheduleDateTime.trim()) return;
+    const at = new Date(rescheduleDateTime);
+    if (isNaN(at.getTime()) || at <= new Date()) {
+      toast.error('Choose a future date and time.');
+      return;
+    }
+    setRescheduling(true);
+    try {
+      const { error: updateRecipients } = await supabase
+        .from('email_campaign_recipients')
+        .update({ status: 'pending', error_message: null })
+        .eq('campaign_id', selectedCampaign)
+        .eq('status', 'failed');
+      if (updateRecipients) throw updateRecipients;
+      const { error: updateCampaign } = await supabase
+        .from('email_campaigns')
+        .update({ status: 'scheduled', scheduled_at: at.toISOString() })
+        .eq('id', selectedCampaign);
+      if (updateCampaign) throw updateCampaign;
+      setShowRescheduleDialog(false);
+      setRescheduleDateTime('');
+      setSelectedCampaign(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
+      ]);
+      toast.success(`Campaign rescheduled for ${at.toLocaleString()}. Pending and failed recipients will be sent then.`);
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to reschedule');
+    } finally {
+      setRescheduling(false);
+    }
+  };
+
   const handleAddFromGroup = async (groupId: string) => {
     if (!selectedCampaign || !selectedCampaignData) return;
     setAddingFromGroup(true);
@@ -709,33 +786,33 @@ export default function Campaigns() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
+    <div className="container mx-auto p-4 sm:p-6 max-w-7xl min-w-0">
       <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-12 h-12 shrink-0 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
               <Mail className="h-6 w-6 text-white" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold">Campaigns Hub</h1>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold truncate">Campaigns Hub</h1>
               <p className="text-sm text-muted-foreground">
                 Manage your email and phone campaigns, monitor health, and optimize performance
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 shrink-0">
             <Button 
               variant="outline" 
               onClick={() => setPhoneServiceDialogOpen(true)} 
               className="gap-2"
             >
-              <Settings className="h-4 w-4" />
-              Phone Services
+              <Settings className="h-4 w-4 shrink-0" />
+              <span className="truncate">Phone Services</span>
             </Button>
             <Button onClick={() => setPhoneCampaignDialogOpen(true)} className="gap-2">
-              <Phone className="h-4 w-4" />
-              <Plus className="h-4 w-4" />
-              Phone Campaign
+              <Phone className="h-4 w-4 shrink-0" />
+              <Plus className="h-4 w-4 shrink-0" />
+              <span className="truncate">Phone Campaign</span>
             </Button>
           </div>
         </div>
@@ -793,12 +870,14 @@ export default function Campaigns() {
             <CardTitle>All Campaigns</CardTitle>
             <CardDescription>View performance and manage your campaigns</CardDescription>
           </CardHeader>
-          <CardContent>
-            <Table>
+          <CardContent className="p-0 sm:p-6">
+            <div className="overflow-x-auto">
+            <Table className="min-w-[700px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Campaign Name</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Scheduled</TableHead>
                   <TableHead>Recipients</TableHead>
                   <TableHead>Progress</TableHead>
                   <TableHead>Created</TableHead>
@@ -810,11 +889,15 @@ export default function Campaigns() {
                   const progress = campaign.total_recipients > 0
                     ? (campaign.sent_count / campaign.total_recipients) * 100
                     : 0;
+                  const isScheduled = campaign.status?.toLowerCase() === 'scheduled' && campaign.scheduled_at;
 
                   return (
                     <TableRow key={campaign.id}>
                       <TableCell className="font-medium">{campaign.name}</TableCell>
                       <TableCell>{getStatusBadge(campaign.status)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                        {isScheduled ? format(new Date(campaign.scheduled_at!), 'PPp') : '—'}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Users className="h-4 w-4 text-muted-foreground" />
@@ -856,6 +939,7 @@ export default function Campaigns() {
                 })}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -895,8 +979,8 @@ export default function Campaigns() {
             </Card>
           ) : (
             <Card>
-              <CardHeader className="flex flex-row items-start justify-between gap-4">
-                <div>
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <CardTitle>Draft Campaigns</CardTitle>
                   <CardDescription>Continue editing your saved drafts or create a new one from a template</CardDescription>
                 </div>
@@ -904,14 +988,15 @@ export default function Campaigns() {
                   variant="outline"
                   size="sm"
                   onClick={() => setCreateFromTemplateOpen(true)}
-                  className="shrink-0 gap-2"
+                  className="shrink-0 gap-2 w-full sm:w-auto"
                 >
                   <Copy className="h-4 w-4" />
                   Create from template
                 </Button>
               </CardHeader>
-              <CardContent>
-                <Table>
+              <CardContent className="p-0 sm:p-6">
+                <div className="overflow-x-auto">
+                <Table className="min-w-[500px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Campaign Name</TableHead>
@@ -980,6 +1065,7 @@ export default function Campaigns() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -1098,7 +1184,7 @@ export default function Campaigns() {
               <DialogTitle>Campaign Recipients</DialogTitle>
               <DialogDescription>
                 {canEditRecipients
-                  ? "View, edit, or remove recipients. Changes apply to draft/scheduled campaigns only."
+                  ? "View, edit, or remove recipients. Add recipients to send or schedule again; edit content via Edit content."
                   : "View individual recipient status and details"}
               </DialogDescription>
             </DialogHeader>
@@ -1134,6 +1220,73 @@ export default function Campaigns() {
                     Cancel schedule
                   </Button>
                 </div>
+              </div>
+            )}
+
+            {canResendOrReschedule && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-amber-500/10 px-4 py-3 text-sm">
+                <RotateCcw className="h-4 w-4 text-amber-600 shrink-0" />
+                <span className="text-muted-foreground">
+                  {failedRecipients.length > 0 && pendingRecipientsCount > 0
+                    ? `${failedRecipients.length} failed, ${pendingRecipientsCount} pending.`
+                    : failedRecipients.length > 0
+                      ? `${failedRecipients.length} failed.`
+                      : `${pendingRecipientsCount} still pending.`}
+                </span>
+                <div className="flex flex-wrap gap-2 ml-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDraftToEdit(selectedCampaign!);
+                      setBulkEmailDialogOpen(true);
+                    }}
+                  >
+                    <FileText className="h-4 w-4 mr-1" />
+                    Edit content
+                  </Button>
+                  {failedRecipients.length > 0 && (
+                    <Button variant="outline" size="sm" onClick={handleRetryFailed} disabled={retryingFailed}>
+                      {retryingFailed ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-1" />}
+                      Retry failed
+                    </Button>
+                  )}
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setMinutes(d.getMinutes() + 30);
+                      d.setSeconds(0, 0);
+                      setRescheduleDateTime(d.toISOString().slice(0, 16));
+                      setShowRescheduleDialog(true);
+                    }}
+                  >
+                    <CalendarClock className="h-4 w-4 mr-1" />
+                    Reschedule sending
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {selectedCampaignData?.status?.toLowerCase() === 'completed' && !canResendOrReschedule && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/50 px-4 py-3 text-sm">
+                <CheckCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">
+                  This campaign has finished sending. Edit content or add recipients below, then reschedule to send again.
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto"
+                  onClick={() => {
+                    setDraftToEdit(selectedCampaign!);
+                    setBulkEmailDialogOpen(true);
+                  }}
+                >
+                  <FileText className="h-4 w-4 mr-1" />
+                  Edit content
+                </Button>
               </div>
             )}
 
@@ -1439,6 +1592,37 @@ export default function Campaigns() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Reschedule campaign dialog */}
+        <Dialog open={showRescheduleDialog} onOpenChange={(open) => { setShowRescheduleDialog(open); if (!open) setRescheduleDateTime(''); }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><CalendarClock className="h-5 w-5" />Reschedule sending</DialogTitle>
+              <DialogDescription>
+                Set a date and time to send. Failed recipients will be reset to pending and sent at the scheduled time (cron runs every 15 minutes).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="reschedule-datetime">Date & time</Label>
+                <input
+                  id="reschedule-datetime"
+                  type="datetime-local"
+                  value={rescheduleDateTime}
+                  onChange={(e) => setRescheduleDateTime(e.target.value)}
+                  min={new Date(new Date().getTime() + 15 * 60 * 1000).toISOString().slice(0, 16)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowRescheduleDialog(false)}>Cancel</Button>
+              <Button onClick={handleRescheduleCampaign} disabled={rescheduling || !rescheduleDateTime.trim()}>
+                {rescheduling ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Rescheduling...</> : <><CalendarClock className="h-4 w-4 mr-1.5" />Reschedule</>}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Delete Draft Confirmation */}
         <AlertDialog open={!!draftToDelete} onOpenChange={() => !deletingDraft && setDraftToDelete(null)}>

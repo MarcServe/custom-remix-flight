@@ -1014,7 +1014,7 @@ export default function Profile() {
                 </p>
               </div>
 
-              <div className="flex justify-between pt-4">
+              <div className="flex flex-wrap gap-2 items-center justify-end sm:justify-between pt-4">
                 <SendTestEmailButton
                   templateStyle={businessProfile.email_template_style}
                   brandColor={businessProfile.email_brand_color}
@@ -1026,6 +1026,7 @@ export default function Profile() {
                 <Button
                   onClick={handleSaveBusinessProfile}
                   disabled={saving}
+                  className="shrink-0"
                 >
                   {saving ? (
                     <>

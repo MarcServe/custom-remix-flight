@@ -760,12 +760,13 @@ serve(async (req) => {
 
         sentCount++;
 
-        // Rate limiting: wait 200ms between emails
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Sending control: 1 email per 5 seconds to preserve SMTP health and avoid spam
+        const delayMs = 5000;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
 
       } catch (error: any) {
         console.error(`Failed to send to ${recipient.email}:`, error);
-        
+
         // Update recipient with error
         await supabaseClient
           .from('email_campaign_recipients')
@@ -776,6 +777,10 @@ serve(async (req) => {
           .eq('id', recipient.id);
 
         failedCount++;
+
+        // Same delay after failed send so we don't hammer the provider
+        const delayMs = 5000;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
 
