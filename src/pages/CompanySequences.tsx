@@ -36,8 +36,18 @@ import {
   Trash2,
   Settings,
   ExternalLink,
-  AlertTriangle
+  AlertTriangle,
+  LayoutList
 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useNavigate } from 'react-router-dom';
 import { useUpdateSequenceStatus, useSendSequenceEmail } from '@/hooks/use-company-sequences';
@@ -174,6 +184,7 @@ export default function CompanySequences() {
   });
 
   const industries = Array.from(new Set(companySequences?.map(s => s.companies.industry).filter(Boolean) || []));
+  const maxSteps = Math.min(10, Math.max(1, ...(filteredSequences?.map(s => s.email_sequences?.steps?.length || 0) || [0])));
 
   const handleStatusChange = async (id: string, status: 'draft' | 'active' | 'paused' | 'completed') => {
     await updateStatusMutation.mutateAsync({ id, status });
@@ -276,6 +287,19 @@ export default function CompanySequences() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        <Tabs defaultValue="campaigns" className="space-y-6">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="campaigns" className="gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Campaigns
+            </TabsTrigger>
+            <TabsTrigger value="delivery" className="gap-2">
+              <LayoutList className="h-4 w-4" />
+              Delivery report
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="campaigns" className="space-y-6">
         {/* Filters */}
         <Card className="mb-6 border-2 hover:border-primary/50 transition-all shadow-lg">
           <CardHeader className="pb-4">
@@ -631,6 +655,81 @@ export default function CompanySequences() {
             })
           )}
         </div>
+          </TabsContent>
+
+          <TabsContent value="delivery" className="space-y-4">
+            <Card className="border-2">
+              <CardHeader>
+                <CardTitle className="text-lg">Who received what</CardTitle>
+                <CardDescription>
+                  Sequence delivery by company: which step was sent, opened, or replied for each candidate.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="w-full overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="min-w-[160px]">Company</TableHead>
+                        <TableHead className="min-w-[140px]">Sequence</TableHead>
+                        <TableHead className="w-24">Status</TableHead>
+                        {Array.from({ length: maxSteps }).map((_, i) => (
+                          <TableHead key={i} className="text-center min-w-[100px]">Step {i + 1}</TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredSequences?.map(seq => {
+                        const steps = seq.email_sequences?.steps?.length || 0;
+                        const activitiesByStep = (seq.email_activities || []).reduce((acc, a) => {
+                          acc[a.step_number] = a;
+                          return acc;
+                        }, {} as Record<number, { sent_at?: string; opened_at?: string; replied_at?: string }>);
+                        return (
+                          <TableRow
+                            key={seq.id}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => {
+                              setSelectedSequence(seq);
+                              setDetailsDialogOpen(true);
+                            }}
+                          >
+                            <TableCell className="font-medium">{seq.companies.name}</TableCell>
+                            <TableCell>{seq.email_sequences?.name || '—'}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={getStatusColor(seq.status)}>
+                                {seq.status}
+                              </Badge>
+                            </TableCell>
+                            {Array.from({ length: maxSteps }).map((_, i) => {
+                              const stepNum = i + 1;
+                              const act = activitiesByStep[stepNum];
+                              let label = '—';
+                              if (act?.sent_at) {
+                                const d = new Date(act.sent_at);
+                                label = `Sent ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}`;
+                                if (act.replied_at) label += ' · Replied';
+                                else if (act.opened_at) label += ' · Opened';
+                              }
+                              return (
+                                <TableCell key={i} className="text-center text-sm text-muted-foreground">
+                                  {label}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+                {(!filteredSequences?.length) && (
+                  <p className="text-sm text-muted-foreground py-8 text-center">No sequence data to show.</p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Details Dialog */}
