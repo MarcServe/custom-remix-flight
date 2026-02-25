@@ -222,40 +222,40 @@ export default function Auth() {
 
           <div className="space-y-1 animate-fade-in" style={{ animationDelay: '0.4s' }}>
             <CardTitle className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-              LeadGenie CRM
+              LeadGenie
             </CardTitle>
             <CardDescription className="text-sm text-muted-foreground">
-              AI-Powered Lead Generation &amp; Enrichment
+              Find leads, enrich them, and run email &amp; phone outreach that converts
             </CardDescription>
           </div>
 
           <div className="rounded-xl border-2 border-primary/40 bg-card/95/80 px-4 py-4 text-center shadow-[0_10px_30px_-18px_rgba(72,50,250,0.7)] animate-fade-in">
             <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-              Modern sales platform powered by AI. Find best-fit accounts, enrich contacts automatically, and close deals faster with guided workflows.
+              One platform to discover ideal accounts, enrich companies &amp; contacts with AI, run bulk email and A/B campaigns, sequences, and track everything in your pipeline.
             </p>
             <div className="grid gap-2 text-center">
               <div className="border-2 border-primary/50 rounded-lg px-3 py-3 bg-card/90 shadow-[0_8px_18px_-12px_rgba(72,50,250,0.65)]">
                 <p className="text-[11px] font-semibold text-foreground tracking-wide uppercase">
-                  AI Lead Finder
+                  AI discovery &amp; enrichment
                 </p>
                 <p className="text-[11px] text-muted-foreground leading-snug">
-                  Discover companies that match your ICP and let AI fill in the missing details instantly.
+                  Autopilot and Lead Finder surface best-fit accounts; enrichment fills in firmographics and contact details.
                 </p>
               </div>
               <div className="border-2 border-primary/50 rounded-lg px-3 py-3 bg-card/90 shadow-[0_8px_18px_-12px_rgba(72,50,250,0.65)]">
                 <p className="text-[11px] font-semibold text-foreground tracking-wide uppercase">
-                  Smart Contact Management
+                  Email &amp; phone outreach
                 </p>
                 <p className="text-[11px] text-muted-foreground leading-snug">
-                  Stay on top of every relationship with automated reminders and clean, enriched records.
+                  Bulk campaigns with A/B tests, sequences, newsletters, and phone campaigns—all from one place.
                 </p>
               </div>
               <div className="border-2 border-primary/50 rounded-lg px-3 py-3 bg-card/90 shadow-[0_8px_18px_-12px_rgba(72,50,250,0.65)]">
                 <p className="text-[11px] font-semibold text-foreground tracking-wide uppercase">
-                  Pipeline Analytics
+                  CRM, inbox &amp; pipeline
                 </p>
                 <p className="text-[11px] text-muted-foreground leading-snug">
-                  Visualize your funnel, forecast revenue, and focus on the deals that move the needle.
+                  Companies, people, deals, lead inbox, auto-responses, and pipeline analytics so nothing slips through.
                 </p>
               </div>
             </div>

@@ -72,6 +72,9 @@ verify_jwt = true
 [functions.send-bulk-emails]
 verify_jwt = false  # Allow cron-trigger to call with service role
 
+[functions.resend-campaign-variants]
+verify_jwt = true
+
 [functions.send-test-email]
 verify_jwt = true
 

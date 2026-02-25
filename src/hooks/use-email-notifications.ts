@@ -84,14 +84,17 @@ export const useEmailNotifications = () => {
         (payload: RealtimePostgresChangesPayload<any>) => {
           const newThread = payload.new;
           
-          // New inbound email notification
+          // New inbound email (reply) – redirect to Conversations tab and open the right conversation
           if (newThread.direction === 'inbound') {
-            toast.info('📨 New Email Received', {
+            const conversationsUrl = newThread.company_sequence_id
+              ? `/conversations?sequence=${newThread.company_sequence_id}`
+              : '/conversations';
+            toast.info('📨 New reply received', {
               description: `From: ${newThread.from_email}`,
               duration: 5000,
               action: {
-                label: 'View',
-                onClick: () => window.location.href = '/conversations',
+                label: 'View in Conversations',
+                onClick: () => { window.location.href = conversationsUrl; },
               },
             });
           }

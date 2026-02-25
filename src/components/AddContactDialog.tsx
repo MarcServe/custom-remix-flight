@@ -155,17 +155,31 @@ export function AddContactDialog({ open, onOpenChange, onSuccess, initialValues 
           // Handle company
           let finalCompanyId = values.company_id;
           if (values.company_name && !values.company_id) {
-            const { data: newCompany, error: companyError } = await supabase
+            const nameTrimmed = values.company_name.trim();
+            const { data: existingRows } = await supabase
               .from("companies")
-              .insert({
-                user_id: user.id,
-                name: values.company_name,
-              })
-              .select()
-              .single();
+              .select("id")
+              .eq("user_id", user.id)
+              .ilike("name", nameTrimmed)
+              .limit(1);
+            const existingCompany = existingRows?.[0];
+            if (existingCompany) {
+              finalCompanyId = existingCompany.id;
+            } else {
+              const { data: newCompany, error: companyError } = await supabase
+                .from("companies")
+                .insert({
+                  user_id: user.id,
+                  name: nameTrimmed,
+                })
+                .select()
+                .single();
 
-            if (companyError) throw companyError;
-            finalCompanyId = newCompany.id;
+              if (companyError) {
+                throw new Error(companyError.message || "Failed to create company");
+              }
+              finalCompanyId = newCompany.id;
+            }
           }
 
           if (finalCompanyId && existingPerson.company_id !== finalCompanyId) {
@@ -181,7 +195,9 @@ export function AddContactDialog({ open, onOpenChange, onSuccess, initialValues 
               .select()
               .single();
 
-            if (updateError) throw updateError;
+            if (updateError) {
+              throw new Error(updateError.message || "Failed to update contact");
+            }
             return { ...updatedPerson, wasExisting: true };
           }
 
@@ -191,19 +207,33 @@ export function AddContactDialog({ open, onOpenChange, onSuccess, initialValues 
 
       let finalCompanyId = values.company_id;
 
-      // If user entered a company name manually, create the company first
+      // If user entered a company name manually, reuse existing company by name or create
       if (values.company_name && !values.company_id) {
-        const { data: newCompany, error: companyError } = await supabase
+        const nameTrimmed = values.company_name.trim();
+        const { data: existingRows } = await supabase
           .from("companies")
-          .insert({
-            user_id: user.id,
-            name: values.company_name,
-          })
-          .select()
-          .single();
+          .select("id")
+          .eq("user_id", user.id)
+          .ilike("name", nameTrimmed)
+          .limit(1);
+        const existingCompany = existingRows?.[0];
+        if (existingCompany) {
+          finalCompanyId = existingCompany.id;
+        } else {
+          const { data: newCompany, error: companyError } = await supabase
+            .from("companies")
+            .insert({
+              user_id: user.id,
+              name: nameTrimmed,
+            })
+            .select()
+            .single();
 
-        if (companyError) throw companyError;
-        finalCompanyId = newCompany.id;
+          if (companyError) {
+            throw new Error(companyError.message || "Failed to create company");
+          }
+          finalCompanyId = newCompany.id;
+        }
       }
 
       const { data, error } = await supabase
@@ -224,7 +254,9 @@ export function AddContactDialog({ open, onOpenChange, onSuccess, initialValues 
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(error.message || "Database error");
+      }
       return { ...data, wasExisting: false };
     },
     onSuccess: (data: any) => {
@@ -238,10 +270,16 @@ export function AddContactDialog({ open, onOpenChange, onSuccess, initialValues 
       onOpenChange(false);
       onSuccess?.();
     },
-    onError: (error) => {
+    onError: (error: unknown) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof (error as { message?: string })?.message === "string"
+            ? (error as { message: string }).message
+            : "Unknown error";
       toast({
         title: "Failed to create contact",
-        description: error instanceof Error ? error.message : "Unknown error",
+        description: message,
         variant: "destructive",
       });
     },

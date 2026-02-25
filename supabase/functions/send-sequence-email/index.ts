@@ -6,6 +6,7 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || 'leadgenie@eldapgraaa.resend.app';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -177,6 +178,7 @@ serve(async (req) => {
           to: contact.email,
           subject: emailStep.subject,
           html: emailStep.body.replace(/\n/g, '<br>'),
+          reply_to: RESEND_INBOUND_EMAIL,
           tags: [
             { name: 'company_sequence_id', value: companySequenceId },
             { name: 'step_number', value: stepNumber.toString() },

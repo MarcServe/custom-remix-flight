@@ -568,7 +568,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
           const { data: draftData, error } = await supabase
             .from('email_campaigns')
-            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, status')
+            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, status, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric')
             .eq('id', initialDraftId)
             .in('status', ['draft', 'scheduled', 'sending', 'completed'])
             .single();
@@ -769,7 +769,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   };
 
   const handleGenerateWithAI = async () => {
-    if (selectedPeople.length === 0) {
+    if (recipientsToUse.length === 0) {
       toast({
         title: "No recipients",
         description: "Please select at least one person to generate email for",
@@ -780,7 +780,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
     try {
       setGeneratingAi(true);
-      const firstPerson = selectedPeople[0];
+      const firstPerson = recipientsToUse[0];
       const companyData = firstPerson.company_id && companiesData?.[firstPerson.company_id];
       
       const { data, error } = await supabase.functions.invoke('generate-email-with-ai', {
@@ -819,9 +819,16 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         setSubject(data.subject);
         setBodyHtml(`<p>${data.body.replace(/\n/g, '</p><p>')}</p>`);
         setBodyText(data.body);
+        if (abTestEnabled) {
+          setAbSubjectB(data.subject);
+          setAbBodyTextB(data.body);
+          setAbBodyHtmlB(data.body ? previewBodyToHtml(data.body) : '');
+        }
         toast({
           title: "Email generated",
-          description: "AI has generated your email content. You can edit it before sending.",
+          description: abTestEnabled
+            ? "Variant A and B prefilled. Edit either variant before sending."
+            : "AI has generated your email content. You can edit it before sending.",
         });
       }
     } catch (error: any) {
@@ -1068,22 +1075,22 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
           const useAb = abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
           const bodyHtmlA = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
-          const bodyHtmlB = abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : bodyHtmlA);
           const bodyTextB = abBodyTextB || bodyText;
+          const bodyHtmlB = abBodyHtmlB || (bodyTextB ? previewBodyToHtml(bodyTextB) : '');
           const recipients = recipientsToUse
             .filter(person => person.email)
             .map((person: any) => {
               const variant = useAb ? (Math.random() * 100 < abTrafficSplit ? 'A' : 'B') : null;
               const subj = variant === 'B' ? (abSubjectB || subject) : subject;
-              const html = variant === 'B' ? bodyHtmlB : bodyHtmlA;
               const text = variant === 'B' ? bodyTextB : bodyText;
+              const htmlForDb = variant === 'B' ? bodyHtmlB : bodyHtmlA;
               return {
                 campaign_id: draftId,
                 person_id: personIdForDb(person),
                 email: person.email,
                 name: `${person.first_name} ${person.last_name}`.trim(),
                 personalized_subject: personalizeText(subj, person),
-                personalized_body_html: personalizeText(html, person),
+                personalized_body_html: personalizeText(htmlForDb, person),
                 personalized_body_text: personalizeText(text, person),
                 status: 'pending',
                 email_period: 'new',
@@ -1141,23 +1148,23 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
         const useAbDraft = abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
         const bodyHtmlADraft = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
-        const bodyHtmlBDraft = abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : bodyHtmlADraft);
         const bodyTextBDraft = abBodyTextB || bodyText;
+        const bodyHtmlBDraft = abBodyHtmlB || (bodyTextBDraft ? previewBodyToHtml(bodyTextBDraft) : '');
         // Create recipients (person_id must be a real UUID; synthetic "rec-*" ids are null)
         const recipients = recipientsToUse
           .filter(person => person.email)
           .map((person: any) => {
             const variant = useAbDraft ? (Math.random() * 100 < abTrafficSplit ? 'A' : 'B') : null;
             const subj = variant === 'B' ? (abSubjectB || subject) : subject;
-            const html = variant === 'B' ? bodyHtmlBDraft : bodyHtmlADraft;
             const text = variant === 'B' ? bodyTextBDraft : bodyText;
+            const htmlForDb = variant === 'B' ? bodyHtmlBDraft : bodyHtmlADraft;
             return {
               campaign_id: campaign.id,
               person_id: personIdForDb(person),
               email: person.email,
               name: `${person.first_name} ${person.last_name}`.trim(),
               personalized_subject: personalizeText(subj, person),
-              personalized_body_html: personalizeText(html, person),
+              personalized_body_html: personalizeText(htmlForDb, person),
               personalized_body_text: personalizeText(text, person),
               status: 'pending',
               email_period: 'new',
@@ -1629,13 +1636,11 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       } else {
         testSubject = personalizeText(subjectForTest, testPerson);
         testBodyText = personalizeText(bodyTextForTest, testPerson);
-        // Variant A: send HTML + text (same as main compose). Variant B: send plain text only so server builds HTML the same way (avoids raw HTML in email)
-        if (useVariantB) {
-          testBodyHtml = undefined as unknown as string;
-        } else {
-          const bodyHtmlForTest = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
-          testBodyHtml = personalizeText(bodyHtmlForTest, testPerson);
-        }
+        // Same mechanism for A and B: send HTML + text so server uses same path (Variant A mechanism for both)
+        const bodyHtmlForTest = useVariantB
+          ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : '') || bodyText)
+          : (bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`);
+        testBodyHtml = personalizeText(bodyHtmlForTest, testPerson);
       }
 
       const payload: Record<string, unknown> = {
@@ -1899,23 +1904,23 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
       const useAbSend = abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
       const bodyHtmlASend = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
-      const bodyHtmlBSend = abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : bodyHtmlASend);
       const bodyTextBSend = abBodyTextB || bodyText;
-      // Create recipients with personalized content (person_id must be a real UUID; synthetic "rec-*" ids are null)
+      const bodyHtmlBSend = abBodyHtmlB || (bodyTextBSend ? previewBodyToHtml(bodyTextBSend) : '');
+      // Create recipients with personalized content (same mechanism for A and B: store HTML + text)
       const recipients = recipientsToUse
         .filter(person => person.email) // Only include people with emails
         .map((person: any) => {
           const variant = useAbSend ? (Math.random() * 100 < abTrafficSplit ? 'A' : 'B') : null;
           const subj = variant === 'B' ? (abSubjectB || subject) : subject;
-          const html = variant === 'B' ? bodyHtmlBSend : bodyHtmlASend;
           const text = variant === 'B' ? bodyTextBSend : bodyText;
+          const htmlForDb = variant === 'B' ? bodyHtmlBSend : bodyHtmlASend;
           return {
             campaign_id: campaign.id,
             person_id: personIdForDb(person),
             email: person.email,
             name: `${person.first_name} ${person.last_name}`.trim(),
             personalized_subject: personalizeText(subj, person),
-            personalized_body_html: personalizeText(html, person),
+            personalized_body_html: personalizeText(htmlForDb, person),
             personalized_body_text: personalizeText(text, person),
             status: 'pending',
             email_period: 'new', // Mark as new email
@@ -2366,7 +2371,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 <div className="space-y-2">
                 <Button
                   onClick={handleGenerateWithAI}
-                    disabled={generatingAi || generatingPersonalized || selectedPeople.length === 0}
+                    disabled={generatingAi || generatingPersonalized || recipientsToUse.length === 0}
                   className="w-full"
                 >
                   {generatingAi ? (
@@ -2885,7 +2890,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 variant="outline"
                 size="sm"
                 onClick={handleGenerateWithAI}
-                disabled={generatingAi || sending || selectedPeople.length === 0}
+                disabled={generatingAi || sending || recipientsToUse.length === 0}
               >
                 {generatingAi ? (
                   <>

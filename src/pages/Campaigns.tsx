@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical, Phone, Plus, Settings, FileText, Edit, Trash2, Building2, Copy, Save, FolderInput, CalendarClock, RotateCcw, RefreshCw } from "lucide-react";
+import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical, Phone, Plus, Settings, FileText, Edit, Trash2, Building2, Copy, Save, FolderInput, CalendarClock, RotateCcw, RefreshCw, SendHorizontal, ArrowLeftRight } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +28,12 @@ import { PhoneServiceDialog } from "@/components/integrations/PhoneServiceDialog
 import BulkEmailDialog, { type BulkEmailDialogHandle } from "@/components/BulkEmailDialog";
 import { format } from "date-fns";
 import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -115,9 +121,16 @@ export default function Campaigns() {
   const [showRescheduleDialog, setShowRescheduleDialog] = useState(false);
   const [rescheduleDateTime, setRescheduleDateTime] = useState("");
   const [retryingFailed, setRetryingFailed] = useState(false);
+  const [resendVariantLoading, setResendVariantLoading] = useState<'A' | 'B' | 'all' | 'swap' | null>(null);
   const [rescheduling, setRescheduling] = useState(false);
   const [enrollFollowUpSequenceId, setEnrollFollowUpSequenceId] = useState<string>("");
   const [enrollingFollowUp, setEnrollingFollowUp] = useState(false);
+  // Resend-style status filter: server-side for large lists, counts from RPC
+  type RecipientStatusFilter = 'all' | 'pending' | 'sent' | 'opened' | 'clicked' | 'opened_no_click' | 'bounced' | 'failed';
+  const [recipientStatusFilter, setRecipientStatusFilter] = useState<RecipientStatusFilter>('all');
+  // Segment for follow-up enrollment (server-side filtered)
+  type EnrollSegment = 'all_sent' | 'opened' | 'clicked' | 'opened_no_click';
+  const [enrollSegment, setEnrollSegment] = useState<EnrollSegment>('all_sent');
 
   const { data: followUpSequences = [] } = useQuery({
     queryKey: ['email-sequences'],
@@ -144,6 +157,11 @@ export default function Campaigns() {
     },
     refetchInterval: 5000,
   });
+
+  // Reset status filter when switching campaign
+  useEffect(() => {
+    setRecipientStatusFilter('all');
+  }, [selectedCampaign]);
 
   const addToDraftFromState = (location.state as { addToDraft?: boolean })?.addToDraft === true;
   const addToDraftFromUrl = searchParams.get("addToDraft") === "1";
@@ -208,16 +226,57 @@ export default function Campaigns() {
     return () => window.removeEventListener("message", handler);
   }, [bulkEmailDialogOpen]);
 
-  const { data: recipients } = useQuery({
-    queryKey: ['campaign-recipients', selectedCampaign],
+  // Server-side counts by segment (works for large lists without fetching all rows)
+  const { data: statusCounts } = useQuery({
+    queryKey: ['campaign-recipient-counts', selectedCampaign],
     enabled: !!selectedCampaign,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await supabase.rpc('get_campaign_recipient_status_counts', {
+        p_campaign_id: selectedCampaign!,
+      });
+      if (error) throw error;
+      return data as { all: number; pending: number; sent: number; opened: number; clicked: number; opened_no_click: number; bounced: number; failed: number };
+    },
+  });
+
+  // Recipients list: server-side filtered when a segment is selected (scales to large lists)
+  const { data: recipients } = useQuery({
+    queryKey: ['campaign-recipients', selectedCampaign, recipientStatusFilter],
+    enabled: !!selectedCampaign,
+    queryFn: async () => {
+      let query = supabase
         .from('email_campaign_recipients')
         .select('*')
         .eq('campaign_id', selectedCampaign!)
         .order('created_at', { ascending: true });
 
+      switch (recipientStatusFilter) {
+        case 'pending':
+          query = query.eq('status', 'pending');
+          break;
+        case 'sent':
+          query = query.eq('status', 'sent').not('sent_at', 'is', null);
+          break;
+        case 'opened':
+          query = query.not('opened_at', 'is', null);
+          break;
+        case 'clicked':
+          query = query.not('clicked_at', 'is', null);
+          break;
+        case 'opened_no_click':
+          query = query.not('opened_at', 'is', null).is('clicked_at', null);
+          break;
+        case 'bounced':
+          query = query.eq('status', 'bounced');
+          break;
+        case 'failed':
+          query = query.eq('status', 'failed');
+          break;
+        default:
+          break;
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data as CampaignRecipient[];
     },
@@ -256,6 +315,8 @@ export default function Campaigns() {
       sent: "default",
       failed: "destructive",
       opened: "default",
+      clicked: "default",
+      bounced: "destructive",
     };
 
     return <Badge variant={variants[status] || "secondary"}>{status}</Badge>;
@@ -339,6 +400,7 @@ export default function Campaigns() {
       setSelectedRecipientIds(new Set());
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["campaign-recipients", selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ["campaign-recipient-counts", selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ["email-campaigns"] }),
       ]);
     } catch (e: any) {
@@ -367,6 +429,7 @@ export default function Campaigns() {
       setSelectedRecipientIds(new Set());
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["campaign-recipients", selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ["campaign-recipient-counts", selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ["email-campaigns"] }),
       ]);
     } catch (e: any) {
@@ -482,6 +545,7 @@ export default function Campaigns() {
       toast.success(`Added ${newRecipients.length} recipient(s) to campaign.`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["campaign-recipients", selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ["campaign-recipient-counts", selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ["email-campaigns"] }),
       ]);
     } catch (e: any) {
@@ -509,6 +573,7 @@ export default function Campaigns() {
       toast.success("Recipient updated");
       setEditingRecipient(null);
       await queryClient.invalidateQueries({ queryKey: ["campaign-recipients", selectedCampaign] });
+        queryClient.invalidateQueries({ queryKey: ["campaign-recipient-counts", selectedCampaign] });
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to update recipient");
     } finally {
@@ -535,6 +600,7 @@ export default function Campaigns() {
       setRemovingRecipient(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["campaign-recipients", selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ["campaign-recipient-counts", selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ["email-campaigns"] }),
       ]);
     } catch (e: any) {
@@ -727,13 +793,93 @@ export default function Campaigns() {
       if (updateCampaign) throw updateCampaign;
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
       ]);
-      toast.success(`${failedRecipients.length} recipient(s) set to pending. Cron will continue sending shortly.`);
+      const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
+        body: { campaignId: selectedCampaign },
+      });
+      if (sendError) console.error('Trigger send:', sendError);
+      toast.success(`${failedRecipients.length} recipient(s) set to pending. Sending started.`);
     } catch (e: any) {
       toast.error(e?.message ?? 'Failed to retry');
     } finally {
       setRetryingFailed(false);
+    }
+  };
+
+  // Sent recipients by variant (for A/B resend/swap)
+  const sentRecipientsByVariant = useMemo(() => {
+    const recs = recipients ?? [];
+    const sent = recs.filter((r) => ['sent', 'opened', 'clicked'].includes(r.status?.toLowerCase?.() ?? '') || !!r.sent_at);
+    return {
+      A: sent.filter((r) => r.ab_variant === 'A'),
+      B: sent.filter((r) => r.ab_variant === 'B'),
+      all: sent,
+    };
+  }, [recipients]);
+
+  const handleResendVariant = async (mode: 'A' | 'B' | 'all') => {
+    if (!selectedCampaign) return;
+    const list = mode === 'A' ? sentRecipientsByVariant.A : mode === 'B' ? sentRecipientsByVariant.B : sentRecipientsByVariant.all;
+    if (list.length === 0) {
+      toast.error(`No sent recipients for Variant ${mode === 'all' ? 'A or B' : mode}.`);
+      return;
+    }
+    setResendVariantLoading(mode);
+    try {
+      const ids = list.map((r) => r.id);
+      const { error: updateErr } = await supabase
+        .from('email_campaign_recipients')
+        .update({ status: 'pending' })
+        .eq('campaign_id', selectedCampaign)
+        .in('id', ids);
+      if (updateErr) throw updateErr;
+      const { error: campaignErr } = await supabase
+        .from('email_campaigns')
+        .update({ status: 'sending' })
+        .eq('id', selectedCampaign);
+      if (campaignErr) throw campaignErr;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
+      ]);
+      const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
+        body: { campaignId: selectedCampaign },
+      });
+      if (sendError) console.error('Trigger send:', sendError);
+      toast.success(`Resending to ${list.length} recipient(s) (Variant ${mode === 'all' ? 'A & B' : mode}). Sending started.`);
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to resend');
+    } finally {
+      setResendVariantLoading(null);
+    }
+  };
+
+  const handleSwapAndResend = async () => {
+    if (!selectedCampaign || sentRecipientsByVariant.all.length === 0) return;
+    setResendVariantLoading('swap');
+    try {
+      const { data, error } = await supabase.functions.invoke('resend-campaign-variants', {
+        body: { campaignId: selectedCampaign, action: 'swap' },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
+      ]);
+      const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
+        body: { campaignId: selectedCampaign },
+      });
+      if (sendError) console.error('Trigger send:', sendError);
+      toast.success('Variants swapped and resend started. A recipients get B content, B recipients get A content.');
+    } catch (e: any) {
+      toast.error(e?.message ?? (typeof (e as any)?.error === 'string' ? (e as any).error : 'Failed to swap and resend'));
+    } finally {
+      setResendVariantLoading(null);
     }
   };
 
@@ -745,12 +891,28 @@ export default function Campaigns() {
     }
     setEnrollingFollowUp(true);
     try {
-      const { data: sentRecipients, error: recErr } = await supabase
+      let enrollQuery = supabase
         .from('email_campaign_recipients')
         .select('id, person_id, personalized_subject, personalized_body_text, sent_at')
         .eq('campaign_id', selectedCampaign)
-        .in('status', ['sent', 'opened', 'clicked'])
         .not('person_id', 'is', null);
+
+      switch (enrollSegment) {
+        case 'opened':
+          enrollQuery = enrollQuery.not('opened_at', 'is', null);
+          break;
+        case 'clicked':
+          enrollQuery = enrollQuery.not('clicked_at', 'is', null);
+          break;
+        case 'opened_no_click':
+          enrollQuery = enrollQuery.not('opened_at', 'is', null).is('clicked_at', null);
+          break;
+        default:
+          enrollQuery = enrollQuery.in('status', ['sent', 'opened', 'clicked']);
+          break;
+      }
+
+      const { data: sentRecipients, error: recErr } = await enrollQuery;
       if (recErr) throw recErr;
       if (!sentRecipients?.length) {
         toast.error('No sent recipients with contacts found. Follow-up requires recipients linked to people (company).');
@@ -877,6 +1039,7 @@ export default function Campaigns() {
       setSelectedCampaign(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
       ]);
       toast.success(`Campaign rescheduled for ${at.toLocaleString()}. Pending and failed recipients will be sent then.`);
@@ -927,6 +1090,7 @@ export default function Campaigns() {
       toast.success(`Added ${newMembers.length} recipient(s) from group.`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
       ]);
     } catch (e: any) {
@@ -1490,6 +1654,21 @@ export default function Campaigns() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <Select
+                      value={enrollSegment}
+                      onValueChange={(v) => setEnrollSegment(v as EnrollSegment)}
+                      disabled={enrollingFollowUp}
+                    >
+                      <SelectTrigger className="w-[180px]" title="Enroll only this segment">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all_sent">All sent</SelectItem>
+                        <SelectItem value="opened">Only opened</SelectItem>
+                        <SelectItem value="clicked">Only clicked</SelectItem>
+                        <SelectItem value="opened_no_click">Opened, no click</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Button
                       variant="default"
                       size="sm"
@@ -1534,6 +1713,45 @@ export default function Campaigns() {
                     </div>
                     {abTestResults.winner === 'B' && <Badge variant="default" className="mt-2">Winner ({abTestResults.winnerMetric.replace('_', ' ')})</Badge>}
                   </div>
+                </div>
+                {/* Resend & swap actions */}
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
+                  <span className="text-muted-foreground text-xs mr-1">Resend / swap:</span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" disabled={!!resendVariantLoading || sentRecipientsByVariant.all.length === 0}>
+                        {resendVariantLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <SendHorizontal className="h-4 w-4 mr-1" />}
+                        Resend or swap
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem
+                        onClick={() => handleResendVariant('A')}
+                        disabled={sentRecipientsByVariant.A.length === 0 || !!resendVariantLoading}
+                      >
+                        Resend to Variant A recipients ({sentRecipientsByVariant.A.length})
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleResendVariant('B')}
+                        disabled={sentRecipientsByVariant.B.length === 0 || !!resendVariantLoading}
+                      >
+                        Resend to Variant B recipients ({sentRecipientsByVariant.B.length})
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleResendVariant('all')}
+                        disabled={sentRecipientsByVariant.all.length === 0 || !!resendVariantLoading}
+                      >
+                        Resend to all (same variant each)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={handleSwapAndResend}
+                        disabled={sentRecipientsByVariant.all.length === 0 || !!resendVariantLoading}
+                      >
+                        <ArrowLeftRight className="h-4 w-4 mr-2" />
+                        Swap variants and resend (A→B content, B→A content)
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             )}
@@ -1606,6 +1824,50 @@ export default function Campaigns() {
               </div>
             )}
 
+            {/* Resend-style status filter: server-side for large lists */}
+            {recipients && (
+              <div className="flex flex-wrap items-center gap-3 py-2 border-b">
+                <Label className="text-sm font-medium shrink-0">Status</Label>
+                <Select
+                  value={recipientStatusFilter}
+                  onValueChange={(v) => setRecipientStatusFilter(v as RecipientStatusFilter)}
+                >
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="All statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      All statuses {statusCounts ? `(${statusCounts.all})` : ''}
+                    </SelectItem>
+                    <SelectItem value="pending">
+                      Pending {statusCounts ? `(${statusCounts.pending})` : ''}
+                    </SelectItem>
+                    <SelectItem value="sent">
+                      Sent / Delivered {statusCounts ? `(${statusCounts.sent})` : ''}
+                    </SelectItem>
+                    <SelectItem value="opened">
+                      Opened {statusCounts ? `(${statusCounts.opened})` : ''}
+                    </SelectItem>
+                    <SelectItem value="clicked">
+                      Clicked {statusCounts ? `(${statusCounts.clicked})` : ''}
+                    </SelectItem>
+                    <SelectItem value="opened_no_click">
+                      Opened, no click {statusCounts ? `(${statusCounts.opened_no_click})` : ''}
+                    </SelectItem>
+                    <SelectItem value="bounced">
+                      Bounced {statusCounts ? `(${statusCounts.bounced})` : ''}
+                    </SelectItem>
+                    <SelectItem value="failed">
+                      Failed {statusCounts ? `(${statusCounts.failed})` : ''}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground">
+                  Showing {recipients.length} recipient{recipients.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            )}
+
             {recipients && (
               <Table>
                 <TableHeader>
@@ -1622,6 +1884,7 @@ export default function Campaigns() {
                     <TableHead>Recipient</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Status</TableHead>
+                    {abTestResults && <TableHead className="w-[70px]">Variant</TableHead>}
                     <TableHead>Sent At</TableHead>
                     <TableHead>Opened At</TableHead>
                     {canEditRecipients && <TableHead className="w-[100px]">Actions</TableHead>}
@@ -1653,6 +1916,17 @@ export default function Campaigns() {
                         {recipient.email}
                       </TableCell>
                       <TableCell>{getRecipientStatusBadge(recipient.status)}</TableCell>
+                      {abTestResults && (
+                        <TableCell className="text-sm">
+                          {recipient.ab_variant === 'A' || recipient.ab_variant === 'B' ? (
+                            <Badge variant={recipient.ab_variant === 'A' ? 'default' : 'secondary'} className="font-mono">
+                              {recipient.ab_variant}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">–</span>
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell className="text-sm">
                         {recipient.sent_at
                           ? format(new Date(recipient.sent_at), "MMM d, HH:mm")

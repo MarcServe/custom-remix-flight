@@ -64,6 +64,7 @@ serve(async (req) => {
           results.push({ success: false, error: 'No email ID', payload });
           continue;
         }
+        emailId = String(emailId).trim();
 
         console.log(`Processing event: ${eventType} for email: ${emailId}`);
 
@@ -76,11 +77,34 @@ serve(async (req) => {
 
         if (findError || !activity) {
           // Try to find a campaign recipient directly by external_message_id
-          const { data: directRecipient } = await supabase
+          let directRecipient = (await supabase
             .from('email_campaign_recipients')
             .select('id, campaign_id')
             .eq('external_message_id', emailId)
-            .maybeSingle();
+            .maybeSingle()).data;
+          if (!directRecipient && eventData?.to?.length > 0) {
+            const recipientEmail = (eventData.to[0] && typeof eventData.to[0] === 'string')
+              ? eventData.to[0].trim().toLowerCase()
+              : null;
+            if (recipientEmail) {
+              const { data: byEmail } = await supabase
+                .from('email_campaign_recipients')
+                .select('id, campaign_id')
+                .ilike('email', recipientEmail)
+                .eq('status', 'sent')
+                .order('sent_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (byEmail) {
+                directRecipient = byEmail;
+                await supabase
+                  .from('email_campaign_recipients')
+                  .update({ external_message_id: emailId })
+                  .eq('id', byEmail.id);
+                console.log(`Backfilled external_message_id for recipient ${byEmail.id} (matched by email ${recipientEmail})`);
+              }
+            }
+          }
           if (directRecipient) {
             const recipientUpdates: Record<string, any> = {};
             if (eventType === 'email.opened') {
@@ -111,10 +135,10 @@ serve(async (req) => {
                     .eq('id', directRecipient.campaign_id);
                 }
               }
-              console.log(`✅ Updated campaign recipient directly for ${emailId}`);
-              results.push({ success: true, recipientId: directRecipient.id, event: eventType });
-              continue;
+              console.log(`✅ Updated campaign recipient directly for ${emailId} (${eventType})`);
             }
+            results.push({ success: true, recipientId: directRecipient.id, event: eventType });
+            continue;
           }
           console.error('Email activity not found:', emailId);
           results.push({ success: false, error: 'Activity not found', emailId, payload });

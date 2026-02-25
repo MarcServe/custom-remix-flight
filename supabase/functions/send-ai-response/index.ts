@@ -8,6 +8,7 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || 'leadgenie@eldapgraaa.resend.app';
 
 interface SendAIResponseRequest {
   companySequenceId: string;
@@ -329,6 +330,7 @@ serve(async (req) => {
           to: [recipientEmailAddress],
           subject,
           text: body,
+          reply_to: RESEND_INBOUND_EMAIL,
           html: renderEmailTemplate(
             businessProfile?.email_template_style || 'professional',
             {

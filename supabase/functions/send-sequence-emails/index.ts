@@ -203,6 +203,7 @@ Deno.serve(async (req) => {
           const fromEmail = resendConnection?.from_email || connection?.from_email || 'onboarding@resend.dev';
           const senderName = businessProfile?.company_name || 'CRM';
 
+          const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || 'leadgenie@eldapgraaa.resend.app';
           const resendResponse = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
@@ -214,6 +215,7 @@ Deno.serve(async (req) => {
               to: [contact.email],
               subject: emailData.subject,
               text: emailData.body,
+              reply_to: RESEND_INBOUND_EMAIL,
             }),
           });
 

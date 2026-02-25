@@ -7,6 +7,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY');
+const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || 'leadgenie@eldapgraaa.resend.app';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -282,16 +283,17 @@ Deno.serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: apiKeyConnection?.from_email 
-              ? `CRM <${apiKeyConnection.from_email}>` 
-              : connection?.from_email 
-                ? `CRM <${connection.from_email}>` 
-                : userProfile?.email 
-                  ? `CRM <${userProfile.email}>` 
+            from: apiKeyConnection?.from_email
+              ? `CRM <${apiKeyConnection.from_email}>`
+              : connection?.from_email
+                ? `CRM <${connection.from_email}>`
+                : userProfile?.email
+                  ? `CRM <${userProfile.email}>`
                   : `CRM <onboarding@resend.dev>`,
             to: [testEmail],
             subject: testSubject,
             text: testBody,
+            reply_to: RESEND_INBOUND_EMAIL,
           }),
         });
 
@@ -481,6 +483,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
             to: [testEmail],
             subject: '🎨 Test Email - Your Email Template Preview',
             html,
+            reply_to: RESEND_INBOUND_EMAIL,
           }),
         });
 
@@ -669,17 +672,18 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: apiKeyConnection?.from_email 
-            ? `${userProfile?.full_name || 'Team'} <${apiKeyConnection.from_email}>` 
-            : connection?.from_email 
-              ? `${userProfile?.full_name || 'Team'} <${connection.from_email}>` 
-              : userProfile?.email 
-                ? `${userProfile?.full_name || 'Team'} <${userProfile.email}>` 
+          from: apiKeyConnection?.from_email
+            ? `${userProfile?.full_name || 'Team'} <${apiKeyConnection.from_email}>`
+            : connection?.from_email
+              ? `${userProfile?.full_name || 'Team'} <${connection.from_email}>`
+              : userProfile?.email
+                ? `${userProfile?.full_name || 'Team'} <${userProfile.email}>`
                 : `${userProfile?.full_name || 'Team'} <onboarding@resend.dev>`,
           to: [testEmail],
           subject: `[TEST] ${personalizedSubject2}`,
           html: bodyHtml,
           text: personalizedBody2 + signatureText,
+          reply_to: RESEND_INBOUND_EMAIL,
         }),
       });
 

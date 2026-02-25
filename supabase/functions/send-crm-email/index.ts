@@ -101,7 +101,7 @@ serve(async (req) => {
       throw new Error('Invalid JSON in request body');
     }
     
-    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, senderConnectionId, sender_profile_id: requestSenderProfileId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, useInboundReplyTo = false, attachments = [] } = emailRequest;
+    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, senderConnectionId, sender_profile_id: requestSenderProfileId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, useInboundReplyTo = true, attachments = [] } = emailRequest;
     
     // Fetch user profile for signature and business email
     const { data: userProfile } = await supabaseClient

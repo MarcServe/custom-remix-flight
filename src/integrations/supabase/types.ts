@@ -3284,6 +3284,10 @@ export type Database = {
         Args: { invitation_token: string }
         Returns: Json
       }
+      get_campaign_recipient_status_counts: {
+        Args: { p_campaign_id: string }
+        Returns: Json
+      }
       get_user_team_role: {
         Args: { _team_id: string; _user_id: string }
         Returns: string

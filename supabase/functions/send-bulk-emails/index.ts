@@ -8,6 +8,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Reply-To for campaign emails: use Resend inbound so replies are received by Resend and show in Conversations
+const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || 'leadgenie@eldapgraaa.resend.app';
+
 function parseResendError(status: number, bodyText: string): string {
   try {
     const j = JSON.parse(bodyText);
@@ -351,6 +354,10 @@ serve(async (req) => {
           
           // Extract body HTML (remove signature if already included to avoid duplicates)
           let bodyHtml = recipient.personalized_body_html || '';
+          // Fallback: when no HTML stored (e.g. legacy B or edge case), use plain text so template bodyTextToHtml can convert
+          if (!bodyHtml.trim() && (recipient.personalized_body_text || '').trim()) {
+            bodyHtml = recipient.personalized_body_text;
+          }
           // More comprehensive signature removal patterns
           const signaturePatterns = [
             /<br><br><p>Best regards,.*$/is,
@@ -475,6 +482,10 @@ serve(async (req) => {
           
           // Extract body HTML (remove signature if already included to avoid duplicates)
           let bodyHtml = recipient.personalized_body_html || '';
+          // Fallback: when no HTML stored (e.g. legacy B or edge case), use plain text so template bodyTextToHtml can convert
+          if (!bodyHtml.trim() && (recipient.personalized_body_text || '').trim()) {
+            bodyHtml = recipient.personalized_body_text;
+          }
           // More comprehensive signature removal patterns
           const signaturePatterns = [
             /<br><br><p>Best regards,.*$/is,
@@ -572,6 +583,10 @@ serve(async (req) => {
           
           // Extract body HTML (remove signature if already included to avoid duplicates)
           let bodyHtml = recipient.personalized_body_html || '';
+          // Fallback: when no HTML stored (e.g. legacy B or edge case), use plain text so template bodyTextToHtml can convert
+          if (!bodyHtml.trim() && (recipient.personalized_body_text || '').trim()) {
+            bodyHtml = recipient.personalized_body_text;
+          }
           // More comprehensive signature removal patterns
           const signaturePatterns = [
             /<br><br><p>Best regards,.*$/is,
@@ -625,6 +640,7 @@ serve(async (req) => {
               subject: recipient.personalized_subject,
               text: recipient.personalized_body_text || '',
               html: wrappedHtml,
+              reply_to: RESEND_INBOUND_EMAIL,
               headers: {
                 'X-Priority': '3',
                 'Importance': 'normal',

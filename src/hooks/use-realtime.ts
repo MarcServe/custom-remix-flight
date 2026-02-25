@@ -383,9 +383,10 @@ export const useEmailThreadsRealtime = () => {
         (payload: RealtimePostgresChangesPayload<any>) => {
           console.log('✅ Email threads realtime update:', payload.eventType, payload.new);
           
-          // Aggressively invalidate all conversation-related queries
+          // Aggressively invalidate all conversation-related queries so replies show in Conversations tab
           queryClient.invalidateQueries({ queryKey: ['email-threads'] });
           queryClient.invalidateQueries({ queryKey: ['active-conversations'] });
+          queryClient.invalidateQueries({ queryKey: ['personal-conversations'] });
           queryClient.invalidateQueries({ queryKey: ['company-sequences'] });
           queryClient.invalidateQueries({ queryKey: ['pending-reviews'] });
           
