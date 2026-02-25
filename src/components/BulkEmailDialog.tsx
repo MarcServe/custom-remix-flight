@@ -1614,9 +1614,6 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       const hasVariantBContent = !!(abSubjectB?.trim() || abBodyTextB?.trim() || abBodyHtmlB?.trim());
       const useVariantB = abTestEnabled && chosenVariant === 'B' && hasVariantBContent;
       const subjectForTest = useVariantB ? (abSubjectB || subject) : subject;
-      const bodyHtmlForTest = useVariantB
-        ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : bodyHtml || previewBodyToHtml(bodyText)) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`)
-        : (bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`);
       const bodyTextForTest = useVariantB ? (abBodyTextB || bodyText) : bodyText;
 
       // Use personalized email if available, otherwise use template with variables
@@ -1631,22 +1628,30 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         testBodyText = personalized.bodyText;
       } else {
         testSubject = personalizeText(subjectForTest, testPerson);
-        testBodyHtml = personalizeText(bodyHtmlForTest, testPerson);
         testBodyText = personalizeText(bodyTextForTest, testPerson);
+        // Variant A: send HTML + text (same as main compose). Variant B: send plain text only so server builds HTML the same way (avoids raw HTML in email)
+        if (useVariantB) {
+          testBodyHtml = undefined as unknown as string;
+        } else {
+          const bodyHtmlForTest = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
+          testBodyHtml = personalizeText(bodyHtmlForTest, testPerson);
+        }
       }
 
+      const payload: Record<string, unknown> = {
+        toEmail: testEmailAddress,
+        toName: 'Test Recipient',
+        subject: testSubject,
+        bodyText: testBodyText,
+        sender,
+        senderConnectionId: senderConnectionId || undefined,
+        sender_profile_id: senderProfileId || undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      };
+      if (testBodyHtml !== undefined) payload.bodyHtml = testBodyHtml;
+
       const { data: invokeData, error } = await supabase.functions.invoke('send-crm-email', {
-        body: {
-          toEmail: testEmailAddress,
-          toName: 'Test Recipient',
-          subject: testSubject,
-          bodyHtml: testBodyHtml,
-          bodyText: testBodyText,
-          sender,
-          senderConnectionId: senderConnectionId || undefined,
-          sender_profile_id: senderProfileId || undefined, // Same profile as preview so test email matches inbox
-          attachments: attachments.length > 0 ? attachments : undefined,
-        },
+        body: payload,
       });
 
       if (error) {

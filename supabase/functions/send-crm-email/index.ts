@@ -231,8 +231,16 @@ serve(async (req) => {
       emailBodyContent += invoiceHtml;
     }
 
+    // If body looks like escaped HTML (e.g. &lt;p&gt;), unescape so the template renders real HTML
+    if (emailBodyContent && /&lt;/.test(emailBodyContent) && !/<\s*[a-zA-Z]/.test(emailBodyContent)) {
+      emailBodyContent = emailBodyContent
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&amp;/g, '&');
+    }
+
     // Create emailBodyHtml from emailBodyContent for compatibility
-    // Note: renderEmailTemplate will handle signature and branding, so we just use the content here
     let emailBodyHtml = emailBodyContent;
 
     // Validate required fields - allow either text or HTML body
@@ -244,13 +252,12 @@ serve(async (req) => {
       throw new Error('Missing required fields: toEmail, subject, and at least one of bodyText or bodyHtml');
     }
     
-    // Ensure we have at least a minimal text version for providers that require it
-    if (!hasTextBody && hasHtmlBody) {
-      // Extract text from HTML as fallback
-      emailBodyText = emailBodyHtml.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() || 'Email content';
-    } else if (!hasHtmlBody && hasTextBody) {
-      // If we only have text, create a simple HTML version
-      emailBodyHtml = `<p>${emailBodyText.replace(/\n/g, '</p><p>')}</p>`;
+    // When we have HTML, always use tag-stripped HTML for the plain-text part so clients never see raw HTML
+    if (hasHtmlBody) {
+      emailBodyText = emailBodyHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || 'Email content';
+    } else if (hasTextBody) {
+      // Pass plain text to template so bodyTextToHtml() adds paragraphs, spacing, and lists (same as Variant A)
+      emailBodyContent = emailBodyText;
     }
     
     // Final safety check - ensure both are non-empty strings

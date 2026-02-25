@@ -74,9 +74,14 @@ function renderSignatureBlock(opts: {
  * - Already HTML content is returned as-is.
  */
 function bodyTextToHtml(text: string): string {
-  const raw = (text || '').trim();
+  let raw = (text || '').trim();
   if (!raw) return '';
-  if (raw.includes('<p>') || raw.includes('<div') || raw.includes('<ul') || raw.includes('<ol')) return raw;
+  // If content looks like escaped HTML (e.g. &lt;p&gt;), unescape so it renders as HTML
+  if (/&lt;/.test(raw) && !/<\s*[a-zA-Z]/.test(raw)) {
+    raw = raw.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  }
+  // Pass through any content that looks like HTML so it is never escaped
+  if (/<\s*[a-zA-Z]/.test(raw)) return raw;
   const blocks = raw.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
   const out: string[] = [];
   for (const block of blocks) {
