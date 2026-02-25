@@ -112,12 +112,14 @@ export const SequenceChatCard = () => {
             // Handle sequence generation
             if (parsed.sequence) {
               setGeneratedSequence(parsed.sequence);
-              // Invalidate sequences query to refresh the list
               queryClient.invalidateQueries({ queryKey: ['sequences'] });
               toast({
                 title: "Sequence Generated!",
                 description: "Your email sequence has been created and saved.",
               });
+              setTimeout(() => {
+                document.getElementById('saved-sequences')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 400);
             }
             
             // Handle content delta
@@ -220,9 +222,15 @@ export const SequenceChatCard = () => {
                   Sequence Generated Successfully!
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Your {generatedSequence.sequence?.length || extractedParams.steps}-step sequence has been saved. 
-                  Scroll down to see it in "Your Saved Sequences".
+                  Your {generatedSequence.sequence?.length || extractedParams.steps}-step sequence has been saved in Saved Sequences below.
                 </p>
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('saved-sequences')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className="text-xs font-medium text-primary hover:underline mt-1 inline-block"
+                >
+                  Jump to Saved Sequences →
+                </button>
               </div>
             </div>
           </div>

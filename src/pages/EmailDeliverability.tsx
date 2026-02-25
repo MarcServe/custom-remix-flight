@@ -45,6 +45,7 @@ export default function EmailDeliverability() {
   const [bounceEvents, setBounceEvents] = useState<BounceEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
+  const [hasConnection, setHasConnection] = useState<boolean | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -54,16 +55,36 @@ export default function EmailDeliverability() {
   const loadData = async () => {
     try {
       setLoading(true);
-      
-      // Load deliverability metrics
+      setMetrics([]);
+      setBounceEvents([]);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: conn } = await supabase
+          .from('crm_connections')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .limit(1)
+          .maybeSingle();
+        setHasConnection(!!conn);
+      } else {
+        setHasConnection(false);
+      }
+
+      // Load deliverability metrics (table may not exist in some envs)
       const { data: metricsData, error: metricsError } = await supabase
         .from('email_deliverability_metrics')
         .select('*')
         .order('checked_at', { ascending: false })
         .limit(30);
 
-      if (metricsError) throw metricsError;
-      setMetrics(metricsData || []);
+      if (metricsError) {
+        console.warn('Deliverability metrics load:', metricsError);
+        setMetrics([]);
+      } else {
+        setMetrics(metricsData || []);
+      }
 
       // Load bounce events
       const { data: bounceData, error: bounceError } = await supabase
@@ -72,13 +93,19 @@ export default function EmailDeliverability() {
         .order('occurred_at', { ascending: false })
         .limit(50);
 
-      if (bounceError) throw bounceError;
-      setBounceEvents(bounceData || []);
+      if (bounceError) {
+        console.warn('Bounce events load:', bounceError);
+        setBounceEvents([]);
+      } else {
+        setBounceEvents(bounceData || []);
+      }
     } catch (error: any) {
       console.error('Error loading deliverability data:', error);
+      setMetrics([]);
+      setBounceEvents([]);
       toast({
-        title: "Error",
-        description: "Failed to load deliverability metrics",
+        title: "Could not load data",
+        description: error?.message || "Failed to load deliverability metrics. Connect an email account and try again.",
         variant: "destructive",
       });
     } finally {
@@ -223,11 +250,28 @@ export default function EmailDeliverability() {
             </p>
           )}
         </div>
-        <Button onClick={checkDeliverability} disabled={checking}>
+        <Button onClick={checkDeliverability} disabled={checking || hasConnection === false}>
           <RefreshCw className={`h-4 w-4 mr-2 ${checking ? 'animate-spin' : ''}`} />
           {checking ? 'Checking...' : 'Check Now'}
         </Button>
       </div>
+
+      {hasConnection === false && (
+        <Card className="border-amber-500/50 bg-amber-500/5">
+          <CardContent className="flex flex-col sm:flex-row sm:items-center gap-4 py-6">
+            <AlertCircle className="h-10 w-10 text-amber-600 shrink-0" />
+            <div>
+              <h3 className="font-semibold text-amber-800 dark:text-amber-200">No email connection</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Connect an email account (Integrations or Email Branding) to run deliverability checks and see domain health.
+              </p>
+            </div>
+            <Button variant="outline" className="shrink-0" onClick={() => window.open('/integrations', '_self')}>
+              Go to Integrations
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {!latestMetric ? (
         <Card>
@@ -235,9 +279,11 @@ export default function EmailDeliverability() {
             <Shield className="h-16 w-16 text-muted-foreground mb-4" />
             <h3 className="text-xl font-semibold mb-2">No Deliverability Data</h3>
             <p className="text-muted-foreground text-center mb-4">
-              Run your first deliverability check to monitor your email health
+              {hasConnection === false
+                ? 'Connect an email account first, then run a deliverability check.'
+                : 'Run your first deliverability check to monitor your email health'}
             </p>
-            <Button onClick={checkDeliverability} disabled={checking}>
+            <Button onClick={checkDeliverability} disabled={checking || hasConnection === false}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Run Check
             </Button>

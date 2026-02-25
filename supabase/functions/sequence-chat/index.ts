@@ -28,6 +28,7 @@ serve(async (req) => {
       throw new Error("OPENAI_API_KEY is not configured or invalid. Please add it in Supabase Edge Function Secrets.");
     }
 
+    const authHeader = req.headers.get('Authorization');
     console.log('Starting sequence chat with messages:', messages.length);
     console.log('Current extracted params:', extractedParams);
 
@@ -198,7 +199,8 @@ Be conversational and helpful. Ask clarifying questions if needed.`;
                           ...params,
                           provider: 'openai',
                           model: 'gpt-4o-mini'
-                        }
+                        },
+                        ...(authHeader && { headers: { Authorization: authHeader } })
                       }
                     );
 

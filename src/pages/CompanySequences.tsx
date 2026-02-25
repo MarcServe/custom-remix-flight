@@ -649,6 +649,52 @@ export default function CompanySequences() {
                         )}
                       </div>
                     </div>
+
+                    {/* Who opened / Who replied — per-step engagement for this campaign */}
+                    {(engagement.opened > 0 || engagement.replied > 0) && (
+                      <div className="mt-4 pt-4 border-t space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">Who engaged</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                          {engagement.opened > 0 && (
+                            <div className="flex items-start gap-2">
+                              <Eye className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="font-medium text-foreground">Opened</span>
+                                <ul className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                                  {(sequence.email_activities || [])
+                                    .filter(a => a.opened_at)
+                                    .map(a => (
+                                      <li key={a.id}>
+                                        Step {a.step_number + 1} — {new Date(a.opened_at!).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                      </li>
+                                    ))}
+                                </ul>
+                              </div>
+                            </div>
+                          )}
+                          {engagement.replied > 0 && (
+                            <div className="flex items-start gap-2">
+                              <Mail className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="font-medium text-foreground">Replied</span>
+                                <ul className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                                  {(sequence.email_activities || [])
+                                    .filter(a => a.replied_at)
+                                    .map(a => (
+                                      <li key={a.id}>
+                                        Step {a.step_number + 1} — {new Date(a.replied_at!).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                      </li>
+                                    ))}
+                                </ul>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Click card to see full timeline and details
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               );

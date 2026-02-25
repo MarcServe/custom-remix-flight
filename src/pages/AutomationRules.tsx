@@ -270,6 +270,9 @@ export default function AutomationRules() {
           <p className="text-muted-foreground mt-1">
             Create advanced automation with time-based triggers and conditional logic
           </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Rules are saved to the backend and applied (e.g. sequence follow-up timing and send windows).
+          </p>
         </div>
         <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
           <Plus className="h-4 w-4 mr-2" />

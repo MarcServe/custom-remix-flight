@@ -58,6 +58,8 @@ interface Campaign {
   tags?: string[];
   auto_follow_up_enabled?: boolean;
   follow_up_sequence_id?: string | null;
+  ab_test_enabled?: boolean;
+  ab_winner_metric?: 'open_rate' | 'click_rate' | 'reply_rate' | null;
 }
 
 interface CampaignRecipient {
@@ -68,7 +70,9 @@ interface CampaignRecipient {
   person_id?: string | null;
   sent_at?: string;
   opened_at?: string;
+  clicked_at?: string | null;
   error_message?: string;
+  ab_variant?: 'A' | 'B' | null;
 }
 
 export default function Campaigns() {
@@ -279,6 +283,32 @@ export default function Campaigns() {
     () => (recipients ?? []).filter((r) => r.status === "pending"),
     [recipients]
   );
+
+  // A/B test results: aggregate by ab_variant when campaign had A/B body test
+  const abTestResults = useMemo(() => {
+    const camp = selectedCampaignData;
+    const recs = recipients ?? [];
+    if (!camp?.ab_test_enabled || recs.length === 0) return null;
+    const withVariant = recs.filter((r): r is CampaignRecipient & { ab_variant: 'A' | 'B' } => r.ab_variant === 'A' || r.ab_variant === 'B');
+    if (withVariant.length === 0) return null;
+    const sent = (r: CampaignRecipient) => ['sent', 'opened', 'clicked'].includes(r.status?.toLowerCase?.() ?? '') || !!r.sent_at;
+    const opened = (r: CampaignRecipient) => !!r.opened_at || ['opened', 'clicked'].includes(r.status?.toLowerCase?.() ?? '');
+    const clicked = (r: CampaignRecipient) => !!r.clicked_at || (r.status?.toLowerCase?.() === 'clicked');
+    const byVariant = { A: withVariant.filter(r => r.ab_variant === 'A'), B: withVariant.filter(r => r.ab_variant === 'B') };
+    const stats = (list: CampaignRecipient[]) => {
+      const s = list.filter(sent).length;
+      const o = list.filter(opened).length;
+      const c = list.filter(clicked).length;
+      return { sent: s, opened: o, clicked: c, openRate: s > 0 ? (o / s) * 100 : 0, clickRate: s > 0 ? (c / s) * 100 : 0 };
+    };
+    const a = stats(byVariant.A);
+    const b = stats(byVariant.B);
+    const winnerMetric = camp.ab_winner_metric ?? 'open_rate';
+    const aVal = winnerMetric === 'open_rate' ? a.openRate : winnerMetric === 'click_rate' ? a.clickRate : 0;
+    const bVal = winnerMetric === 'open_rate' ? b.openRate : winnerMetric === 'click_rate' ? b.clickRate : 0;
+    const winner = aVal >= bVal ? 'A' : 'B';
+    return { byVariant: { A: a, B: b }, winner, winnerMetric };
+  }, [selectedCampaignData, recipients]);
 
   const handleSelectAllRecipients = () => {
     if (selectedRecipientIds.size === pendingRecipients.length) {
@@ -1480,6 +1510,34 @@ export default function Campaigns() {
               </div>
             )}
 
+            {/* A/B test results for campaigns that had body A/B test */}
+            {abTestResults && (selectedCampaignData?.status?.toLowerCase() === 'completed' || selectedCampaignData?.status?.toLowerCase() === 'sending') && (
+              <div className="rounded-lg border bg-muted/30 px-4 py-3 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <FlaskConical className="h-4 w-4 text-primary shrink-0" />
+                  A/B test results (body)
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className={`rounded-md p-3 border ${abTestResults.winner === 'A' ? 'border-primary bg-primary/5' : 'bg-muted/50'}`}>
+                    <div className="font-medium mb-1">Variant A</div>
+                    <div className="text-muted-foreground space-y-0.5">
+                      <div>{abTestResults.byVariant.A.sent} sent, {abTestResults.byVariant.A.opened} opened, {abTestResults.byVariant.A.clicked} clicked</div>
+                      <div>Open rate: {abTestResults.byVariant.A.openRate.toFixed(1)}% · Click rate: {abTestResults.byVariant.A.clickRate.toFixed(1)}%</div>
+                    </div>
+                    {abTestResults.winner === 'A' && <Badge variant="default" className="mt-2">Winner ({abTestResults.winnerMetric.replace('_', ' ')})</Badge>}
+                  </div>
+                  <div className={`rounded-md p-3 border ${abTestResults.winner === 'B' ? 'border-primary bg-primary/5' : 'bg-muted/50'}`}>
+                    <div className="font-medium mb-1">Variant B</div>
+                    <div className="text-muted-foreground space-y-0.5">
+                      <div>{abTestResults.byVariant.B.sent} sent, {abTestResults.byVariant.B.opened} opened, {abTestResults.byVariant.B.clicked} clicked</div>
+                      <div>Open rate: {abTestResults.byVariant.B.openRate.toFixed(1)}% · Click rate: {abTestResults.byVariant.B.clickRate.toFixed(1)}%</div>
+                    </div>
+                    {abTestResults.winner === 'B' && <Badge variant="default" className="mt-2">Winner ({abTestResults.winnerMetric.replace('_', ' ')})</Badge>}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {canEditRecipients && (
               <div className="space-y-2 py-2 border-b">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1855,7 +1913,17 @@ export default function Campaigns() {
         </TabsContent>
 
         <TabsContent value="testing">
-          <ABTesting />
+          <ABTesting
+            onOpenBulkEmailForAbTest={() => {
+              setSearchParams({ tab: 'overview' });
+              setBulkEmailDialogOpen(true);
+              setDraftToEdit(null);
+            }}
+            onSelectCampaignAndShowOverview={(campaignId) => {
+              setSearchParams({ tab: 'overview' });
+              setSelectedCampaign(campaignId);
+            }}
+          />
         </TabsContent>
       </Tabs>
 

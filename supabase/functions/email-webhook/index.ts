@@ -88,6 +88,7 @@ serve(async (req) => {
               recipientUpdates.status = 'opened';
             } else if (eventType === 'email.clicked') {
               recipientUpdates.opened_at = new Date().toISOString();
+              recipientUpdates.clicked_at = new Date().toISOString();
               recipientUpdates.status = 'clicked';
             } else if (eventType === 'email.bounced') {
               recipientUpdates.status = 'bounced';
@@ -283,6 +284,7 @@ serve(async (req) => {
             campaignRecipientUpdates.status = 'opened';
           } else if (eventType === 'email.clicked') {
             campaignRecipientUpdates.opened_at = new Date().toISOString();
+            campaignRecipientUpdates.clicked_at = new Date().toISOString();
             campaignRecipientUpdates.status = 'clicked';
           } else if (eventType === 'email.bounced') {
             campaignRecipientUpdates.status = 'bounced';

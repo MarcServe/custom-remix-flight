@@ -636,7 +636,7 @@ export default function Sequences() {
             <AutomationMetrics />
 
             {/* Saved Sequences */}
-            <div className="space-y-4">
+            <div id="saved-sequences" className="space-y-4 scroll-mt-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-2xl font-bold">Saved Sequences</h2>
                 <Badge variant="secondary" className="text-sm">

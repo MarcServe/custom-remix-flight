@@ -1,18 +1,27 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Play, Pause, Trophy, TrendingUp, Mail, Clock } from "lucide-react";
+import { Plus, Play, Pause, Trophy, TrendingUp, Mail, Clock, Send, FlaskConical, ExternalLink, FileText, Trash2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+
+export interface ABTestingProps {
+  /** Open the Send Bulk Email dialog so user can run a body A/B test from the compose form */
+  onOpenBulkEmailForAbTest?: () => void;
+  /** Switch to Campaigns overview and select this campaign to show A/B results in the detail panel */
+  onSelectCampaignAndShowOverview?: (campaignId: string) => void;
+}
 
 interface ABTest {
   id: string;
@@ -36,11 +45,30 @@ interface ABTest {
   created_at: string;
 }
 
-export default function ABTesting() {
+export default function ABTesting({ onOpenBulkEmailForAbTest, onSelectCampaignAndShowOverview }: ABTestingProps = {}) {
   const [tests, setTests] = useState<ABTest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [testToDeleteId, setTestToDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
+
+  // Campaigns that have body A/B test enabled (from Send Bulk Email flow)
+  const { data: campaignAbTests = [] } = useQuery({
+    queryKey: ['campaigns-ab-tests'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('email_campaigns')
+        .select('id, name, status, created_at, total_recipients, sent_count, opened_count, ab_test_enabled, ab_winner_metric')
+        .eq('user_id', user.id)
+        .eq('ab_test_enabled', true)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   const [formData, setFormData] = useState({
     name: '',
@@ -164,6 +192,30 @@ export default function ABTesting() {
     }
   };
 
+  const deleteTest = async (testId: string) => {
+    try {
+      setDeleting(true);
+      const { error } = await supabase
+        .from('email_ab_tests')
+        .delete()
+        .eq('id', testId);
+
+      if (error) throw error;
+      toast({ title: "A/B test deleted" });
+      setTestToDeleteId(null);
+      await loadTests();
+    } catch (error: any) {
+      console.error('Error deleting test:', error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to delete test",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -235,11 +287,83 @@ export default function ABTesting() {
             Test different variations to optimize your email performance
           </p>
         </div>
-        <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Test
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenBulkEmailForAbTest && (
+            <Button onClick={onOpenBulkEmailForAbTest} className="gap-2">
+              <Send className="h-4 w-4" />
+              Run body A/B test
+            </Button>
+          )}
+          <Button variant={onOpenBulkEmailForAbTest ? "outline" : "default"} onClick={() => { resetForm(); setIsDialogOpen(true); }} className="gap-2">
+            <Plus className="h-4 w-4" />
+            New subject-line test
+          </Button>
+        </div>
       </div>
+
+      {/* Campaign body A/B tests: run from Send Bulk Email; results on campaign detail */}
+      {(onOpenBulkEmailForAbTest != null || campaignAbTests.length > 0) && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <FlaskConical className="h-5 w-5 text-primary" />
+              <CardTitle>Campaign body A/B tests</CardTitle>
+            </div>
+            <CardDescription>
+              Run body A/B tests from Send Bulk Email: add recipients, compose your main email, then enable &quot;A/B test (body)&quot; and add Variant B. Results (open rate, click rate by variant) appear on the campaign when you select it in All Campaigns.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {onOpenBulkEmailForAbTest && (
+              <Button onClick={onOpenBulkEmailForAbTest} variant="secondary" className="gap-2">
+                <FileText className="h-4 w-4" />
+                Open Send Bulk Email to run a body A/B test
+              </Button>
+            )}
+            {campaignAbTests.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Campaigns with body A/B test</p>
+                <ul className="space-y-2">
+                  {campaignAbTests.map((c: any) => (
+                    <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+                      <div>
+                        <span className="font-medium">{c.name}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {c.sent_count ?? 0} sent · {c.opened_count ?? 0} opened · winner by {c.ab_winner_metric ?? 'open_rate'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={c.status === 'completed' ? 'default' : 'secondary'}>{c.status}</Badge>
+                        {onSelectCampaignAndShowOverview && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onSelectCampaignAndShowOverview(c.id)}
+                            className="gap-1"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            View results
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No campaigns with body A/B test yet. Use &quot;Run body A/B test&quot; or Send Bulk Email and enable A/B test (body) when composing.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex items-center gap-2 pt-2">
+        <Mail className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">Subject line tests</h2>
+      </div>
+      <p className="text-sm text-muted-foreground -mt-2">
+        Standalone subject-line (or content) tests. For body tests with real campaigns, use the Campaign body A/B section above.
+      </p>
 
       <Tabs defaultValue="active" className="space-y-4">
         <TabsList>
@@ -293,6 +417,15 @@ export default function ABTesting() {
                         >
                           <Pause className="h-4 w-4 mr-2" />
                           Pause
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={() => setTestToDeleteId(test.id)}
+                          title="Delete test"
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
@@ -379,7 +512,18 @@ export default function ABTesting() {
                         <CardDescription>{test.description}</CardDescription>
                       </div>
                     </div>
-                    <Badge className={getStatusColor(test.status)}>Completed</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge className={getStatusColor(test.status)}>Completed</Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => setTestToDeleteId(test.id)}
+                        title="Delete test"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -427,6 +571,15 @@ export default function ABTesting() {
                           Pause
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => setTestToDeleteId(test.id)}
+                        title="Delete test"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 </CardHeader>
@@ -436,14 +589,41 @@ export default function ABTesting() {
         </TabsContent>
       </Tabs>
 
+      <AlertDialog open={!!testToDeleteId} onOpenChange={(open) => !open && setTestToDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete A/B test?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This subject-line test will be permanently removed. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => testToDeleteId && deleteTest(testToDeleteId)}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create A/B Test</DialogTitle>
+            <DialogTitle>Create subject-line A/B test</DialogTitle>
             <DialogDescription>
-              Test different variations to see what works best
+              Test subject lines (or content) as a standalone test. To A/B test email bodies with a real campaign and see open/click results per variant, use &quot;Run body A/B test&quot; on this page and enable A/B test (body) in Send Bulk Email.
             </DialogDescription>
           </DialogHeader>
+          {onOpenBulkEmailForAbTest && (
+            <Button type="button" variant="outline" className="w-full gap-2" onClick={() => { setIsDialogOpen(false); onOpenBulkEmailForAbTest(); }}>
+              <Send className="h-4 w-4" />
+              Switch to body A/B test (Send Bulk Email)
+            </Button>
+          )}
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">

@@ -1954,6 +1954,7 @@ export type Database = {
       }
       email_campaign_recipients: {
         Row: {
+          ab_variant: string | null
           bounced_at: string | null
           campaign_id: string
           clicked_at: string | null
@@ -1973,6 +1974,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ab_variant?: string | null
           bounced_at?: string | null
           campaign_id: string
           clicked_at?: string | null
@@ -1992,6 +1994,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ab_variant?: string | null
           bounced_at?: string | null
           campaign_id?: string
           clicked_at?: string | null
@@ -2029,6 +2032,12 @@ export type Database = {
       }
       email_campaigns: {
         Row: {
+          ab_body_html_b: string | null
+          ab_body_text_b: string | null
+          ab_subject_b: string | null
+          ab_test_enabled: boolean
+          ab_traffic_split: number
+          ab_winner_metric: string | null
           auto_follow_up_enabled: boolean
           body_html_template: string
           body_text_template: string
@@ -2051,6 +2060,12 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ab_body_html_b?: string | null
+          ab_body_text_b?: string | null
+          ab_subject_b?: string | null
+          ab_test_enabled?: boolean
+          ab_traffic_split?: number
+          ab_winner_metric?: string | null
           auto_follow_up_enabled?: boolean
           body_html_template: string
           body_text_template: string
@@ -2073,6 +2088,12 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ab_body_html_b?: string | null
+          ab_body_text_b?: string | null
+          ab_subject_b?: string | null
+          ab_test_enabled?: boolean
+          ab_traffic_split?: number
+          ab_winner_metric?: string | null
           auto_follow_up_enabled?: boolean
           body_html_template?: string
           body_text_template?: string

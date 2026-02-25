@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter } from "lucide-react";
+import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { PersonaSelector, type MarketingPersona } from "./email/PersonaSelector";
 import { TagInput } from "@/components/ui/tag-input";
@@ -86,6 +86,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
   const [testRecipientId, setTestRecipientId] = useState<string | null>(null);
+  const [testEmailVariant, setTestEmailVariant] = useState<'A' | 'B'>('A');
   const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
   const [selectedPersona, setSelectedPersona] = useState<MarketingPersona | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -113,6 +114,14 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const [draftId, setDraftId] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [loadDraftOpen, setLoadDraftOpen] = useState(false);
+  // A/B test (body): variant B and split
+  const [abTestEnabled, setAbTestEnabled] = useState(false);
+  const [abSectionOpen, setAbSectionOpen] = useState(false); // expand/collapse Variant B form (independent of on/off)
+  const [abSubjectB, setAbSubjectB] = useState("");
+  const [abBodyHtmlB, setAbBodyHtmlB] = useState("");
+  const [abBodyTextB, setAbBodyTextB] = useState("");
+  const [abTrafficSplit, setAbTrafficSplit] = useState(50);
+  const [abWinnerMetric, setAbWinnerMetric] = useState<'open_rate' | 'click_rate' | 'reply_rate'>('open_rate');
 
   // Fetch previous campaigns for exclusion
   const { data: previousCampaigns } = useQuery({
@@ -326,7 +335,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
       const { data, error } = await supabase
         .from('email_campaigns')
-        .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id')
+        .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric')
         .eq('user_id', user.id)
         .eq('status', 'draft')
         .order('updated_at', { ascending: false })
@@ -1031,6 +1040,12 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           auto_follow_up_enabled: autoFollowUpEnabled,
           follow_up_sequence_id: followUpSequenceId || null,
           updated_at: new Date().toISOString(),
+          ab_test_enabled: abTestEnabled,
+          ab_subject_b: abTestEnabled ? (abSubjectB || null) : null,
+          ab_body_html_b: abTestEnabled ? (abBodyHtmlB || null) : null,
+          ab_body_text_b: abTestEnabled ? (abBodyTextB || null) : null,
+          ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
+          ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
         };
         if (!contentOnly) {
           updatePayload.scheduled_at = scheduledAt;
@@ -1050,19 +1065,30 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             .delete()
             .eq('campaign_id', draftId);
 
+          const useAb = abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
+          const bodyHtmlA = bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
+          const bodyHtmlB = abBodyHtmlB || (abBodyTextB ? `<p>${abBodyTextB.replace(/\n/g, '</p><p>')}</p>` : bodyHtmlA);
+          const bodyTextB = abBodyTextB || bodyText;
           const recipients = recipientsToUse
             .filter(person => person.email)
-            .map((person: any) => ({
-              campaign_id: draftId,
-              person_id: personIdForDb(person),
-              email: person.email,
-              name: `${person.first_name} ${person.last_name}`.trim(),
-              personalized_subject: personalizeText(subject, person),
-              personalized_body_html: personalizeText(bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`, person),
-              personalized_body_text: personalizeText(bodyText, person),
-              status: 'pending',
-              email_period: 'new',
-            }));
+            .map((person: any) => {
+              const variant = useAb ? (Math.random() * 100 < abTrafficSplit ? 'A' : 'B') : null;
+              const subj = variant === 'B' ? (abSubjectB || subject) : subject;
+              const html = variant === 'B' ? bodyHtmlB : bodyHtmlA;
+              const text = variant === 'B' ? bodyTextB : bodyText;
+              return {
+                campaign_id: draftId,
+                person_id: personIdForDb(person),
+                email: person.email,
+                name: `${person.first_name} ${person.last_name}`.trim(),
+                personalized_subject: personalizeText(subj, person),
+                personalized_body_html: personalizeText(html, person),
+                personalized_body_text: personalizeText(text, person),
+                status: 'pending',
+                email_period: 'new',
+                ...(variant && { ab_variant: variant }),
+              };
+            });
 
           const { error: recipientsError } = await supabase
             .from('email_campaign_recipients')
@@ -1098,6 +1124,12 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             tags: campaignTags,
             auto_follow_up_enabled: autoFollowUpEnabled,
             follow_up_sequence_id: followUpSequenceId || null,
+            ab_test_enabled: abTestEnabled,
+            ab_subject_b: abTestEnabled ? (abSubjectB || null) : null,
+            ab_body_html_b: abTestEnabled ? (abBodyHtmlB || null) : null,
+            ab_body_text_b: abTestEnabled ? (abBodyTextB || null) : null,
+            ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
+            ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
           })
           .select()
           .single();
@@ -1106,20 +1138,31 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
         setDraftId(campaign.id);
 
+        const useAbDraft = abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
+        const bodyHtmlADraft = bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
+        const bodyHtmlBDraft = abBodyHtmlB || (abBodyTextB ? `<p>${abBodyTextB.replace(/\n/g, '</p><p>')}</p>` : bodyHtmlADraft);
+        const bodyTextBDraft = abBodyTextB || bodyText;
         // Create recipients (person_id must be a real UUID; synthetic "rec-*" ids are null)
         const recipients = recipientsToUse
           .filter(person => person.email)
-          .map((person: any) => ({
-            campaign_id: campaign.id,
-            person_id: personIdForDb(person),
-            email: person.email,
-            name: `${person.first_name} ${person.last_name}`.trim(),
-            personalized_subject: personalizeText(subject, person),
-            personalized_body_html: personalizeText(bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`, person),
-            personalized_body_text: personalizeText(bodyText, person),
-            status: 'pending',
-            email_period: 'new',
-          }));
+          .map((person: any) => {
+            const variant = useAbDraft ? (Math.random() * 100 < abTrafficSplit ? 'A' : 'B') : null;
+            const subj = variant === 'B' ? (abSubjectB || subject) : subject;
+            const html = variant === 'B' ? bodyHtmlBDraft : bodyHtmlADraft;
+            const text = variant === 'B' ? bodyTextBDraft : bodyText;
+            return {
+              campaign_id: campaign.id,
+              person_id: personIdForDb(person),
+              email: person.email,
+              name: `${person.first_name} ${person.last_name}`.trim(),
+              personalized_subject: personalizeText(subj, person),
+              personalized_body_html: personalizeText(html, person),
+              personalized_body_text: personalizeText(text, person),
+              status: 'pending',
+              email_period: 'new',
+              ...(variant && { ab_variant: variant }),
+            };
+          });
 
         const { error: recipientsError } = await supabase
           .from('email_campaign_recipients')
@@ -1209,6 +1252,16 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
       setAutoFollowUpEnabled(draft.auto_follow_up_enabled !== false);
       setFollowUpSequenceId(draft.follow_up_sequence_id || "");
+
+      const abEnabled = !!(draft as any).ab_test_enabled;
+      setAbTestEnabled(abEnabled);
+      setAbSectionOpen(abEnabled || !!(draft as any).ab_subject_b || !!(draft as any).ab_body_text_b);
+      setAbSubjectB((draft as any).ab_subject_b ?? "");
+      setAbBodyHtmlB((draft as any).ab_body_html_b ?? "");
+      setAbBodyTextB((draft as any).ab_body_text_b ?? "");
+      setAbTrafficSplit(typeof (draft as any).ab_traffic_split === 'number' ? (draft as any).ab_traffic_split : 50);
+      const metric = (draft as any).ab_winner_metric;
+      setAbWinnerMetric(metric === 'click_rate' || metric === 'reply_rate' ? metric : 'open_rate');
 
       // Load recipients. Support rows without person_id (e.g. added from Campaign Details) for all campaign types.
       const isContentOnlyEdit = ['sending', 'completed'].includes((draft as any).status?.toLowerCase?.() ?? '');
@@ -1555,22 +1608,28 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         ? businessProfile.email_signature
         : `<br><br><p>Best regards,<br><strong>${userProfile?.full_name || 'Team'}</strong><br>${userProfile?.job_title ? `${userProfile.job_title}<br>` : ''}${businessProfile?.company_name || ''}</p>`;
 
+      // Use A or B variant when A/B test is enabled
+      const useVariantB = abTestEnabled && testEmailVariant === 'B' && (abSubjectB?.trim() || abBodyTextB?.trim());
+      const subjectForTest = useVariantB ? (abSubjectB || subject) : subject;
+      const bodyHtmlForTest = useVariantB
+        ? (abBodyHtmlB || (abBodyTextB ? `<p>${abBodyTextB.replace(/\n/g, '</p><p>')}</p>` : bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`))
+        : (bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`);
+      const bodyTextForTest = useVariantB ? (abBodyTextB || bodyText) : bodyText;
+
       // Use personalized email if available, otherwise use template with variables
       let testSubject: string;
       let testBodyHtml: string;
       let testBodyText: string;
 
-      if (hasPersonalizedEmail) {
+      if (hasPersonalizedEmail && !useVariantB) {
         const personalized = personalizedEmails[testPerson.id];
         testSubject = personalized.subject;
-        // Don't append signature - backend's renderEmailTemplate will add it with proper branding
         testBodyHtml = personalized.bodyHtml;
         testBodyText = personalized.bodyText;
       } else {
-        testSubject = personalizeText(subject, testPerson);
-        // Don't append signature - backend's renderEmailTemplate will add it with proper branding
-        testBodyHtml = personalizeText(bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`, testPerson);
-        testBodyText = personalizeText(bodyText, testPerson);
+        testSubject = personalizeText(subjectForTest, testPerson);
+        testBodyHtml = personalizeText(bodyHtmlForTest, testPerson);
+        testBodyText = personalizeText(bodyTextForTest, testPerson);
       }
 
       const { data: invokeData, error } = await supabase.functions.invoke('send-crm-email', {
@@ -1601,12 +1660,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
       toast({
         title: "Test email sent",
-        description: `Test email sent to ${testEmailAddress}${hasPersonalizedEmail ? ` (personalized for ${testPerson.first_name} ${testPerson.last_name})` : ` (template-based for ${testPerson.first_name} ${testPerson.last_name})`}`,
+        description: `Test email (Variant ${testEmailVariant}) sent to ${testEmailAddress}${hasPersonalizedEmail && !useVariantB ? ` (personalized for ${testPerson.first_name} ${testPerson.last_name})` : ` (for ${testPerson.first_name} ${testPerson.last_name})`}`,
       });
 
       setTestEmailDialogOpen(false);
       setTestEmailAddress("");
       setTestRecipientId(null);
+      setTestEmailVariant('A');
     } catch (error: any) {
       console.error('Error sending test email:', error);
       // Extract more detailed error message
@@ -1777,6 +1837,12 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             auto_follow_up_enabled: autoFollowUpEnabled,
             follow_up_sequence_id: followUpSequenceId || null,
             updated_at: new Date().toISOString(),
+            ab_test_enabled: abTestEnabled,
+            ab_subject_b: abTestEnabled ? (abSubjectB || null) : null,
+            ab_body_html_b: abTestEnabled ? (abBodyHtmlB || null) : null,
+            ab_body_text_b: abTestEnabled ? (abBodyTextB || null) : null,
+            ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
+            ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
           })
           .eq('id', draftId)
           .select()
@@ -1808,6 +1874,12 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             tags: campaignTags,
             auto_follow_up_enabled: autoFollowUpEnabled,
             follow_up_sequence_id: followUpSequenceId || null,
+            ab_test_enabled: abTestEnabled,
+            ab_subject_b: abTestEnabled ? (abSubjectB || null) : null,
+            ab_body_html_b: abTestEnabled ? (abBodyHtmlB || null) : null,
+            ab_body_text_b: abTestEnabled ? (abBodyTextB || null) : null,
+            ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
+            ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
           })
           .select()
           .single();
@@ -1816,20 +1888,31 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         campaign = newCampaign;
       }
 
+      const useAbSend = abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
+      const bodyHtmlASend = bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
+      const bodyHtmlBSend = abBodyHtmlB || (abBodyTextB ? `<p>${abBodyTextB.replace(/\n/g, '</p><p>')}</p>` : bodyHtmlASend);
+      const bodyTextBSend = abBodyTextB || bodyText;
       // Create recipients with personalized content (person_id must be a real UUID; synthetic "rec-*" ids are null)
       const recipients = recipientsToUse
         .filter(person => person.email) // Only include people with emails
-        .map((person: any) => ({
-          campaign_id: campaign.id,
-          person_id: personIdForDb(person),
-          email: person.email,
-          name: `${person.first_name} ${person.last_name}`.trim(),
-          personalized_subject: personalizeText(subject, person),
-          personalized_body_html: personalizeText(bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`, person),
-          personalized_body_text: personalizeText(bodyText, person),
-          status: 'pending',
-          email_period: 'new', // Mark as new email
-        }));
+        .map((person: any) => {
+          const variant = useAbSend ? (Math.random() * 100 < abTrafficSplit ? 'A' : 'B') : null;
+          const subj = variant === 'B' ? (abSubjectB || subject) : subject;
+          const html = variant === 'B' ? bodyHtmlBSend : bodyHtmlASend;
+          const text = variant === 'B' ? bodyTextBSend : bodyText;
+          return {
+            campaign_id: campaign.id,
+            person_id: personIdForDb(person),
+            email: person.email,
+            name: `${person.first_name} ${person.last_name}`.trim(),
+            personalized_subject: personalizeText(subj, person),
+            personalized_body_html: personalizeText(html, person),
+            personalized_body_text: personalizeText(text, person),
+            status: 'pending',
+            email_period: 'new', // Mark as new email
+            ...(variant && { ab_variant: variant }),
+          };
+        });
 
       const { error: recipientsError } = await supabase
         .from('email_campaign_recipients')
@@ -1897,6 +1980,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setSenderProfileId("");
       setSelectedTags([]);
       setTemplate('blank');
+      setAbTestEnabled(false);
+      setAbSectionOpen(false);
+      setAbSubjectB("");
+      setAbBodyHtmlB("");
+      setAbBodyTextB("");
+      setAbTrafficSplit(50);
+      setAbWinnerMetric('open_rate');
       setAttachments([]);
       setEnableAutoResponder(false);
       setPersonalizedEmails({});
@@ -2324,6 +2414,99 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             />
           </div>
 
+          <Collapsible open={abSectionOpen} onOpenChange={setAbSectionOpen}>
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <CollapsibleTrigger asChild>
+                    <Button type="button" variant="ghost" size="sm" className="flex items-center gap-2 font-medium">
+                      <FlaskConical className="h-4 w-4" />
+                      A/B test (body)
+                      {abSectionOpen ? null : <ChevronDown className="h-4 w-4" />}
+                    </Button>
+                  </CollapsibleTrigger>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="ab-test-enabled"
+                      checked={abTestEnabled}
+                      onCheckedChange={(checked) => {
+                        setAbTestEnabled(checked);
+                        if (checked) setAbSectionOpen(true);
+                      }}
+                    />
+                    <Label htmlFor="ab-test-enabled" className="text-sm font-normal cursor-pointer text-muted-foreground">
+                      Use A/B test when sending
+                    </Label>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Split:</span>
+                  <Select value={String(abTrafficSplit)} onValueChange={(v) => setAbTrafficSplit(Number(v))}>
+                    <SelectTrigger className="w-[100px] h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="50">50% / 50%</SelectItem>
+                      <SelectItem value="60">60% / 40%</SelectItem>
+                      <SelectItem value="70">70% / 30%</SelectItem>
+                      <SelectItem value="80">80% / 20%</SelectItem>
+                      <SelectItem value="33">33% / 67%</SelectItem>
+                      <SelectItem value="40">40% / 60%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground">Winner by:</span>
+                  <Select value={abWinnerMetric} onValueChange={(v: 'open_rate' | 'click_rate' | 'reply_rate') => setAbWinnerMetric(v)}>
+                    <SelectTrigger className="w-[120px] h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open_rate">Open rate</SelectItem>
+                      <SelectItem value="click_rate">Click rate</SelectItem>
+                      <SelectItem value="reply_rate">Reply rate</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <CollapsibleContent className="space-y-3 pt-2">
+                <div className="rounded-md bg-muted/50 p-3 space-y-2 text-sm">
+                  <p className="font-medium text-foreground">How A/B testing works</p>
+                  <ul className="text-muted-foreground space-y-1 list-disc list-inside">
+                    <li><strong>Variant A</strong> = subject and email body in the section above (main compose).</li>
+                    <li><strong>Variant B</strong> = subject and body in the fields below.</li>
+                    <li>When you send, each recipient gets either A or B at random (e.g. 50% / 50%).</li>
+                    <li>After the campaign, open the campaign in Campaigns to see which variant won (by open rate, click rate, or reply rate).</li>
+                  </ul>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    <strong>Preview Variant B:</strong> Scroll down to the &quot;Preview for [recipient]&quot; section (below the email body) — when A/B is on and Variant B has content, you&apos;ll see <strong>Variant A</strong> and <strong>Variant B</strong> tabs there.
+                  </p>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    <strong>Test Variant B:</strong> Click &quot;Send Test Email&quot; (or &quot;Test Email&quot;), then choose &quot;Send test as: Variant B&quot; to send yourself the alternative. Send both A and B to compare in your inbox before going live.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Variant B — Subject</Label>
+                  <Input
+                    value={abSubjectB}
+                    onChange={(e) => setAbSubjectB(e.target.value)}
+                    placeholder="Alternative subject line"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Variant B — Body</Label>
+                  <Textarea
+                    value={abBodyTextB}
+                    onChange={(e) => {
+                      setAbBodyTextB(e.target.value);
+                      setAbBodyHtmlB(e.target.value ? `<p>${e.target.value.replace(/\n/g, '</p><p>')}</p>` : "");
+                    }}
+                    placeholder="Alternative email body (same placeholders: {{firstName}}, {{companyName}}, etc.)"
+                    className="min-h-[120px] bg-background"
+                  />
+                </div>
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
+
           <div className="space-y-2">
             <Label htmlFor="sender">Send From</Label>
             <Select 
@@ -2659,7 +2842,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           />
 
           <div className="space-y-2">
-            <Label htmlFor="subject">Subject Line</Label>
+            {abTestEnabled && (
+              <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                <span className="rounded bg-primary/10 px-2 py-0.5">Variant A</span>
+                <span className="text-muted-foreground font-normal">— main email (subject & body below)</span>
+              </div>
+            )}
+            <Label htmlFor="subject">{abTestEnabled ? 'Variant A — Subject' : 'Subject Line'}</Label>
             <Input
               id="subject"
               value={subject}
@@ -2669,7 +2858,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           </div>
 
           <div className="flex justify-between items-center">
-            <Label>Email Content</Label>
+            <Label>{abTestEnabled ? 'Variant A — Email body' : 'Email Content'}</Label>
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -2746,7 +2935,6 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
           {previewPerson && (() => {
             const sp = senderProfiles.find(p => p.id === senderProfileId);
-            // When a sender profile is selected (e.g. TalkWeb), use that profile's branding and signature; otherwise use business (default)
             const previewTemplate: EmailTemplatePreviewStyle =
               (sp?.template_style as EmailTemplatePreviewStyle) ||
               (businessProfile?.email_template_style as EmailTemplatePreviewStyle) ||
@@ -2759,13 +2947,16 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             const previewSenderTitle = sp?.sender_title || businessProfile?.email_sender_title || userProfile?.job_title || '';
             const previewSenderEmail = sp?.sender_email || businessProfile?.email_sender_email || userProfile?.email || '';
             const previewFooterText = sp?.footer_text || businessProfile?.email_footer_text || undefined;
-            // Footer image = company logo (same as Email Branding). Founder image = person photo in signature.
             const previewFooterImage = sp?.footer_logo_url || sp?.logo_url || businessProfile?.email_footer_logo_url || businessProfile?.email_logo_url || undefined;
             const previewWebsiteUrl = sp?.website_url || businessProfile?.website || undefined;
             const previewSenderImageUrl = sp?.sender_image_url || businessProfile?.email_sender_image_url || userProfile?.avatar_url || undefined;
             const previewSignature = (sp?.signature ?? businessProfile?.email_signature ?? '')?.trim() || undefined;
-            const previewSubject = personalizeText(subject, previewPerson) || 'No subject';
-            const previewBody = personalizeText(bodyHtml || previewBodyToHtml(bodyText), previewPerson) || '<p>Your email body will appear here...</p>';
+            const previewSubjectA = personalizeText(subject, previewPerson) || 'No subject';
+            const previewBodyA = personalizeText(bodyHtml || previewBodyToHtml(bodyText), previewPerson) || '<p>Your email body will appear here...</p>';
+            const bodyHtmlB = abBodyHtmlB || (abBodyTextB ? `<p>${abBodyTextB.replace(/\n/g, '</p><p>')}</p>` : '');
+            const previewSubjectB = personalizeText(abSubjectB || subject, previewPerson) || 'No subject';
+            const previewBodyB = personalizeText(bodyHtmlB || previewBodyA, previewPerson) || '<p>Variant B body...</p>';
+            const showAbPreviews = (abSubjectB?.trim() || abBodyTextB?.trim()) ? true : false;
 
             return (
               <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
@@ -2774,29 +2965,86 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                   Preview for {previewPerson.first_name} {previewPerson.last_name}
                   {sp && <Badge variant="secondary" className="text-xs">{sp.name}</Badge>}
                 </div>
-                <div className="text-sm">
-                  <div className="mb-2">
-                    <strong>Subject:</strong> {previewSubject}
-                  </div>
-                </div>
-                <div className="rounded-lg border bg-muted/20 p-3 overflow-auto max-h-[500px]">
-                  <EmailTemplatePreview
-                    template={previewTemplate}
-                    brandColor={previewBrandColor}
-                    logoUrl={previewLogoUrl}
-                    companyName={previewCompanyName}
-                    headerName={previewHeaderName}
-                    senderName={previewSenderName}
-                    senderTitle={previewSenderTitle}
-                    senderEmail={previewSenderEmail}
-                    footerText={previewFooterText}
-                    footerImageUrl={previewFooterImage}
-                    senderImageUrl={previewSenderImageUrl}
-                    websiteUrl={previewWebsiteUrl}
-                    signature={previewSignature}
-                    bodyHtml={previewBody}
-                  />
-                </div>
+                {showAbPreviews ? (
+                  <Tabs defaultValue="previewA" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="previewA">Variant A</TabsTrigger>
+                      <TabsTrigger value="previewB">Variant B</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="previewA" className="mt-3 space-y-2">
+                      <div className="text-sm">
+                        <strong>Subject:</strong> {previewSubjectA}
+                      </div>
+                      <div className="rounded-lg border bg-muted/20 p-3 overflow-auto max-h-[400px]">
+                        <EmailTemplatePreview
+                          template={previewTemplate}
+                          brandColor={previewBrandColor}
+                          logoUrl={previewLogoUrl}
+                          companyName={previewCompanyName}
+                          headerName={previewHeaderName}
+                          senderName={previewSenderName}
+                          senderTitle={previewSenderTitle}
+                          senderEmail={previewSenderEmail}
+                          footerText={previewFooterText}
+                          footerImageUrl={previewFooterImage}
+                          senderImageUrl={previewSenderImageUrl}
+                          websiteUrl={previewWebsiteUrl}
+                          signature={previewSignature}
+                          bodyHtml={previewBodyA}
+                        />
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="previewB" className="mt-3 space-y-2">
+                      <div className="text-sm">
+                        <strong>Subject:</strong> {previewSubjectB}
+                      </div>
+                      <div className="rounded-lg border bg-muted/20 p-3 overflow-auto max-h-[400px]">
+                        <EmailTemplatePreview
+                          template={previewTemplate}
+                          brandColor={previewBrandColor}
+                          logoUrl={previewLogoUrl}
+                          companyName={previewCompanyName}
+                          headerName={previewHeaderName}
+                          senderName={previewSenderName}
+                          senderTitle={previewSenderTitle}
+                          senderEmail={previewSenderEmail}
+                          footerText={previewFooterText}
+                          footerImageUrl={previewFooterImage}
+                          senderImageUrl={previewSenderImageUrl}
+                          websiteUrl={previewWebsiteUrl}
+                          signature={previewSignature}
+                          bodyHtml={previewBodyB}
+                        />
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                ) : (
+                  <>
+                    <div className="text-sm">
+                      <div className="mb-2">
+                        <strong>Subject:</strong> {previewSubjectA}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border bg-muted/20 p-3 overflow-auto max-h-[500px]">
+                      <EmailTemplatePreview
+                        template={previewTemplate}
+                        brandColor={previewBrandColor}
+                        logoUrl={previewLogoUrl}
+                        companyName={previewCompanyName}
+                        headerName={previewHeaderName}
+                        senderName={previewSenderName}
+                        senderTitle={previewSenderTitle}
+                        senderEmail={previewSenderEmail}
+                        footerText={previewFooterText}
+                        footerImageUrl={previewFooterImage}
+                        senderImageUrl={previewSenderImageUrl}
+                        websiteUrl={previewWebsiteUrl}
+                        signature={previewSignature}
+                        bodyHtml={previewBodyA}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             );
           })()}
@@ -2970,15 +3218,18 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           if (!open) {
             setTestEmailAddress("");
             setTestRecipientId(null);
+            setTestEmailVariant('A');
           }
         }}>
           <AlertDialogContent className="sm:max-w-[500px]">
             <AlertDialogHeader>
               <AlertDialogTitle>Send Test Email</AlertDialogTitle>
               <AlertDialogDescription>
-                Send a test email to preview how your campaign will look. {usePersonalizedEmails && Object.keys(personalizedEmails).length > 0 
-                  ? 'You can select which recipient\'s personalized email to test.'
-                  : 'The email will use the template with variables personalized for the selected recipient.'}
+                Send a test email to preview how your campaign will look.
+                {abTestEnabled && " Choose Variant A or B below to test either version."}
+                {usePersonalizedEmails && Object.keys(personalizedEmails).length > 0 
+                  ? ' You can select which recipient\'s personalized email to test.'
+                  : ' The email will use the template with variables personalized for the selected recipient.'}
               </AlertDialogDescription>
             </AlertDialogHeader>
             
@@ -2993,6 +3244,33 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 placeholder="your@email.com"
               />
               </div>
+
+              {abTestEnabled && (
+                <div className="space-y-2">
+                  <Label>Send test as</Label>
+                  <Select
+                    value={testEmailVariant}
+                    onValueChange={(v: 'A' | 'B') => setTestEmailVariant(v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose variant" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="A">Variant A (main subject & body)</SelectItem>
+                      <SelectItem
+                        value="B"
+                        disabled={!abSubjectB?.trim() && !abBodyTextB?.trim()}
+                      >
+                        Variant B (alternative subject & body)
+                        {(!abSubjectB?.trim() && !abBodyTextB?.trim()) && " — add content above"}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Send yourself both variants to compare before launching the campaign.
+                  </p>
+                </div>
+              )}
 
               {recipientsToUse.length > 1 && (
                 <div className="space-y-2">
