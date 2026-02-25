@@ -89,10 +89,10 @@ function bodyTextToHtml(text: string): string {
     const listMatch = lines.every((l) => /^(\s*)([-*•]\s*|(\d+\.)\s)/.test(l) || l === '');
     if (listMatch && lines.some(Boolean)) {
       const items = lines.filter(Boolean).map((l) => l.replace(/^(\s*)([-*•]\s*|(\d+\.)\s)/, '').trim());
-      if (items.length) out.push('<ul style="margin:8px 0;padding-left:20px;">' + items.map((i) => `<li style="margin-bottom:4px;">${escapeHtml(i)}</li>`).join('') + '</ul>');
+      if (items.length) out.push('<ul style="margin:12px 0;padding-left:20px;">' + items.map((i) => `<li style="margin-bottom:6px;">${escapeHtml(i)}</li>`).join('') + '</ul>');
     } else {
       const para = lines.map(escapeHtml).join('<br>\n');
-      if (para) out.push(`<p style="margin:0 0 8px 0;line-height:1.4;">${para}</p>`);
+      if (para) out.push(`<p style="margin:0 0 14px 0;line-height:1.5;">${para}</p>`);
     }
   }
   return out.join('\n');
