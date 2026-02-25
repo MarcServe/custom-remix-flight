@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical, Phone, Plus, Settings, FileText, Edit, Trash2, Building2, Copy, Save, FolderInput, CalendarClock, RotateCcw } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical, Phone, Plus, Settings, FileText, Edit, Trash2, Building2, Copy, Save, FolderInput, CalendarClock, RotateCcw, RefreshCw } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +56,8 @@ interface Campaign {
   body_html_template?: string;
   body_text_template?: string;
   tags?: string[];
+  auto_follow_up_enabled?: boolean;
+  follow_up_sequence_id?: string | null;
 }
 
 interface CampaignRecipient {
@@ -109,6 +112,20 @@ export default function Campaigns() {
   const [rescheduleDateTime, setRescheduleDateTime] = useState("");
   const [retryingFailed, setRetryingFailed] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
+  const [enrollFollowUpSequenceId, setEnrollFollowUpSequenceId] = useState<string>("");
+  const [enrollingFollowUp, setEnrollingFollowUp] = useState(false);
+
+  const { data: followUpSequences = [] } = useQuery({
+    queryKey: ['email-sequences'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('email_sequences')
+        .select('id, name')
+        .order('name');
+      if (error) return [];
+      return (data || []) as { id: string; name: string }[];
+    },
+  });
 
   const { data: campaigns, isLoading } = useQuery({
     queryKey: ['email-campaigns'],
@@ -687,6 +704,121 @@ export default function Campaigns() {
       toast.error(e?.message ?? 'Failed to retry');
     } finally {
       setRetryingFailed(false);
+    }
+  };
+
+  const handleEnrollSentCampaignInFollowUp = async () => {
+    const sequenceId = enrollFollowUpSequenceId?.trim() || selectedCampaignData?.follow_up_sequence_id;
+    if (!selectedCampaign || !sequenceId) {
+      toast.error('Select a follow-up sequence first.');
+      return;
+    }
+    setEnrollingFollowUp(true);
+    try {
+      const { data: sentRecipients, error: recErr } = await supabase
+        .from('email_campaign_recipients')
+        .select('id, person_id, personalized_subject, personalized_body_text, sent_at')
+        .eq('campaign_id', selectedCampaign)
+        .in('status', ['sent', 'opened', 'clicked'])
+        .not('person_id', 'is', null);
+      if (recErr) throw recErr;
+      if (!sentRecipients?.length) {
+        toast.error('No sent recipients with contacts found. Follow-up requires recipients linked to people (company).');
+        return;
+      }
+      const personIds = [...new Set(sentRecipients.map((r: any) => r.person_id).filter(Boolean))];
+      const { data: peopleData, error: peopleErr } = await supabase
+        .from('people')
+        .select('id, company_id')
+        .in('id', personIds);
+      if (peopleErr || !peopleData?.length) {
+        toast.error('Could not load contact companies.');
+        return;
+      }
+      const companyByPerson = new Map<string, string>(peopleData.map((p: any) => [p.id, p.company_id]).filter(([, cid]) => cid));
+      const { data: seqData, error: seqErr } = await supabase
+        .from('email_sequences')
+        .select('steps')
+        .eq('id', sequenceId)
+        .single();
+      if (seqErr || !seqData) throw new Error('Sequence not found');
+      const steps = Array.isArray(seqData.steps) ? seqData.steps : [];
+      const personalizedEmails: { stepNumber: number; subject: string; body: string; delayDays: number }[] = [
+        { stepNumber: 0, subject: '(Campaign)', body: '', delayDays: 0 },
+      ];
+      steps.forEach((step: { subject?: string; body?: string; delayDays?: number }, i: number) => {
+        personalizedEmails.push({
+          stepNumber: i + 1,
+          subject: step?.subject ?? `Follow-up ${i + 1}`,
+          body: step?.body ?? '',
+          delayDays: typeof step?.delayDays === 'number' ? step.delayDays : (i === 0 ? 3 : (i + 1) * 2),
+        });
+      });
+      const { data: existing } = await supabase
+        .from('company_sequences')
+        .select('company_id')
+        .eq('campaign_id', selectedCampaign);
+      const existingCompanies = new Set((existing || []).map((r: any) => r.company_id));
+      let enrolled = 0;
+      const companyToFirstRecipient = new Map<string, any>();
+      for (const r of sentRecipients as any[]) {
+        const cid = companyByPerson.get(r.person_id);
+        if (!cid || existingCompanies.has(cid)) continue;
+        if (!companyToFirstRecipient.has(cid)) companyToFirstRecipient.set(cid, r);
+      }
+      for (const [companyId, recipient] of companyToFirstRecipient) {
+        const { data: newCs, error: csErr } = await supabase
+          .from('company_sequences')
+          .insert({
+            company_id: companyId,
+            sequence_id: sequenceId,
+            campaign_id: selectedCampaign,
+            current_step: 0,
+            personalized_emails: personalizedEmails,
+            status: 'active',
+            automation_rules: {
+              enabled: true,
+              rules: [
+                { type: 'no_reply_after_open', wait_hours: 48 },
+                { type: 'no_open', wait_hours: 72 },
+              ],
+            },
+            metadata: { first_email_sent_at: recipient.sent_at || new Date().toISOString(), campaign_recipient_id: recipient.id },
+          })
+          .select('id')
+          .single();
+        if (!csErr && newCs?.id) {
+          await supabase.from('email_activities').insert({
+            company_sequence_id: newCs.id,
+            contact_id: null,
+            step_number: 0,
+            subject: recipient.personalized_subject,
+            body: recipient.personalized_body_text ?? null,
+            status: 'sent',
+            sent_at: recipient.sent_at || new Date().toISOString(),
+            metadata: { campaign_id: selectedCampaign, campaign_recipient_id: recipient.id },
+          });
+          enrolled++;
+          existingCompanies.add(companyId);
+        }
+      }
+      await supabase
+        .from('email_campaigns')
+        .update({ auto_follow_up_enabled: true, follow_up_sequence_id: sequenceId })
+        .eq('id', selectedCampaign);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
+      ]);
+      toast.success(
+        enrolled > 0
+          ? `Enrolled ${enrolled} company/companies in follow-up sequence. They will receive reminder steps per sequence rules.`
+          : 'Campaign is now set for follow-up. All sent recipients were already enrolled.'
+      );
+      setEnrollFollowUpSequenceId('');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to enroll in follow-up sequence');
+    } finally {
+      setEnrollingFollowUp(false);
     }
   };
 
@@ -1287,6 +1419,64 @@ export default function Campaigns() {
                   <FileText className="h-4 w-4 mr-1" />
                   Edit content
                 </Button>
+              </div>
+            )}
+
+            {/* Auto follow-up for sent campaigns: show status or enroll in sequence */}
+            {(selectedCampaignData?.status?.toLowerCase() === 'completed' || selectedCampaignData?.status?.toLowerCase() === 'sending') &&
+             (selectedCampaignData as Campaign).sent_count > 0 && (
+              <div className="rounded-lg border bg-muted/30 px-4 py-3 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <RefreshCw className="h-4 w-4 text-primary shrink-0" />
+                  Auto follow-up / sequences
+                </div>
+                {selectedCampaignData.auto_follow_up_enabled && selectedCampaignData.follow_up_sequence_id && (
+                  <p className="text-sm text-muted-foreground">
+                    Follow-up sequence: <strong>{followUpSequences.find(s => s.id === selectedCampaignData.follow_up_sequence_id)?.name ?? 'Selected sequence'}</strong>
+                    — Recipients are (or will be) enrolled for reminder steps when they don’t reply.
+                  </p>
+                )}
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {selectedCampaignData.auto_follow_up_enabled && selectedCampaignData.follow_up_sequence_id
+                      ? 'Add any sent recipients who weren’t enrolled yet (e.g. sent before follow-up was enabled).'
+                      : 'Enroll this campaign\'s sent recipients in a follow-up sequence so they get reminder emails (no-reply rules). One enrollment per company.'}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={enrollFollowUpSequenceId || (selectedCampaignData.follow_up_sequence_id || 'none')}
+                      onValueChange={(v) => setEnrollFollowUpSequenceId(v === 'none' ? '' : v)}
+                      disabled={enrollingFollowUp}
+                    >
+                      <SelectTrigger className="w-[220px]">
+                        <SelectValue placeholder="Select sequence..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Select sequence...</SelectItem>
+                        {followUpSequences.map((seq) => (
+                          <SelectItem key={seq.id} value={seq.id}>
+                            {seq.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleEnrollSentCampaignInFollowUp}
+                      disabled={(!enrollFollowUpSequenceId && !selectedCampaignData.follow_up_sequence_id) || enrollingFollowUp || followUpSequences.length === 0}
+                    >
+                      {enrollingFollowUp ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4 mr-1" />
+                      )}
+                      {selectedCampaignData.auto_follow_up_enabled && selectedCampaignData.follow_up_sequence_id
+                        ? 'Enroll remaining in sequence'
+                        : 'Enroll in follow-up sequence'}
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
 

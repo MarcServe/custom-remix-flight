@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2, Search, Plus, RefreshCw, CalendarDays } from "lucide-react";
+import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2, Search, Plus, RefreshCw, CalendarDays, Send, Megaphone } from "lucide-react";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
 import BulkEmailDialog from "@/components/BulkEmailDialog";
@@ -102,6 +102,8 @@ export default function Companies() {
   const [dateAddedTo, setDateAddedTo] = useState<string>('');
   const [dateAddedFromTime, setDateAddedFromTime] = useState<string>('');
   const [dateAddedToTime, setDateAddedToTime] = useState<string>('');
+  const [sentInFilter, setSentInFilter] = useState<'all' | 'sent-campaign' | 'sent-newsletter' | 'not-sent'>('all');
+  const [selectedCampaignTagFilters, setSelectedCampaignTagFilters] = useState<string[]>([]);
   const [companiesPage, setCompaniesPage] = useState(1);
   const [companiesPageSize, setCompaniesPageSize] = useState(50);
   const [emailRecipient, setEmailRecipient] = useState<{
@@ -190,6 +192,91 @@ export default function Companies() {
       return new Set((data || []).map(p => p.email?.toLowerCase()).filter(Boolean));
     },
   });
+
+  // Emails that have been sent in a campaign (with campaign tags for filtering)
+  const { data: campaignSentData } = useQuery({
+    queryKey: ["campaign-sent-emails"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("email_campaign_recipients")
+        .select("email, email_campaigns(id, name, tags)")
+        .not("sent_at", "is", null);
+      if (error) return { emails: new Set<string>(), emailToTags: new Map<string, string[]>(), allTags: new Set<string>() };
+      const emails = new Set<string>();
+      const emailToTags = new Map<string, string[]>();
+      const allTags = new Set<string>();
+      (data || []).forEach((r: any) => {
+        const email = r.email?.toLowerCase?.()?.trim();
+        if (!email) return;
+        emails.add(email);
+        const tags = (r.email_campaigns?.tags && Array.isArray(r.email_campaigns.tags)) ? r.email_campaigns.tags : [];
+        tags.forEach((t: string) => allTags.add(String(t).trim()));
+        const existing = emailToTags.get(email) || [];
+        tags.forEach((t: string) => { if (t && !existing.includes(t)) existing.push(t); });
+        emailToTags.set(email, existing);
+      });
+      return { emails, emailToTags, allTags: Array.from(allTags).sort() };
+    },
+  });
+
+  // Emails that have been sent a newsletter
+  const { data: newsletterSentEmails } = useQuery({
+    queryKey: ["newsletter-sent-emails"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("newsletter_sends")
+        .select("newsletter_subscribers!inner(email)")
+        .not("sent_at", "is", null);
+      if (error) return new Set<string>();
+      const set = new Set<string>();
+      (data || []).forEach((row: any) => {
+        const email = row?.newsletter_subscribers?.email?.toLowerCase?.()?.trim();
+        if (email) set.add(email);
+      });
+      return set;
+    },
+  });
+
+  // People emails by company_id (for "sent in campaign/newsletter" filter)
+  const { data: peopleEmailsByCompany } = useQuery({
+    queryKey: ["people-emails-by-company"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("people")
+        .select("company_id, email")
+        .not("email", "is", null)
+        .not("company_id", "is", null);
+      const map = new Map<string, string[]>();
+      (data || []).forEach((p: any) => {
+        if (!p.company_id || !p.email) return;
+        const email = p.email.toLowerCase().trim();
+        const list = map.get(p.company_id) || [];
+        if (!list.includes(email)) list.push(email);
+        map.set(p.company_id, list);
+      });
+      return map;
+    },
+  });
+
+  const emailsSentInCampaign = campaignSentData?.emails ?? new Set<string>();
+  const emailToCampaignTags = campaignSentData?.emailToTags ?? new Map<string, string[]>();
+  const allCampaignTagsFromCampaigns: string[] = Array.isArray(campaignSentData?.allTags) ? campaignSentData.allTags : [];
+  const emailsSentInNewsletter = newsletterSentEmails ?? new Set<string>();
+
+  // Collect all emails for a company (for sent-in filter)
+  const getCompanyEmails = (company: Company): string[] => {
+    const out: string[] = [];
+    const add = (e: string | null | undefined) => {
+      if (e && typeof e === "string") {
+        const lower = e.toLowerCase().trim();
+        if (lower && !out.includes(lower)) out.push(lower);
+      }
+    };
+    add(company.general_email ?? (company as any).generalEmail);
+    (company.contacts || []).forEach((c: any) => add(c?.email));
+    (peopleEmailsByCompany?.get(company.id) || []).forEach(add);
+    return out;
+  };
 
   // Check if company is already in contacts
   const isCompanyInContacts = (company: Company) => {
@@ -1339,6 +1426,34 @@ export default function Companies() {
       }
     }
 
+    // Sent in campaign / newsletter filter
+    if (sentInFilter !== 'all') {
+      const companyEmails = getCompanyEmails(company);
+      const anySentCampaign = companyEmails.some(e => emailsSentInCampaign.has(e));
+      const anySentNewsletter = companyEmails.some(e => emailsSentInNewsletter.has(e));
+      switch (sentInFilter) {
+        case 'sent-campaign':
+          if (!anySentCampaign) return false;
+          break;
+        case 'sent-newsletter':
+          if (!anySentNewsletter) return false;
+          break;
+        case 'not-sent':
+          if (anySentCampaign || anySentNewsletter) return false;
+          break;
+      }
+    }
+
+    // Campaign/Newsletter tag filter: show companies whose email was sent a campaign with any of these tags
+    if (selectedCampaignTagFilters.length > 0) {
+      const companyEmails = getCompanyEmails(company);
+      const hasMatchingTag = companyEmails.some(email => {
+        const tags = emailToCampaignTags.get(email) || [];
+        return selectedCampaignTagFilters.some(selected => tags.includes(selected));
+      });
+      if (!hasMatchingTag) return false;
+    }
+
     // Date added filter
     if (dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) {
       const created = company.created_at ? new Date(company.created_at).getTime() : 0;
@@ -1445,7 +1560,7 @@ export default function Companies() {
     });
     
     return sorted;
-  }, [baseCompanies, selectedTagFilters, emailStatusFilter, peopleEmails, searchQuery, sourceFilter, dateAddedPreset, dateAddedFrom, dateAddedTo, dateAddedFromTime, dateAddedToTime]);
+  }, [baseCompanies, selectedTagFilters, emailStatusFilter, peopleEmails, searchQuery, sourceFilter, sentInFilter, selectedCampaignTagFilters, emailsSentInCampaign, emailsSentInNewsletter, emailToCampaignTags, peopleEmailsByCompany, dateAddedPreset, dateAddedFrom, dateAddedTo, dateAddedFromTime, dateAddedToTime]);
 
   const totalCompaniesPages = Math.max(1, Math.ceil((filteredCompanies?.length ?? 0) / companiesPageSize));
   const paginatedCompanies = useMemo(() => {
@@ -1471,7 +1586,7 @@ export default function Companies() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCompaniesPage(1);
-  }, [searchQuery, selectedTagFilters, emailStatusFilter, sourceFilter, dateAddedPreset, dateAddedFrom, dateAddedTo, dateAddedFromTime, dateAddedToTime]);
+  }, [searchQuery, selectedTagFilters, emailStatusFilter, sentInFilter, selectedCampaignTagFilters, sourceFilter, dateAddedPreset, dateAddedFrom, dateAddedTo, dateAddedFromTime, dateAddedToTime]);
 
   const handleTagFilterClick = (tag: string) => {
     setSelectedTagFilters(prev => 
@@ -1549,227 +1664,18 @@ export default function Companies() {
   };
 
   const handleBulkEmailFromCompanies = async () => {
-    const selectedCompanies = filteredCompanies?.filter(c => selectedCompanyIds.has(c.id)) || [];
-    const companiesWithEmail = selectedCompanies.filter(company => {
-      const match = getCompanyEmailContact(company);
-      return !!match?.email;
-    });
-
-    if (companiesWithEmail.length === 0) {
+    // Use the companies from the grouping dialog (same 731 shown in the modal), not filteredCompanies/selectedCompanyIds,
+    // which can be paginated or stale and would open compose with wrong count or fail.
+    const companyIds = groupingDialogCompanies.map((c) => c.id);
+    if (companyIds.length === 0) {
       toast({
-        title: "No emails available",
-        description: "Selected companies don't have email addresses. Please extract emails first or add contacts.",
+        title: "No companies selected",
+        description: "Select companies and try again.",
         variant: "destructive",
       });
       return;
     }
-
-    try {
-      // Get all people from selected companies, or create temporary entries for companies with general_email
-      const peopleForEmail: Array<{
-        id: string;
-        first_name: string;
-        last_name: string;
-        email: string;
-        company_id?: string;
-        companies?: {
-          id?: string;
-          name?: string;
-          tags?: string[];
-        };
-      }> = [];
-
-      // Fetch people from database for these companies
-      const companyIds = companiesWithEmail.map(c => c.id);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      const { data: existingPeople } = await supabase
-        .from('people')
-        .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
-        .in('company_id', companyIds)
-        .not('email', 'is', null);
-
-      // Create a map of company_id -> existing people for that company
-      const peopleByCompanyId = new Map<string, any[]>();
-      if (existingPeople) {
-        existingPeople.forEach((p: any) => {
-          if (p.company_id) {
-            if (!peopleByCompanyId.has(p.company_id)) {
-              peopleByCompanyId.set(p.company_id, []);
-            }
-            peopleByCompanyId.get(p.company_id)!.push(p);
-          }
-        });
-      }
-
-      // Add all existing people to the list
-      if (existingPeople) {
-        peopleForEmail.push(...existingPeople.map((p: any) => ({
-          id: p.id,
-          first_name: p.first_name || '',
-          last_name: p.last_name || '',
-          email: p.email,
-          company_id: p.company_id,
-          companies: p.companies ? {
-            id: p.companies.id,
-            name: p.companies.name,
-            tags: p.companies.tags || [],
-          } : undefined,
-        })));
-      }
-
-      // For companies without people in database, create people records using general_email or contact email
-      // Also check if we need to add additional contacts from companies that already have some people
-      const existingEmails = new Set(peopleForEmail.map(p => p.email.toLowerCase().trim()));
-      
-      for (const company of companiesWithEmail) {
-        const companyPeople = peopleByCompanyId.get(company.id) || [];
-        const emailMatch = getCompanyEmailContact(company);
-        
-        // If company has no people OR we want to add the primary contact email if not already added
-        if (emailMatch?.email && !existingEmails.has(emailMatch.email.toLowerCase().trim())) {
-          // Check if person with this email already exists (might be from a different company)
-          const { data: existingPersonByEmail } = await supabase
-            .from('people')
-            .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
-            .ilike('email', emailMatch.email)
-            .maybeSingle();
-
-          if (existingPersonByEmail) {
-            // Use existing person, but update company_id if needed
-            if (existingPersonByEmail.company_id !== company.id) {
-              await supabase
-                .from('people')
-                .update({ company_id: company.id })
-                .eq('id', existingPersonByEmail.id);
-            }
-            // Only add if not already in our list
-            if (!peopleForEmail.find(p => p.id === existingPersonByEmail.id)) {
-              peopleForEmail.push({
-                id: existingPersonByEmail.id,
-                first_name: existingPersonByEmail.first_name || '',
-                last_name: existingPersonByEmail.last_name || '',
-                email: existingPersonByEmail.email,
-                company_id: company.id,
-                companies: existingPersonByEmail.companies ? {
-                  id: existingPersonByEmail.companies.id,
-                  name: existingPersonByEmail.companies.name,
-                  tags: existingPersonByEmail.companies.tags || [],
-                } : undefined,
-              });
-              existingEmails.add(existingPersonByEmail.email.toLowerCase().trim());
-            }
-          } else {
-            // Create new person record for this company
-            const nameParts = emailMatch.type === 'contact' && emailMatch.contact?.name
-              ? emailMatch.contact.name.trim().split(' ')
-              : company.name.trim().split(' ');
-            
-            const firstName = nameParts[0] || company.name;
-            const lastName = nameParts.slice(1).join(' ') || '';
-
-            const { data: newPerson, error: createError } = await supabase
-              .from('people')
-              .insert({
-                first_name: firstName,
-                last_name: lastName,
-                email: emailMatch.email,
-                company_id: company.id,
-                user_id: user.id,
-              })
-              .select('id, first_name, last_name, email, company_id')
-              .single();
-
-            if (!createError && newPerson) {
-              peopleForEmail.push({
-                id: newPerson.id,
-                first_name: newPerson.first_name || '',
-                last_name: newPerson.last_name || '',
-                email: newPerson.email,
-                company_id: newPerson.company_id,
-                companies: {
-                  id: company.id,
-                  name: company.name,
-                  tags: company.tags || [],
-                },
-              });
-              existingEmails.add(newPerson.email.toLowerCase().trim());
-            }
-          }
-        }
-      }
-
-      if (peopleForEmail.length === 0) {
-        toast({
-          title: "No recipients found",
-          description: "Could not find email addresses for selected companies.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Now fetch full company data with overview and tags for personalization
-      const { data: companiesData } = await supabase
-        .from('companies')
-        .select('id, name, description, industry, website, enrichment_data, recent_news, funding_stage, funding_total, employee_count, tech_stack, key_executives, tags')
-        .in('id', companyIds);
-
-      // Enrich people with full company data
-      const enrichedPeople = peopleForEmail.map(person => {
-        const companyData = companiesData?.find(c => c.id === person.company_id);
-        if (companyData) {
-          // Normalize funding_total to number
-          const fundingTotal = typeof companyData.funding_total === 'string' 
-            ? (parseFloat(companyData.funding_total) || undefined)
-            : (typeof companyData.funding_total === 'number' ? companyData.funding_total : undefined);
-          
-          return {
-            id: person.id,
-            first_name: person.first_name,
-            last_name: person.last_name,
-            email: person.email,
-            company_id: person.company_id,
-            companies: {
-              id: companyData.id,
-              name: companyData.name,
-              tags: companyData.tags || [],
-              // Include all company overview data for personalization
-              description: companyData.description,
-              industry: companyData.industry,
-              website: companyData.website,
-              enrichment_data: companyData.enrichment_data,
-              recent_news: companyData.recent_news,
-              funding_stage: companyData.funding_stage,
-              funding_total: fundingTotal,
-              employee_count: companyData.employee_count,
-              tech_stack: Array.isArray(companyData.tech_stack) ? companyData.tech_stack : undefined,
-              key_executives: Array.isArray(companyData.key_executives) ? (companyData.key_executives as any[]) : undefined,
-            },
-          };
-        }
-        // Return person as-is if no company data found
-        return {
-          id: person.id,
-          first_name: person.first_name,
-          last_name: person.last_name,
-          email: person.email,
-          company_id: person.company_id,
-          companies: person.companies,
-        };
-      });
-
-      // Store enriched people data and open bulk email dialog
-      setBulkEmailPeople(enrichedPeople);
-      setBulkEmailDialogOpen(true);
-    } catch (error: any) {
-      console.error('Error preparing bulk email:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to prepare bulk email",
-        variant: "destructive",
-      });
-    }
+    await openBulkEmailForCompanyIds(companyIds);
   };
 
   const BULK_EMAIL_QUERY_BATCH = 200;
@@ -2085,7 +1991,7 @@ export default function Companies() {
               </span>
             )}
             {filteredCompanies?.length ?? 0} of {companiesTotalCount ?? baseCompanies?.length ?? 0} companies
-            {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all' || searchQuery.trim() || dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && " (filtered)"}
+            {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all' || sentInFilter !== 'all' || selectedCampaignTagFilters.length > 0 || searchQuery.trim() || dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && " (filtered)"}
           </p>
           <p className="text-muted-foreground/80 text-xs mt-0.5">
             Search and filters apply to all companies. Use &quot;Select all filtered&quot; to select every matching company for bulk email.
@@ -2297,6 +2203,97 @@ export default function Companies() {
               </div>
             </PopoverContent>
           </Popover>
+          {/* Sent in campaign/newsletter filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Send className="h-4 w-4" />
+                Sent in
+                {sentInFilter !== 'all' && (
+                  <Badge variant="secondary" className="ml-1">1</Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56" align="end">
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm">Filter by outreach</h4>
+                <p className="text-xs text-muted-foreground">Show companies/contacts already sent a campaign or newsletter.</p>
+                <Button
+                  variant={sentInFilter === 'all' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setSentInFilter('all')}
+                >
+                  All
+                </Button>
+                <Button
+                  variant={sentInFilter === 'sent-campaign' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setSentInFilter('sent-campaign')}
+                >
+                  <Send className="h-3.5 w-3.5 mr-2 text-primary" />
+                  Sent in campaign
+                </Button>
+                <Button
+                  variant={sentInFilter === 'sent-newsletter' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setSentInFilter('sent-newsletter')}
+                >
+                  <Megaphone className="h-3.5 w-3.5 mr-2 text-primary" />
+                  Sent in newsletter
+                </Button>
+                <Button
+                  variant={sentInFilter === 'not-sent' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setSentInFilter('not-sent')}
+                >
+                  Not sent (campaign or newsletter)
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Campaign/Newsletter tags filter */}
+          {allCampaignTagsFromCampaigns.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Megaphone className="h-4 w-4" />
+                  Campaign tags
+                  {selectedCampaignTagFilters.length > 0 && (
+                    <Badge variant="secondary" className="ml-1">{selectedCampaignTagFilters.length}</Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 max-h-[280px] overflow-y-auto" align="end">
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Filter by campaign/newsletter tag</h4>
+                  <p className="text-xs text-muted-foreground">Show companies sent in a campaign with any of these tags.</p>
+                  {selectedCampaignTagFilters.length > 0 && (
+                    <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSelectedCampaignTagFilters([])}>
+                      Clear all
+                    </Button>
+                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    {allCampaignTagsFromCampaigns.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant={selectedCampaignTagFilters.includes(tag) ? 'default' : 'outline'}
+                        className="cursor-pointer text-xs"
+                        onClick={() => setSelectedCampaignTagFilters(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+
           {/* Source filter: group companies by where they were added from */}
           <Popover>
             <PopoverTrigger asChild>
@@ -2526,9 +2523,23 @@ export default function Companies() {
       </div>
 
       {/* Active Filters */}
-      {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all' || sourceFilter || dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && (
+      {(selectedTagFilters.length > 0 || emailStatusFilter !== 'all' || sentInFilter !== 'all' || selectedCampaignTagFilters.length > 0 || sourceFilter || dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && (
         <div className="flex flex-wrap gap-2 px-4 md:px-0 items-center">
           <span className="text-sm text-muted-foreground">Filtering by:</span>
+          {sentInFilter !== 'all' && (
+            <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setSentInFilter('all')}>
+              {sentInFilter === 'sent-campaign' && <><Send className="h-3 w-3" /> Sent in campaign</>}
+              {sentInFilter === 'sent-newsletter' && <><Megaphone className="h-3 w-3" /> Sent in newsletter</>}
+              {sentInFilter === 'not-sent' && 'Not sent'}
+              <X className="h-3 w-3 ml-1" />
+            </Badge>
+          )}
+          {selectedCampaignTagFilters.map((tag) => (
+            <Badge key={tag} variant="secondary" className="gap-1 cursor-pointer" onClick={() => setSelectedCampaignTagFilters(prev => prev.filter(t => t !== tag))}>
+              <Megaphone className="h-3 w-3" /> {tag}
+              <X className="h-3 w-3 ml-1" />
+            </Badge>
+          ))}
 {(dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && (
                 <Badge
                   variant="secondary"
@@ -3076,6 +3087,39 @@ export default function Companies() {
                             In Contacts
                           </Badge>
                         )}
+                        {(() => {
+                          const companyEmails = getCompanyEmails(company);
+                          const sentCampaign = companyEmails.some(e => emailsSentInCampaign.has(e));
+                          const sentNewsletter = companyEmails.some(e => emailsSentInNewsletter.has(e));
+                          const campaignTagsForCompany = new Set<string>();
+                          companyEmails.forEach(email => (emailToCampaignTags.get(email) || []).forEach(t => campaignTagsForCompany.add(t)));
+                          const tagsList = Array.from(campaignTagsForCompany);
+                          if (!sentCampaign && !sentNewsletter && tagsList.length === 0) return null;
+                          return (
+                            <>
+                              {sentCampaign && (
+                                <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
+                                  <Send className="h-3 w-3 mr-1" />
+                                  Campaign
+                                </Badge>
+                              )}
+                              {sentNewsletter && (
+                                <Badge variant="outline" className="text-xs bg-violet-500/10 text-violet-600 border-violet-500/20">
+                                  <Megaphone className="h-3 w-3 mr-1" />
+                                  Newsletter
+                                </Badge>
+                              )}
+                              {tagsList.slice(0, 3).map(tag => (
+                                <Badge key={tag} variant="secondary" className="text-xs">
+                                  {tag}
+                                </Badge>
+                              ))}
+                              {tagsList.length > 3 && (
+                                <Badge variant="secondary" className="text-xs">+{tagsList.length - 3}</Badge>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs md:text-sm text-muted-foreground flex-wrap">

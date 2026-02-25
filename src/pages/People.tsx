@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send, Plus, UserPlus, Loader2, CheckCircle2, Filter, X, Clock, Tag, ChevronDown, Search, Trash2, RefreshCw, CalendarDays } from "lucide-react";
+import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send, Plus, UserPlus, Loader2, CheckCircle2, Filter, X, Clock, Tag, ChevronDown, Search, Trash2, RefreshCw, CalendarDays, Megaphone } from "lucide-react";
 import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
 import { PersonDetailsDialog } from "@/components/PersonDetailsDialog";
 import BulkEmailDialog from "@/components/BulkEmailDialog";
@@ -46,6 +46,8 @@ export default function People() {
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
   const [selectedIndustryFilters, setSelectedIndustryFilters] = useState<string[]>([]);
   const [selectedCampaignFilter, setSelectedCampaignFilter] = useState<string | null>(null);
+  const [sentInFilter, setSentInFilter] = useState<'all' | 'sent-campaign' | 'sent-newsletter' | 'not-sent'>('all');
+  const [selectedCampaignTagFilters, setSelectedCampaignTagFilters] = useState<string[]>([]);
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string | null>(null);
   const [groupByCategory, setGroupByCategory] = useState(true);
   const [dateAddedPreset, setDateAddedPreset] = useState<'all' | 'last7' | 'last30' | 'last90' | 'custom'>('all');
@@ -196,6 +198,25 @@ export default function People() {
     enabled: !!people && Array.isArray(people) && people.length > 0,
     retry: 1,
   });
+
+  // Emails that have been sent a newsletter (for "sent in newsletter" filter)
+  const { data: newsletterSentEmails } = useQuery({
+    queryKey: ["newsletter-sent-emails"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("newsletter_sends")
+        .select("newsletter_subscribers!inner(email)")
+        .not("sent_at", "is", null);
+      if (error) return new Set<string>();
+      const set = new Set<string>();
+      (data || []).forEach((row: any) => {
+        const email = row?.newsletter_subscribers?.email?.toLowerCase?.()?.trim();
+        if (email) set.add(email);
+      });
+      return set;
+    },
+  });
+  const emailsSentInNewsletter = newsletterSentEmails ?? new Set<string>();
 
   // Fetch people emails to check duplicates
   const { data: peopleEmails } = useQuery({
@@ -455,6 +476,14 @@ export default function People() {
       }
     });
   }
+  // Flatten campaign tags for filter dropdown
+  const allCampaignTagsFromCampaigns = useMemo(() => {
+    const tags = new Set<string>();
+    allCampaigns.forEach((c) => {
+      if (c.tags && Array.isArray(c.tags)) c.tags.forEach((t: string) => tags.add(String(t).trim()));
+    });
+    return Array.from(tags).sort();
+  }, [emailHistory]);
 
   // Filter people by selected tags, industries, campaigns, and search query
   const filteredPeople = useMemo(() => {
@@ -579,10 +608,39 @@ export default function People() {
     // Campaign filter - show only contacts who were in this campaign
     if (selectedCampaignFilter) {
       const personHistory = emailHistory?.[person.id] || [];
-      const wasInCampaign = personHistory.some((email: any) => 
+      const wasInCampaign = personHistory.some((email: any) =>
         email?.email_campaigns?.id === selectedCampaignFilter
       );
       if (!wasInCampaign) return false;
+    }
+
+    // Sent in campaign / newsletter filter
+    if (sentInFilter !== 'all') {
+      const personEmail = person.email?.toLowerCase?.()?.trim();
+      const personHistory = emailHistory?.[person.id] || [];
+      const sentCampaign = personHistory.length > 0;
+      const sentNewsletter = personEmail ? emailsSentInNewsletter.has(personEmail) : false;
+      switch (sentInFilter) {
+        case 'sent-campaign':
+          if (!sentCampaign) return false;
+          break;
+        case 'sent-newsletter':
+          if (!sentNewsletter) return false;
+          break;
+        case 'not-sent':
+          if (sentCampaign || sentNewsletter) return false;
+          break;
+      }
+    }
+
+    // Campaign tag filter - show only contacts sent in a campaign with any of these tags
+    if (selectedCampaignTagFilters.length > 0) {
+      const personHistory = emailHistory?.[person.id] || [];
+      const hasMatchingTag = personHistory.some((email: any) => {
+        const tags = (email?.email_campaigns?.tags && Array.isArray(email.email_campaigns.tags)) ? email.email_campaigns.tags : [];
+        return selectedCampaignTagFilters.some((selected) => tags.includes(selected));
+      });
+      if (!hasMatchingTag) return false;
     }
 
     // Group / category filter - show only contacts whose company has this tag (source or custom category)
@@ -625,7 +683,7 @@ export default function People() {
       const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
       return dateB - dateA; // Descending order (newest first)
     });
-  }, [people, selectedTagFilters, selectedIndustryFilters, selectedCampaignFilter, selectedGroupFilter, emailHistory, searchQuery, dateAddedPreset, dateAddedFrom, dateAddedTo]);
+  }, [people, selectedTagFilters, selectedIndustryFilters, selectedCampaignFilter, selectedGroupFilter, sentInFilter, selectedCampaignTagFilters, emailHistory, emailsSentInNewsletter, searchQuery, dateAddedPreset, dateAddedFrom, dateAddedTo]);
 
   // Category options: source groups + custom tags (for Category dropdown)
   const categoryOptions = useMemo(() => {
@@ -661,7 +719,7 @@ export default function People() {
 
   useEffect(() => {
     setPeoplePage(1);
-  }, [searchQuery, selectedTagFilters, selectedIndustryFilters, selectedCampaignFilter, selectedGroupFilter, dateAddedPreset, dateAddedFrom, dateAddedTo]);
+  }, [searchQuery, selectedTagFilters, selectedIndustryFilters, selectedCampaignFilter, selectedGroupFilter, sentInFilter, selectedCampaignTagFilters, dateAddedPreset, dateAddedFrom, dateAddedTo]);
 
   // Debug logging when filtering by tags but no results
   if (selectedTagFilters.length > 0 && filteredPeople.length === 0 && people && people.length > 0) {
@@ -768,6 +826,15 @@ export default function People() {
     const fullName = `${person.first_name || ""} ${person.last_name || ""}`.trim() || person.email || "Unknown";
     const isSelected = selectedPeopleIds.has(person.id);
     const isNew = isPersonNew(person);
+    const personHistory = emailHistory?.[person.id] || [];
+    const sentCampaign = personHistory.length > 0;
+    const sentNewsletter = person.email ? emailsSentInNewsletter.has(person.email.toLowerCase().trim()) : false;
+    const campaignTagsForPerson = new Set<string>();
+    personHistory.forEach((email: any) => {
+      const tags = (email?.email_campaigns?.tags && Array.isArray(email.email_campaigns.tags)) ? email.email_campaigns.tags : [];
+      tags.forEach((t: string) => campaignTagsForPerson.add(String(t).trim()));
+    });
+    const tagsList = Array.from(campaignTagsForPerson);
     return (
       <Card
         key={person.id}
@@ -796,6 +863,22 @@ export default function People() {
                     NEW
                   </Badge>
                 )}
+                {sentCampaign && (
+                  <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
+                    <Send className="h-3 w-3 mr-1" />
+                    Campaign
+                  </Badge>
+                )}
+                {sentNewsletter && (
+                  <Badge variant="outline" className="text-xs bg-violet-500/10 text-violet-600 border-violet-500/20">
+                    <Megaphone className="h-3 w-3 mr-1" />
+                    Newsletter
+                  </Badge>
+                )}
+                {tagsList.slice(0, 2).map((tag) => (
+                  <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                ))}
+                {tagsList.length > 2 && <Badge variant="secondary" className="text-xs">+{tagsList.length - 2}</Badge>}
               </div>
               {person.email && (
                 <p className="text-xs text-muted-foreground truncate">{person.email}</p>
@@ -870,7 +953,7 @@ export default function People() {
                 <h1 className="text-4xl font-bold tracking-tight">People</h1>
                 <p className="text-muted-foreground mt-1">
                   {filteredPeople?.length || 0} of {people?.length || 0} contacts
-                  {(selectedTagFilters.length > 0 || searchQuery.trim() || dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && " (filtered)"}
+                  {(selectedTagFilters.length > 0 || sentInFilter !== 'all' || selectedCampaignTagFilters.length > 0 || searchQuery.trim() || dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && " (filtered)"}
                   {selectedPeopleIds.size > 0 && ` • ${selectedPeopleIds.size} selected`}
                 </p>
               </div>
@@ -1175,6 +1258,75 @@ export default function People() {
               </PopoverContent>
             </Popover>
 
+            {/* Sent in campaign/newsletter filter */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Send className="h-4 w-4" />
+                  Sent in
+                  {sentInFilter !== 'all' && (
+                    <Badge variant="secondary" className="ml-1">1</Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56" align="end">
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Filter by outreach</h4>
+                  <p className="text-xs text-muted-foreground">Show contacts already sent a campaign or newsletter.</p>
+                  <Button variant={sentInFilter === 'all' ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start" onClick={() => setSentInFilter('all')}>
+                    All
+                  </Button>
+                  <Button variant={sentInFilter === 'sent-campaign' ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start" onClick={() => setSentInFilter('sent-campaign')}>
+                    <Send className="h-3.5 w-3.5 mr-2 text-primary" />
+                    Sent in campaign
+                  </Button>
+                  <Button variant={sentInFilter === 'sent-newsletter' ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start" onClick={() => setSentInFilter('sent-newsletter')}>
+                    <Megaphone className="h-3.5 w-3.5 mr-2 text-primary" />
+                    Sent in newsletter
+                  </Button>
+                  <Button variant={sentInFilter === 'not-sent' ? 'secondary' : 'ghost'} size="sm" className="w-full justify-start" onClick={() => setSentInFilter('not-sent')}>
+                    Not sent (campaign or newsletter)
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Campaign/Newsletter tags filter */}
+            {allCampaignTagsFromCampaigns.length > 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <Megaphone className="h-4 w-4" />
+                    Campaign tags
+                    {selectedCampaignTagFilters.length > 0 && (
+                      <Badge variant="secondary" className="ml-1">{selectedCampaignTagFilters.length}</Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 max-h-[280px] overflow-y-auto" align="end">
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-sm">Filter by campaign tag</h4>
+                    <p className="text-xs text-muted-foreground">Show contacts sent in a campaign with any of these tags.</p>
+                    {selectedCampaignTagFilters.length > 0 && (
+                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSelectedCampaignTagFilters([])}>Clear all</Button>
+                    )}
+                    <div className="flex flex-wrap gap-1.5">
+                      {allCampaignTagsFromCampaigns.map((tag) => (
+                        <Badge
+                          key={tag}
+                          variant={selectedCampaignTagFilters.includes(tag) ? 'default' : 'outline'}
+                          className="cursor-pointer text-xs"
+                          onClick={() => setSelectedCampaignTagFilters(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
+
             {/* Date added filter */}
             <Popover>
               <PopoverTrigger asChild>
@@ -1254,9 +1406,23 @@ export default function People() {
           </div>
           
           {/* Active Filters */}
-          {(selectedTagFilters.length > 0 || selectedGroupFilter || dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && (
+          {(selectedTagFilters.length > 0 || selectedGroupFilter || sentInFilter !== 'all' || selectedCampaignTagFilters.length > 0 || dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && (
             <div className="flex flex-wrap gap-2 items-center">
               <span className="text-sm text-muted-foreground">Filtering by:</span>
+              {sentInFilter !== 'all' && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setSentInFilter('all')}>
+                  {sentInFilter === 'sent-campaign' && <><Send className="h-3 w-3" /> Sent in campaign</>}
+                  {sentInFilter === 'sent-newsletter' && <><Megaphone className="h-3 w-3" /> Sent in newsletter</>}
+                  {sentInFilter === 'not-sent' && 'Not sent'}
+                  <X className="h-3 w-3 ml-1" />
+                </Badge>
+              )}
+              {selectedCampaignTagFilters.map((tag) => (
+                <Badge key={tag} variant="secondary" className="gap-1 cursor-pointer" onClick={() => setSelectedCampaignTagFilters(prev => prev.filter(t => t !== tag))}>
+                  <Megaphone className="h-3 w-3" /> {tag}
+                  <X className="h-3 w-3 ml-1" />
+                </Badge>
+              ))}
               {(dateAddedPreset !== 'all' || dateAddedFrom || dateAddedTo) && (
                 <Badge
                   variant="secondary"

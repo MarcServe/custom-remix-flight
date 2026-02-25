@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus } from "lucide-react";
+import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { PersonaSelector, type MarketingPersona } from "./email/PersonaSelector";
 import { TagInput } from "@/components/ui/tag-input";
@@ -1400,6 +1400,48 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     setFilteredRecipients((prev) => prev.filter((p) => p.id !== personId));
   };
 
+  const removeDuplicateRecipients = () => {
+    setFilteredRecipients((prev) => {
+      const seen = new Set<string>();
+      const deduplicated = prev.filter((p) => {
+        const email = (p.email || "").toLowerCase().trim();
+        if (!email) return true; // keep entries without email (rare)
+        if (seen.has(email)) return false;
+        seen.add(email);
+        return true;
+      });
+      const removed = prev.length - deduplicated.length;
+      if (removed > 0) {
+        toast({
+          title: "Duplicates removed",
+          description: `Removed ${removed} duplicate recipient(s). List now has ${deduplicated.length} unique recipients.`,
+        });
+      } else {
+        toast({ title: "No duplicates", description: "The list already contains only unique email addresses." });
+      }
+      return deduplicated;
+    });
+  };
+
+  const removeDuplicateWarningRecipientsFromList = () => {
+    if (!duplicateRecipients?.length) return;
+    const idsToRemove = new Set(duplicateRecipients.map((d: any) => d.personId).filter(Boolean));
+    const emailsToRemove = new Set(
+      duplicateRecipients.map((d: any) => d.email?.toLowerCase?.()?.trim()).filter(Boolean)
+    );
+    setFilteredRecipients((prev) =>
+      prev.filter(
+        (p) =>
+          !idsToRemove.has(p.id) &&
+          !(p.email && emailsToRemove.has(p.email.toLowerCase().trim()))
+      )
+    );
+    toast({
+      title: "Removed from list",
+      description: `Removed ${duplicateRecipients.length} recipient(s) who already received a previous campaign.`,
+    });
+  };
+
   const addRecipientsFromSelection = async () => {
     setReplacingRecipients(true);
     try {
@@ -2095,6 +2137,16 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                       })}
                     </div>
                   </details>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                    onClick={removeDuplicateWarningRecipientsFromList}
+                  >
+                    <Minus className="h-4 w-4 mr-1" />
+                    Remove duplicate{duplicateRecipients.length > 1 ? 's' : ''} from list
+                  </Button>
                 </div>
               </div>
             </div>
@@ -2295,7 +2347,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                     const matchProfile = senderProfiles.find(
                       (p: { sender_email?: string }) => p.sender_email && fromEmail && String(p.sender_email).toLowerCase() === fromEmail.toLowerCase()
                     );
-                    const displayName = matchProfile?.display_name || matchProfile?.name || businessProfile?.company_name || 'Your Business';
+                    const displayName = matchProfile?.sender_name || matchProfile?.display_name || matchProfile?.name || businessProfile?.company_name || 'Your Business';
                     const providerLabel =
                       conn.provider === 'resend'
                         ? 'Resend'
@@ -2364,9 +2416,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 {senderProfiles.map((p: any) => (
                   <SelectItem key={p.id} value={p.id}>
                     <div className="flex flex-col">
-                      <span className="font-medium">{p.display_name || p.name}</span>
+                      <span className="font-medium">{p.sender_name || p.display_name || p.name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {p.sender_name || p.name}{p.sender_email ? ` · ${p.sender_email}` : ''}
+                        {(p.sender_name || p.display_name || p.name)}{p.sender_email ? ` · ${p.sender_email}` : ''}
                       </span>
                     </div>
                   </SelectItem>
@@ -2786,6 +2838,17 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 </Button>
                 <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={removeDuplicateRecipients}
+                  disabled={recipientsToUse.length === 0}
+                  title="Remove duplicate recipients (by email address)"
+                >
+                  <Filter className="h-4 w-4 mr-1" />
+                  Remove duplicates
+                </Button>
+                <Button
+                  type="button"
                   variant="ghost"
                   size="sm"
                   className="text-muted-foreground"
@@ -2836,7 +2899,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Use <Plus className="h-3 w-3 inline" /> Add to merge from Companies/People; use <Minus className="h-3 w-3 inline" /> to remove from the list.
+              Use <Plus className="h-3 w-3 inline" /> Add to merge from Companies/People; use <Minus className="h-3 w-3 inline" /> to remove from the list. Use Remove duplicates to clean the list by email.
               {draftId && " Save draft to keep changes."}
             </p>
             </div>
