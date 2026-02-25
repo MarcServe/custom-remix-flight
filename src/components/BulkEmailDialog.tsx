@@ -87,6 +87,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const [sendingTest, setSendingTest] = useState(false);
   const [testRecipientId, setTestRecipientId] = useState<string | null>(null);
   const [testEmailVariant, setTestEmailVariant] = useState<'A' | 'B'>('A');
+  const testEmailVariantRef = useRef<'A' | 'B'>('A');
   const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
   const [selectedPersona, setSelectedPersona] = useState<MarketingPersona | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -1066,8 +1067,8 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             .eq('campaign_id', draftId);
 
           const useAb = abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
-          const bodyHtmlA = bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
-          const bodyHtmlB = abBodyHtmlB || (abBodyTextB ? `<p>${abBodyTextB.replace(/\n/g, '</p><p>')}</p>` : bodyHtmlA);
+          const bodyHtmlA = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
+          const bodyHtmlB = abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : bodyHtmlA);
           const bodyTextB = abBodyTextB || bodyText;
           const recipients = recipientsToUse
             .filter(person => person.email)
@@ -1139,8 +1140,8 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         setDraftId(campaign.id);
 
         const useAbDraft = abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
-        const bodyHtmlADraft = bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
-        const bodyHtmlBDraft = abBodyHtmlB || (abBodyTextB ? `<p>${abBodyTextB.replace(/\n/g, '</p><p>')}</p>` : bodyHtmlADraft);
+        const bodyHtmlADraft = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
+        const bodyHtmlBDraft = abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : bodyHtmlADraft);
         const bodyTextBDraft = abBodyTextB || bodyText;
         // Create recipients (person_id must be a real UUID; synthetic "rec-*" ids are null)
         const recipients = recipientsToUse
@@ -1608,12 +1609,14 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         ? businessProfile.email_signature
         : `<br><br><p>Best regards,<br><strong>${userProfile?.full_name || 'Team'}</strong><br>${userProfile?.job_title ? `${userProfile.job_title}<br>` : ''}${businessProfile?.company_name || ''}</p>`;
 
-      // Use A or B variant when A/B test is enabled
-      const useVariantB = abTestEnabled && testEmailVariant === 'B' && (abSubjectB?.trim() || abBodyTextB?.trim());
+      // Use A or B variant when A/B test is enabled (read from ref so we use the value selected in the dialog, not stale state)
+      const chosenVariant = testEmailVariantRef.current;
+      const hasVariantBContent = !!(abSubjectB?.trim() || abBodyTextB?.trim() || abBodyHtmlB?.trim());
+      const useVariantB = abTestEnabled && chosenVariant === 'B' && hasVariantBContent;
       const subjectForTest = useVariantB ? (abSubjectB || subject) : subject;
       const bodyHtmlForTest = useVariantB
-        ? (abBodyHtmlB || (abBodyTextB ? `<p>${abBodyTextB.replace(/\n/g, '</p><p>')}</p>` : bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`))
-        : (bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`);
+        ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : bodyHtml || previewBodyToHtml(bodyText)) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`)
+        : (bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`);
       const bodyTextForTest = useVariantB ? (abBodyTextB || bodyText) : bodyText;
 
       // Use personalized email if available, otherwise use template with variables
@@ -1660,13 +1663,14 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
       toast({
         title: "Test email sent",
-        description: `Test email (Variant ${testEmailVariant}) sent to ${testEmailAddress}${hasPersonalizedEmail && !useVariantB ? ` (personalized for ${testPerson.first_name} ${testPerson.last_name})` : ` (for ${testPerson.first_name} ${testPerson.last_name})`}`,
+        description: `Test email (Variant ${chosenVariant}) sent to ${testEmailAddress}${hasPersonalizedEmail && !useVariantB ? ` (personalized for ${testPerson.first_name} ${testPerson.last_name})` : ` (for ${testPerson.first_name} ${testPerson.last_name})`}`,
       });
 
       setTestEmailDialogOpen(false);
       setTestEmailAddress("");
       setTestRecipientId(null);
       setTestEmailVariant('A');
+      testEmailVariantRef.current = 'A';
     } catch (error: any) {
       console.error('Error sending test email:', error);
       // Extract more detailed error message
@@ -1889,8 +1893,8 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       }
 
       const useAbSend = abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
-      const bodyHtmlASend = bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
-      const bodyHtmlBSend = abBodyHtmlB || (abBodyTextB ? `<p>${abBodyTextB.replace(/\n/g, '</p><p>')}</p>` : bodyHtmlASend);
+      const bodyHtmlASend = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
+      const bodyHtmlBSend = abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : bodyHtmlASend);
       const bodyTextBSend = abBodyTextB || bodyText;
       // Create recipients with personalized content (person_id must be a real UUID; synthetic "rec-*" ids are null)
       const recipients = recipientsToUse
@@ -2953,7 +2957,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             const previewSignature = (sp?.signature ?? businessProfile?.email_signature ?? '')?.trim() || undefined;
             const previewSubjectA = personalizeText(subject, previewPerson) || 'No subject';
             const previewBodyA = personalizeText(bodyHtml || previewBodyToHtml(bodyText), previewPerson) || '<p>Your email body will appear here...</p>';
-            const bodyHtmlB = abBodyHtmlB || (abBodyTextB ? `<p>${abBodyTextB.replace(/\n/g, '</p><p>')}</p>` : '');
+            const bodyHtmlB = abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : '');
             const previewSubjectB = personalizeText(abSubjectB || subject, previewPerson) || 'No subject';
             const previewBodyB = personalizeText(bodyHtmlB || previewBodyA, previewPerson) || '<p>Variant B body...</p>';
             const showAbPreviews = (abSubjectB?.trim() || abBodyTextB?.trim()) ? true : false;
@@ -3213,12 +3217,15 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         </div>
         
         {/* Test Email Dialog */}
-        <AlertDialog open={testEmailDialogOpen} onOpenChange={(open) => {
+        <AlertDialog open={testEmailDialogOpen}         onOpenChange={(open) => {
           setTestEmailDialogOpen(open);
-          if (!open) {
+          if (open) {
+            testEmailVariantRef.current = testEmailVariant;
+          } else {
             setTestEmailAddress("");
             setTestRecipientId(null);
             setTestEmailVariant('A');
+            testEmailVariantRef.current = 'A';
           }
         }}>
           <AlertDialogContent className="sm:max-w-[500px]">
@@ -3250,7 +3257,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                   <Label>Send test as</Label>
                   <Select
                     value={testEmailVariant}
-                    onValueChange={(v: 'A' | 'B') => setTestEmailVariant(v)}
+                    onValueChange={(v: 'A' | 'B') => {
+                      setTestEmailVariant(v);
+                      testEmailVariantRef.current = v;
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Choose variant" />
@@ -3259,10 +3269,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                       <SelectItem value="A">Variant A (main subject & body)</SelectItem>
                       <SelectItem
                         value="B"
-                        disabled={!abSubjectB?.trim() && !abBodyTextB?.trim()}
+                        disabled={!abSubjectB?.trim() && !abBodyTextB?.trim() && !abBodyHtmlB?.trim()}
                       >
                         Variant B (alternative subject & body)
-                        {(!abSubjectB?.trim() && !abBodyTextB?.trim()) && " — add content above"}
+                        {(!abSubjectB?.trim() && !abBodyTextB?.trim() && !abBodyHtmlB?.trim()) && " — add content above"}
                       </SelectItem>
                     </SelectContent>
                   </Select>
