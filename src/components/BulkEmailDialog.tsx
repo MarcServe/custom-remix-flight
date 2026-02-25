@@ -41,10 +41,10 @@ function previewBodyToHtml(text: string): string {
     const listMatch = lines.every((l) => /^(\s*)([-*•]\s*|(\d+\.)\s)/.test(l) || l === '');
     if (listMatch && lines.some(Boolean)) {
       const items = lines.filter(Boolean).map((l) => l.replace(/^(\s*)([-*•]\s*|(\d+\.)\s)/, '').trim());
-      if (items.length) out.push('<ul style="margin:8px 0;padding-left:20px;">' + items.map((i) => `<li style="margin-bottom:4px;">${i.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</li>`).join('') + '</ul>');
+      if (items.length) out.push('<ul style="margin:12px 0;padding-left:20px;">' + items.map((i) => `<li style="margin-bottom:6px;">${i.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</li>`).join('') + '</ul>');
     } else {
       const para = lines.map((l) => l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')).join('<br>');
-      if (para) out.push(`<p style="margin:0 0 8px 0;line-height:1.4;">${para}</p>`);
+      if (para) out.push(`<p style="margin:0 0 12px 0;line-height:1.5;">${para}</p>`);
     }
   }
   return out.join('');
@@ -1042,9 +1042,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           follow_up_sequence_id: followUpSequenceId || null,
           updated_at: new Date().toISOString(),
           ab_test_enabled: abTestEnabled,
-          ab_subject_b: abTestEnabled ? (abSubjectB || null) : null,
-          ab_body_html_b: abTestEnabled ? (abBodyHtmlB || null) : null,
-          ab_body_text_b: abTestEnabled ? (abBodyTextB || null) : null,
+          ab_subject_b: abSubjectB?.trim() || null,
+          ab_body_html_b: (abBodyTextB?.trim() || abBodyHtmlB?.trim()) ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : null)) : null,
+          ab_body_text_b: abBodyTextB?.trim() || null,
           ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
           ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
         };
@@ -1126,9 +1126,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             auto_follow_up_enabled: autoFollowUpEnabled,
             follow_up_sequence_id: followUpSequenceId || null,
             ab_test_enabled: abTestEnabled,
-            ab_subject_b: abTestEnabled ? (abSubjectB || null) : null,
-            ab_body_html_b: abTestEnabled ? (abBodyHtmlB || null) : null,
-            ab_body_text_b: abTestEnabled ? (abBodyTextB || null) : null,
+            ab_subject_b: abSubjectB?.trim() || null,
+            ab_body_html_b: (abBodyTextB?.trim() || abBodyHtmlB?.trim()) ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : null)) : null,
+            ab_body_text_b: abBodyTextB?.trim() || null,
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
           })
@@ -1842,9 +1842,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             follow_up_sequence_id: followUpSequenceId || null,
             updated_at: new Date().toISOString(),
             ab_test_enabled: abTestEnabled,
-            ab_subject_b: abTestEnabled ? (abSubjectB || null) : null,
-            ab_body_html_b: abTestEnabled ? (abBodyHtmlB || null) : null,
-            ab_body_text_b: abTestEnabled ? (abBodyTextB || null) : null,
+            ab_subject_b: abSubjectB?.trim() || null,
+            ab_body_html_b: (abBodyTextB?.trim() || abBodyHtmlB?.trim()) ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : null)) : null,
+            ab_body_text_b: abBodyTextB?.trim() || null,
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
           })
@@ -1879,9 +1879,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             auto_follow_up_enabled: autoFollowUpEnabled,
             follow_up_sequence_id: followUpSequenceId || null,
             ab_test_enabled: abTestEnabled,
-            ab_subject_b: abTestEnabled ? (abSubjectB || null) : null,
-            ab_body_html_b: abTestEnabled ? (abBodyHtmlB || null) : null,
-            ab_body_text_b: abTestEnabled ? (abBodyTextB || null) : null,
+            ab_subject_b: abSubjectB?.trim() || null,
+            ab_body_html_b: (abBodyTextB?.trim() || abBodyHtmlB?.trim()) ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : null)) : null,
+            ab_body_text_b: abBodyTextB?.trim() || null,
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
           })
@@ -2419,12 +2419,12 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           </div>
 
           <Collapsible open={abSectionOpen} onOpenChange={setAbSectionOpen}>
-            <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+            <div className={`rounded-lg border-2 p-3 space-y-3 transition-colors ${abTestEnabled ? 'border-primary bg-primary/10' : 'border-border bg-muted/30'}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-3">
                   <CollapsibleTrigger asChild>
                     <Button type="button" variant="ghost" size="sm" className="flex items-center gap-2 font-medium">
-                      <FlaskConical className="h-4 w-4" />
+                      <FlaskConical className={`h-4 w-4 ${abTestEnabled ? 'text-primary' : ''}`} />
                       A/B test (body)
                       {abSectionOpen ? null : <ChevronDown className="h-4 w-4" />}
                     </Button>
@@ -2438,9 +2438,12 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                         if (checked) setAbSectionOpen(true);
                       }}
                     />
-                    <Label htmlFor="ab-test-enabled" className="text-sm font-normal cursor-pointer text-muted-foreground">
+                    <Label htmlFor="ab-test-enabled" className={`text-sm cursor-pointer ${abTestEnabled ? 'font-semibold text-primary' : 'font-normal text-muted-foreground'}`}>
                       Use A/B test when sending
                     </Label>
+                    <Badge variant={abTestEnabled ? 'default' : 'secondary'} className={abTestEnabled ? 'bg-primary' : ''}>
+                      {abTestEnabled ? 'ON' : 'OFF'}
+                    </Badge>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -2499,10 +2502,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                   <Label>Variant B — Body</Label>
                   <Textarea
                     value={abBodyTextB}
-                    onChange={(e) => {
-                      setAbBodyTextB(e.target.value);
-                      setAbBodyHtmlB(e.target.value ? `<p>${e.target.value.replace(/\n/g, '</p><p>')}</p>` : "");
-                    }}
+                    onChange={(e) => setAbBodyTextB(e.target.value)}
                     placeholder="Alternative email body (same placeholders: {{firstName}}, {{companyName}}, etc.)"
                     className="min-h-[120px] bg-background"
                   />
