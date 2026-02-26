@@ -2680,17 +2680,23 @@ export default function Companies() {
                 </Button>
                 {(() => {
                   const selectedCompanies = filteredCompanies?.filter(c => selectedCompanyIds.has(c.id)) || [];
+                  const hasEmail = (company: typeof selectedCompanies[0]) =>
+                    !!(company.general_email || (company as any).generalEmail || company.contacts?.some((c: any) => c.email));
+                  const hasPhone = (company: typeof selectedCompanies[0]) =>
+                    !!((company as any).company_phone || (company as any).companyPhone || company.contacts?.some((c: any) => c.phone));
                   const companiesWithoutEmail = selectedCompanies.filter(company => {
-                    const hasEmail = !!(company.general_email || (company as any).generalEmail || company.contacts?.some(c => c.email));
                     const website = company.website?.trim() || '';
-                    const hasValidWebsite = website && 
-                                            !website.startsWith('no-website-') && 
+                    const hasValidWebsite = website &&
+                                            !website.startsWith('no-website-') &&
                                             website.length > 3 &&
-                                            (website.startsWith('http://') || 
-                                             website.startsWith('https://') || 
+                                            (website.startsWith('http://') ||
+                                             website.startsWith('https://') ||
                                              website.includes('.') && !website.includes(' '));
-                    return !hasEmail && hasValidWebsite;
+                    return !hasEmail(company) && hasValidWebsite;
                   });
+                  const companiesMissingEmailOrPhone = selectedCompanies.filter(
+                    company => !hasEmail(company) && !hasPhone(company)
+                  );
                   const companiesWithEmail = selectedCompanies.filter(company => {
                     const match = getCompanyEmailContact(company);
                     return !!match?.email;
@@ -2719,11 +2725,33 @@ export default function Companies() {
                           )}
                         </Button>
                       )}
+                      {companiesMissingEmailOrPhone.length > 0 && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => addToEnrichmentMutation.mutate(companiesMissingEmailOrPhone.map(c => c.id))}
+                          disabled={addToEnrichmentMutation.isPending}
+                          title="Add only companies that have no email and no phone to the Enrichment queue"
+                        >
+                          {addToEnrichmentMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              Adding...
+                            </>
+                          ) : (
+                            <>
+                              <Wand2 className="h-4 w-4 mr-1" />
+                              Add to Enrichment – missing email/phone ({companiesMissingEmailOrPhone.length})
+                            </>
+                          )}
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => addToEnrichmentMutation.mutate(Array.from(selectedCompanyIds))}
                         disabled={addToEnrichmentMutation.isPending}
+                        title="Add all selected companies to the Enrichment queue"
                       >
                         {addToEnrichmentMutation.isPending ? (
                           <>
@@ -2733,7 +2761,7 @@ export default function Companies() {
                         ) : (
                           <>
                             <Wand2 className="h-4 w-4 mr-1" />
-                            Add to Enrichment ({selectedCompanies.length})
+                            Add to Enrichment – all ({selectedCompanies.length})
                           </>
                         )}
                       </Button>

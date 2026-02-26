@@ -108,6 +108,8 @@ export default function EmailBranding() {
   });
   const [savingSenderProfile, setSavingSenderProfile] = useState(false);
   const [previewProfileId, setPreviewProfileId] = useState<string>("default");
+  const PREFILL_NONE = "__none__";
+  const [prefillFromProfileId, setPrefillFromProfileId] = useState<string>(PREFILL_NONE);
 
   const defaultFooterLogoRef = useRef<HTMLInputElement>(null);
   const defaultSenderImgRef = useRef<HTMLInputElement>(null);
@@ -366,8 +368,36 @@ export default function EmailBranding() {
 
   const openAddSenderProfile = () => {
     setEditingSenderProfileId(null);
+    setPrefillFromProfileId(PREFILL_NONE);
     setSenderProfileForm({ name: "", display_name: "", logo_url: "", brand_color: "#8b5cf6", footer_text: "", footer_image_url: "", footer_logo_url: "", signature: "", signature_closing: "Best regards,", sender_phone: "", sender_address: "", signature_use_structured: true, signature_company: "", template_style: "professional", sender_name: "", signature_name: "", sender_email: "", sender_title: "", sender_image_url: "", website_url: "" });
     setSenderProfileDialogOpen(true);
+  };
+
+  const applyPrefillFromProfile = (profileId: string) => {
+    const p = senderProfiles.find((x) => x.id === profileId);
+    if (!p) return;
+    setSenderProfileForm({
+      name: "", // Leave empty so user enters new profile label
+      display_name: p.display_name || "",
+      logo_url: p.logo_url || "",
+      brand_color: p.brand_color || "#8b5cf6",
+      footer_text: p.footer_text || "",
+      footer_image_url: p.footer_image_url || "",
+      footer_logo_url: p.footer_logo_url || "",
+      signature: p.signature || "",
+      signature_closing: p.signature_closing ?? "Best regards,",
+      sender_phone: p.sender_phone || "",
+      sender_address: p.sender_address || "",
+      signature_use_structured: p.signature_use_structured ?? true,
+      signature_company: p.signature_company || "",
+      template_style: ((senderTemplateStyles as readonly string[]).includes(p.template_style as any) ? p.template_style : "professional") as typeof senderProfileForm.template_style,
+      sender_name: p.sender_name || "",
+      signature_name: p.signature_name || "",
+      sender_email: p.sender_email || "",
+      sender_title: p.sender_title || "",
+      sender_image_url: p.sender_image_url || "",
+      website_url: p.website_url || "",
+    });
   };
 
   const openEditSenderProfile = (p: any) => {
@@ -386,7 +416,7 @@ export default function EmailBranding() {
       sender_address: p.sender_address || "",
       signature_use_structured: p.signature_use_structured ?? true,
       signature_company: p.signature_company || "",
-      template_style: (senderTemplateStyles.includes(p.template_style as any) ? p.template_style : "professional") as typeof senderProfileForm.template_style,
+      template_style: ((senderTemplateStyles as readonly string[]).includes(p.template_style as any) ? p.template_style : "professional") as typeof senderProfileForm.template_style,
       sender_name: p.sender_name || "",
       signature_name: p.signature_name || "",
       sender_email: p.sender_email || "",
@@ -942,13 +972,46 @@ export default function EmailBranding() {
       </PreviewErrorBoundary>
 
       {/* Sender profile dialog */}
-      <Dialog open={senderProfileDialogOpen} onOpenChange={setSenderProfileDialogOpen}>
+      <Dialog
+        open={senderProfileDialogOpen}
+        onOpenChange={(open) => {
+          setSenderProfileDialogOpen(open);
+          if (!open) setPrefillFromProfileId(PREFILL_NONE);
+        }}
+      >
         <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingSenderProfileId ? "Edit sender profile" : "Add sender profile"}</DialogTitle>
             <DialogDescription>Configure branding and sender identity for this profile.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4 overflow-y-auto min-h-0 pr-2">
+            {/* Prefill from existing profile (Add mode only) */}
+            {!editingSenderProfileId && senderProfiles.length > 0 && (
+              <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                <Label>Prefill from existing profile</Label>
+                <Select
+                  value={prefillFromProfileId}
+                  onValueChange={(value) => {
+                    setPrefillFromProfileId(value);
+                    if (value && value !== PREFILL_NONE) applyPrefillFromProfile(value);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Start from scratch or copy a profile…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={PREFILL_NONE}>None – start from scratch</SelectItem>
+                    {senderProfiles.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Copy all fields from a profile, then edit profile label, logo, etc. and save as new.</p>
+              </div>
+            )}
+
             {/* Same order as Default Branding: label, company/header, template, color, logo, email footer, sender profile, footer signature */}
 
             <div className="space-y-2">
