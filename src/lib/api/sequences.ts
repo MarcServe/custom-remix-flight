@@ -86,11 +86,25 @@ export const sequencesApi = {
     segment_filters?: any;
     custom_instructions?: string;
     use_email_branding?: boolean;
+    repeat_sequence?: boolean;
+    repeat_after_days?: number;
+    repeat_only_for?: string;
+    description?: string | null;
   }) {
     // Serialize steps to JSON string array format expected by database
     const dbUpdates: any = { ...updates };
     if (updates.steps) {
       dbUpdates.steps = updates.steps.map(step => JSON.stringify(step));
+    }
+    // Remove undefined values so Supabase doesn't receive them
+    Object.keys(dbUpdates).forEach((key) => {
+      if (dbUpdates[key] === undefined) delete dbUpdates[key];
+    });
+    if (dbUpdates.segment_filters && typeof dbUpdates.segment_filters === 'object') {
+      const seg = dbUpdates.segment_filters as Record<string, unknown>;
+      dbUpdates.segment_filters = Object.fromEntries(
+        Object.entries(seg).filter(([, v]) => v !== undefined && v !== '')
+      );
     }
 
     const { data, error } = await apiClient.supabase
@@ -100,7 +114,10 @@ export const sequencesApi = {
       .select()
       .single();
 
-    return { data, error };
+    if (error) {
+      throw new Error(error.message || 'Failed to update sequence');
+    }
+    return { data, error: null };
   },
 
   /**

@@ -47,6 +47,7 @@ EXTRACTION RULES (from the pasted text only):
 - tone: extract if clear; else "professional".
 - steps: 3–5 from request or default 3.
 - productContext: the pasted message itself or a summary that includes product name + what it does + who it helps. Required.
+- name: a short, descriptive sequence title for the user (e.g. "Healthcare North America (11-50) - professional" or "TalkWeb Education UK - casual"). Use industry, geography, size, tone and product name when relevant. Keep it clear and under ~60 characters.
 
 BEHAVIOR:
 - Call generate_sequence as soon as the user provides a description. Always include productContext. Reply with a short confirmation then the tool runs.
@@ -96,6 +97,10 @@ BEHAVIOR:
                   description: "Number of email steps (3-5)",
                   minimum: 3,
                   maximum: 5
+                },
+                name: {
+                  type: "string",
+                  description: "Short, descriptive sequence title (e.g. 'Healthcare North America (11-50) - professional'). Use industry, geography, size, tone and product name. Under ~60 chars."
                 }
               },
               required: ["productContext", "industry", "geography", "size", "tone", "steps"],

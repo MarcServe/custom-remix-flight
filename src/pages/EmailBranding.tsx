@@ -24,8 +24,9 @@ import { PreviewErrorBoundary } from "@/components/PreviewErrorBoundary";
 import { LogoUpload } from "@/components/ui/logo-upload";
 import { TemplateStyleSelector, type EmailTemplateStyle } from "@/components/email/TemplateStyleSelector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 
-/** Build HTML for the structured footer signature (closing, name, title, company, phone, email, website, address) */
+/** Build HTML for the structured footer signature (closing, name, title, company, phone, email, website, address). Set includeEmail false to omit email (From: already shows it). */
 function buildStructuredSignatureHtml(opts: {
   closing?: string | null;
   name?: string | null;
@@ -35,14 +36,16 @@ function buildStructuredSignatureHtml(opts: {
   email?: string | null;
   website?: string | null;
   address?: string | null;
+  includeEmail?: boolean;
 }): string {
+  const includeEmail = opts.includeEmail !== false;
   const parts: string[] = [];
   if (opts.closing?.trim()) parts.push(opts.closing.trim());
   if (opts.name?.trim()) parts.push(opts.name.trim());
   if (opts.title?.trim()) parts.push(opts.title.trim());
   if (opts.company?.trim()) parts.push(opts.company.trim());
   if (opts.phone?.trim()) parts.push(`Phone: ${opts.phone.trim()}`);
-  if (opts.email?.trim()) parts.push(`📧 ${opts.email.trim()}`);
+  if (includeEmail && opts.email?.trim()) parts.push(`📧 ${opts.email.trim()}`);
   if (opts.website?.trim()) {
     const url = opts.website.trim().startsWith("http") ? opts.website.trim() : `https://${opts.website.trim()}`;
     parts.push(`🌐 ${url}`);
@@ -78,6 +81,7 @@ export default function EmailBranding() {
     email_sender_phone: "",
     email_sender_address: "",
     email_signature_use_structured: true,
+    email_signature_show_email: true,
     email_template_style: "professional",
     website: "",
   });
@@ -97,6 +101,7 @@ export default function EmailBranding() {
     sender_phone: "",
     sender_address: "",
     signature_use_structured: true,
+    signature_show_email: true,
     signature_company: "",
     template_style: "professional" as "professional" | "minimal" | "modern" | "creative" | "corporate" | "bold" | "elegant",
     sender_name: "",
@@ -259,7 +264,7 @@ export default function EmailBranding() {
 
       const { data, error } = await supabase
         .from("business_profiles")
-        .select("company_name, services_description, email_header_name, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_signature_name, email_sender_title, email_sender_email, email_signature, email_signature_closing, email_sender_phone, email_sender_address, email_signature_use_structured, email_template_style, website")
+        .select("company_name, services_description, email_header_name, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_signature_name, email_sender_title, email_sender_email, email_signature, email_signature_closing, email_sender_phone, email_sender_address, email_signature_use_structured, signature_show_email, email_template_style, website")
         .eq("user_id", authUser.id)
         .single();
 
@@ -285,6 +290,7 @@ export default function EmailBranding() {
           email_sender_phone: data.email_sender_phone || "",
           email_sender_address: data.email_sender_address || "",
           email_signature_use_structured: data.email_signature_use_structured ?? true,
+          email_signature_show_email: (data as { signature_show_email?: boolean }).signature_show_email !== false,
           email_template_style: data.email_template_style || "professional",
           website: data.website || "",
         });
@@ -313,6 +319,7 @@ export default function EmailBranding() {
             email: businessProfile.email_sender_email,
             website: businessProfile.website,
             address: businessProfile.email_sender_address,
+            includeEmail: businessProfile.email_signature_show_email,
           }) || null
         : (businessProfile.email_signature || null);
 
@@ -335,6 +342,7 @@ export default function EmailBranding() {
         email_sender_phone: businessProfile.email_sender_phone || null,
         email_sender_address: businessProfile.email_sender_address || null,
         email_signature_use_structured: businessProfile.email_signature_use_structured,
+        signature_show_email: businessProfile.email_signature_show_email,
         email_template_style: businessProfile.email_template_style,
         website: businessProfile.website || null,
       };
@@ -370,7 +378,7 @@ export default function EmailBranding() {
   const openAddSenderProfile = () => {
     setEditingSenderProfileId(null);
     setPrefillFromProfileId(PREFILL_NONE);
-    setSenderProfileForm({ name: "", display_name: "", logo_url: "", brand_color: "#8b5cf6", footer_text: "", footer_image_url: "", footer_logo_url: "", signature: "", signature_closing: "Best regards,", sender_phone: "", sender_address: "", signature_use_structured: true, signature_company: "", template_style: "professional", sender_name: "", signature_name: "", sender_email: "", sender_title: "", sender_image_url: "", website_url: "" });
+    setSenderProfileForm({ name: "", display_name: "", logo_url: "", brand_color: "#8b5cf6", footer_text: "", footer_image_url: "", footer_logo_url: "", signature: "", signature_closing: "Best regards,", sender_phone: "", sender_address: "", signature_use_structured: true, signature_show_email: true, signature_company: "", template_style: "professional", sender_name: "", signature_name: "", sender_email: "", sender_title: "", sender_image_url: "", website_url: "" });
     setSenderProfileDialogOpen(true);
   };
 
@@ -390,6 +398,7 @@ export default function EmailBranding() {
       sender_phone: p.sender_phone || "",
       sender_address: p.sender_address || "",
       signature_use_structured: p.signature_use_structured ?? true,
+      signature_show_email: (p as { signature_show_email?: boolean }).signature_show_email !== false,
       signature_company: p.signature_company || "",
       template_style: ((senderTemplateStyles as readonly string[]).includes(p.template_style as any) ? p.template_style : "professional") as typeof senderProfileForm.template_style,
       sender_name: p.sender_name || "",
@@ -416,6 +425,7 @@ export default function EmailBranding() {
       sender_phone: p.sender_phone || "",
       sender_address: p.sender_address || "",
       signature_use_structured: p.signature_use_structured ?? true,
+      signature_show_email: (p as { signature_show_email?: boolean }).signature_show_email !== false,
       signature_company: p.signature_company || "",
       template_style: ((senderTemplateStyles as readonly string[]).includes(p.template_style as any) ? p.template_style : "professional") as typeof senderProfileForm.template_style,
       sender_name: p.sender_name || "",
@@ -442,6 +452,7 @@ export default function EmailBranding() {
             email: senderProfileForm.sender_email,
             website: senderProfileForm.website_url,
             address: senderProfileForm.sender_address,
+            includeEmail: senderProfileForm.signature_show_email,
           }) || null
         : (senderProfileForm.signature || null);
 
@@ -458,6 +469,7 @@ export default function EmailBranding() {
         sender_phone: senderProfileForm.sender_phone.trim() || null,
         sender_address: senderProfileForm.sender_address.trim() || null,
         signature_use_structured: senderProfileForm.signature_use_structured,
+        signature_show_email: senderProfileForm.signature_show_email,
         signature_company: senderProfileForm.signature_company.trim() || null,
         template_style: senderProfileForm.template_style,
         sender_name: senderProfileForm.sender_name.trim() || null,
@@ -799,6 +811,16 @@ export default function EmailBranding() {
                     placeholder="e.g. LaunchSpace, UWE - Bristol, BS34 8RB, UK"
                   />
                 </div>
+                <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/20">
+                  <div>
+                    <Label className="text-xs font-medium">Show email in signature</Label>
+                    <p className="text-xs text-muted-foreground">Turn off to omit the From address from the signature block (recipients already see it in the email header). Keeps one domain uniform.</p>
+                  </div>
+                  <Switch
+                    checked={businessProfile.email_signature_show_email}
+                    onCheckedChange={(checked) => setBusinessProfile({ ...businessProfile, email_signature_show_email: checked })}
+                  />
+                </div>
               </TabsContent>
               <TabsContent value="custom" className="pt-4">
                 <Label htmlFor="email_signature" className="text-xs">Custom email signature (HTML)</Label>
@@ -916,6 +938,7 @@ export default function EmailBranding() {
                 email: selectedProfile.sender_email,
                 website: selectedProfile.website_url,
                 address: selectedProfile.sender_address,
+                includeEmail: (selectedProfile as { signature_show_email?: boolean }).signature_show_email !== false,
               });
               return built || undefined;
             }
@@ -931,6 +954,7 @@ export default function EmailBranding() {
               email: businessProfile.email_sender_email,
               website: businessProfile.website,
               address: businessProfile.email_sender_address,
+              includeEmail: businessProfile.email_signature_show_email,
             });
             return built || undefined;
           }
@@ -1272,6 +1296,16 @@ export default function EmailBranding() {
                       placeholder="e.g. LaunchSpace, UWE - Bristol, BS34 8RB, UK"
                     />
                   </div>
+                  <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/20">
+                    <div>
+                      <Label className="text-xs font-medium">Show email in signature</Label>
+                      <p className="text-xs text-muted-foreground">Turn off to omit the From address from the signature (recipients already see it in the email header).</p>
+                    </div>
+                    <Switch
+                      checked={senderProfileForm.signature_show_email}
+                      onCheckedChange={(checked) => setSenderProfileForm((f) => ({ ...f, signature_show_email: checked }))}
+                    />
+                  </div>
                 </TabsContent>
                 <TabsContent value="custom" className="pt-4">
                   <Label className="text-xs">Custom email signature (HTML)</Label>
@@ -1330,6 +1364,7 @@ export default function EmailBranding() {
                             email: senderProfileForm.sender_email,
                             website: senderProfileForm.website_url,
                             address: senderProfileForm.sender_address,
+                            includeEmail: senderProfileForm.signature_show_email,
                           }) || undefined)
                         : (senderProfileForm.signature?.trim() || undefined)
                     }

@@ -11,10 +11,27 @@ function cleanApiKey(key: string | undefined): string | null {
 }
 
 const OPENAI_API_KEY = cleanApiKey(Deno.env.get('OPENAI_API_KEY'));
+const RESEND_API_KEY = cleanApiKey(Deno.env.get('RESEND_API_KEY'));
+
+/** Extract email from "Name <email@domain.com>" or return as-is if plain email */
+function extractEmail(value: string): string {
+  if (!value || typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  const match = trimmed.match(/<([^>]+)>/);
+  return (match ? match[1] : trimmed).toLowerCase();
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Allow GET for webhook URL verification (e.g. Resend checking endpoint before save)
+  if (req.method === 'GET') {
+    return new Response(
+      JSON.stringify({ ok: true, service: 'process-inbound-emails' }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
   try {
@@ -57,18 +74,41 @@ serve(async (req) => {
         );
       }
 
-      from = rawFrom.trim().toLowerCase();
-      
-      // Extract other fields with similar fallback paths
-      to = payload?.data?.to?.email ?? payload?.data?.to ?? payload?.to?.email ?? payload?.to ?? '';
+      from = extractEmail(String(rawFrom));
+      const rawTo = payload?.data?.to ?? payload?.to ?? '';
+      to = Array.isArray(rawTo) ? (rawTo[0] ? extractEmail(String(rawTo[0])) : '') : extractEmail(String(rawTo));
       subject = payload?.data?.subject ?? payload?.subject ?? '';
       bodyHtml = payload?.data?.html_body ?? payload?.data?.bodyHtml ?? payload?.html ?? payload?.bodyHtml ?? '';
       bodyText = payload?.data?.text_body ?? payload?.data?.bodyText ?? payload?.text ?? payload?.bodyText ?? '';
       messageId = payload?.data?.message_id ?? payload?.messageId ?? payload?.message_id ?? `resend-${Date.now()}`;
       threadId = payload?.data?.thread_id ?? payload?.threadId ?? payload?.thread_id ?? null;
       inReplyTo = payload?.data?.in_reply_to ?? payload?.inReplyTo ?? payload?.in_reply_to ?? null;
+
+      // Resend email.received webhook does NOT include body; fetch via API if we have email_id
+      const emailId = payload?.data?.email_id ?? payload?.email_id;
+      if (webhookSource === 'resend' && emailId && RESEND_API_KEY && (!bodyText || !bodyHtml)) {
+        try {
+          const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
+            headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
+          });
+          if (res.ok) {
+            const emailData = await res.json();
+            bodyHtml = bodyHtml || emailData?.html || '';
+            bodyText = bodyText || emailData?.text || '';
+            if (emailData?.message_id) messageId = emailData.message_id;
+            if (emailData?.headers?.['in-reply-to']) inReplyTo = emailData.headers['in-reply-to'].replace(/[<>]/g, '');
+            if (emailData?.headers?.['references']) {
+              const refs = emailData.headers['references'].trim().split(/\s+/);
+              if (refs[0]) threadId = refs[0].replace(/[<>]/g, '');
+            }
+            console.log('✅ Fetched Resend received email body:', { hasHtml: !!bodyHtml, hasText: !!bodyText });
+          }
+        } catch (e) {
+          console.warn('Failed to fetch Resend received email body:', e);
+        }
+      }
       
-      console.log('✅ Resend webhook parsed:', { from, to, subject, messageId, hasBody: !!bodyText });
+      console.log('✅ Resend webhook parsed:', { from, to, subject, messageId, hasBody: !!(bodyText || bodyHtml) });
     } else if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
       // SendGrid Inbound Parse format
       webhookSource = 'sendgrid';
@@ -283,7 +323,7 @@ serve(async (req) => {
       console.log('This is normal for first-time contacts or emails not part of an active sequence');
       
       // Still store the email for visibility, without a sequence
-      await supabaseClient
+      const { error: insertError } = await supabaseClient
         .from('email_threads')
         .insert({
           company_sequence_id: null,
@@ -300,6 +340,14 @@ serve(async (req) => {
             unmatched: true,
           },
         });
+      
+      if (insertError) {
+        console.error('Failed to store inbound email (standalone):', insertError);
+        return new Response(
+          JSON.stringify({ success: false, error: insertError.message, stored: false }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       
       return new Response(
         JSON.stringify({ 

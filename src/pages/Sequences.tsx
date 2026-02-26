@@ -794,6 +794,7 @@ export default function Sequences() {
           open={detailsDialogOpen}
           onOpenChange={setDetailsDialogOpen}
           sequence={selectedSequence}
+          onSequenceUpdated={(updated) => setSelectedSequence(updated)}
         />
       )}
 

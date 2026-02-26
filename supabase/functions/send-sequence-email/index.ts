@@ -132,7 +132,25 @@ serve(async (req) => {
 
     console.log(`Sending via ${emailProvider} from ${fromEmail}`);
 
-    const plainBody = emailStep.body;
+    // Strip any signature/sign-off from step body to avoid double signature (system adds it via branding)
+    let plainBody = (emailStep.body ?? '').trim();
+    if (plainBody) {
+      const signaturePatterns = [
+        /\n\s*Best regards,?\s*[\s\S]*$/i,
+        /\n\s*Kind regards,?\s*[\s\S]*$/i,
+        /\n\s*Sincerely,?\s*[\s\S]*$/i,
+        /\n\s*Regards,?\s*[\s\S]*$/i,
+        /\n\s*\[Your Name\][\s\S]*$/i,
+        /\n\s*\{\{your_name\}\}[\s\S]*$/i,
+        /\n\s*\{\{sender_name\}\}[\s\S]*$/i,
+      ];
+      for (const p of signaturePatterns) {
+        plainBody = plainBody.replace(p, '').trim();
+      }
+      // Remove trailing newlines and common placeholder signature lines
+      plainBody = plainBody.replace(/\n{2,}\s*(\[.*?\]|\{\{.*?\}\}|[A-Z][a-z]+ [A-Z][a-z]+.*)$/gm, '').trim();
+    }
+
     const htmlBody = branding
       ? renderEmailTemplate(branding.templateStyle, {
           body: plainBody,

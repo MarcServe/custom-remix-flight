@@ -704,6 +704,7 @@ export type Database = {
           email_sender_phone: string | null
           email_sender_address: string | null
           email_signature_use_structured: boolean | null
+          signature_show_email: boolean | null
           email_logo_url: string | null
           email_provider: string | null
           email_signature: string | null
@@ -744,6 +745,7 @@ export type Database = {
           email_sender_phone?: string | null
           email_sender_address?: string | null
           email_signature_use_structured?: boolean | null
+          signature_show_email?: boolean | null
           email_logo_url?: string | null
           email_provider?: string | null
           email_signature?: string | null
@@ -784,6 +786,7 @@ export type Database = {
           email_sender_phone?: string | null
           email_sender_address?: string | null
           email_signature_use_structured?: boolean | null
+          signature_show_email?: boolean | null
           email_logo_url?: string | null
           email_provider?: string | null
           email_signature?: string | null
@@ -824,6 +827,7 @@ export type Database = {
           sender_phone: string | null
           sender_address: string | null
           signature_use_structured: boolean | null
+          signature_show_email: boolean | null
           signature_company: string | null
           created_at: string
           updated_at: string
@@ -850,6 +854,7 @@ export type Database = {
           sender_phone?: string | null
           sender_address?: string | null
           signature_use_structured?: boolean | null
+          signature_show_email?: boolean | null
           signature_company?: string | null
           created_at?: string
           updated_at?: string
@@ -876,6 +881,7 @@ export type Database = {
           sender_phone?: string | null
           sender_address?: string | null
           signature_use_structured?: boolean | null
+          signature_show_email?: boolean | null
           signature_company?: string | null
           created_at?: string
           updated_at?: string
@@ -2221,6 +2227,10 @@ export type Database = {
           steps: string[] | null
           updated_at: string | null
           use_email_branding: boolean
+          repeat_sequence: boolean
+          repeat_after_days: number
+          repeat_only_for: string
+          description: string | null
         }
         Insert: {
           ai_instructions?: string | null
@@ -2238,6 +2248,10 @@ export type Database = {
           steps?: string[] | null
           updated_at?: string | null
           use_email_branding?: boolean
+          repeat_sequence?: boolean
+          repeat_after_days?: number
+          repeat_only_for?: string
+          description?: string | null
         }
         Update: {
           ai_instructions?: string | null
@@ -2255,6 +2269,10 @@ export type Database = {
           steps?: string[] | null
           updated_at?: string | null
           use_email_branding?: boolean
+          repeat_sequence?: boolean
+          repeat_after_days?: number
+          repeat_only_for?: string
+          description?: string | null
         }
         Relationships: []
       }

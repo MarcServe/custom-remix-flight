@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { MessageSquare, Loader2, Send, ArrowLeft, ArrowRight, Sparkles, Filter, Settings, RefreshCw } from "lucide-react";
+import { MessageSquare, Loader2, Send, ArrowLeft, ArrowRight, Sparkles, Filter, Settings, RefreshCw, Trash2, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,10 +18,26 @@ import { usePendingReviews, PendingReview } from "@/hooks/use-pending-reviews";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEmailThreadsRealtime } from "@/hooks/use-realtime";
-import { contactsApi } from "@/lib/api/contacts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSendEmail } from "@/hooks/use-email-sending";
 import { QuickReplyTemplates } from "@/components/QuickReplyTemplates";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { CreateDealDialog, type DealInitialValues } from "@/components/CreateDealDialog";
 
 interface EmailThread {
   id: string;
@@ -75,32 +91,6 @@ export default function Conversations() {
   // Subscribe to realtime updates for email threads
   useEmailThreadsRealtime();
 
-  // Auto-add test contact if needed
-  useEffect(() => {
-    const addTestContact = async () => {
-      try {
-        // Check if contact already exists
-        const existingContacts = await contactsApi.getContactsByCompany('0855efb0-4875-4b84-adca-fc837d3abebc');
-        const hasLunaContact = existingContacts?.some(c => c.email === 'lunamorgan511@gmail.com');
-        
-        if (!hasLunaContact) {
-          await contactsApi.createContact({
-            company_id: '0855efb0-4875-4b84-adca-fc837d3abebc',
-            name: 'Luna Morgan',
-            email: 'lunamorgan511@gmail.com',
-            title: 'Test Contact',
-            is_primary_contact: false,
-          });
-          console.log('✅ Added Luna Morgan as test contact');
-        }
-      } catch (error) {
-        console.error('Failed to add test contact:', error);
-      }
-    };
-
-    addTestContact();
-  }, []);
-  
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null);
   const [selectedPersonalThread, setSelectedPersonalThread] = useState<string | null>(null);
   const [conversationType, setConversationType] = useState<"sequences" | "personal">("sequences");
@@ -112,6 +102,10 @@ export default function Conversations() {
   const [selectedReview, setSelectedReview] = useState<PendingReview | null>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [dealDialogOpen, setDealDialogOpen] = useState(false);
+  const [dealInitialValues, setDealInitialValues] = useState<DealInitialValues | null>(null);
+  const [isMovingToDeal, setIsMovingToDeal] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
 
   const sendEmailMutation = useSendEmail();
@@ -121,16 +115,19 @@ export default function Conversations() {
   // Enhanced polling - refetch conversations more frequently
   useEffect(() => {
     const interval = setInterval(() => {
-      console.log('Auto-refreshing conversations and threads...');
       queryClient.invalidateQueries({ queryKey: ['active-conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['personal-conversations'] });
       if (selectedSequence) {
         queryClient.invalidateQueries({ queryKey: ['email-threads', selectedSequence] });
       }
+      if (selectedPersonalThread) {
+        queryClient.invalidateQueries({ queryKey: ['email-threads', selectedSequence, selectedPersonalThread, conversationType] });
+      }
       setLastSyncTime(new Date());
-    }, 15000); // 15 seconds for better responsiveness
+    }, 15000); // 15 seconds
 
     return () => clearInterval(interval);
-  }, [queryClient, selectedSequence]);
+  }, [queryClient, selectedSequence, selectedPersonalThread, conversationType]);
 
   // Fetch personal conversations (non-sequence emails)
   const { data: personalConversations, refetch: refetchPersonalConversations } = useQuery({
@@ -144,24 +141,31 @@ export default function Conversations() {
 
       if (error) throw error;
 
-      // Group by thread_id or recipient email
-      const grouped = data.reduce((acc: any[], thread) => {
-        const existingConv = acc.find(c => 
-          c.thread_id === thread.thread_id || 
-          (c.to_email === thread.to_email && c.from_email === thread.from_email)
+      const rows = Array.isArray(data) ? data : [];
+      // Normalize emails for consistent grouping (DB may store mixed case)
+      const norm = (e: string) => (e || '').trim().toLowerCase();
+      // Group by thread_id or (from_email, to_email) pair
+      const grouped = rows.reduce((acc: any[], thread: any) => {
+        const tFrom = norm(thread?.from_email);
+        const tTo = norm(thread?.to_email);
+        const existingConv = acc.find((c: any) =>
+          (thread?.thread_id && c.thread_id === thread.thread_id) ||
+          (norm(c.to_email) === tTo && norm(c.from_email) === tFrom)
         );
 
         if (existingConv) {
           existingConv.threads.push(thread);
         } else {
+          const isToResend = tTo.includes('resend.app');
+          const title = isToResend ? (thread?.from_email || thread?.to_email) : (thread?.to_email || thread?.from_email);
           acc.push({
-            id: thread.thread_id || thread.id,
-            thread_id: thread.thread_id,
-            title: thread.to_email,
-            subject: thread.subject,
-            to_email: thread.to_email,
-            from_email: thread.from_email,
-            lastActivity: thread.received_at,
+            id: thread?.thread_id || thread?.id,
+            thread_id: thread?.thread_id,
+            title: title || 'Unknown',
+            subject: thread?.subject,
+            to_email: thread?.to_email,
+            from_email: thread?.from_email,
+            lastActivity: thread?.received_at,
             threads: [thread],
             type: 'personal'
           });
@@ -173,9 +177,10 @@ export default function Conversations() {
     },
   });
 
-  const { data: conversations, isLoading, refetch: refetchConversations } = useQuery({
+  const { data: conversations, isLoading, isError: isConversationsError, error: conversationsError, refetch: refetchConversations } = useQuery({
     queryKey: ['active-conversations'],
-    refetchInterval: 15000, // Refetch conversations list every 15 seconds
+    refetchInterval: 15000,
+    retry: 1,
     queryFn: async () => {
       console.log('Fetching active conversations...');
       setLastSyncTime(new Date());
@@ -243,7 +248,8 @@ export default function Conversations() {
       }, {} as Record<string, typeof standaloneThreads>);
 
       Object.entries(standaloneByRecipient).forEach(([email, threads]) => {
-        const latestThread = threads[0];
+        const latestThread = threads?.[0];
+        if (!latestThread) return;
         allConversations.push({
           id: `standalone-${email}`,
           type: 'standalone',
@@ -346,8 +352,10 @@ export default function Conversations() {
     ? threads?.filter(t => t.metadata?.auto_sent === true)
     : threads;
 
-  const selectedConversation = conversations?.find(c => c.id === selectedSequence);
-  const selectedSeqData = selectedConversation?.sequenceData;
+  const selectedConversation = conversationType === 'sequences'
+    ? conversations?.find((c: any) => c.id === selectedSequence)
+    : personalConversations?.find((c: any) => c.id === selectedPersonalThread);
+  const selectedSeqData = selectedConversation?.type === 'sequence' ? selectedConversation?.sequenceData : undefined;
 
   const handleGenerateResponse = async () => {
     if (!selectedSequence) return;
@@ -536,6 +544,66 @@ export default function Conversations() {
     }
   };
 
+  const handleDeleteConversation = async () => {
+    if (!threads?.length) return;
+    const ids = threads.map((t) => t.id);
+    const { error } = await supabase.from('email_threads').delete().in('id', ids);
+    if (error) {
+      toast({
+        title: "Delete failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    setDeleteDialogOpen(false);
+    if (conversationType === 'sequences') {
+      setSelectedSequence(null);
+    } else {
+      setSelectedPersonalThread(null);
+    }
+    queryClient.invalidateQueries({ queryKey: ['active-conversations'] });
+    queryClient.invalidateQueries({ queryKey: ['personal-conversations'] });
+    queryClient.invalidateQueries({ queryKey: ['email-threads'] });
+    toast({ title: "Conversation deleted", description: "The conversation has been removed." });
+  };
+
+  const handleMoveToDeals = async () => {
+    if (!threads?.length) return;
+    setIsMovingToDeal(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-conversation-for-deal', {
+        body: { threadIds: threads.map((t) => t.id) },
+      });
+      if (error) throw error;
+      if (!data || typeof data.title !== 'string') {
+        throw new Error(data?.error || 'AI could not extract deal details');
+      }
+      setDealInitialValues({
+        title: data.title,
+        company_name: data.company_name ?? undefined,
+        company_id: undefined,
+        amount: data.amount ?? undefined,
+        stage: data.stage ?? 'CONTACTED',
+        priority: data.priority ?? 'medium',
+        notes: data.notes ?? undefined,
+      });
+      setDealDialogOpen(true);
+      toast({
+        title: "Deal draft ready",
+        description: "Review and save the AI-suggested deal below.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Move to Deals failed",
+        description: e?.message || "Could not analyze conversation",
+        variant: "destructive",
+      });
+    } finally {
+      setIsMovingToDeal(false);
+    }
+  };
+
   const getSentimentBadge = (sentiment?: string) => {
     if (!sentiment) return null;
 
@@ -553,8 +621,25 @@ export default function Conversations() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="container mx-auto p-4 sm:p-6 max-w-7xl flex flex-col items-center justify-center min-h-[400px] gap-3">
+        <p className="text-sm text-muted-foreground">Loading conversations…</p>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden />
+      </div>
+    );
+  }
+
+  if (isConversationsError) {
+    const errMsg = conversationsError instanceof Error ? conversationsError.message : 'Please try again.';
+    return (
+      <div className="container mx-auto p-4 sm:p-6 max-w-7xl">
+        <Alert variant="destructive">
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            <span>Failed to load conversations. {errMsg}</span>
+            <Button variant="outline" size="sm" onClick={() => refetchConversations()}>
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }
@@ -668,7 +753,7 @@ export default function Conversations() {
           <TabsList className="mb-4 w-full sm:w-auto">
             <TabsTrigger value="sequences" className="flex-1 sm:flex-initial">
               <span className="mr-2">Sequences</span>
-              <Badge variant="secondary" className="ml-1">{conversations?.length || 0}</Badge>
+              <Badge variant="secondary" className="ml-1">{conversations?.filter((c: any) => c.type === 'sequence').length || 0}</Badge>
             </TabsTrigger>
             <TabsTrigger value="personal" className="flex-1 sm:flex-initial">
               <span className="mr-2">Personal</span>
@@ -681,15 +766,17 @@ export default function Conversations() {
               <CardHeader>
                 <CardTitle>{conversationType === 'sequences' ? 'Sequence Conversations' : 'Personal Emails'}</CardTitle>
                 <CardDescription>
-                  {conversationType === 'sequences' 
-                    ? 'Email threads from active sequences' 
-                    : 'Standalone emails sent from People menu'}
+                  {conversationType === 'sequences'
+                    ? 'Email threads from active sequences'
+                    : 'Standalone emails and replies to test/campaign emails appear here under the sender\'s address. Use Refresh if you don\'t see a reply yet.'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[400px]">
                   {(() => {
-                    const activeList = conversationType === 'sequences' ? conversations : personalConversations;
+                    const activeList = conversationType === 'sequences'
+                      ? (conversations?.filter((c: any) => c.type === 'sequence') ?? [])
+                      : (personalConversations ?? []);
                     const selectedId = conversationType === 'sequences' ? selectedSequence : selectedPersonalThread;
                     const setSelectedId = conversationType === 'sequences' ? setSelectedSequence : setSelectedPersonalThread;
 
@@ -698,9 +785,9 @@ export default function Conversations() {
                         <div className="text-center py-12">
                           <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                           <p className="text-sm text-muted-foreground">
-                            {conversationType === 'sequences' 
-                              ? 'No active sequence conversations' 
-                              : 'No personal emails yet'}
+                            {conversationType === 'sequences'
+                              ? 'No active sequence conversations'
+                              : 'No personal emails yet. Replies to test emails show here under the address you replied from.'}
                           </p>
                         </div>
                       );
@@ -778,17 +865,47 @@ export default function Conversations() {
                   <CardDescription className="truncate">Goal: {selectedConversation.goal}</CardDescription>
                 )}
               </div>
-              {selectedSequence && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setFilterAutoSent(!filterAutoSent)}
-                  className="shrink-0"
-                >
-                  <Filter className="h-4 w-4 mr-2" />
-                  {filterAutoSent ? "Show All" : "Auto-Sent Only"}
-                </Button>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {selectedSequence && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFilterAutoSent(!filterAutoSent)}
+                  >
+                    <Filter className="h-4 w-4 mr-2" />
+                    {filterAutoSent ? "Show All" : "Auto-Sent Only"}
+                  </Button>
+                )}
+                {(selectedSequence || selectedPersonalThread) && threads && threads.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        Actions
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => handleMoveToDeals()}
+                        disabled={isMovingToDeal}
+                      >
+                        {isMovingToDeal ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <TrendingUp className="h-4 w-4 mr-2" />
+                        )}
+                        Move to Deals (AI)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setDeleteDialogOpen(true)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete conversation
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -1023,6 +1140,33 @@ export default function Conversations() {
         open={reviewModalOpen}
         onOpenChange={setReviewModalOpen}
         review={selectedReview}
+      />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove this conversation and all its messages. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConversation} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <CreateDealDialog
+        open={dealDialogOpen}
+        onOpenChange={(open) => {
+          setDealDialogOpen(open);
+          if (!open) setDealInitialValues(null);
+        }}
+        initialValues={dealInitialValues}
+        onSuccess={() => navigate('/deals')}
       />
     </div>
   );

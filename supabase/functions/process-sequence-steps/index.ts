@@ -37,43 +37,192 @@ serve(async (req) => {
 
     const processed = [];
     const errors = [];
+    const now = new Date();
 
+    // Parse repeat_only_for: supports single value or JSON array for multi-select
+    const parseRepeatOnlyFor = (raw: string | undefined): string[] => {
+      if (!raw || !raw.trim()) return ['no_reply'];
+      const s = raw.trim();
+      if (s.startsWith('[')) {
+        try {
+          const arr = JSON.parse(s);
+          return Array.isArray(arr) ? arr.filter((x: unknown) => typeof x === 'string') : [s];
+        } catch {
+          return [s];
+        }
+      }
+      return [s];
+    };
+    const matchesRepeatOption = (opt: string, opened: boolean, clicked: boolean, replied: boolean): boolean => {
+      switch (opt) {
+        case 'all': return true;
+        case 'not_opened': return !opened;
+        case 'opened_not_clicked': return opened && !clicked;
+        case 'clicked_not_replied': return clicked && !replied;
+        case 'no_reply':
+        default: return !replied;
+      }
+    };
+
+    // 1. Handle restarts: sequences that were due to restart (repeat_sequence)
     for (const sequence of activeSequences) {
+      const meta = (sequence.metadata || {}) as {
+        restart_after?: string;
+        repeat_sequence?: boolean;
+        repeat_after_days?: number;
+        repeat_only_for?: string;
+      };
+      const restartAfter = meta.restart_after ? new Date(meta.restart_after) : null;
+      if (restartAfter && restartAfter.getTime() <= now.getTime()) {
+        const repeatOnlyForOptions = parseRepeatOnlyFor(meta.repeat_only_for);
+        const lastStep = sequence.current_step ?? 0;
+        const { data: lastStepActivity } = await supabase
+          .from('email_activities')
+          .select('opened_at, replied_at, metadata')
+          .eq('company_sequence_id', sequence.id)
+          .eq('step_number', lastStep)
+          .order('sent_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const opened = !!lastStepActivity?.opened_at;
+        const clicked = !!(lastStepActivity?.metadata as { clicked?: boolean } | null)?.clicked;
+        const replied = !!lastStepActivity?.replied_at;
+
+        const stillEligible = repeatOnlyForOptions.some((opt) => matchesRepeatOption(opt, opened, clicked, replied));
+
+        try {
+          if (!stillEligible) {
+            await supabase
+              .from('company_sequences')
+              .update({
+                status: 'completed',
+                metadata: { ...meta, restart_after: null },
+                updated_at: now.toISOString(),
+              })
+              .eq('id', sequence.id);
+            console.log(`Sequence ${sequence.id}: Not restarted—no longer eligible (${repeatOnlyForOptions.join(',')})`);
+          } else {
+            await supabase
+              .from('company_sequences')
+              .update({
+                current_step: 0,
+                metadata: { ...meta, restart_after: null },
+                updated_at: now.toISOString(),
+              })
+              .eq('id', sequence.id);
+            await supabase.from('email_activities').insert({
+              company_sequence_id: sequence.id,
+              contact_id: null,
+              step_number: 0,
+              subject: '(Restart)',
+              body: '',
+              status: 'sent',
+              sent_at: now.toISOString(),
+              metadata: { repeat_restart: true },
+            });
+            console.log(`Sequence ${sequence.id}: Restarted (repeat)`);
+          }
+        } catch (e) {
+          console.error(`Failed to restart sequence ${sequence.id}:`, e);
+        }
+      }
+    }
+
+    // Re-fetch active sequences after restarts (current_step may have changed)
+    const { data: activeSequencesAfterRestart } = await supabase
+      .from('company_sequences')
+      .select('*')
+      .eq('status', 'active');
+
+    const sequencesToProcess = activeSequencesAfterRestart || activeSequences;
+
+    for (const sequence of sequencesToProcess) {
       try {
         const nextStepNumber = sequence.current_step + 1;
         const nextStep = sequence.personalized_emails?.[nextStepNumber];
 
         if (!nextStep) {
-          // No more steps, mark as completed
-          await supabase
-            .from('company_sequences')
-            .update({ status: 'completed' })
-            .eq('id', sequence.id);
+          // No more steps: schedule restart (if repeat and condition matches) or mark completed
+          const meta = (sequence.metadata || {}) as {
+            restart_after?: string;
+            repeat_sequence?: boolean;
+            repeat_after_days?: number;
+            repeat_only_for?: string;
+          };
+          const repeatSequence = meta.repeat_sequence === true;
+          const repeatAfterDays = Math.max(1, Math.min(30, meta.repeat_after_days ?? 5));
+          const repeatOnlyForOptions = parseRepeatOnlyFor(meta.repeat_only_for);
+
+          let shouldRestart = false;
+          if (repeatSequence) {
+            const { data: lastStepActivity } = await supabase
+              .from('email_activities')
+              .select('opened_at, replied_at, metadata')
+              .eq('company_sequence_id', sequence.id)
+              .eq('step_number', sequence.current_step)
+              .order('sent_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            const opened = !!lastStepActivity?.opened_at;
+            const clicked = !!(lastStepActivity?.metadata as { clicked?: boolean } | null)?.clicked;
+            const replied = !!lastStepActivity?.replied_at;
+
+            shouldRestart = repeatOnlyForOptions.some((opt) => matchesRepeatOption(opt, opened, clicked, replied));
+          }
+
+          if (repeatSequence && shouldRestart) {
+            const restartAt = new Date(now);
+            restartAt.setDate(restartAt.getDate() + repeatAfterDays);
+            await supabase
+              .from('company_sequences')
+              .update({
+                metadata: { ...meta, restart_after: restartAt.toISOString() },
+                updated_at: now.toISOString(),
+              })
+              .eq('id', sequence.id);
+            console.log(`Sequence ${sequence.id}: Scheduled repeat in ${repeatAfterDays} days (repeat_only_for=${repeatOnlyForOptions.join(',')})`);
+          } else {
+            await supabase
+              .from('company_sequences')
+              .update({ status: 'completed' })
+              .eq('id', sequence.id);
+            if (repeatSequence && !shouldRestart) {
+              console.log(`Sequence ${sequence.id}: Completed (repeat conditions ${repeatOnlyForOptions.join(',')} not met—contact already engaged/replied)`);
+            }
+          }
           continue;
         }
 
-        // Get last email activity
+        // Get last email activity (most recent for this step)
         const { data: lastActivity } = await supabase
           .from('email_activities')
           .select('*')
           .eq('company_sequence_id', sequence.id)
           .eq('step_number', sequence.current_step)
-          .single();
+          .order('sent_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
         if (!lastActivity?.sent_at) {
           console.log(`Sequence ${sequence.id}: No activity found for current step`);
           continue;
         }
 
-        // Check automation rules if enabled
+        // Check automation rules: per-step rule (nextStep.automation_rule) or global rules
         const automationRules = sequence.automation_rules || { enabled: true, rules: [] };
+        const nextStepRule = nextStep?.automation_rule as { type?: string; wait_hours?: number } | undefined;
+        const rulesToCheck = nextStepRule?.type && nextStepRule.type !== 'time_based'
+          ? [{ type: nextStepRule.type, wait_hours: nextStepRule.wait_hours ?? 24 }]
+          : (automationRules.rules || []);
         let shouldSendNext = false;
         let triggerReason = '';
 
-        if (automationRules.enabled && automationRules.rules?.length > 0) {
+        if (automationRules.enabled && rulesToCheck.length > 0) {
           const hoursSinceLastEmail = (Date.now() - new Date(lastActivity.sent_at).getTime()) / (1000 * 60 * 60);
 
-          for (const rule of automationRules.rules) {
+          for (const rule of rulesToCheck) {
             const waitHours = rule.wait_hours || 48;
 
             switch (rule.type) {

@@ -13,8 +13,9 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical } from "lucide-react";
+import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical, ExternalLink, Edit2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useUpdateSequence } from "@/hooks/use-sequences";
 import { PersonaSelector, type MarketingPersona } from "./email/PersonaSelector";
 import { TagInput } from "@/components/ui/tag-input";
 import { useCompanyTags } from "@/hooks/use-company-tags";
@@ -354,7 +355,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     enabled: open,
   });
 
-  // Email sequences for campaign auto follow-up (reminders when no response)
+  // Email sequences for campaign auto follow-up (reminders when no response) — include steps for dropdown preview
   const { data: followUpSequences = [] } = useQuery({
     queryKey: ['email-sequences-follow-up'],
     queryFn: async () => {
@@ -362,13 +363,21 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       if (!user) return [];
       const { data, error } = await supabase
         .from('email_sequences')
-        .select('id, name')
+        .select('id, name, steps')
         .order('name');
       if (error) return [];
       return data || [];
     },
     enabled: open,
   });
+
+  const selectedFollowUpSequence = followUpSequenceId
+    ? followUpSequences.find((s: { id: string }) => s.id === followUpSequenceId)
+    : null;
+
+  const [editingFollowUpSequenceName, setEditingFollowUpSequenceName] = useState(false);
+  const [followUpSequenceNameEdit, setFollowUpSequenceNameEdit] = useState("");
+  const updateSequence = useUpdateSequence();
 
   // Sender profiles for "Send as" (e.g. TALKWEB, Biz Boosters)
   const { data: senderProfiles = [] } = useQuery({
@@ -2998,6 +3007,106 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 <p className="text-xs text-muted-foreground">
                   AI will infer audience and steps from your email content and add the new sequence above.
                 </p>
+                {selectedFollowUpSequence && (
+                  <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold">Sequence preview</span>
+                      <a
+                        href="/sequences"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        View or edit sequence
+                      </a>
+                    </div>
+                    <div className="flex items-center gap-2 group">
+                      {editingFollowUpSequenceName ? (
+                        <Input
+                          value={followUpSequenceNameEdit}
+                          onChange={(e) => setFollowUpSequenceNameEdit(e.target.value)}
+                          onBlur={async () => {
+                            const trimmed = followUpSequenceNameEdit.trim() || selectedFollowUpSequence.name;
+                            setEditingFollowUpSequenceName(false);
+                            if (trimmed !== selectedFollowUpSequence.name) {
+                              try {
+                                await updateSequence.mutateAsync({
+                                  id: selectedFollowUpSequence.id,
+                                  updates: { name: trimmed },
+                                });
+                                queryClient.invalidateQueries({ queryKey: ['email-sequences-follow-up'] });
+                              } catch {
+                                setFollowUpSequenceNameEdit(selectedFollowUpSequence.name);
+                              }
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                            if (e.key === "Escape") {
+                              setFollowUpSequenceNameEdit(selectedFollowUpSequence.name);
+                              setEditingFollowUpSequenceName(false);
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          className="h-8 text-sm font-medium"
+                          autoFocus
+                        />
+                      ) : (
+                        <>
+                          <span className="text-sm font-medium truncate flex-1 min-w-0">
+                            {selectedFollowUpSequence.name}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => {
+                              setFollowUpSequenceNameEdit(selectedFollowUpSequence.name);
+                              setEditingFollowUpSequenceName(true);
+                            }}
+                            title="Edit sequence title"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                      {(() => {
+                        const steps = selectedFollowUpSequence.steps;
+                        if (!steps || !Array.isArray(steps) || steps.length === 0) {
+                          return <p className="text-xs text-muted-foreground">No steps in this sequence.</p>;
+                        }
+                        return steps.map((step: unknown, idx: number) => {
+                          let parsed: { subject?: string; body?: string; delayDays?: number } = {};
+                          try {
+                            parsed = typeof step === 'string' ? JSON.parse(step) : (step as object) || {};
+                          } catch {
+                            parsed = {};
+                          }
+                          const subject = parsed.subject || '(No subject)';
+                          const bodyPreview = (parsed.body || '')
+                            .replace(/<[^>]+>/g, ' ')
+                            .replace(/\s+/g, ' ')
+                            .trim()
+                            .slice(0, 80);
+                          return (
+                            <div key={idx} className="text-xs border-l-2 border-primary/50 pl-2 py-0.5">
+                              <span className="font-medium text-muted-foreground">Step {idx + 1}</span>
+                              {parsed.delayDays != null && parsed.delayDays > 0 && (
+                                <span className="text-muted-foreground ml-1">(Day {parsed.delayDays})</span>
+                              )}
+                              <div className="font-medium mt-0.5">{subject}</div>
+                              {bodyPreview && <div className="text-muted-foreground truncate">{bodyPreview}{bodyPreview.length >= 80 ? '…' : ''}</div>}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

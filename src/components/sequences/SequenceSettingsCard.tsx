@@ -105,11 +105,13 @@ export function SequenceSettingsCard({
   const getRuleLabel = (type: string) => {
     switch (type) {
       case 'no_open':
-        return 'No Open';
+        return 'No open (send after wait)';
       case 'opened_not_clicked':
-        return 'Opened, Not Clicked';
+        return 'Opened, not clicked (send after wait)';
       case 'clicked_not_replied':
-        return 'Clicked, Not Replied';
+        return 'Clicked, not replied (send after wait)';
+      case 'no_reply_after_open':
+        return 'No reply after open (send after wait)';
       default:
         return type;
     }

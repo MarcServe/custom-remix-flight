@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -18,15 +18,28 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plus, X, DollarSign, Calendar, Clock, Tag as TagIcon } from "lucide-react";
 
+export interface DealInitialValues {
+  title?: string;
+  company_id?: string;
+  company_name?: string;
+  amount?: number;
+  stage?: string;
+  priority?: string;
+  notes?: string;
+  tags?: string[];
+}
+
 interface CreateDealDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialValues?: DealInitialValues | null;
+  onSuccess?: () => void;
 }
 
 const DEAL_STAGES = ["NEW", "QUALIFIED", "CONTACTED", "MEETING", "PROPOSAL", "WON", "LOST"];
 const PRIORITIES = ["low", "medium", "high"];
 
-export function CreateDealDialog({ open, onOpenChange }: CreateDealDialogProps) {
+export function CreateDealDialog({ open, onOpenChange, initialValues, onSuccess }: CreateDealDialogProps) {
   const [title, setTitle] = useState("");
   const [companyId, setCompanyId] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
@@ -40,7 +53,7 @@ export function CreateDealDialog({ open, onOpenChange }: CreateDealDialogProps) 
   
   const queryClient = useQueryClient();
 
-  // Fetch companies for dropdown
+  // Fetch companies for dropdown (must be declared before any useEffect that uses it)
   const { data: companies } = useQuery({
     queryKey: ['companies-for-deals'],
     queryFn: async () => {
@@ -52,6 +65,27 @@ export function CreateDealDialog({ open, onOpenChange }: CreateDealDialogProps) 
     },
     enabled: open,
   });
+
+  useEffect(() => {
+    if (open && initialValues) {
+      setTitle(initialValues.title ?? "");
+      setCompanyId(initialValues.company_id ?? "");
+      setAmount(initialValues.amount != null ? String(initialValues.amount) : "");
+      setStage(initialValues.stage ?? "NEW");
+      setPriority(initialValues.priority ?? "medium");
+      setNotes(initialValues.notes ?? "");
+      setTags(initialValues.tags ?? []);
+    }
+  }, [open, initialValues]);
+
+  // Resolve company_id from company_name once companies list is loaded (e.g. from AI)
+  useEffect(() => {
+    if (!open || !initialValues?.company_name || initialValues.company_id || !companies?.length) return;
+    const match = companies.find(
+      (c) => c.name?.toLowerCase() === initialValues.company_name?.toLowerCase()
+    );
+    if (match) setCompanyId(match.id);
+  }, [open, initialValues?.company_name, initialValues?.company_id, companies]);
 
   const createMutation = useMutation({
     mutationFn: async (dealData: any) => {
@@ -69,6 +103,7 @@ export function CreateDealDialog({ open, onOpenChange }: CreateDealDialogProps) 
       toast.success("Deal created successfully");
       resetForm();
       onOpenChange(false);
+      onSuccess?.();
     },
     onError: (error: Error) => {
       toast.error(`Failed to create deal: ${error.message}`);

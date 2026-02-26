@@ -203,7 +203,7 @@ Configure matching secrets in Vercel (Frontend) and Supabase (edge functions). W
 
 - **Nango OAuth** – `nango-oauth-init` creates Connect sessions; `nango-webhook` stores connections mapped to Supabase users. Ensure integration IDs (`google-mail`, `microsoft-outlook`) exist in Nango and redirect URIs include `https://api.nango.dev/oauth/callback`.
 - **Resend** – `send-sequence-email(s)` deliver via Resend’s API. Webhooks (`email-webhook`) capture events and update `email_activities`. Make sure webhook endpoints in Resend point to `https://<project>.supabase.co/functions/v1/email-webhook`.
-- **Inbound Replies** – Configure Resend inbound processing to hit `process-inbound-emails`. Error “null value in column `from_email`” means the handler must populate required fields before inserting.
+- **Inbound Replies** – Configure Resend inbound processing to hit `process-inbound-emails`. See [docs/RESEND_INBOUND_SETUP.md](docs/RESEND_INBOUND_SETUP.md) for webhook URL, `RESEND_API_KEY`, and where replies appear in Conversations. Error “null value in column `from_email`” means the handler must populate required fields before inserting.
 - **Lead Enrichment** – `lead-finder` uses Exa for initial results, Perplexity for enrichment, and GetProspect for contacts (all optional depending on API keys).
 
 ## Branching & Deployment

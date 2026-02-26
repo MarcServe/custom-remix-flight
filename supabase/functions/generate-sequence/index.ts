@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { size, geography, industry, steps = 3, tone = "professional", provider, model, customInstructions, productContext, autoRespond = false, use_email_branding = true } = await req.json();
+    const { size, geography, industry, steps = 3, tone = "professional", provider, model, customInstructions, productContext, autoRespond = false, use_email_branding = true, name: requestedName } = await req.json();
 
     console.log("Sequence generation request:", { size, geography, industry, steps, tone, provider, model, hasProductContext: !!productContext });
 
@@ -82,12 +82,15 @@ ${businessContext}
 
 ${customInstructions ? `\nCUSTOM INSTRUCTIONS:\n${customInstructions}\n` : ''}
 
+CRITICAL - SIGNATURE RULE (follow strictly to avoid double signature in sent emails):
+- The body must END with the main message or call-to-action. Do NOT include: "Best regards", "Kind regards", "Sincerely", "[Your Name]", "{{your_name}}", or any sender/company name in the body. The system adds the email signature automatically when sending; if you include it in the body, recipients see it twice.
+
 Return ONLY a valid JSON array (no markdown, no code blocks) with exactly ${steps} objects, each having:
 - subject (string): Email subject line
-- body (string): Email body with placeholders like {{company_name}}, {{first_name}}
+- body (string): Email body with placeholders like {{company_name}}, {{first_name}}. End with your closing sentence or call-to-action only. No sign-off line, no signature, no "[Your Name]", no company name.
 - delayDays (number): Days to wait before sending (0 for first email, then increase)
 
-Make each email progressively more specific and value-focused. Keep emails concise and professional.
+Make each email progressively more specific and value-focused. Keep emails concise and professional. Do not add any sign-off or signature—the platform adds it automatically.
 ${pitchContext ? 'Every email must pitch the product/offer described in "WHAT WE ARE PITCHING" above. Use its name and value proposition.' : ''}
 ${businessContext && !pitchContext ? 'Use the business context to make the emails relevant and show clear value alignment.' : ''}
 ${customInstructions ? 'Follow the custom instructions provided above carefully.' : ''}
@@ -164,7 +167,7 @@ Return ONLY the JSON array.`;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const sequenceName = `${industry} in ${geography} (${size}) - ${tone}`;
+    const sequenceName = (requestedName && String(requestedName).trim()) || `${industry} in ${geography} (${size}) - ${tone}`;
 
     const { data: savedSequence, error: sequenceError } = await supabase
       .from("email_sequences")

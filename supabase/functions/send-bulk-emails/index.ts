@@ -730,19 +730,26 @@ serve(async (req) => {
               if (!existing) {
                 const { data: followUpSequence } = await supabaseClient
                   .from('email_sequences')
-                  .select('steps')
+                  .select('steps, repeat_sequence, repeat_after_days, repeat_only_for')
                   .eq('id', followUpSeqId)
                   .single();
                 const steps = Array.isArray(followUpSequence?.steps) ? followUpSequence.steps : [];
-                const personalizedEmails: { stepNumber: number; subject: string; body: string; delayDays: number }[] = [
+                const personalizedEmails: { stepNumber: number; subject: string; body: string; delayDays: number; automation_rule?: { type: string; wait_hours?: number } }[] = [
                   { stepNumber: 0, subject: '(Campaign)', body: '', delayDays: 0 },
                 ];
-                steps.forEach((step: { subject?: string; body?: string; delayDays?: number }, i: number) => {
+                steps.forEach((rawStep: unknown, i: number) => {
+                  const step = typeof rawStep === 'string' ? (() => { try { return JSON.parse(rawStep); } catch { return {}; } })() : (rawStep as Record<string, unknown>) || {};
+                  const subj = step?.subject ?? `Follow-up ${i + 1}`;
+                  const body = step?.body ?? '';
+                  const delayDays = typeof step?.delayDays === 'number' ? step.delayDays : (i === 0 ? 3 : (i + 1) * 2);
+                  const ar = step?.automation_rule as { type?: string; wait_hours?: number } | undefined;
+                  const ruleType = ar?.type && ['no_open', 'opened_not_clicked', 'clicked_not_replied', 'no_reply_after_open', 'time_based', 'wait_for_open', 'wait_for_click'].includes(ar.type) ? ar.type : undefined;
                   personalizedEmails.push({
                     stepNumber: i + 1,
-                    subject: step?.subject ?? `Follow-up ${i + 1}`,
-                    body: step?.body ?? '',
-                    delayDays: typeof step?.delayDays === 'number' ? step.delayDays : (i === 0 ? 3 : (i + 1) * 2),
+                    subject: subj,
+                    body,
+                    delayDays,
+                    ...(ruleType && ruleType !== 'none' && ruleType !== 'time_based' ? { automation_rule: { type: ruleType, wait_hours: ar?.wait_hours ?? 24 } } : {}),
                   });
                 });
                 const { data: newCs, error: csErr } = await supabaseClient
@@ -761,7 +768,13 @@ serve(async (req) => {
                         { type: 'no_open', wait_hours: 72 },
                       ],
                     },
-                    metadata: { first_email_sent_at: new Date().toISOString(), campaign_recipient_id: recipient.id },
+                    metadata: {
+                      first_email_sent_at: new Date().toISOString(),
+                      campaign_recipient_id: recipient.id,
+                      repeat_sequence: !!(followUpSequence as { repeat_sequence?: boolean })?.repeat_sequence,
+                      repeat_after_days: Math.max(1, Math.min(30, (followUpSequence as { repeat_after_days?: number })?.repeat_after_days ?? 5)),
+                      repeat_only_for: (followUpSequence as { repeat_only_for?: string })?.repeat_only_for ?? 'no_reply',
+                    },
                   })
                   .select('id')
                   .single();

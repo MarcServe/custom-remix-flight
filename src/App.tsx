@@ -93,7 +93,7 @@ const App = () => (
                           <Route path="/newsletters" element={<Newsletters />} />
                           <Route path="/recipient-groups" element={<RecipientGroups />} />
                           <Route path="/notes" element={<Notes />} />
-                          <Route path="/conversations" element={<Conversations />} />
+                          <Route path="/conversations" element={<PageErrorBoundary fallbackTitle="Conversations failed to load"><Conversations /></PageErrorBoundary>} />
                           <Route path="/events" element={<Events />} />
                           <Route path="/integrations" element={<Integrations />} />
                           <Route path="/integrations/email-providers" element={<EmailProviders />} />
