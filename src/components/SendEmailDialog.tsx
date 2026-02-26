@@ -345,9 +345,9 @@ export function SendEmailDialog({
                   {senderProfiles.map((p: any) => (
                     <SelectItem key={p.id} value={p.id}>
                       <div className="flex flex-col">
-                        <span className="font-medium">{p.display_name || p.name}</span>
+                        <span className="font-medium">{p.name || p.display_name || 'Unnamed profile'}</span>
                         <span className="text-xs text-muted-foreground">
-                          {p.sender_name || p.name}{p.sender_email ? ` · ${p.sender_email}` : ''}
+                          {p.sender_name && p.sender_email ? `${p.sender_name} · ${p.sender_email}` : p.sender_email || p.display_name || ''}
                         </span>
                       </div>
                     </SelectItem>

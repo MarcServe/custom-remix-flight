@@ -1382,7 +1382,7 @@ Return ONLY the HTML body content.`,
                         <SelectContent>
                           <SelectItem value="default">Default — {businessProfile?.company_name || "Your company"}</SelectItem>
                           {senderProfiles.map((p: any) => (
-                            <SelectItem key={p.id} value={p.id}>{p.display_name || p.name}</SelectItem>
+                            <SelectItem key={p.id} value={p.id}>{p.name || p.display_name || 'Unnamed profile'}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
