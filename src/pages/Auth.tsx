@@ -198,7 +198,7 @@ export default function Auth() {
       <div className="absolute inset-0 pointer-events-none">
         <img 
           src={genieImage} 
-          alt="LeadGenie CRM" 
+          alt="LeadBoosters CRM" 
           className="w-full h-full object-cover object-center opacity-15 animate-fade-in"
           style={{ 
             animationDelay: '0.2s',
@@ -217,12 +217,12 @@ export default function Auth() {
       <Card className="w-full max-w-md relative z-10 animate-fade-in shadow-[0_15px_45px_-20px_rgba(72,50,250,0.6)] backdrop-blur-md bg-card/98 border-2 border-primary/40 ring-2 ring-primary/20" style={{ animationDelay: '0.3s' }}>
         <CardHeader className="text-center space-y-3 pb-2">
           <div className="flex justify-center animate-fade-in" style={{ animationDelay: '0.3s' }}>
-            <img src={leadGenieLogo} alt="LeadGenie CRM" className="h-20 w-auto drop-shadow" />
+            <img src={leadGenieLogo} alt="LeadBoosters CRM" className="h-20 w-auto drop-shadow" />
           </div>
 
           <div className="space-y-1 animate-fade-in" style={{ animationDelay: '0.4s' }}>
             <CardTitle className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-              LeadGenie
+              LeadBoosters
             </CardTitle>
             <CardDescription className="text-sm text-muted-foreground">
               Find leads, enrich them, and run email &amp; phone outreach that converts

@@ -225,6 +225,75 @@ Deno.serve(async (req) => {
         });
       }
 
+      case 'process-scheduled-ab-actions': {
+        // Process due scheduled Resend/Swap A/B actions (from A/B Testing → Schedule tab)
+        console.log('[cron-trigger] Processing scheduled campaign actions');
+        const now = new Date().toISOString();
+        const { data: due, error: dueError } = await supabase
+          .from('scheduled_campaign_actions')
+          .select('id, campaign_id, action')
+          .eq('status', 'pending')
+          .lte('scheduled_at', now);
+        if (dueError) {
+          console.error('[cron-trigger] Error fetching scheduled actions:', dueError);
+          return new Response(JSON.stringify({ success: false, error: dueError.message }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        const results: { id: string; campaign_id: string; action: string; ok?: boolean; error?: string }[] = [];
+        for (const row of due || []) {
+          try {
+            if (row.action === 'swap') {
+              const resResend = await fetch(`${SUPABASE_URL}/functions/v1/resend-campaign-variants`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ campaignId: row.campaign_id, action: 'swap' }),
+              });
+              const resResendJson = await resResend.json().catch(() => ({}));
+              if (resResendJson.error) throw new Error(resResendJson.error);
+            } else {
+              const variant = row.action === 'resend_a' ? 'A' : row.action === 'resend_b' ? 'B' : null;
+              let query = supabase
+                .from('email_campaign_recipients')
+                .update({ status: 'pending' })
+                .eq('campaign_id', row.campaign_id)
+                .in('status', ['sent', 'opened', 'clicked']);
+              if (variant) query = query.eq('ab_variant', variant);
+              const { error: upErr } = await query;
+              if (upErr) throw upErr;
+              await supabase
+                .from('email_campaigns')
+                .update({ status: 'sending' })
+                .eq('id', row.campaign_id);
+            }
+            const resSend = await fetch(`${SUPABASE_URL}/functions/v1/send-bulk-emails`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ campaignId: row.campaign_id, triggeredByCron: true }),
+            });
+            await resSend.json().catch(() => ({}));
+            await supabase.from('scheduled_campaign_actions').update({ status: 'completed' }).eq('id', row.id);
+            results.push({ id: row.id, campaign_id: row.campaign_id, action: row.action, ok: true });
+          } catch (e) {
+            console.error('[cron-trigger] Scheduled action failed:', row.id, e);
+            results.push({ id: row.id, campaign_id: row.campaign_id, action: row.action, error: e instanceof Error ? e.message : String(e) });
+          }
+        }
+        return new Response(JSON.stringify({
+          success: true,
+          action: 'process-scheduled-ab-actions',
+          processed: (due || []).length,
+          results,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
       default:
         return new Response(JSON.stringify({ 
           success: false, 

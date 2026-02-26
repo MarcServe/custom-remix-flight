@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Play, Pause, Trophy, TrendingUp, Mail, Clock, Send, FlaskConical, ExternalLink, FileText, Trash2 } from "lucide-react";
+import { Plus, Play, Pause, Trophy, TrendingUp, Mail, Clock, Send, FlaskConical, ExternalLink, FileText, Trash2, CalendarClock } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -51,7 +51,13 @@ export default function ABTesting({ onOpenBulkEmailForAbTest, onSelectCampaignAn
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [testToDeleteId, setTestToDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [scheduleCampaignId, setScheduleCampaignId] = useState<string>("");
+  const [scheduleAction, setScheduleAction] = useState<"swap" | "resend_a" | "resend_b" | "resend_all">("swap");
+  const [scheduleAt, setScheduleAt] = useState("");
+  const [scheduling, setScheduling] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Campaigns that have body A/B test enabled (from Send Bulk Email flow)
   const { data: campaignAbTests = [] } = useQuery({
@@ -69,6 +75,24 @@ export default function ABTesting({ onOpenBulkEmailForAbTest, onSelectCampaignAn
       return data ?? [];
     },
   });
+
+  // Scheduled Resend/Swap actions (for Schedule tab)
+  const { data: scheduledActions = [] } = useQuery({
+    queryKey: ["scheduled-campaign-actions"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("scheduled_campaign_actions")
+        .select("id, campaign_id, action, scheduled_at, status, created_at")
+        .eq("user_id", user.id)
+        .order("scheduled_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as { id: string; campaign_id: string; action: string; scheduled_at: string; status: string; created_at: string }[];
+    },
+  });
+
+  const pendingScheduled = scheduledActions.filter((s) => s.status === "pending");
 
   const [formData, setFormData] = useState({
     name: '',
@@ -301,60 +325,189 @@ export default function ABTesting({ onOpenBulkEmailForAbTest, onSelectCampaignAn
         </div>
       </div>
 
-      {/* Campaign body A/B tests: run from Send Bulk Email; results on campaign detail */}
+      {/* Campaign body A/B tests + Schedule Resend/Swap */}
       {(onOpenBulkEmailForAbTest != null || campaignAbTests.length > 0) && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <FlaskConical className="h-5 w-5 text-primary" />
-              <CardTitle>Campaign body A/B tests</CardTitle>
-            </div>
-            <CardDescription>
-              Run body A/B tests from Send Bulk Email: add recipients, compose your main email, then enable &quot;A/B test (body)&quot; and add Variant B. Results (open rate, click rate by variant) appear on the campaign when you select it in All Campaigns.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {onOpenBulkEmailForAbTest && (
-              <Button onClick={onOpenBulkEmailForAbTest} variant="secondary" className="gap-2">
-                <FileText className="h-4 w-4" />
-                Open Send Bulk Email to run a body A/B test
-              </Button>
-            )}
-            {campaignAbTests.length > 0 ? (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Campaigns with body A/B test</p>
-                <ul className="space-y-2">
-                  {campaignAbTests.map((c: any) => (
-                    <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
-                      <div>
-                        <span className="font-medium">{c.name}</span>
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          {c.sent_count ?? 0} sent · {c.opened_count ?? 0} opened · winner by {c.ab_winner_metric ?? 'open_rate'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={c.status === 'completed' ? 'default' : 'secondary'}>{c.status}</Badge>
-                        {onSelectCampaignAndShowOverview && (
+        <Tabs defaultValue="body" className="space-y-4">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="body" className="gap-2">
+              <FlaskConical className="h-4 w-4" />
+              Body A/B tests
+            </TabsTrigger>
+            <TabsTrigger value="schedule" className="gap-2">
+              <CalendarClock className="h-4 w-4" />
+              Schedule
+              {pendingScheduled.length > 0 && (
+                <Badge variant="secondary" className="ml-1">{pendingScheduled.length}</Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="body" className="space-y-4 mt-0">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <FlaskConical className="h-5 w-5 text-primary" />
+                  <CardTitle>Campaign body A/B tests</CardTitle>
+                </div>
+                <CardDescription>
+                  Run body A/B tests from Send Bulk Email: add recipients, compose your main email, then enable &quot;A/B test (body)&quot; and add Variant B. Results (open rate, click rate by variant) appear on the campaign when you select it in All Campaigns.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {onOpenBulkEmailForAbTest && (
+                  <Button onClick={onOpenBulkEmailForAbTest} variant="secondary" className="gap-2">
+                    <FileText className="h-4 w-4" />
+                    Open Send Bulk Email to run a body A/B test
+                  </Button>
+                )}
+                {campaignAbTests.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground">Campaigns with body A/B test</p>
+                    <ul className="space-y-2">
+                      {campaignAbTests.map((c: any) => (
+                        <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+                          <div>
+                            <span className="font-medium">{c.name}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {c.sent_count ?? 0} sent · {c.opened_count ?? 0} opened · winner by {c.ab_winner_metric ?? 'open_rate'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={c.status === 'completed' ? 'default' : 'secondary'}>{c.status}</Badge>
+                            {onSelectCampaignAndShowOverview && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onSelectCampaignAndShowOverview(c.id)}
+                                className="gap-1"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                View results
+                              </Button>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No campaigns with body A/B test yet. Use &quot;Run body A/B test&quot; or Send Bulk Email and enable A/B test (body) when composing.</p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="schedule" className="space-y-4 mt-0">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <CalendarClock className="h-5 w-5 text-primary" />
+                  <CardTitle>Schedule Resend / Swap</CardTitle>
+                </div>
+                <CardDescription>
+                  Schedule a Resend or Swap A/B action for a campaign. The action will run at the chosen date and time (processed by the system cron).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Campaign</Label>
+                    <Select value={scheduleCampaignId} onValueChange={setScheduleCampaignId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select campaign" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {campaignAbTests.filter((c: any) => (c.sent_count ?? 0) > 0).map((c: any) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Action</Label>
+                    <Select value={scheduleAction} onValueChange={(v: "swap" | "resend_a" | "resend_b" | "resend_all") => setScheduleAction(v)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="swap">Swap and resend (A→B, B→A)</SelectItem>
+                        <SelectItem value="resend_a">Resend to Variant A recipients</SelectItem>
+                        <SelectItem value="resend_b">Resend to Variant B recipients</SelectItem>
+                        <SelectItem value="resend_all">Resend to all</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Date & time</Label>
+                  <Input
+                    type="datetime-local"
+                    value={scheduleAt}
+                    onChange={(e) => setScheduleAt(e.target.value)}
+                    min={new Date().toISOString().slice(0, 16)}
+                  />
+                </div>
+                <Button
+                  disabled={!scheduleCampaignId || !scheduleAt || scheduling}
+                  onClick={async () => {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) return;
+                    setScheduling(true);
+                    try {
+                      const { error } = await supabase.from("scheduled_campaign_actions").insert({
+                        campaign_id: scheduleCampaignId,
+                        user_id: user.id,
+                        action: scheduleAction,
+                        scheduled_at: new Date(scheduleAt).toISOString(),
+                        status: "pending",
+                      });
+                      if (error) throw error;
+                      toast({ title: "Scheduled", description: `${scheduleAction === "swap" ? "Swap and resend" : `Resend ${scheduleAction.replace("resend_", "").toUpperCase()}`} scheduled for ${new Date(scheduleAt).toLocaleString()}.` });
+                      setScheduleAt("");
+                      queryClient.invalidateQueries({ queryKey: ["scheduled-campaign-actions"] });
+                    } catch (e: any) {
+                      toast({ title: "Error", description: e?.message ?? "Failed to schedule", variant: "destructive" });
+                    } finally {
+                      setScheduling(false);
+                    }
+                  }}
+                >
+                  {scheduling ? "Scheduling…" : "Schedule"}
+                </Button>
+                {pendingScheduled.length > 0 && (
+                  <div className="space-y-2 pt-4 border-t">
+                    <p className="text-sm font-medium">Upcoming scheduled</p>
+                    <ul className="space-y-2">
+                      {pendingScheduled.map((s) => (
+                        <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+                          <span>
+                            {campaignAbTests.find((c: any) => c.id === s.campaign_id)?.name ?? "Campaign"} · {s.action === "swap" ? "Swap and resend" : `Resend ${s.action.replace("resend_", "").toUpperCase()}`} at {new Date(s.scheduled_at).toLocaleString()}
+                          </span>
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            onClick={() => onSelectCampaignAndShowOverview(c.id)}
-                            className="gap-1"
+                            className="text-destructive hover:text-destructive"
+                            disabled={cancellingId === s.id}
+                            onClick={async () => {
+                              setCancellingId(s.id);
+                              try {
+                                await supabase.from("scheduled_campaign_actions").update({ status: "cancelled" }).eq("id", s.id);
+                                queryClient.invalidateQueries({ queryKey: ["scheduled-campaign-actions"] });
+                                toast({ title: "Cancelled", description: "Scheduled action cancelled." });
+                              } finally {
+                                setCancellingId(null);
+                              }
+                            }}
                           >
-                            <ExternalLink className="h-3 w-3" />
-                            View results
+                            Cancel
                           </Button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No campaigns with body A/B test yet. Use &quot;Run body A/B test&quot; or Send Bulk Email and enable A/B test (body) when composing.</p>
-            )}
-          </CardContent>
-        </Card>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       )}
 
       <div className="flex items-center gap-2 pt-2">

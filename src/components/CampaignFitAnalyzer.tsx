@@ -69,7 +69,9 @@ export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (co
   const [saveToNotesOpen, setSaveToNotesOpen] = useState(false);
   const [saveToNotesTitle, setSaveToNotesTitle] = useState("");
   const [saveToNotesContent, setSaveToNotesContent] = useState("");
-  
+  const [showOnlyAligned, setShowOnlyAligned] = useState(true);
+
+  const [categoryOrCampaign, setCategoryOrCampaign] = useState("");
   const [campaignType, setCampaignType] = useState("");
   const [targetIndustries, setTargetIndustries] = useState<string[]>([]);
   const [targetSizes, setTargetSizes] = useState<string[]>([]);
@@ -81,6 +83,7 @@ export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (co
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke('analyze-campaign-fit', {
         body: {
+          categoryOrCampaign: categoryOrCampaign.trim() || undefined,
           campaignType,
           targetIndustries,
           targetSizes,
@@ -109,10 +112,12 @@ export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (co
   });
 
   const handleAnalyze = () => {
-    if (!campaignType || !productFocus) {
+    const hasCategory = categoryOrCampaign.trim().length > 0;
+    const hasLegacy = campaignType.trim() && productFocus.trim();
+    if (!hasCategory && !hasLegacy) {
       toast({
         title: "Missing Information",
-        description: "Please provide campaign type and product focus.",
+        description: "Enter your target category in plain English (e.g. Mental Health and Learning Disability), or fill in Campaign Type and Product Focus.",
         variant: "destructive",
       });
       return;
@@ -123,6 +128,7 @@ export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (co
   const resetForm = () => {
     setResults(null);
     setSelectedCompanyIds(new Set());
+    setCategoryOrCampaign("");
     setCampaignType("");
     setTargetIndustries([]);
     setTargetSizes([]);
@@ -138,6 +144,8 @@ export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (co
   const selectedNoEmail = results?.results.filter(
     (r) => selectedCompanyIds.has(r.companyId) && hasNoEmail(r)
   ) ?? [];
+  const alignedResults = results?.results.filter((r) => r.priority === 'high' || r.priority === 'medium') ?? [];
+  const displayResults = results && showOnlyAligned ? alignedResults : (results?.results ?? []);
 
   const sendToEnrichmentMutation = useMutation({
     mutationFn: async () => {
@@ -260,7 +268,7 @@ export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (co
             Campaign Fit Analyzer
           </DialogTitle>
           <DialogDescription>
-            Find the best companies from your list for a specific marketing campaign
+            Type your target category in plain English. Only companies that match this category will appear as high or medium fit.
           </DialogDescription>
         </DialogHeader>
 
@@ -268,28 +276,43 @@ export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (co
           <>
             <ScrollArea className="flex-1 pr-4 min-h-0">
               <div className="space-y-6 py-4">
-                {/* Campaign Details */}
+                {/* Primary: Category in plain English */}
+                <div className="space-y-2">
+                  <Label htmlFor="categoryOrCampaign">Target category or campaign (plain English) *</Label>
+                  <Input
+                    id="categoryOrCampaign"
+                    placeholder="e.g. Mental Health and Learning Disability, B2B SaaS, Sustainable Packaging, Care Homes"
+                    value={categoryOrCampaign}
+                    onChange={(e) => setCategoryOrCampaign(e.target.value)}
+                    className="font-medium"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    AI will analyse your companies and show only those aligned to this category. Unrelated companies (e.g. retail when you want care sector) will be scored low.
+                  </p>
+                </div>
+
+                {/* Optional refinement */}
                 <div className="space-y-4">
-                  <h3 className="font-medium flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    Campaign Details
+                  <h3 className="font-medium flex items-center gap-2 text-muted-foreground">
+                    <Sparkles className="h-4 w-4" />
+                    Optional: refine with campaign details
                   </h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="campaignType">Campaign Type *</Label>
+                      <Label htmlFor="campaignType">Campaign type</Label>
                       <Input
                         id="campaignType"
-                        placeholder="e.g., Product Launch, Demo Outreach, Content Promotion"
+                        placeholder="e.g. Product Launch, Demo Outreach"
                         value={campaignType}
                         onChange={(e) => setCampaignType(e.target.value)}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="productFocus">Product/Service Focus *</Label>
+                      <Label htmlFor="productFocus">Product / service focus</Label>
                       <Input
                         id="productFocus"
-                        placeholder="e.g., CRM Software, Marketing Automation"
+                        placeholder="e.g. CRM Software, Care Management"
                         value={productFocus}
                         onChange={(e) => setProductFocus(e.target.value)}
                       />
@@ -297,10 +320,10 @@ export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (co
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="icp">Ideal Customer Profile</Label>
+                    <Label htmlFor="icp">Ideal customer profile</Label>
                     <Textarea
                       id="icp"
-                      placeholder="Describe your ideal customer... e.g., Mid-market B2B SaaS companies with 50-500 employees looking to scale their sales operations"
+                      placeholder="e.g. Mid-market care providers with 50–500 employees"
                       value={idealCustomerProfile}
                       onChange={(e) => setIdealCustomerProfile(e.target.value)}
                       className="min-h-[80px]"
@@ -360,7 +383,7 @@ export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (co
               </Button>
               <Button 
                 onClick={handleAnalyze} 
-                disabled={analysisMutation.isPending || !campaignType || !productFocus}
+                disabled={analysisMutation.isPending || (!categoryOrCampaign.trim() && (!campaignType.trim() || !productFocus.trim()))}
                 className="flex-1"
               >
                 {analysisMutation.isPending ? (
@@ -430,20 +453,39 @@ export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (co
                 <div className="space-y-3">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <h3 className="font-medium">Company Rankings</h3>
-                    <span className="text-sm text-muted-foreground">
-                      {results.summary.hasContacts} with email contacts · {noEmailResults.length} without email
-                    </span>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={showOnlyAligned}
+                          onCheckedChange={(c) => setShowOnlyAligned(!!c)}
+                        />
+                        <span>Show only aligned (high + medium)</span>
+                      </label>
+                      <span className="text-sm text-muted-foreground">
+                        {results.summary.hasContacts} with email · {noEmailResults.length} without email
+                      </span>
+                    </div>
                   </div>
+                  {showOnlyAligned && alignedResults.length === 0 && (
+                    <p className="text-sm text-muted-foreground rounded-lg border bg-muted/30 p-3">
+                      No companies in your list match this category. Try a different category or add more companies.
+                    </p>
+                  )}
 
                   {/* Select all / Select no-email only */}
                   <div className="flex items-center gap-3 rounded-lg border bg-muted/50 p-2 flex-wrap">
                     <Checkbox
-                      checked={results.results.length > 0 && results.results.every((r) => selectedCompanyIds.has(r.companyId))}
+                      checked={displayResults.length > 0 && displayResults.every((r) => selectedCompanyIds.has(r.companyId))}
                       onCheckedChange={(checked) => {
-                        setSelectedCompanyIds(checked ? new Set(results.results.map((r) => r.companyId)) : new Set());
+                        setSelectedCompanyIds((prev) => {
+                          const next = new Set(prev);
+                          if (checked) displayResults.forEach((r) => next.add(r.companyId));
+                          else displayResults.forEach((r) => next.delete(r.companyId));
+                          return next;
+                        });
                       }}
                     />
-                    <span className="text-sm font-medium">Select all ({results.results.length})</span>
+                    <span className="text-sm font-medium">Select all visible ({displayResults.length})</span>
                     <Checkbox
                       checked={noEmailResults.length > 0 && noEmailResults.every((r) => selectedCompanyIds.has(r.companyId))}
                       onCheckedChange={(checked) => {
@@ -463,7 +505,7 @@ export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (co
 
                   <ScrollArea className="h-[280px] border rounded-md">
                     <div className="p-2 space-y-2">
-                      {results.results.map((result, index) => (
+                      {displayResults.map((result, index) => (
                         <Card key={result.companyId} className={index < 3 ? "border-primary/30" : ""}>
                           <CardContent className="py-3">
                             <div className="flex items-start gap-3">
@@ -533,16 +575,28 @@ export function CampaignFitAnalyzer({ onOpenBulkEmail }: { onOpenBulkEmail?: (co
                 Send to Enrichment ({selectedNoEmail.length})
               </Button>
               {onOpenBulkEmail && (
-                <Button
-                  variant="outline"
-                  onClick={handleBulkEmail}
-                  disabled={selectedCompanyIds.size === 0}
-                  className="flex-1 min-w-[120px]"
-                  title="Compose bulk email for contacts at selected companies"
-                >
-                  <Mail className="h-4 w-4 mr-2" />
-                  Bulk email ({selectedCompanyIds.size})
-                </Button>
+                <>
+                  <Button
+                    variant="default"
+                    onClick={() => onOpenBulkEmail(alignedResults.map((r) => r.companyId))}
+                    disabled={alignedResults.length === 0}
+                    className="flex-1 min-w-[140px]"
+                    title="Compose bulk email for all high- and medium-fit companies. Use filters in the dialog to exclude previous campaigns and avoid duplicates."
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    Bulk email all aligned ({alignedResults.length})
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleBulkEmail}
+                    disabled={selectedCompanyIds.size === 0}
+                    className="flex-1 min-w-[120px]"
+                    title="Compose bulk email for selected companies only. Use filters in the dialog to exclude previous campaigns and avoid duplicates."
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    Bulk email selected ({selectedCompanyIds.size})
+                  </Button>
+                </>
               )}
               <Button
                 onClick={() => {

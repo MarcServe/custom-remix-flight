@@ -29,22 +29,12 @@ serve(async (req) => {
       );
     }
 
+    const isServiceRole = authHeader.includes(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "invalid");
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
+      isServiceRole ? (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "") : (Deno.env.get("SUPABASE_ANON_KEY") ?? ""),
+      isServiceRole ? {} : { global: { headers: { Authorization: authHeader } } }
     );
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     const body = await req.json().catch(() => ({}));
     const { campaignId, action } = body;
@@ -67,11 +57,14 @@ serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    if (campaign.user_id !== user.id) {
-      return new Response(
-        JSON.stringify({ error: "Campaign not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!isServiceRole) {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user || campaign.user_id !== user.id) {
+        return new Response(
+          JSON.stringify({ error: "Campaign not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     const { data: recipients, error: recError } = await supabase
@@ -92,7 +85,40 @@ serve(async (req) => {
       );
     }
 
-    const personIds = [...new Set((recipients as { person_id: string | null }[]).map((r) => r.person_id).filter(Boolean))] as string[];
+    const recipientIds = (recipients as { id: string }[]).map((r) => r.id);
+    const { data: historyRows } = await supabase
+      .from("email_campaign_send_history")
+      .select("recipient_id, variant_sent")
+      .eq("campaign_id", campaignId)
+      .in("recipient_id", recipientIds);
+
+    const receivedByRecipient = new Map<string, Set<string>>();
+    for (const h of historyRows || []) {
+      const rid = (h as { recipient_id: string; variant_sent: string }).recipient_id;
+      const v = (h as { recipient_id: string; variant_sent: string }).variant_sent;
+      if (!receivedByRecipient.has(rid)) receivedByRecipient.set(rid, new Set());
+      receivedByRecipient.get(rid)!.add(v);
+    }
+
+    const variantToSend = (rec: { ab_variant: string }) => (rec.ab_variant === "A" ? "B" : "A");
+    const alreadyReceived = (rec: { id: string; ab_variant: string }) =>
+      receivedByRecipient.get(rec.id)?.has(variantToSend(rec)) ?? false;
+    const toSwap = (recipients as { id: string; person_id: string | null; ab_variant: string }[]).filter(
+      (rec) => !alreadyReceived(rec)
+    );
+
+    if (toSwap.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          updated: 0,
+          message: "No recipients to swap: everyone has already received the other variant. No duplicate sends.",
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const personIds = [...new Set(toSwap.map((r) => r.person_id).filter(Boolean))] as string[];
     const { data: people, error: peopleError } = await supabase
       .from("people")
       .select("id, first_name, last_name")
@@ -114,7 +140,7 @@ serve(async (req) => {
     const textB = campaign.ab_body_text_b || "";
 
     let updated = 0;
-    for (const rec of recipients as { id: string; person_id: string | null; ab_variant: string }[]) {
+    for (const rec of toSwap) {
       const person = rec.person_id ? peopleMap.get(rec.person_id) : null;
       const first = (person as { first_name?: string } | undefined)?.first_name ?? "";
       const last = (person as { last_name?: string } | undefined)?.last_name ?? "";

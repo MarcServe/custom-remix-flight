@@ -15,7 +15,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mail, Layers, Clock, Calendar, Copy, TrendingUp, Edit2, Save, X, Sparkles, RefreshCw, Loader2 } from "lucide-react";
+import { Mail, Layers, Clock, Calendar, Copy, TrendingUp, Edit2, Save, X, Sparkles, RefreshCw, Loader2, Palette } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useUpdateSequence } from "@/hooks/use-sequences";
@@ -48,6 +49,7 @@ interface SequenceDetailsDialogProps {
     model?: string;
     created_at?: string;
     custom_instructions?: string;
+    use_email_branding?: boolean;
   };
 }
 
@@ -62,14 +64,16 @@ export function SequenceDetailsDialog({
   const [editedSteps, setEditedSteps] = useState<SequenceStep[]>([]);
   const [editingInstructions, setEditingInstructions] = useState(false);
   const [customInstructions, setCustomInstructions] = useState(sequence.custom_instructions || '');
+  const [useEmailBranding, setUseEmailBranding] = useState(sequence.use_email_branding !== false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const updateSequence = useUpdateSequence();
 
-  // Reset instructions state when sequence changes
+  // Reset state when sequence changes
   useMemo(() => {
     setCustomInstructions(sequence.custom_instructions || '');
     setEditingInstructions(false);
-  }, [sequence.id, sequence.custom_instructions]);
+    setUseEmailBranding(sequence.use_email_branding !== false);
+  }, [sequence.id, sequence.custom_instructions, sequence.use_email_branding]);
 
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text);
@@ -357,6 +361,49 @@ export function SequenceDetailsDialog({
                     {sequence.custom_instructions || 'No custom instructions set. Click Edit to add instructions for this sequence.'}
                   </p>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Email branding - match campaigns for consistent look */}
+            <Card className="bg-muted/50 border-dashed">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Palette className="h-4 w-4 text-primary" />
+                  Email branding template
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium">Use email branding template</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Wrap sequence emails in your logo, footer, and style so recipients recognize your brand (same as campaigns).
+                    </p>
+                  </div>
+                  <Switch
+                    checked={useEmailBranding}
+                    onCheckedChange={async (checked) => {
+                      setUseEmailBranding(checked);
+                      try {
+                        await updateSequence.mutateAsync({
+                          id: sequence.id,
+                          updates: { use_email_branding: checked },
+                        });
+                        toast({
+                          title: "Saved",
+                          description: checked ? "Sequence emails will use your branding template." : "Sequence emails will be sent as plain content.",
+                        });
+                      } catch {
+                        setUseEmailBranding(!checked);
+                        toast({
+                          title: "Error",
+                          description: "Failed to update setting",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  />
+                </div>
               </CardContent>
             </Card>
 

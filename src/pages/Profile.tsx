@@ -524,7 +524,7 @@ export default function Profile() {
                   </Badge>
                 </div>
                 <CardDescription className="text-blue-600 dark:text-blue-300">
-                  You're currently enjoying your 7-day free trial of LeadGenie Premium
+                  You're currently enjoying your 7-day free trial of LeadBoosters Premium
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -554,7 +554,7 @@ export default function Profile() {
                   <CardTitle className="text-green-700 dark:text-green-400">Premium Subscription Active</CardTitle>
                 </div>
                 <CardDescription className="text-green-600 dark:text-green-300">
-                  You have full access to all LeadGenie Premium features
+                  You have full access to all LeadBoosters Premium features
                 </CardDescription>
               </CardHeader>
               <CardContent>

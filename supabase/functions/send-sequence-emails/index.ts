@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.78.0';
 import { corsHeaders } from '../_shared/cors.ts';
+import { renderEmailTemplate } from '../_shared/professional-template.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -65,10 +66,12 @@ Deno.serve(async (req) => {
       throw new Error('Invalid authorization');
     }
 
-    // Get business profile for email provider preference
+    // Get business profile (full branding when sequence uses email branding)
+    const sequence = companySequence.email_sequences as { use_email_branding?: boolean } | null;
+    const useBranding = sequence?.use_email_branding !== false;
     const { data: businessProfile } = await supabase
       .from('business_profiles')
-      .select('email_provider, company_name')
+      .select('company_name, email_header_name, email_provider, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_signature_name, email_sender_title, email_sender_email, email_signature, website')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -91,6 +94,25 @@ Deno.serve(async (req) => {
 
     const emailProvider = connection.provider;
     console.log(`Using optimal email provider: ${emailProvider} (tracking: ${connection.tracking_enabled})`);
+
+    const fromEmail = connection?.from_email || 'noreply@yourdomain.com';
+    const senderName = businessProfile?.company_name || 'Your Business';
+    const branding = useBranding && businessProfile ? {
+      templateStyle: (businessProfile as Record<string, unknown>).email_template_style as string || 'professional',
+      companyName: (businessProfile as Record<string, unknown>).company_name as string ?? null,
+      headerName: (businessProfile as Record<string, unknown>).email_header_name as string ?? null,
+      logoUrl: (businessProfile as Record<string, unknown>).email_logo_url as string ?? null,
+      brandColor: ((businessProfile as Record<string, unknown>).email_brand_color as string) || '#8b5cf6',
+      footerText: (businessProfile as Record<string, unknown>).email_footer_text as string ?? null,
+      footerImageUrl: (businessProfile as Record<string, unknown>).email_footer_logo_url as string ?? (businessProfile as Record<string, unknown>).email_logo_url as string ?? null,
+      signature: (businessProfile as Record<string, unknown>).email_signature as string ?? null,
+      senderName: (businessProfile as Record<string, unknown>).email_sender_name as string ?? null,
+      signatureName: (businessProfile as Record<string, unknown>).email_signature_name as string ?? null,
+      senderEmail: (businessProfile as Record<string, unknown>).email_sender_email as string ?? null,
+      senderTitle: (businessProfile as Record<string, unknown>).email_sender_title as string ?? null,
+      senderImageUrl: (businessProfile as Record<string, unknown>).email_sender_image_url as string ?? null,
+      websiteUrl: (businessProfile as Record<string, unknown>).website as string ?? null,
+    } : null;
 
     const sentEmails = [];
     const errors = [];
@@ -149,8 +171,24 @@ Deno.serve(async (req) => {
             throw new Error('SendGrid API key not configured');
           }
 
-          const fromEmail = connection?.from_email || 'noreply@yourdomain.com';
-          const senderName = businessProfile?.company_name || 'Your Business';
+          const htmlBody = branding
+            ? renderEmailTemplate(branding.templateStyle, {
+                body: emailData.body,
+                senderName: branding.senderName || senderName,
+                signatureName: branding.signatureName ?? undefined,
+                senderEmail: branding.senderEmail || fromEmail,
+                senderTitle: branding.senderTitle ?? undefined,
+                companyName: branding.companyName ?? undefined,
+                headerName: branding.headerName ?? undefined,
+                logoUrl: branding.logoUrl ?? undefined,
+                brandColor: branding.brandColor,
+                footerText: branding.footerText ?? undefined,
+                footerImageUrl: branding.footerImageUrl ?? undefined,
+                signature: branding.signature ?? undefined,
+                senderImageUrl: branding.senderImageUrl ?? undefined,
+                websiteUrl: branding.websiteUrl ?? undefined,
+              })
+            : emailData.body.replace(/\n/g, '<br>');
 
           const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
             method: 'POST',
@@ -171,10 +209,10 @@ Deno.serve(async (req) => {
                 email: fromEmail,
                 name: senderName,
               },
-              content: [{
-                type: 'text/plain',
-                value: emailData.body,
-              }],
+              content: [
+                { type: 'text/plain', value: emailData.body },
+                { type: 'text/html', value: htmlBody },
+              ],
             }),
           });
 
@@ -191,17 +229,24 @@ Deno.serve(async (req) => {
             throw new Error('Resend API key not configured');
           }
 
-          // Get Resend connection for verified from_email
-          const { data: resendConnection } = await supabase
-            .from('crm_connections')
-            .select('from_email')
-            .eq('user_id', user.id)
-            .eq('provider', 'resend')
-            .eq('status', 'active')
-            .maybeSingle();
-
-          const fromEmail = resendConnection?.from_email || connection?.from_email || 'onboarding@resend.dev';
-          const senderName = businessProfile?.company_name || 'CRM';
+          const htmlBody = branding
+            ? renderEmailTemplate(branding.templateStyle, {
+                body: emailData.body,
+                senderName: branding.senderName || senderName,
+                signatureName: branding.signatureName ?? undefined,
+                senderEmail: branding.senderEmail || fromEmail,
+                senderTitle: branding.senderTitle ?? undefined,
+                companyName: branding.companyName ?? undefined,
+                headerName: branding.headerName ?? undefined,
+                logoUrl: branding.logoUrl ?? undefined,
+                brandColor: branding.brandColor,
+                footerText: branding.footerText ?? undefined,
+                footerImageUrl: branding.footerImageUrl ?? undefined,
+                signature: branding.signature ?? undefined,
+                senderImageUrl: branding.senderImageUrl ?? undefined,
+                websiteUrl: branding.websiteUrl ?? undefined,
+              })
+            : emailData.body.replace(/\n/g, '<br>');
 
           const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || 'leadgenie@eldapgraaa.resend.app';
           const resendResponse = await fetch('https://api.resend.com/emails', {
@@ -215,6 +260,7 @@ Deno.serve(async (req) => {
               to: [contact.email],
               subject: emailData.subject,
               text: emailData.body,
+              html: htmlBody,
               reply_to: RESEND_INBOUND_EMAIL,
             }),
           });

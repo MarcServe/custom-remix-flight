@@ -10,6 +10,8 @@ export interface SequenceRequest {
   model?: string;
   customInstructions?: string;
   autoRespond?: boolean;
+  /** When true (default), sequence emails use the same email branding template as campaigns for consistent look. */
+  use_email_branding?: boolean;
 }
 
 export interface SequenceResponse {
@@ -83,6 +85,7 @@ export const sequencesApi = {
     }>;
     segment_filters?: any;
     custom_instructions?: string;
+    use_email_branding?: boolean;
   }) {
     // Serialize steps to JSON string array format expected by database
     const dbUpdates: any = { ...updates };

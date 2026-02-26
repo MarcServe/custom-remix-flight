@@ -1,4 +1,4 @@
-# LeadGenie CRM - User Guide
+# LeadBoosters CRM - User Guide
 
 ## Table of Contents
 - [Introduction](#introduction)
@@ -26,9 +26,9 @@
 
 ## Introduction
 
-### What is LeadGenie CRM?
+### What is LeadBoosters CRM?
 
-LeadGenie CRM is an AI-powered customer relationship management platform designed to help sales teams discover, engage, and convert leads more effectively. It combines traditional CRM functionality with advanced AI capabilities for lead discovery, email automation, and intelligent response generation.
+LeadBoosters CRM is an AI-powered customer relationship management platform designed to help sales teams discover, engage, and convert leads more effectively. It combines traditional CRM functionality with advanced AI capabilities for lead discovery, email automation, and intelligent response generation.
 
 ### Key Features
 
@@ -41,7 +41,7 @@ LeadGenie CRM is an AI-powered customer relationship management platform designe
 - **Real-Time Insights**: Live engagement tracking and detailed analytics
 - **Invoice Management**: Create and send professional invoices directly from the CRM
 
-### Who Should Use LeadGenie CRM?
+### Who Should Use LeadBoosters CRM?
 
 - **Sales Teams**: Streamline prospecting and outreach
 - **Business Development**: Discover and qualify new opportunities
@@ -55,7 +55,7 @@ LeadGenie CRM is an AI-powered customer relationship management platform designe
 
 ### Creating an Account
 
-1. Navigate to the LeadGenie CRM login page
+1. Navigate to the LeadBoosters CRM login page
 2. Click "Sign Up" to create a new account
 3. Enter your email address and create a secure password
 4. Verify your email address by clicking the link sent to your inbox
@@ -404,7 +404,7 @@ View key metrics on the Dashboard:
 
 ### Overview
 
-LeadGenie CRM supports multiple email providers for seamless email integration.
+LeadBoosters CRM supports multiple email providers for seamless email integration.
 
 ### Supported Email Providers
 
@@ -420,7 +420,7 @@ LeadGenie CRM supports multiple email providers for seamless email integration.
 1. Navigate to **Integrations** → **Email Providers**
 2. Click **Connect** on the Gmail Direct card
 3. Click **Sign in with Google**
-4. Authorize LeadGenie to access your Gmail account
+4. Authorize LeadBoosters to access your Gmail account
 5. Grant required permissions:
    - Read emails
    - Send emails
@@ -1242,7 +1242,7 @@ Store and manage all documents, attachments, and files related to your CRM activ
 
 ### Overview
 
-LeadGenie CRM supports team collaboration with role-based permissions, assignments, and shared resources.
+LeadBoosters CRM supports team collaboration with role-based permissions, assignments, and shared resources.
 
 ### Team Roles
 
@@ -1347,7 +1347,7 @@ LeadGenie CRM supports team collaboration with role-based permissions, assignmen
 
 ### Overview
 
-LeadGenie CRM integrates with various third-party services to enhance functionality.
+LeadBoosters CRM integrates with various third-party services to enhance functionality.
 
 ### Email Integrations
 
@@ -1547,7 +1547,7 @@ Configure AI auto-response system:
 
 ### Overview
 
-LeadGenie CRM uses AI throughout the platform to save time and improve results.
+LeadBoosters CRM uses AI throughout the platform to save time and improve results.
 
 ### AI Lead Discovery
 
@@ -1857,4 +1857,4 @@ LeadGenie CRM uses AI throughout the platform to save time and improve results.
 
 *Last Updated: 2025*
 
-*LeadGenie CRM - AI-Powered Sales Automation*
+*LeadBoosters CRM - AI-Powered Sales Automation*

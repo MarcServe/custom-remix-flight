@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PersonaSelector, type MarketingPersona } from "./email/PersonaSelector";
 import { TagInput } from "@/components/ui/tag-input";
 import { useCompanyTags } from "@/hooks/use-company-tags";
@@ -70,6 +70,7 @@ interface BulkEmailDialogProps {
 
 const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(function BulkEmailDialog({ open, onOpenChange, selectedPeople, initialDraftId }, ref) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { allSuggestions } = useCompanyTags();
   const [campaignName, setCampaignName] = useState("");
   const [subject, setSubject] = useState("");
@@ -466,19 +467,33 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         // ignore
       }
     } else {
-      // When dialog opens, initialize filteredRecipients with selectedPeople
-      if (prevSelectedPeopleRef.current.length === 0 && selectedPeople.length > 0) {
-        setFilteredRecipients(selectedPeople);
-      } else if (selectedPeople.length > prevSelectedPeopleRef.current.length) {
-        // Dialog is already open and new people were added - merge into filteredRecipients
-        // This preserves draft recipients while adding newly selected people
+      // Dedupe by email so no duplicate is ever shown; keep first occurrence
+      const dedupeByEmail = (list: typeof selectedPeople) => {
+        const seen = new Set<string>();
+        return list.filter((p) => {
+          const e = p.email?.toLowerCase().trim();
+          if (!e) return false;
+          if (seen.has(e)) return false;
+          seen.add(e);
+          return true;
+        });
+      };
+      const dedupedPeople = dedupeByEmail(selectedPeople);
+      // When dialog opens, initialize filteredRecipients with selectedPeople (deduped)
+      if (prevSelectedPeopleRef.current.length === 0 && dedupedPeople.length > 0) {
+        setFilteredRecipients(dedupedPeople);
+      } else if (dedupedPeople.length > prevSelectedPeopleRef.current.length) {
+        // Dialog is already open and new people were added - merge into filteredRecipients (no duplicate emails)
         setFilteredRecipients(prev => {
-          const existingIds = new Set(prev.map(p => p.id));
-          const newPeople = selectedPeople.filter(p => !existingIds.has(p.id));
+          const existingEmails = new Set(prev.map(p => p.email?.toLowerCase().trim()).filter(Boolean));
+          const newPeople = dedupedPeople.filter(p => {
+            const e = p.email?.toLowerCase().trim();
+            return e && !existingEmails.has(e);
+          });
           return newPeople.length > 0 ? [...prev, ...newPeople] : prev;
         });
       }
-      prevSelectedPeopleRef.current = selectedPeople;
+      prevSelectedPeopleRef.current = dedupedPeople;
       // Restore draft from localStorage when opening without a server draft
       if (!initialDraftId && !hasRestoredLocalDraft.current) {
         hasRestoredLocalDraft.current = true;
@@ -570,7 +585,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             .from('email_campaigns')
             .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, status, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric')
             .eq('id', initialDraftId)
-            .in('status', ['draft', 'scheduled', 'sending', 'completed'])
+            .in('status', ['draft', 'scheduled', 'sending', 'paused', 'completed'])
             .single();
 
           if (error || !draftData) {
@@ -584,7 +599,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           }
 
           hasAutoLoadedDraft.current = true;
-          contentOnlyEditRef.current = ['sending', 'completed'].includes((draftData as any).status?.toLowerCase?.() ?? '');
+          contentOnlyEditRef.current = ['sending', 'paused', 'completed'].includes((draftData as any).status?.toLowerCase?.() ?? '');
           // Use setTimeout to ensure dialog is fully open before loading
           setTimeout(() => {
             handleLoadDraft(draftData);
@@ -1830,6 +1845,64 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         scheduledAt = scheduledDateTime.toISOString();
         campaignStatus = 'scheduled';
       }
+
+      // Content-only edit (paused/sending/completed): update campaign only, do not replace recipients. Close so user can Resume from campaign view.
+      const contentOnly = contentOnlyEditRef.current;
+      if (draftId && contentOnly) {
+        const updatePayload: Record<string, unknown> = {
+          name: campaignName,
+          subject_template: subject,
+          body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
+          body_text_template: bodyText,
+          sender_connection_id: senderConnectionId,
+          sender_profile_id: senderProfileId || null,
+          tags: campaignTags,
+          auto_follow_up_enabled: autoFollowUpEnabled,
+          follow_up_sequence_id: followUpSequenceId || null,
+          updated_at: new Date().toISOString(),
+          ab_test_enabled: abTestEnabled,
+          ab_subject_b: abSubjectB?.trim() || null,
+          ab_body_html_b: (abBodyTextB?.trim() || abBodyHtmlB?.trim()) ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : null)) : null,
+          ab_body_text_b: abBodyTextB?.trim() || null,
+          ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
+          ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
+        };
+        if (scheduleEnabled && scheduledAt) {
+          updatePayload.status = 'scheduled';
+          updatePayload.scheduled_at = scheduledAt;
+        }
+        // If not scheduling, keep status as paused so they can click Resume
+        const { error: contentUpdateError } = await supabase
+          .from('email_campaigns')
+          .update(updatePayload)
+          .eq('id', draftId);
+        if (contentUpdateError) throw contentUpdateError;
+
+        if (scheduleEnabled && scheduledAt && scheduledDateTime) {
+          const formattedDate = scheduledDateTime.toLocaleString('en-US', {
+            timeZone: scheduledTimezone,
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+          });
+          toast({
+            title: "Content saved & scheduled",
+            description: `Campaign will resume sending at ${formattedDate}. No new campaign created—same recipients.`,
+          });
+        } else {
+          toast({
+            title: "Content saved",
+            description: "Close this dialog and click Resume on the campaign to continue sending to remaining recipients.",
+          });
+        }
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+        onOpenChange(false);
+        setSending(false);
+        return;
+      }
       
       let campaign;
       
@@ -2044,21 +2117,26 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Send Bulk Email</DialogTitle>
-          <DialogDescription>
-            Send personalized emails to {recipientsToUse.length} {selectedTags.length > 0 ? 'filtered' : 'selected'} {recipientsToUse.length === 1 ? 'person' : 'people'}
-            {selectedTags.length > 0 && (
-              <span className="text-muted-foreground"> (filtered by {selectedTags.length} tag{selectedTags.length > 1 ? 's' : ''})</span>
-            )}
-            {excludedCampaignIds.length > 0 && (
-              <span className="text-blue-600 dark:text-blue-400 font-medium">
-                {' • '}{excludedRecipients?.size || 0} excluded from {excludedCampaignIds.length} previous campaign{excludedCampaignIds.length > 1 ? 's' : ''}
-              </span>
-            )}
-            {duplicateRecipients && duplicateRecipients.length > 0 && (
-              <span className="text-amber-600 dark:text-amber-400 font-medium">
-                {' • '}{duplicateRecipients.length} already received email{duplicateRecipients.length > 1 ? 's' : ''}
-              </span>
-            )}
+          <DialogDescription className="space-y-1">
+            <span>
+              Send personalized emails to {recipientsToUse.length} {selectedTags.length > 0 ? 'filtered' : 'selected'} {recipientsToUse.length === 1 ? 'person' : 'people'}
+              {selectedTags.length > 0 && (
+                <span className="text-muted-foreground"> (filtered by {selectedTags.length} tag{selectedTags.length > 1 ? 's' : ''})</span>
+              )}
+              {excludedCampaignIds.length > 0 && (
+                <span className="text-blue-600 dark:text-blue-400 font-medium">
+                  {' • '}{excludedRecipients?.size || 0} excluded from {excludedCampaignIds.length} previous campaign{excludedCampaignIds.length > 1 ? 's' : ''}
+                </span>
+              )}
+              {duplicateRecipients && duplicateRecipients.length > 0 && (
+                <span className="text-amber-600 dark:text-amber-400 font-medium">
+                  {' • '}{duplicateRecipients.length} already received email{duplicateRecipients.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </span>
+            <p className="text-xs text-muted-foreground pt-0.5">
+              Use filters below to exclude recipients from previous campaigns and avoid duplicate sends. Duplicate emails in the list are removed automatically.
+            </p>
           </DialogDescription>
         </DialogHeader>
         

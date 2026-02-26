@@ -661,15 +661,27 @@ serve(async (req) => {
         }
 
         // Update recipient status with tracking metadata
+        const sentAt = new Date().toISOString();
         await supabaseClient
           .from('email_campaign_recipients')
           .update({
             status: 'sent',
-            sent_at: new Date().toISOString(),
+            sent_at: sentAt,
             external_message_id: messageId,
             email_period: 'new', // Mark as new email
           })
           .eq('id', recipient.id);
+
+        // Record A/B send history so we never resend the same variant to the same person
+        const variantSent = recipient.ab_variant === 'A' || recipient.ab_variant === 'B' ? recipient.ab_variant : null;
+        if (variantSent && campaign.ab_test_enabled) {
+          await supabaseClient.from('email_campaign_send_history').insert({
+            campaign_id: campaignId,
+            recipient_id: recipient.id,
+            variant_sent: variantSent,
+            sent_at: sentAt,
+          });
+        }
 
         // Record detailed email activity with provider tracking info
         await supabaseClient

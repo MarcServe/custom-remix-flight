@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical, Phone, Plus, Settings, FileText, Edit, Trash2, Building2, Copy, Save, FolderInput, CalendarClock, RotateCcw, RefreshCw, SendHorizontal, ArrowLeftRight } from "lucide-react";
+import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical, Phone, Plus, Settings, FileText, Edit, Trash2, Building2, Copy, Save, FolderInput, CalendarClock, RotateCcw, RefreshCw, SendHorizontal, ArrowLeftRight, BarChart3, Search, Pause, Play } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -100,6 +100,8 @@ export default function Campaigns() {
   const [removing, setRemoving] = useState(false);
   const [draftToDelete, setDraftToDelete] = useState<string | null>(null);
   const [deletingDraft, setDeletingDraft] = useState(false);
+  const [campaignToDelete, setCampaignToDelete] = useState<string | null>(null);
+  const [deletingCampaign, setDeletingCampaign] = useState(false);
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<Set<string>>(new Set());
   const [clearingList, setClearingList] = useState(false);
   const [bulkRemoving, setBulkRemoving] = useState(false);
@@ -115,7 +117,9 @@ export default function Campaigns() {
   const [saveAsGroupName, setSaveAsGroupName] = useState("");
   const [savingAsGroup, setSavingAsGroup] = useState(false);
   const [addFromGroupOpen, setAddFromGroupOpen] = useState(false);
+  const [overviewStatusFilter, setOverviewStatusFilter] = useState<string>("all");
   const [addingFromGroup, setAddingFromGroup] = useState(false);
+  const [deliveryReportCampaignId, setDeliveryReportCampaignId] = useState<string | null>(null);
   const [cancelScheduleConfirmOpen, setCancelScheduleConfirmOpen] = useState(false);
   const [cancellingSchedule, setCancellingSchedule] = useState(false);
   const [showRescheduleDialog, setShowRescheduleDialog] = useState(false);
@@ -123,6 +127,8 @@ export default function Campaigns() {
   const [retryingFailed, setRetryingFailed] = useState(false);
   const [resendVariantLoading, setResendVariantLoading] = useState<'A' | 'B' | 'all' | 'swap' | null>(null);
   const [rescheduling, setRescheduling] = useState(false);
+  const [pausingCampaign, setPausingCampaign] = useState(false);
+  const [resumingCampaign, setResumingCampaign] = useState(false);
   const [enrollFollowUpSequenceId, setEnrollFollowUpSequenceId] = useState<string>("");
   const [enrollingFollowUp, setEnrollingFollowUp] = useState(false);
   // Resend-style status filter: server-side for large lists, counts from RPC
@@ -131,6 +137,7 @@ export default function Campaigns() {
   // Segment for follow-up enrollment (server-side filtered)
   type EnrollSegment = 'all_sent' | 'opened' | 'clicked' | 'opened_no_click';
   const [enrollSegment, setEnrollSegment] = useState<EnrollSegment>('all_sent');
+  const [recipientSearchQuery, setRecipientSearchQuery] = useState('');
 
   const { data: followUpSequences = [] } = useQuery({
     queryKey: ['email-sequences'],
@@ -282,11 +289,78 @@ export default function Campaigns() {
     },
   });
 
+  // Delivery report tab: fetch recipients for selected campaign (no dialog) — refetch when tab is delivery for live data
+  const { data: deliveryReportRecipients, refetch: refetchDeliveryReportRecipients } = useQuery({
+    queryKey: ['campaign-recipients', 'delivery-report', deliveryReportCampaignId],
+    enabled: !!deliveryReportCampaignId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('email_campaign_recipients')
+        .select('*')
+        .eq('campaign_id', deliveryReportCampaignId!)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return data as CampaignRecipient[];
+    },
+  });
+
+  // Delivery report: summary from recipient-level data so it matches the list and stays live
+  const deliveryReportSummaryFromRecipients = useMemo(() => {
+    const recs = deliveryReportRecipients ?? [];
+    if (recs.length === 0) return null;
+    const sent = recs.filter((r) => ['sent', 'opened', 'clicked'].includes(r.status?.toLowerCase?.() ?? '') || !!r.sent_at).length;
+    const opened = recs.filter((r) => !!r.opened_at || ['opened', 'clicked'].includes(r.status?.toLowerCase?.() ?? '')).length;
+    return { sent, opened: Math.min(opened, sent), total: recs.length };
+  }, [deliveryReportRecipients]);
+
+  // Refetch delivery data when user switches to Delivery tab so the report stays live
+  useEffect(() => {
+    if (activeTab === 'delivery' && deliveryReportCampaignId) {
+      queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+      refetchDeliveryReportRecipients();
+    }
+  }, [activeTab, deliveryReportCampaignId, queryClient, refetchDeliveryReportRecipients]);
+
+  // Full send history (initial + resends) for Delivery report and avoiding duplicate sends
+  const { data: campaignSendHistory } = useQuery({
+    queryKey: ['campaign-send-history', deliveryReportCampaignId ?? selectedCampaign],
+    enabled: !!(deliveryReportCampaignId || selectedCampaign),
+    queryFn: async () => {
+      const cid = deliveryReportCampaignId || selectedCampaign!;
+      const { data, error } = await supabase
+        .from('email_campaign_send_history')
+        .select('id, recipient_id, variant_sent, sent_at')
+        .eq('campaign_id', cid)
+        .order('sent_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as { id: string; recipient_id: string; variant_sent: string; sent_at: string }[];
+    },
+  });
+
+  // Group send history by date for "Send history" timeline in Campaign Recipients modal
+  const sendHistoryByDate = useMemo(() => {
+    const list = campaignSendHistory ?? [];
+    if (list.length === 0) return [];
+    const byKey: Record<string, { count: number; variantA: number; variantB: number; at: string }> = {};
+    for (const row of list) {
+      const at = new Date(row.sent_at);
+      const key = format(at, 'yyyy-MM-dd HH:mm');
+      if (!byKey[key]) byKey[key] = { count: 0, variantA: 0, variantB: 0, at: row.sent_at };
+      byKey[key].count += 1;
+      if (row.variant_sent === 'A') byKey[key].variantA += 1;
+      else if (row.variant_sent === 'B') byKey[key].variantB += 1;
+    }
+    return Object.values(byKey)
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+      .slice(0, 20);
+  }, [campaignSendHistory]);
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
       draft: "secondary",
       scheduled: "outline",
       sending: "default",
+      paused: "outline",
       completed: "default",
       failed: "destructive",
     };
@@ -295,6 +369,7 @@ export default function Campaigns() {
       draft: Clock,
       scheduled: Clock,
       sending: Send,
+      paused: Pause,
       completed: CheckCircle,
       failed: XCircle,
     };
@@ -333,17 +408,39 @@ export default function Campaigns() {
   const pendingRecipientsCount = (recipients ?? []).filter((r) => r.status === 'pending').length;
   const canResendOrReschedule =
     selectedCampaignData &&
-    ['sending', 'completed'].includes(selectedCampaignData.status?.toLowerCase?.() ?? '') &&
+    ['sending', 'paused', 'completed'].includes(selectedCampaignData.status?.toLowerCase?.() ?? '') &&
     (failedRecipients.length > 0 || pendingRecipientsCount > 0);
   const canEditRecipients =
     selectedCampaignData &&
-    (["draft", "scheduled", "completed"].includes(selectedCampaignData.status?.toLowerCase?.() ?? "") ||
+    (["draft", "scheduled", "completed", "paused"].includes(selectedCampaignData.status?.toLowerCase?.() ?? "") ||
       canResendOrReschedule);
 
   const pendingRecipients = useMemo(
     () => (recipients ?? []).filter((r) => r.status === "pending"),
     [recipients]
   );
+
+  const filteredRecipients = useMemo(() => {
+    const list = recipients ?? [];
+    const q = recipientSearchQuery.trim().toLowerCase();
+    const filtered = !q
+      ? list
+      : list.filter(
+          (r) =>
+            (r.name ?? '').toLowerCase().includes(q) ||
+            (r.email ?? '').toLowerCase().includes(q)
+        );
+    // Sort so sent/delivered appear first (by sent_at desc), then pending/failed — so history is visible at a glance
+    return [...filtered].sort((a, b) => {
+      const aSent = a.sent_at ? new Date(a.sent_at).getTime() : 0;
+      const bSent = b.sent_at ? new Date(b.sent_at).getTime() : 0;
+      if (aSent !== bSent) return bSent - aSent; // most recent sent first
+      if (aSent > 0 && bSent > 0) return 0;
+      const aPending = (a.status?.toLowerCase() ?? '') === 'pending' ? 1 : 0;
+      const bPending = (b.status?.toLowerCase() ?? '') === 'pending' ? 1 : 0;
+      return aPending - bPending; // pending after sent
+    });
+  }, [recipients, recipientSearchQuery]);
 
   // A/B test results: aggregate by ab_variant when campaign had A/B body test
   const abTestResults = useMemo(() => {
@@ -370,6 +467,36 @@ export default function Campaigns() {
     const winner = aVal >= bVal ? 'A' : 'B';
     return { byVariant: { A: a, B: b }, winner, winnerMetric };
   }, [selectedCampaignData, recipients]);
+
+  // A/B results for Delivery report tab (same logic, different data source)
+  const deliveryReportCampaign = useMemo(
+    () => campaigns?.find((c) => c.id === deliveryReportCampaignId),
+    [campaigns, deliveryReportCampaignId]
+  );
+  const deliveryReportAbResults = useMemo(() => {
+    const camp = deliveryReportCampaign;
+    const recs = deliveryReportRecipients ?? [];
+    if (!camp?.ab_test_enabled || recs.length === 0) return null;
+    const withVariant = recs.filter((r): r is CampaignRecipient & { ab_variant: 'A' | 'B' } => r.ab_variant === 'A' || r.ab_variant === 'B');
+    if (withVariant.length === 0) return null;
+    const sent = (r: CampaignRecipient) => ['sent', 'opened', 'clicked'].includes(r.status?.toLowerCase?.() ?? '') || !!r.sent_at;
+    const opened = (r: CampaignRecipient) => !!r.opened_at || ['opened', 'clicked'].includes(r.status?.toLowerCase?.() ?? '');
+    const clicked = (r: CampaignRecipient) => !!r.clicked_at || (r.status?.toLowerCase?.() === 'clicked');
+    const byVariant = { A: withVariant.filter((r) => r.ab_variant === 'A'), B: withVariant.filter((r) => r.ab_variant === 'B') };
+    const stats = (list: CampaignRecipient[]) => {
+      const s = list.filter(sent).length;
+      const o = list.filter(opened).length;
+      const c = list.filter(clicked).length;
+      return { sent: s, opened: o, clicked: c, openRate: s > 0 ? (o / s) * 100 : 0, clickRate: s > 0 ? (c / s) * 100 : 0 };
+    };
+    const a = stats(byVariant.A);
+    const b = stats(byVariant.B);
+    const winnerMetric = camp.ab_winner_metric ?? 'open_rate';
+    const aVal = winnerMetric === 'open_rate' ? a.openRate : winnerMetric === 'click_rate' ? a.clickRate : 0;
+    const bVal = winnerMetric === 'open_rate' ? b.openRate : winnerMetric === 'click_rate' ? b.clickRate : 0;
+    const winner = aVal >= bVal ? 'A' : 'B';
+    return { byVariant: { A: a, B: b }, winner, winnerMetric };
+  }, [deliveryReportCampaign, deliveryReportRecipients]);
 
   const handleSelectAllRecipients = () => {
     if (selectedRecipientIds.size === pendingRecipients.length) {
@@ -647,6 +774,32 @@ export default function Campaigns() {
     }
   };
 
+  const handleDeleteCampaign = async () => {
+    if (!campaignToDelete) return;
+    setDeletingCampaign(true);
+    try {
+      const { error } = await supabase
+        .from('email_campaigns')
+        .delete()
+        .eq('id', campaignToDelete);
+      if (error) throw error;
+      toast.success('Campaign deleted');
+      if (selectedCampaign === campaignToDelete) {
+        setSelectedCampaign(null);
+      }
+      if (draftToEdit === campaignToDelete) {
+        setDraftToEdit(null);
+        setBulkEmailDialogOpen(false);
+      }
+      setCampaignToDelete(null);
+      await queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to delete campaign');
+    } finally {
+      setDeletingCampaign(false);
+    }
+  };
+
   // Create new draft from any campaign (master draft / template)
   const handleCreateFromTemplate = async (source: Campaign) => {
     setCloningFromTemplate(true);
@@ -695,9 +848,27 @@ export default function Campaigns() {
     if (!campaigns) return [];
     return campaigns.filter(c => {
       const status = c.status?.toLowerCase()?.trim();
-      return status === 'draft' || status === 'completed' || status === 'sending' || status === 'scheduled';
+      return status === 'draft' || status === 'completed' || status === 'sending' || status === 'paused' || status === 'scheduled';
     });
   }, [campaigns]);
+
+  // All Campaigns table: filter by status and sort so sending/paused (in progress) appear first
+  const overviewCampaigns = useMemo(() => {
+    if (!campaigns) return [];
+    let list = campaigns;
+    if (overviewStatusFilter !== "all") {
+      list = list.filter((c) => (c.status?.toLowerCase()?.trim() ?? "") === overviewStatusFilter);
+    }
+    const order: Record<string, number> = { sending: 0, paused: 1, scheduled: 2, draft: 3, completed: 4, failed: 5 };
+    return [...list].sort((a, b) => {
+      const aStatus = a.status?.toLowerCase()?.trim() ?? "";
+      const bStatus = b.status?.toLowerCase()?.trim() ?? "";
+      const aOrder = order[aStatus] ?? 6;
+      const bOrder = order[bStatus] ?? 6;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return new Date(b.updated_at ?? b.created_at).getTime() - new Date(a.updated_at ?? a.created_at).getTime();
+    });
+  }, [campaigns, overviewStatusFilter]);
 
   const { data: recipientGroups = [], refetch: refetchRecipientGroups } = useQuery({
     queryKey: ['recipient-groups'],
@@ -870,16 +1041,47 @@ export default function Campaigns() {
         queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-send-history'] }),
       ]);
       const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
         body: { campaignId: selectedCampaign },
       });
       if (sendError) console.error('Trigger send:', sendError);
-      toast.success('Variants swapped and resend started. A recipients get B content, B recipients get A content.');
+      toast.success('Variants swapped and resend started. Only recipients who have not already received that variant will be sent to; no duplicate variant sends.');
     } catch (e: any) {
       toast.error(e?.message ?? (typeof (e as any)?.error === 'string' ? (e as any).error : 'Failed to swap and resend'));
     } finally {
       setResendVariantLoading(null);
+    }
+  };
+
+  const handlePauseCampaign = async () => {
+    if (!selectedCampaign || selectedCampaignData?.status?.toLowerCase() !== 'sending') return;
+    setPausingCampaign(true);
+    try {
+      const { error } = await supabase.from('email_campaigns').update({ status: 'paused' }).eq('id', selectedCampaign);
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+      toast.success('Campaign paused. Edit content if needed, then click Resume to continue sending from where you left off (no duplicates).');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to pause');
+    } finally {
+      setPausingCampaign(false);
+    }
+  };
+
+  const handleResumeCampaign = async () => {
+    if (!selectedCampaign || selectedCampaignData?.status?.toLowerCase() !== 'paused') return;
+    setResumingCampaign(true);
+    try {
+      const { error } = await supabase.from('email_campaigns').update({ status: 'sending' }).eq('id', selectedCampaign);
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+      toast.success('Campaign resumed. Sending will continue for pending recipients (cron or manual send).');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to resume');
+    } finally {
+      setResumingCampaign(false);
     }
   };
 
@@ -1145,11 +1347,16 @@ export default function Campaigns() {
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setSearchParams({ tab: value })}>
-        <TabsList className="grid w-full grid-cols-5 mb-6">
+        <TabsList className="grid w-full grid-cols-6 mb-6">
           <TabsTrigger value="overview" className="flex items-center gap-2">
             <Mail className="h-4 w-4" />
             <span className="hidden sm:inline">All Campaigns</span>
             <span className="sm:hidden">All</span>
+          </TabsTrigger>
+          <TabsTrigger value="delivery" className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            <span className="hidden sm:inline">Delivery report</span>
+            <span className="sm:hidden">Report</span>
           </TabsTrigger>
           <TabsTrigger value="drafts" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
@@ -1193,8 +1400,29 @@ export default function Campaigns() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>All Campaigns</CardTitle>
-            <CardDescription>View performance and manage your campaigns</CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <CardTitle>All Campaigns</CardTitle>
+                <CardDescription>View performance and manage your campaigns. Paused and sending campaigns appear first.</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="overview-status-filter" className="text-sm text-muted-foreground whitespace-nowrap">Status</Label>
+                <Select value={overviewStatusFilter} onValueChange={setOverviewStatusFilter}>
+                  <SelectTrigger id="overview-status-filter" className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="paused">Paused</SelectItem>
+                    <SelectItem value="sending">Sending</SelectItem>
+                    <SelectItem value="scheduled">Scheduled</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="p-0 sm:p-6">
             <div className="overflow-x-auto">
@@ -1211,7 +1439,13 @@ export default function Campaigns() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {campaigns.map((campaign) => {
+                {overviewCampaigns.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      {overviewStatusFilter === "all" ? "No campaigns yet." : `No campaigns with status "${overviewStatusFilter}". Try "All" or another status.`}
+                    </TableCell>
+                  </TableRow>
+                ) : overviewCampaigns.map((campaign) => {
                   const progress = campaign.total_recipients > 0
                     ? (campaign.sent_count / campaign.total_recipients) * 100
                     : 0;
@@ -1251,14 +1485,27 @@ export default function Campaigns() {
                         {format(new Date(campaign.created_at), 'MMM d, yyyy')}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedCampaign(campaign.id)}
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Details
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setSelectedCampaign(campaign.id)}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setCampaignToDelete(campaign.id)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete campaign
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   );
@@ -1269,6 +1516,186 @@ export default function Campaigns() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+
+        {/* Delivery report tab: what was sent, A/B breakdown, link to recipients */}
+        <TabsContent value="delivery" className="space-y-6 mt-0 outline-none">
+          <Card className="min-h-[200px]">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" />
+                Delivery report
+              </CardTitle>
+              <CardDescription>
+                See what was sent, who received which variant (A/B), and performance by variant. Select a campaign to view its report.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Label className="text-sm font-medium">Campaign</Label>
+                <Select
+                  value={deliveryReportCampaignId ?? '__none__'}
+                  onValueChange={(v) => setDeliveryReportCampaignId(v === '__none__' ? null : v)}
+                >
+                  <SelectTrigger className="w-[280px]">
+                    <SelectValue placeholder="Select a campaign..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <span className="text-muted-foreground">Select a campaign...</span>
+                    </SelectItem>
+                    {(campaigns ?? [])
+                      .filter((c) => (c.sent_count ?? 0) > 0)
+                      .map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} — {c.sent_count} sent
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {deliveryReportCampaignId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedCampaign(deliveryReportCampaignId);
+                    }}
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    View recipients
+                  </Button>
+                )}
+              </div>
+              {isLoading && (
+                <p className="text-sm text-muted-foreground py-4 flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading campaigns...
+                </p>
+              )}
+              {!isLoading && (campaigns ?? []).filter((c) => (c.sent_count ?? 0) > 0).length === 0 && (
+                <p className="text-sm text-muted-foreground py-4">
+                  No campaigns with sends yet. Run a bulk email campaign from All Campaigns and send to at least one recipient, then return here to see the delivery report.
+                </p>
+              )}
+              {!isLoading && !deliveryReportCampaignId && (campaigns ?? []).filter((c) => (c.sent_count ?? 0) > 0).length > 0 && (
+                <p className="text-sm text-muted-foreground py-4">
+                  Select a campaign above to see delivery summary, A/B variant breakdown, and who received which version.
+                </p>
+              )}
+              {deliveryReportCampaignId && deliveryReportCampaign && (
+                <div className="space-y-4 pt-2 border-t">
+                  <div className="flex flex-wrap items-center gap-2 pb-2">
+                    <span className="text-xs text-muted-foreground">Summary from recipient list (live).</span>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }); refetchDeliveryReportRecipients(); }}>
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      Refresh
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                    <div className="rounded-lg border p-3">
+                      <div className="text-muted-foreground text-xs uppercase tracking-wide">Sent</div>
+                      <div className="text-xl font-semibold">
+                        {deliveryReportSummaryFromRecipients ? deliveryReportSummaryFromRecipients.sent : (deliveryReportCampaign.sent_count ?? 0)}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <div className="text-muted-foreground text-xs uppercase tracking-wide">Opened</div>
+                      <div className="text-xl font-semibold">
+                        {deliveryReportSummaryFromRecipients ? deliveryReportSummaryFromRecipients.opened : Math.min(deliveryReportCampaign.opened_count ?? 0, deliveryReportCampaign.sent_count ?? 0)}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <div className="text-muted-foreground text-xs uppercase tracking-wide">Total recipients</div>
+                      <div className="text-xl font-semibold">
+                        {deliveryReportSummaryFromRecipients ? deliveryReportSummaryFromRecipients.total : (deliveryReportCampaign.total_recipients ?? 0)}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <div className="text-muted-foreground text-xs uppercase tracking-wide">Status</div>
+                      <div>{getStatusBadge(deliveryReportCampaign.status)}</div>
+                    </div>
+                  </div>
+                  {deliveryReportAbResults ? (
+                    <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                      <div className="font-medium">A/B test — what was sent</div>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className={`rounded-md p-3 border ${deliveryReportAbResults.winner === 'A' ? 'border-primary bg-primary/5' : 'bg-muted/50'}`}>
+                          <div className="font-medium mb-1">Variant A</div>
+                          <div className="text-muted-foreground space-y-0.5">
+                            <div>{deliveryReportAbResults.byVariant.A.sent} sent, {deliveryReportAbResults.byVariant.A.opened} opened, {deliveryReportAbResults.byVariant.A.clicked} clicked</div>
+                            <div>Open rate: {deliveryReportAbResults.byVariant.A.openRate.toFixed(1)}% · Click rate: {deliveryReportAbResults.byVariant.A.clickRate.toFixed(1)}%</div>
+                          </div>
+                          {deliveryReportAbResults.winner === 'A' && (
+                            <Badge variant="default" className="mt-2">Winner ({deliveryReportAbResults.winnerMetric.replace('_', ' ')})</Badge>
+                          )}
+                        </div>
+                        <div className={`rounded-md p-3 border ${deliveryReportAbResults.winner === 'B' ? 'border-primary bg-primary/5' : 'bg-muted/50'}`}>
+                          <div className="font-medium mb-1">Variant B</div>
+                          <div className="text-muted-foreground space-y-0.5">
+                            <div>{deliveryReportAbResults.byVariant.B.sent} sent, {deliveryReportAbResults.byVariant.B.opened} opened, {deliveryReportAbResults.byVariant.B.clicked} clicked</div>
+                            <div>Open rate: {deliveryReportAbResults.byVariant.B.openRate.toFixed(1)}% · Click rate: {deliveryReportAbResults.byVariant.B.clickRate.toFixed(1)}%</div>
+                          </div>
+                          {deliveryReportAbResults.winner === 'B' && (
+                            <Badge variant="default" className="mt-2">Winner ({deliveryReportAbResults.winnerMetric.replace('_', ' ')})</Badge>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Each recipient received either Variant A or B. Use &quot;View recipients&quot; above to see the full list with variant and status.
+                      </p>
+                    </div>
+                  ) : deliveryReportCampaign.ab_test_enabled && (deliveryReportRecipients?.length ?? 0) === 0 ? (
+                    <p className="text-sm text-muted-foreground">Loading recipient data for A/B breakdown...</p>
+                  ) : deliveryReportCampaign.ab_test_enabled && deliveryReportRecipients && deliveryReportRecipients.length > 0 ? (
+                    <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                      <p className="text-sm text-muted-foreground">Variant not recorded for this campaign&apos;s recipients (e.g. sent before A/B or list replaced).</p>
+                      {deliveryReportSummaryFromRecipients && (
+                        <p className="text-sm">
+                          Overall: <strong>{deliveryReportSummaryFromRecipients.sent}</strong> sent, <strong>{deliveryReportSummaryFromRecipients.opened}</strong> opened of <strong>{deliveryReportSummaryFromRecipients.total}</strong> recipients.
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                  {/* Full send history: initial send + every resend/swap */}
+                  {campaignSendHistory && campaignSendHistory.length > 0 && (
+                    <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                      <div className="font-medium">Send history (all sends — initial and resends)</div>
+                      <p className="text-xs text-muted-foreground">
+                        Every time an email was sent (initial send or swap/resend). Swap and resend never sends the same variant twice to the same recipient.
+                      </p>
+                      <div className="overflow-x-auto max-h-[280px] overflow-y-auto border rounded-md">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-[140px]">Sent at</TableHead>
+                              <TableHead>Recipient</TableHead>
+                              <TableHead className="w-[70px]">Variant</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {campaignSendHistory.map((h) => {
+                              const rec = (deliveryReportRecipients ?? recipients ?? []).find((r) => r.id === h.recipient_id);
+                              return (
+                                <TableRow key={h.id}>
+                                  <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                                    {format(new Date(h.sent_at), 'MMM d, yyyy HH:mm')}
+                                  </TableCell>
+                                  <TableCell className="text-sm">{rec ? `${rec.name} <${rec.email}>` : h.recipient_id}</TableCell>
+                                  <TableCell>
+                                    <Badge variant={h.variant_sent === 'A' ? 'default' : 'secondary'} className="font-mono">{h.variant_sent}</Badge>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Drafts Tab */}
@@ -1513,6 +1940,44 @@ export default function Campaigns() {
                   ? "View, edit, or remove recipients. Add recipients to send or schedule again; edit content via Edit content."
                   : "View individual recipient status and details"}
               </DialogDescription>
+              {statusCounts && (
+                <div className="flex flex-wrap items-center gap-3 pt-2 text-sm">
+                  <span className="font-medium text-foreground">Summary:</span>
+                  <span>{(statusCounts.sent ?? 0) + (statusCounts.opened ?? 0) + (statusCounts.clicked ?? 0)} sent</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span>{statusCounts.pending ?? 0} pending</span>
+                  {(statusCounts.failed ?? 0) > 0 && (
+                    <>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-destructive">{statusCounts.failed} failed</span>
+                    </>
+                  )}
+                  {(statusCounts.bounced ?? 0) > 0 && (
+                    <>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-destructive">{statusCounts.bounced} bounced</span>
+                    </>
+                  )}
+                  <span className="text-muted-foreground text-xs ml-1">
+                    (Sent recipients appear first in the list below)
+                  </span>
+                </div>
+              )}
+              {sendHistoryByDate.length > 0 && (
+                <div className="rounded-md border bg-muted/30 px-3 py-2 mt-2">
+                  <div className="text-xs font-medium text-muted-foreground mb-1.5">Send history (when emails were sent)</div>
+                  <ul className="text-xs space-y-1 text-muted-foreground">
+                    {sendHistoryByDate.map((entry, i) => (
+                      <li key={i}>
+                        {format(new Date(entry.at), 'MMM d, yyyy HH:mm')} — {entry.count} sent
+                        {(entry.variantA > 0 || entry.variantB > 0) && (
+                          <span className="ml-1">(A: {entry.variantA}, B: {entry.variantB})</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </DialogHeader>
 
             {selectedCampaignData?.status?.toLowerCase() === 'scheduled' && (
@@ -1560,6 +2025,18 @@ export default function Campaigns() {
                       : `${pendingRecipientsCount} still pending.`}
                 </span>
                 <div className="flex flex-wrap gap-2 ml-auto">
+                  {selectedCampaignData?.status?.toLowerCase() === 'sending' && (
+                    <Button variant="outline" size="sm" onClick={handlePauseCampaign} disabled={pausingCampaign}>
+                      {pausingCampaign ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Pause className="h-4 w-4 mr-1" />}
+                      Pause
+                    </Button>
+                  )}
+                  {selectedCampaignData?.status?.toLowerCase() === 'paused' && (
+                    <Button variant="default" size="sm" onClick={handleResumeCampaign} disabled={resumingCampaign}>
+                      {resumingCampaign ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Play className="h-4 w-4 mr-1" />}
+                      Resume
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -1616,8 +2093,23 @@ export default function Campaigns() {
               </div>
             )}
 
+            {/* Delete campaign (all statuses) */}
+            <div className="flex justify-end border-t pt-3 mt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  if (selectedCampaign) setCampaignToDelete(selectedCampaign);
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete campaign
+              </Button>
+            </div>
+
             {/* Auto follow-up for sent campaigns: show status or enroll in sequence */}
-            {(selectedCampaignData?.status?.toLowerCase() === 'completed' || selectedCampaignData?.status?.toLowerCase() === 'sending') &&
+            {(selectedCampaignData?.status?.toLowerCase() === 'completed' || selectedCampaignData?.status?.toLowerCase() === 'sending' || selectedCampaignData?.status?.toLowerCase() === 'paused') &&
              (selectedCampaignData as Campaign).sent_count > 0 && (
               <div className="rounded-lg border bg-muted/30 px-4 py-3 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -1635,6 +2127,9 @@ export default function Campaigns() {
                     {selectedCampaignData.auto_follow_up_enabled && selectedCampaignData.follow_up_sequence_id
                       ? 'Add any sent recipients who weren’t enrolled yet (e.g. sent before follow-up was enabled).'
                       : 'Enroll this campaign\'s sent recipients in a follow-up sequence so they get reminder emails (no-reply rules). One enrollment per company.'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    To automatically resend to those who opened but didn't click: choose segment <strong>Opened, no click</strong> when enrolling. The sequence's behavioral automation runs hourly and sends the next step after the wait period.
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <Select
@@ -1690,7 +2185,7 @@ export default function Campaigns() {
             )}
 
             {/* A/B test results for campaigns that had body A/B test */}
-            {abTestResults && (selectedCampaignData?.status?.toLowerCase() === 'completed' || selectedCampaignData?.status?.toLowerCase() === 'sending') && (
+            {abTestResults && (selectedCampaignData?.status?.toLowerCase() === 'completed' || selectedCampaignData?.status?.toLowerCase() === 'sending' || selectedCampaignData?.status?.toLowerCase() === 'paused') && (
               <div className="rounded-lg border bg-muted/30 px-4 py-3 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <FlaskConical className="h-4 w-4 text-primary shrink-0" />
@@ -1759,6 +2254,15 @@ export default function Campaigns() {
             {canEditRecipients && (
               <div className="space-y-2 py-2 border-b">
                 <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative flex-1 min-w-[200px] max-w-[280px]">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                      placeholder="Search recipients..."
+                      value={recipientSearchQuery}
+                      onChange={(e) => setRecipientSearchQuery(e.target.value)}
+                      className="pl-8 h-9"
+                    />
+                  </div>
                   <Button
                     variant="default"
                     size="sm"
@@ -1863,7 +2367,8 @@ export default function Campaigns() {
                   </SelectContent>
                 </Select>
                 <span className="text-sm text-muted-foreground">
-                  Showing {recipients.length} recipient{recipients.length !== 1 ? 's' : ''}
+                  Showing {filteredRecipients.length} recipient{filteredRecipients.length !== 1 ? 's' : ''}
+                  {recipientSearchQuery.trim() && ` (of ${recipients.length})`}
                 </span>
               </div>
             )}
@@ -1891,7 +2396,7 @@ export default function Campaigns() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recipients.map((recipient) => (
+                  {filteredRecipients.map((recipient) => (
                     <TableRow key={recipient.id}>
                       {canEditRecipients && pendingRecipients.length > 0 && (
                         <TableCell className="w-10">
@@ -2172,6 +2677,38 @@ export default function Campaigns() {
                   </>
                 ) : (
                   "Delete draft"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Delete Campaign Confirmation (any status) */}
+        <AlertDialog open={!!campaignToDelete} onOpenChange={() => !deletingCampaign && setCampaignToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete campaign?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This campaign and all its recipients and send history will be permanently deleted. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deletingCampaign}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleDeleteCampaign();
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deletingCampaign}
+              >
+                {deletingCampaign ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete campaign"
                 )}
               </AlertDialogAction>
             </AlertDialogFooter>

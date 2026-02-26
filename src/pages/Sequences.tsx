@@ -32,6 +32,7 @@ export default function Sequences() {
   const [tone, setTone] = useState<"professional" | "casual" | "technical">("professional");
   const [customInstructions, setCustomInstructions] = useState("");
   const [autoRespond, setAutoRespond] = useState(false);
+  const [useEmailBranding, setUseEmailBranding] = useState(true);
   const [sendImmediately, setSendImmediately] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<number[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
@@ -104,6 +105,7 @@ export default function Sequences() {
       model: providerConfig.model,
       customInstructions: customInstructions || undefined,
       autoRespond,
+      use_email_branding: useEmailBranding,
     });
 
     if (data) {
@@ -387,6 +389,22 @@ export default function Sequences() {
                     id="auto-respond"
                     checked={autoRespond}
                     onCheckedChange={setAutoRespond}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 rounded-lg border bg-muted/50">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="use-email-branding" className="text-sm font-medium cursor-pointer">
+                      Use email branding template
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Wrap sequence emails in your logo, footer, and style so recipients recognize your brand (same as campaigns)
+                    </p>
+                  </div>
+                  <Switch
+                    id="use-email-branding"
+                    checked={useEmailBranding}
+                    onCheckedChange={setUseEmailBranding}
                   />
                 </div>
 

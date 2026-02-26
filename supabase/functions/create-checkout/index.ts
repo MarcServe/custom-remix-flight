@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// LeadGenie product prices by currency
+// LeadBoosters product prices by currency
 const LEADGENIE_PRICES = {
   usd: "price_1SXOt7P8zypO5fiCd7FkOQCp",
   gbp: "price_1SXXe4P8zypO5fiC4dDpEHBz"

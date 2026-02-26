@@ -1870,7 +1870,23 @@ export default function Companies() {
         }
         return { id: person.id, first_name: person.first_name, last_name: person.last_name, email: person.email, company_id: person.company_id, companies: person.companies };
       });
-      setBulkEmailPeople(enrichedPeople);
+      // Dedupe by email so no duplicate is sent (keep first occurrence)
+      const seenEmails = new Set<string>();
+      const dedupedPeople = enrichedPeople.filter((p) => {
+        const e = p.email?.toLowerCase().trim();
+        if (!e) return false;
+        if (seenEmails.has(e)) return false;
+        seenEmails.add(e);
+        return true;
+      });
+      if (dedupedPeople.length < enrichedPeople.length) {
+        toast({
+          title: "Duplicates removed",
+          description: `${enrichedPeople.length - dedupedPeople.length} duplicate email${enrichedPeople.length - dedupedPeople.length === 1 ? "" : "s"} removed. ${dedupedPeople.length} unique recipient${dedupedPeople.length === 1 ? "" : "s"}.`,
+          variant: "default",
+        });
+      }
+      setBulkEmailPeople(dedupedPeople);
       setBulkEmailDialogOpen(true);
       if (loadingToast) loadingToast.dismiss();
     } catch (error: any) {

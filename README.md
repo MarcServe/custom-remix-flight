@@ -1,10 +1,10 @@
 <div align="center">
 
-# LeadGeni CRM
+# LeadBoosters CRM
 
 AI-assisted lead generation, outreach, and sales operations built with React, Supabase, and edge functions.
 
-![LeadGeni screenshot](public/placeholder.svg)
+![LeadBoosters screenshot](public/placeholder.svg)
 
 </div>
 
@@ -27,9 +27,9 @@ AI-assisted lead generation, outreach, and sales operations built with React, Su
 
 ## Overview
 
-LeadGeni is a modern CRM focused on AI-powered prospecting, automated outreach sequences, and collaborative sales workflows. The product pairs a Vite/React single-page app with Supabase for authentication, database, real-time updates, and edge functions. Third-party integrations handle email connectivity (Nango + Gmail/Outlook, SMTP, Resend) and AI enrichment (Lovable AI, OpenAI, Perplexity, Exa, GetProspect).
+LeadBoosters is a modern CRM focused on AI-powered prospecting, automated outreach sequences, and collaborative sales workflows. The product pairs a Vite/React single-page app with Supabase for authentication, database, real-time updates, and edge functions. Third-party integrations handle email connectivity (Nango + Gmail/Outlook, SMTP, Resend) and AI enrichment (Lovable AI, OpenAI, Perplexity, Exa, GetProspect).
 
-This repository contains everything required to run the LeadGeni frontend, Supabase schema, migrations, and edge functions. It is currently deployed to Vercel (frontend) and Supabase (backend) with Lovable managing AI-assisted commits.
+This repository contains everything required to run the LeadBoosters frontend, Supabase schema, migrations, and edge functions. It is currently deployed to Vercel (frontend) and Supabase (backend) with Lovable managing AI-assisted commits.
 
 ## Feature Highlights
 
@@ -44,7 +44,7 @@ This repository contains everything required to run the LeadGeni frontend, Supab
 ## System Architecture
 
 ```
-Vite/React (LeadGeni SPA)
+Vite/React (LeadBoosters SPA)
 │
 ├── Supabase Auth & Database (Postgres + RLS)
 │   ├── Tables: companies, deals, email_activities, crm_connections, teams, shared_inboxes, …
@@ -238,7 +238,7 @@ Configure matching secrets in Vercel (Frontend) and Supabase (edge functions). W
 
 ## License
 
-Proprietary – LeadGeni CRM is an internal project. Do not distribute without permission from the RevGeni/Biz Boosters team.
+Proprietary – LeadBoosters CRM is an internal project. Do not distribute without permission from the RevGeni/Biz Boosters team.
 
 ---
 

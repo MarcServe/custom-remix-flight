@@ -100,7 +100,7 @@ export default function Subscription() {
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Subscription</h1>
-        <p className="text-muted-foreground">Manage your LeadGenie subscription</p>
+        <p className="text-muted-foreground">Manage your LeadBoosters subscription</p>
       </div>
 
       <div className="mb-6 flex gap-3">
@@ -174,7 +174,7 @@ export default function Subscription() {
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Plan</span>
-                <span className="font-medium">LeadGenie Premium</span>
+                <span className="font-medium">LeadBoosters Premium</span>
               </div>
               {subscriptionEnd && (
                 <div className="flex justify-between items-center">
@@ -208,7 +208,7 @@ export default function Subscription() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
-            <CardTitle>LeadGenie Premium</CardTitle>
+            <CardTitle>LeadBoosters Premium</CardTitle>
           </div>
           <CardDescription>
             Unlock powerful lead generation features

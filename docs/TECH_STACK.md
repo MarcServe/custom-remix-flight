@@ -1,4 +1,4 @@
-# LeadGenie CRM - Technical Stack Documentation
+# LeadBoosters CRM - Technical Stack Documentation
 
 ## Table of Contents
 - [Architecture Overview](#architecture-overview)
@@ -20,7 +20,7 @@
 
 ## Architecture Overview
 
-LeadGenie CRM is built as a modern, full-stack web application using React for the frontend and Supabase as the backend-as-a-service platform.
+LeadBoosters CRM is built as a modern, full-stack web application using React for the frontend and Supabase as the backend-as-a-service platform.
 
 ### High-Level Architecture
 
@@ -2746,4 +2746,4 @@ jobs:
 
 *Last Updated: 2025*
 
-*LeadGenie CRM - Technical Documentation*
+*LeadBoosters CRM - Technical Documentation*

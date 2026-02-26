@@ -34,13 +34,13 @@ export function TrialGate({ children, feature = 'this feature' }: TrialGateProps
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-center text-muted-foreground">
-            Subscribe to LeadGenie Premium to continue using {feature} and unlock all premium features.
+            Subscribe to LeadBoosters Premium to continue using {feature} and unlock all premium features.
           </p>
           
           <div className="bg-muted p-4 rounded-lg">
             <div className="flex items-center gap-2 mb-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              <span className="font-semibold">LeadGenie Premium</span>
+              <span className="font-semibold">LeadBoosters Premium</span>
             </div>
             <ul className="space-y-1 text-sm text-muted-foreground ml-7">
               <li>• Advanced lead search</li>

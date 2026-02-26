@@ -2220,6 +2220,7 @@ export type Database = {
           segment_filters: Json | null
           steps: string[] | null
           updated_at: string | null
+          use_email_branding: boolean
         }
         Insert: {
           ai_instructions?: string | null
@@ -2236,6 +2237,7 @@ export type Database = {
           segment_filters?: Json | null
           steps?: string[] | null
           updated_at?: string | null
+          use_email_branding?: boolean
         }
         Update: {
           ai_instructions?: string | null
@@ -2252,6 +2254,7 @@ export type Database = {
           segment_filters?: Json | null
           steps?: string[] | null
           updated_at?: string | null
+          use_email_branding?: boolean
         }
         Relationships: []
       }
