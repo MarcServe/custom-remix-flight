@@ -966,6 +966,7 @@ Return ONLY the HTML body content.`,
       signature: sp?.signature || businessProfile?.email_signature || undefined,
       bodyHtml: fullBody || undefined,
       bare: true,
+      showNewsletterFooter: true,
     };
   };
 

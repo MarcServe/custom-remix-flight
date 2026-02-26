@@ -21,6 +21,8 @@ interface EmailTemplatePreviewProps {
   headerExtra?: React.ReactNode;
   bodyHtml?: string;
   bare?: boolean;
+  /** When true and bare is true, show the newsletter-style footer (subscribe message, Unsubscribe, Contact us). When false, show only the standard email footer. */
+  showNewsletterFooter?: boolean;
   /** When set (e.g. newsletter preview), clicking an image in the body calls this with (src, index) */
   onEditImage?: (src: string, index: number) => void;
 }
@@ -42,12 +44,13 @@ export function EmailTemplatePreview({
   headerExtra,
   bodyHtml,
   bare,
+  showNewsletterFooter = false,
   onEditImage,
 }: EmailTemplatePreviewProps) {
   const displayHeaderName = (headerName != null && String(headerName).trim() !== '') ? String(headerName).trim() : undefined;
 
   const renderNewsletterExtra = () => {
-    if (!bare) return null;
+    if (!bare || !showNewsletterFooter) return null;
     const displayUrl = websiteUrl ? websiteUrl.replace(/^https?:\/\//i, '') : '';
     const fullUrl = websiteUrl ? (websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`) : '';
     return (

@@ -13,35 +13,49 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { size, geography, industry, steps = 3, tone = "professional", provider, model, customInstructions, autoRespond = false, use_email_branding = true } = await req.json();
+    const { size, geography, industry, steps = 3, tone = "professional", provider, model, customInstructions, productContext, autoRespond = false, use_email_branding = true } = await req.json();
 
-    console.log("Sequence generation request:", { size, geography, industry, steps, tone, provider, model });
+    console.log("Sequence generation request:", { size, geography, industry, steps, tone, provider, model, hasProductContext: !!productContext });
 
-    // Fetch user's business profile for context
+    // Primary context: pasted product/offer (e.g. TalkWeb) so emails pitch THAT, not the sender's CRM business
+    const pitchContext = (productContext && String(productContext).trim())
+      ? `
+WHAT WE ARE PITCHING (this is the ONLY product/offer for the emails—use this, not the sender's business profile):
+${String(productContext).trim()}
+
+Write every email in this sequence about the product/offer above. Mention its name, what it does, and who it helps. Do NOT pitch "Biz Boosters" or the sender's company unless it is explicitly the same as the product above.`
+      : '';
+
+    // Fetch user's business profile only for optional sender context (when no productContext, use as main pitch)
     const authHeader = req.headers.get('Authorization');
     let businessContext = '';
-    
     let userId: string | null = null;
-    
+
     if (authHeader) {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
-      
+
       const token = authHeader.replace('Bearer ', '');
       const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-      
+
       if (!userError && user) {
         userId = user.id;
-        
+
         const { data: profile } = await supabase
           .from('business_profiles')
           .select('*')
           .eq('user_id', user.id)
           .single();
-        
+
         if (profile) {
-          businessContext = `
+          if (pitchContext) {
+            businessContext = `
+SENDER CONTEXT (who is sending—use only for "From" identity if needed; do NOT use as the product being sold):
+- Company: ${profile.company_name}
+- Industry: ${profile.industry}`;
+          } else {
+            businessContext = `
 
 YOUR BUSINESS CONTEXT (use this to tailor the outreach):
 - Company: ${profile.company_name}
@@ -51,6 +65,7 @@ ${profile.target_audience ? `- Target Audience: ${profile.target_audience}` : ''
 ${profile.value_proposition ? `- Value Proposition: ${profile.value_proposition}` : ''}
 
 Create emails that connect YOUR business offerings to the prospect's needs in the ${industry} industry.`;
+          }
           console.log('Business profile loaded for sequence generation');
         }
       }
@@ -62,6 +77,7 @@ Create emails that connect YOUR business offerings to the prospect's needs in th
     const sequencePrompt = `Generate a ${steps}-step cold email outreach sequence for reaching out to ${industry} companies in ${geography} with ${size} employees.
 
 Tone: ${tone}
+${pitchContext}
 ${businessContext}
 
 ${customInstructions ? `\nCUSTOM INSTRUCTIONS:\n${customInstructions}\n` : ''}
@@ -72,7 +88,8 @@ Return ONLY a valid JSON array (no markdown, no code blocks) with exactly ${step
 - delayDays (number): Days to wait before sending (0 for first email, then increase)
 
 Make each email progressively more specific and value-focused. Keep emails concise and professional.
-${businessContext ? 'Use the business context to make the emails relevant and show clear value alignment.' : ''}
+${pitchContext ? 'Every email must pitch the product/offer described in "WHAT WE ARE PITCHING" above. Use its name and value proposition.' : ''}
+${businessContext && !pitchContext ? 'Use the business context to make the emails relevant and show clear value alignment.' : ''}
 ${customInstructions ? 'Follow the custom instructions provided above carefully.' : ''}
 
 Return ONLY the JSON array.`;

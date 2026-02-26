@@ -35,8 +35,8 @@ export const SequenceChatCard = () => {
 
   const examplePrompts = [
     "Create a 4-step sequence for B2B SaaS companies in the UK",
-    "Generate emails for enterprise fintech in North America",
-    "Build a casual sequence for small tech startups"
+    "We add a voice layer to websites for accessibility—help for dyslexia and learning. Target education and healthcare.",
+    "Generate emails for enterprise fintech in North America"
   ];
 
   useEffect(() => {
@@ -168,7 +168,7 @@ export const SequenceChatCard = () => {
               <Sparkles className="h-4 w-4 text-primary animate-pulse" />
             </CardTitle>
             <CardDescription className="text-xs">
-              Describe your sequence in natural language
+              Paste your product or offer description—we&apos;ll create a tailored sequence in one step
             </CardDescription>
           </div>
         </div>
@@ -246,7 +246,7 @@ export const SequenceChatCard = () => {
                 </div>
                 <h3 className="font-semibold text-sm">Start a Conversation</h3>
                 <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                  Tell me what kind of email sequence you want to create
+                  Paste your product or offer description—we&apos;ll infer audience and create the sequence
                 </p>
               </div>
 
@@ -304,7 +304,7 @@ export const SequenceChatCard = () => {
                   handleSend();
                 }
               }}
-              placeholder="Describe your sequence... (e.g., 'Create 4 emails for enterprise SaaS in Europe')"
+              placeholder="Paste product description or e.g. 'Create 4 emails for enterprise SaaS in Europe'"
               className="flex-1 min-h-[60px] max-h-[120px] resize-none text-sm"
               disabled={isStreaming}
             />

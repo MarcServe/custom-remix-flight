@@ -33,16 +33,25 @@ serve(async (req) => {
     console.log('Current extracted params:', extractedParams);
 
     // Build system prompt
-    const systemPrompt = `You are an AI assistant helping users create personalized email sequences for sales outreach.
+    const systemPrompt = `You are an AI assistant that creates email sequences in ONE STEP. The user will paste a description of the PRODUCT, COMPANY, or OFFER they want to pitch (e.g. TalkWeb, their app, their service). Your job is to use THAT PASTED CONTENT as the sole source of truth—NOT the sender's CRM business profile.
 
-Your job is to:
-1. Have a natural conversation about what kind of sequence they want
-2. Extract key parameters: industry, geography, company size, tone (professional/casual/technical), and number of steps
-3. When you have enough information, use the generate_sequence tool to create the sequence
+CRITICAL:
+- The pasted message defines WHAT we're selling and WHO it's for. Extract everything from it: product/company name (e.g. TalkWeb), what it does, who the target audience is, and any mentioned industry/region/size/tone.
+- You MUST pass the full pasted content (or a clear, complete summary that includes product name and value proposition) as productContext to generate_sequence. The generated emails will pitch THIS product, not "Biz Boosters" or any other default business.
+- Infer target industry FROM THE PASTED CONTENT (e.g. "adds voice for accessibility, dyslexia, learning" → Education, Healthcare, Government; "SaaS for sales" → Tech/B2B). Do NOT default to "Tech" or the sender's industry unless the pasted text clearly says so.
 
-Current extracted parameters: ${JSON.stringify(extractedParams)}
+EXTRACTION RULES (from the pasted text only):
+- industry: who the pasted product is for (Education, Healthcare, Government, Fintech, SaaS, etc.). Infer from the description.
+- geography: extract if mentioned; else "North America".
+- size: extract if mentioned; else "11-50".
+- tone: extract if clear; else "professional".
+- steps: 3–5 from request or default 3.
+- productContext: the pasted message itself or a summary that includes product name + what it does + who it helps. Required.
 
-Be conversational and helpful. Ask clarifying questions if needed.`;
+BEHAVIOR:
+- Call generate_sequence as soon as the user provides a description. Always include productContext. Reply with a short confirmation then the tool runs.
+- Only ask one clarifying question if the message is empty or just "Hi" with no context.
+- Current extracted parameters (from previous turns): ${JSON.stringify(extractedParams)}`;
 
     // Prepare API body
     const body: any = {
@@ -57,13 +66,17 @@ Be conversational and helpful. Ask clarifying questions if needed.`;
           type: "function",
           function: {
             name: "generate_sequence",
-            description: "Generate an email sequence when all required parameters are collected",
+            description: "Generate the email sequence immediately. Pass the user's pasted content as productContext so emails pitch THAT product (e.g. TalkWeb), not the sender's default business. Extract industry, geography, size, tone, steps from the pasted message.",
             parameters: {
               type: "object",
               properties: {
+                productContext: {
+                  type: "string",
+                  description: "The exact pasted product/company/offer description from the user. This is the ONLY source for what we're pitching (e.g. TalkWeb accessibility tool). Include product name, what it does, and who it's for. Do not substitute the sender's business profile."
+                },
                 industry: { 
                   type: "string",
-                  description: "Industry of target companies (e.g., 'Fintech', 'SaaS', 'Healthcare')"
+                  description: "Target industry inferred FROM THE PASTED CONTENT (e.g. Education, Healthcare, Government for accessibility tools; not the sender's industry)"
                 },
                 geography: { 
                   type: "string",
@@ -85,7 +98,7 @@ Be conversational and helpful. Ask clarifying questions if needed.`;
                   maximum: 5
                 }
               },
-              required: ["industry", "geography", "size", "tone", "steps"],
+              required: ["productContext", "industry", "geography", "size", "tone", "steps"],
               additionalProperties: false
             }
           }

@@ -108,6 +108,7 @@ export default function EmailBranding() {
   });
   const [savingSenderProfile, setSavingSenderProfile] = useState(false);
   const [previewProfileId, setPreviewProfileId] = useState<string>("default");
+  const [senderPreviewMode, setSenderPreviewMode] = useState<'email' | 'newsletter'>('email');
   const PREFILL_NONE = "__none__";
   const [prefillFromProfileId, setPrefillFromProfileId] = useState<string>(PREFILL_NONE);
 
@@ -1284,6 +1285,59 @@ export default function EmailBranding() {
                   <p className="text-xs text-muted-foreground mt-1">Optional. Overrides the structured signature when you save.</p>
                 </TabsContent>
               </Tabs>
+            </div>
+
+            {/* In-dialog preview: see template before saving */}
+            <div className="space-y-2 rounded-lg border-2 border-dashed border-primary/30 bg-muted/20 p-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <Palette className="h-4 w-4 text-primary" />
+                  Preview
+                </h4>
+                <Tabs value={senderPreviewMode} onValueChange={(v) => setSenderPreviewMode(v as 'email' | 'newsletter')} className="w-auto">
+                  <TabsList className="h-8">
+                    <TabsTrigger value="email" className="text-xs px-3">Email</TabsTrigger>
+                    <TabsTrigger value="newsletter" className="text-xs px-3">Newsletter</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {senderPreviewMode === 'email' ? 'Standard email (no unsubscribe block).' : 'Newsletter style with subscribe message and Unsubscribe / Contact us.'}
+              </p>
+              <div className="rounded-md overflow-hidden border bg-background max-h-[320px] overflow-y-auto">
+                <PreviewErrorBoundary>
+                  <EmailTemplatePreview
+                    template={(senderProfileForm.template_style || "professional") as EmailTemplatePreviewStyle}
+                    brandColor={senderProfileForm.brand_color || "#8b5cf6"}
+                    logoUrl={senderProfileForm.logo_url || undefined}
+                    companyName={senderProfileForm.signature_company || businessProfile.company_name || "Your Company"}
+                    headerName={senderProfileForm.display_name || undefined}
+                    senderName={senderProfileForm.signature_name || senderProfileForm.sender_name || "Sender"}
+                    senderTitle={senderProfileForm.sender_title || undefined}
+                    senderEmail={senderProfileForm.sender_email || undefined}
+                    footerText={senderProfileForm.footer_text || undefined}
+                    footerImageUrl={senderProfileForm.footer_logo_url || undefined}
+                    senderImageUrl={senderProfileForm.sender_image_url || undefined}
+                    websiteUrl={senderProfileForm.website_url || undefined}
+                    signature={
+                      senderProfileForm.signature_use_structured
+                        ? (buildStructuredSignatureHtml({
+                            closing: senderProfileForm.signature_closing,
+                            name: senderProfileForm.signature_name || senderProfileForm.sender_name,
+                            title: senderProfileForm.sender_title,
+                            company: senderProfileForm.signature_company,
+                            phone: senderProfileForm.sender_phone,
+                            email: senderProfileForm.sender_email,
+                            website: senderProfileForm.website_url,
+                            address: senderProfileForm.sender_address,
+                          }) || undefined)
+                        : (senderProfileForm.signature?.trim() || undefined)
+                    }
+                    bare
+                    showNewsletterFooter={senderPreviewMode === 'newsletter'}
+                  />
+                </PreviewErrorBoundary>
+              </div>
             </div>
           </div>
           <DialogFooter>
