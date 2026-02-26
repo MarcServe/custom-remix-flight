@@ -166,11 +166,13 @@ export function AddContactDialog({ open, onOpenChange, onSuccess, initialValues 
             if (existingCompany) {
               finalCompanyId = existingCompany.id;
             } else {
+              const websitePlaceholder = `no-website-${crypto.randomUUID()}`;
               const { data: newCompany, error: companyError } = await supabase
                 .from("companies")
                 .insert({
                   user_id: user.id,
                   name: nameTrimmed,
+                  website: websitePlaceholder,
                 })
                 .select()
                 .single();
@@ -220,11 +222,14 @@ export function AddContactDialog({ open, onOpenChange, onSuccess, initialValues 
         if (existingCompany) {
           finalCompanyId = existingCompany.id;
         } else {
+          // companies_website_unique is UNIQUE NULLS NOT DISTINCT: only one NULL allowed. Use a placeholder.
+          const websitePlaceholder = `no-website-${crypto.randomUUID()}`;
           const { data: newCompany, error: companyError } = await supabase
             .from("companies")
             .insert({
               user_id: user.id,
               name: nameTrimmed,
+              website: websitePlaceholder,
             })
             .select()
             .single();

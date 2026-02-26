@@ -967,6 +967,20 @@ export default function People() {
                     className="w-full sm:w-auto"
                     onClick={() => {
                       try {
+                        const selected = people?.filter(p => selectedPeopleIds.has(p.id) && p.email) || [];
+                        if (selected.length === 0) {
+                          toast({ title: "No emails", description: "None of the selected people have email addresses.", variant: "destructive" });
+                          return;
+                        }
+                        const prepared = selected.map((p: any) => ({
+                          id: p.id,
+                          first_name: p.first_name ?? '',
+                          last_name: p.last_name ?? '',
+                          email: p.email,
+                          company_id: p.company_id,
+                          companies: p.companies ? { id: p.companies.id, name: p.companies.name, tags: p.companies.tags || [] } : undefined,
+                        }));
+                        localStorage.setItem('leadgenie_draft_recipients', JSON.stringify(prepared));
                         window.opener?.postMessage?.(
                           { type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" },
                           window.location.origin
@@ -986,6 +1000,20 @@ export default function People() {
                     className="w-full sm:w-auto"
                     onClick={() => {
                       try {
+                        const selected = people?.filter(p => selectedPeopleIds.has(p.id) && p.email) || [];
+                        if (selected.length === 0) {
+                          toast({ title: "No emails", description: "None of the selected people have email addresses.", variant: "destructive" });
+                          return;
+                        }
+                        const prepared = selected.map((p: any) => ({
+                          id: p.id,
+                          first_name: p.first_name ?? '',
+                          last_name: p.last_name ?? '',
+                          email: p.email,
+                          company_id: p.company_id,
+                          companies: p.companies ? { id: p.companies.id, name: p.companies.name, tags: p.companies.tags || [] } : undefined,
+                        }));
+                        localStorage.setItem('leadgenie_draft_recipients', JSON.stringify(prepared));
                         window.opener?.postMessage?.(
                           { type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" },
                           window.location.origin

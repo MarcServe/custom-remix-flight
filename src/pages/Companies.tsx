@@ -2749,6 +2749,11 @@ export default function Companies() {
                             size="sm"
                             onClick={() => {
                               try {
+                                if (companiesWithEmail.length === 0) return;
+                                const companyIds = companiesWithEmail.map(c => c.id);
+                                localStorage.removeItem('leadgenie_draft_recipients');
+                                localStorage.removeItem('leadgenie_selected_people_ids');
+                                localStorage.setItem('leadgenie_selected_company_ids', JSON.stringify(companyIds));
                                 window.opener?.postMessage?.(
                                   { type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" },
                                   window.location.origin
@@ -2768,6 +2773,11 @@ export default function Companies() {
                             size="sm"
                             onClick={() => {
                               try {
+                                if (companiesWithEmail.length === 0) return;
+                                const companyIds = companiesWithEmail.map(c => c.id);
+                                localStorage.removeItem('leadgenie_draft_recipients');
+                                localStorage.removeItem('leadgenie_selected_people_ids');
+                                localStorage.setItem('leadgenie_selected_company_ids', JSON.stringify(companyIds));
                                 window.opener?.postMessage?.(
                                   { type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" },
                                   window.location.origin
