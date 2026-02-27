@@ -758,6 +758,7 @@ serve(async (req) => {
                     company_id: companyId,
                     sequence_id: followUpSeqId,
                     campaign_id: campaignId,
+                    sender_profile_id: campaign.sender_profile_id ?? null,
                     current_step: 0,
                     personalized_emails: personalizedEmails,
                     status: 'active',

@@ -97,7 +97,22 @@ Deno.serve(async (req) => {
 
     const fromEmail = connection?.from_email || 'noreply@yourdomain.com';
     const senderName = businessProfile?.company_name || 'Your Business';
-    const branding = useBranding && businessProfile ? {
+    let branding: {
+      templateStyle: string;
+      companyName: string | null;
+      headerName: string | null;
+      logoUrl: string | null;
+      brandColor: string;
+      footerText: string | null;
+      footerImageUrl: string | null;
+      signature: string | null;
+      senderName: string | null;
+      signatureName: string | null;
+      senderEmail: string | null;
+      senderTitle: string | null;
+      senderImageUrl: string | null;
+      websiteUrl: string | null;
+    } | null = useBranding && businessProfile ? {
       templateStyle: (businessProfile as Record<string, unknown>).email_template_style as string || 'professional',
       companyName: (businessProfile as Record<string, unknown>).company_name as string ?? null,
       headerName: (businessProfile as Record<string, unknown>).email_header_name as string ?? null,
@@ -113,6 +128,35 @@ Deno.serve(async (req) => {
       senderImageUrl: (businessProfile as Record<string, unknown>).email_sender_image_url as string ?? null,
       websiteUrl: (businessProfile as Record<string, unknown>).website as string ?? null,
     } : null;
+
+    // Overlay sender profile when sequence was enrolled from a campaign with a product (e.g. TALKWEB)
+    const senderProfileId = (companySequence as { sender_profile_id?: string | null }).sender_profile_id;
+    if (branding && senderProfileId) {
+      const { data: senderProfile } = await supabase
+        .from('sender_profiles')
+        .select('name, display_name, logo_url, brand_color, footer_text, footer_image_url, footer_logo_url, signature, template_style, sender_name, signature_name, sender_email, sender_title, sender_image_url, website_url')
+        .eq('id', senderProfileId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (senderProfile) {
+        branding = {
+          companyName: branding.companyName,
+          headerName: senderProfile.display_name ?? branding.headerName,
+          logoUrl: senderProfile.logo_url ?? branding.logoUrl,
+          brandColor: senderProfile.brand_color || branding.brandColor,
+          footerText: senderProfile.footer_text ?? branding.footerText,
+          footerImageUrl: senderProfile.footer_logo_url ?? senderProfile.logo_url ?? branding.footerImageUrl,
+          signature: senderProfile.signature ?? branding.signature,
+          templateStyle: ['professional', 'minimal', 'modern', 'creative', 'corporate', 'bold', 'elegant'].includes(senderProfile.template_style) ? senderProfile.template_style : branding.templateStyle,
+          senderName: senderProfile.sender_name ?? branding.senderName,
+          signatureName: senderProfile.signature_name ?? branding.signatureName,
+          senderEmail: senderProfile.sender_email ?? branding.senderEmail,
+          senderTitle: senderProfile.sender_title ?? branding.senderTitle,
+          senderImageUrl: senderProfile.sender_image_url ?? branding.senderImageUrl,
+          websiteUrl: senderProfile.website_url ?? branding.websiteUrl,
+        };
+      }
+    }
 
     const sentEmails = [];
     const errors = [];

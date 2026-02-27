@@ -127,6 +127,34 @@ serve(async (req) => {
           senderImageUrl: (bp.email_sender_image_url as string) ?? null,
           websiteUrl: (bp.website as string) ?? null,
         };
+        // Overlay sender profile when sequence was enrolled from a campaign with a product (e.g. TALKWEB)
+        const senderProfileId = (companySequence as { sender_profile_id?: string | null }).sender_profile_id;
+        if (senderProfileId && userId) {
+          const { data: senderProfile } = await supabase
+            .from('sender_profiles')
+            .select('name, display_name, logo_url, brand_color, footer_text, footer_image_url, footer_logo_url, signature, template_style, sender_name, signature_name, sender_email, sender_title, sender_image_url, website_url')
+            .eq('id', senderProfileId)
+            .eq('user_id', userId)
+            .maybeSingle();
+          if (senderProfile) {
+            branding = {
+              companyName: branding!.companyName,
+              headerName: senderProfile.display_name ?? branding!.headerName,
+              logoUrl: senderProfile.logo_url ?? branding!.logoUrl,
+              brandColor: senderProfile.brand_color || branding!.brandColor,
+              footerText: senderProfile.footer_text ?? branding!.footerText,
+              footerImageUrl: senderProfile.footer_logo_url ?? senderProfile.logo_url ?? branding!.footerImageUrl,
+              signature: senderProfile.signature ?? branding!.signature,
+              templateStyle: ['professional', 'minimal', 'modern', 'creative', 'corporate', 'bold', 'elegant'].includes(senderProfile.template_style) ? senderProfile.template_style : branding!.templateStyle,
+              senderName: senderProfile.sender_name ?? branding!.senderName,
+              signatureName: senderProfile.signature_name ?? branding!.signatureName,
+              senderEmail: senderProfile.sender_email ?? branding!.senderEmail,
+              senderTitle: senderProfile.sender_title ?? branding!.senderTitle,
+              senderImageUrl: senderProfile.sender_image_url ?? branding!.senderImageUrl,
+              websiteUrl: senderProfile.website_url ?? branding!.websiteUrl,
+            };
+          }
+        }
       }
     }
 

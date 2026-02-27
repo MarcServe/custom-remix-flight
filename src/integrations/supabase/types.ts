@@ -1146,6 +1146,7 @@ export type Database = {
           next_action: string | null
           personalized_emails: Json | null
           sequence_id: string
+          sender_profile_id: string | null
           status: string
           updated_at: string
         }
@@ -1163,6 +1164,7 @@ export type Database = {
           next_action?: string | null
           personalized_emails?: Json | null
           sequence_id: string
+          sender_profile_id?: string | null
           status?: string
           updated_at?: string
         }
@@ -1180,6 +1182,7 @@ export type Database = {
           next_action?: string | null
           personalized_emails?: Json | null
           sequence_id?: string
+          sender_profile_id?: string | null
           status?: string
           updated_at?: string
         }
@@ -1196,6 +1199,13 @@ export type Database = {
             columns: ["sequence_id"]
             isOneToOne: false
             referencedRelation: "email_sequences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_sequences_sender_profile_id_fkey"
+            columns: ["sender_profile_id"]
+            isOneToOne: false
+            referencedRelation: "sender_profiles"
             referencedColumns: ["id"]
           },
         ]

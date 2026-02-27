@@ -1258,6 +1258,7 @@ export default function Campaigns() {
         if (!cid || existingCompanies.has(cid)) continue;
         if (!companyToFirstRecipient.has(cid)) companyToFirstRecipient.set(cid, r);
       }
+      const campaignSenderProfileId = (selectedCampaignData as { sender_profile_id?: string | null } | undefined)?.sender_profile_id ?? null;
       for (const [companyId, recipient] of companyToFirstRecipient) {
         const { data: newCs, error: csErr } = await supabase
           .from('company_sequences')
@@ -1265,6 +1266,7 @@ export default function Campaigns() {
             company_id: companyId,
             sequence_id: sequenceId,
             campaign_id: selectedCampaign,
+            sender_profile_id: campaignSenderProfileId,
             current_step: 0,
             personalized_emails: personalizedEmails,
             status: 'active',
