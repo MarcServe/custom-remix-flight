@@ -20,6 +20,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
  * - POST { action: "send-campaigns" } - Triggers send-bulk-emails for scheduled campaigns
  * - POST { action: "send-newsletters" } - Sends newsletters with status=scheduled and scheduled_at <= now
  * - POST { action: "process-sequences" } - Triggers process-sequence-steps
+ * - POST { action: "sync-inbound-from-resend" } - Pulls received emails from Resend into CRM (backup to webhook)
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -292,6 +293,28 @@ Deno.serve(async (req) => {
           processed: (due || []).length,
           results,
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      case 'sync-inbound-from-resend': {
+        // Pull received emails from Resend into CRM (backup when webhook doesn't fire)
+        console.log('[cron-trigger] Syncing inbound emails from Resend');
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-inbound-from-resend`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        });
+        const result = await response.json().catch(() => ({}));
+        console.log('[cron-trigger] Sync inbound result:', result);
+        return new Response(JSON.stringify({
+          success: response.ok,
+          action: 'sync-inbound-from-resend',
+          result,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       default:

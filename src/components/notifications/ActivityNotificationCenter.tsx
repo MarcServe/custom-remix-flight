@@ -1,6 +1,28 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+
+const STORAGE_KEY = 'activity-notifications-read';
+
+function getStoredReadIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as string[];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function setStoredReadIds(ids: Set<string>) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
+  } catch {
+    /* ignore */
+  }
+}
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -21,11 +43,34 @@ interface ActivityNotification {
   subject?: string;
   timestamp: string;
   read: boolean;
+  companySequenceId?: string | null;
   metadata?: any;
 }
 
 export function ActivityNotificationCenter() {
   const [open, setOpen] = useState(false);
+  const [readIds, setReadIds] = useState<Set<string>>(getStoredReadIds);
+  const navigate = useNavigate();
+
+  const markAsRead = useCallback((id: string) => {
+    setReadIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      setStoredReadIds(next);
+      return next;
+    });
+  }, []);
+
+  const markAllAsReadInState = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    setReadIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      setStoredReadIds(next);
+      return next;
+    });
+  }, []);
 
   const { data: notifications = [], refetch } = useQuery({
     queryKey: ['activity-notifications'],
@@ -35,6 +80,7 @@ export function ActivityNotificationCenter() {
         .from('email_activities')
         .select(`
           id,
+          company_sequence_id,
           status,
           opened_at,
           replied_at,
@@ -74,6 +120,7 @@ export function ActivityNotificationCenter() {
           subject: activity.subject,
           timestamp,
           read: false,
+          companySequenceId: activity.company_sequence_id,
           metadata: activity.metadata,
         };
       });
@@ -83,7 +130,7 @@ export function ActivityNotificationCenter() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length;
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -116,8 +163,17 @@ export function ActivityNotificationCenter() {
   };
 
   const markAllAsRead = () => {
-    // In a real implementation, update the database
-    refetch();
+    markAllAsReadInState(notifications.map((n) => n.id));
+  };
+
+  const handleNotificationClick = (notif: ActivityNotification) => {
+    markAsRead(notif.id);
+    setOpen(false);
+    // Use setTimeout so popover closes before navigation (avoids focus/portal issues)
+    const target = notif.companySequenceId
+      ? `/conversations?sequence=${notif.companySequenceId}`
+      : '/conversations';
+    setTimeout(() => navigate(target), 0);
   };
 
   return (
@@ -132,9 +188,14 @@ export function ActivityNotificationCenter() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-96 p-0" align="end">
-        <Card className="border-0 shadow-none">
-          <CardHeader className="border-b">
+      <PopoverContent
+        side="right"
+        align="start"
+        sideOffset={12}
+        className="w-[420px] max-w-[calc(100vw-2rem)] p-0 max-h-[min(560px,calc(100vh-8rem))] flex flex-col z-[100]"
+      >
+        <Card className="border-0 shadow-none flex flex-col min-h-0">
+          <CardHeader className="border-b shrink-0">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-lg">Activity Notifications</CardTitle>
@@ -153,8 +214,8 @@ export function ActivityNotificationCenter() {
               )}
             </div>
           </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[400px]">
+          <CardContent className="p-0 flex-1 min-h-0 overflow-hidden">
+            <ScrollArea className="h-[min(400px,calc(100vh-14rem))] max-h-[50vh]">
               {notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <Bell className="h-12 w-12 text-muted-foreground mb-4" />
@@ -163,31 +224,36 @@ export function ActivityNotificationCenter() {
               ) : (
                 <div className="divide-y">
                   {notifications.map((notif) => (
-                    <div
+                    <button
                       key={notif.id}
-                      className={`p-4 hover:bg-muted/50 transition-colors cursor-pointer ${
-                        !notif.read ? 'bg-primary/5' : ''
+                      type="button"
+                      onClick={() => handleNotificationClick(notif)}
+                      className={`w-full text-left p-4 hover:bg-muted/50 transition-colors cursor-pointer ${
+                        !readIds.has(notif.id) ? 'bg-primary/5' : ''
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        <div className="mt-1">{getIcon(notif.type)}</div>
+                        <div className="mt-1 shrink-0">{getIcon(notif.type)}</div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <p className="font-medium text-sm">{getLabel(notif.type)}</p>
-                            {!notif.read && (
-                              <div className="w-2 h-2 rounded-full bg-primary" />
+                            {!readIds.has(notif.id) && (
+                              <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground truncate">
+                          <p className="text-sm text-muted-foreground truncate" title={notif.companyName}>
                             {notif.companyName}
                           </p>
                           {notif.subject && (
-                            <p className="text-xs text-muted-foreground mt-1 truncate">
+                            <p
+                              className="text-xs text-muted-foreground mt-1 line-clamp-3 break-words"
+                              title={notif.subject}
+                            >
                               "{notif.subject}"
                             </p>
                           )}
                           {notif.type === 'clicked' && notif.metadata?.clicked_links?.[0] && (
-                            <p className="text-xs text-muted-foreground mt-1 truncate">
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2 break-all" title={notif.metadata?.clicked_links?.[0]}>
                               {notif.metadata.clicked_links[0]}
                             </p>
                           )}
@@ -196,7 +262,7 @@ export function ActivityNotificationCenter() {
                           </p>
                         </div>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}

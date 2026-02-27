@@ -129,6 +129,8 @@ export default function Campaigns() {
   const [rescheduling, setRescheduling] = useState(false);
   const [pausingCampaign, setPausingCampaign] = useState(false);
   const [resumingCampaign, setResumingCampaign] = useState(false);
+  const [sendingPendingNow, setSendingPendingNow] = useState(false);
+  const [listActionCampaignId, setListActionCampaignId] = useState<string | null>(null);
   const [enrollFollowUpSequenceId, setEnrollFollowUpSequenceId] = useState<string>("");
   const [enrollingFollowUp, setEnrollingFollowUp] = useState(false);
   // Resend-style status filter: server-side for large lists, counts from RPC
@@ -408,7 +410,7 @@ export default function Campaigns() {
   const pendingRecipientsCount = (recipients ?? []).filter((r) => r.status === 'pending').length;
   const canResendOrReschedule =
     selectedCampaignData &&
-    ['sending', 'paused', 'completed'].includes(selectedCampaignData.status?.toLowerCase?.() ?? '') &&
+    ['sending', 'paused', 'completed', 'failed'].includes(selectedCampaignData.status?.toLowerCase?.() ?? '') &&
     (failedRecipients.length > 0 || pendingRecipientsCount > 0);
   const canEditRecipients =
     selectedCampaignData &&
@@ -979,6 +981,76 @@ export default function Campaigns() {
     }
   };
 
+  const handleRetryFailedByCampaignId = async (campaignId: string) => {
+    setListActionCampaignId(campaignId);
+    try {
+      const { error: updateRecipients } = await supabase
+        .from('email_campaign_recipients')
+        .update({ status: 'pending', error_message: null })
+        .eq('campaign_id', campaignId)
+        .eq('status', 'failed');
+      if (updateRecipients) throw updateRecipients;
+      const { error: updateCampaign } = await supabase
+        .from('email_campaigns')
+        .update({ status: 'sending' })
+        .eq('id', campaignId);
+      if (updateCampaign) throw updateCampaign;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipients', campaignId] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', campaignId] }),
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
+      ]);
+      const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
+        body: { campaignId },
+      });
+      if (sendError) console.error('Trigger send:', sendError);
+      toast.success('Failed recipients set to pending. Sending started.');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to retry');
+    } finally {
+      setListActionCampaignId(null);
+    }
+  };
+
+  const handleResumeCampaignById = async (campaignId: string) => {
+    setListActionCampaignId(campaignId);
+    try {
+      const { error } = await supabase.from('email_campaigns').update({ status: 'sending' }).eq('id', campaignId);
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+      const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
+        body: { campaignId },
+      });
+      if (sendError) console.error('Trigger send:', sendError);
+      toast.success('Campaign resumed. Sending will continue for pending recipients.');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to resume');
+    } finally {
+      setListActionCampaignId(null);
+    }
+  };
+
+  const handleSendPendingNowByCampaignId = async (campaignId: string) => {
+    setListActionCampaignId(campaignId);
+    try {
+      const { error } = await supabase.functions.invoke('send-bulk-emails', {
+        body: { campaignId },
+      });
+      if (error) throw error;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipients', campaignId] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', campaignId] }),
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-send-history'] }),
+      ]);
+      toast.success('Next batch sent. Click again for more or open campaign for details.');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to send');
+    } finally {
+      setListActionCampaignId(null);
+    }
+  };
+
   // Sent recipients by variant (for A/B resend/swap)
   const sentRecipientsByVariant = useMemo(() => {
     const recs = recipients ?? [];
@@ -1077,11 +1149,37 @@ export default function Campaigns() {
       const { error } = await supabase.from('email_campaigns').update({ status: 'sending' }).eq('id', selectedCampaign);
       if (error) throw error;
       await queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
-      toast.success('Campaign resumed. Sending will continue for pending recipients (cron or manual send).');
+      const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
+        body: { campaignId: selectedCampaign },
+      });
+      if (sendError) console.error('Trigger send after resume:', sendError);
+      toast.success('Campaign resumed. Sending the next batch now; more will follow via cron or "Send pending now".');
     } catch (e: any) {
       toast.error(e?.message ?? 'Failed to resume');
     } finally {
       setResumingCampaign(false);
+    }
+  };
+
+  const handleSendPendingNow = async () => {
+    if (!selectedCampaign || pendingRecipientsCount === 0) return;
+    setSendingPendingNow(true);
+    try {
+      const { error } = await supabase.functions.invoke('send-bulk-emails', {
+        body: { campaignId: selectedCampaign },
+      });
+      if (error) throw error;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-send-history'] }),
+      ]);
+      toast.success('Next batch sent (up to 50). Click again for more, or wait for the cron.');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to send');
+    } finally {
+      setSendingPendingNow(false);
     }
   };
 
@@ -1497,6 +1595,54 @@ export default function Campaigns() {
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setDraftToEdit(campaign.id);
+                                setBulkEmailDialogOpen(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit campaign
+                            </DropdownMenuItem>
+                            {(campaign.failed_count > 0 || (campaign.status?.toLowerCase?.() ?? '') === 'failed') && (
+                              <DropdownMenuItem
+                                disabled={listActionCampaignId === campaign.id}
+                                onClick={() => handleRetryFailedByCampaignId(campaign.id)}
+                              >
+                                {listActionCampaignId === campaign.id ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="h-4 w-4 mr-2" />
+                                )}
+                                Retry failed
+                              </DropdownMenuItem>
+                            )}
+                            {(campaign.status?.toLowerCase?.() ?? '') === 'paused' && (
+                              <DropdownMenuItem
+                                disabled={listActionCampaignId === campaign.id}
+                                onClick={() => handleResumeCampaignById(campaign.id)}
+                              >
+                                {listActionCampaignId === campaign.id ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Play className="h-4 w-4 mr-2" />
+                                )}
+                                Resume
+                              </DropdownMenuItem>
+                            )}
+                            {(campaign.status?.toLowerCase?.() ?? '') === 'sending' && (
+                              <DropdownMenuItem
+                                disabled={listActionCampaignId === campaign.id}
+                                onClick={() => handleSendPendingNowByCampaignId(campaign.id)}
+                              >
+                                {listActionCampaignId === campaign.id ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Send className="h-4 w-4 mr-2" />
+                                )}
+                                Send pending now
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
                               onClick={() => setCampaignToDelete(campaign.id)}
@@ -2023,6 +2169,11 @@ export default function Campaigns() {
                     : failedRecipients.length > 0
                       ? `${failedRecipients.length} failed.`
                       : `${pendingRecipientsCount} still pending.`}
+                  {pendingRecipientsCount > 0 && (
+                    <span className="block text-xs mt-1 text-muted-foreground/90">
+                      Cron runs every 15 min. Use &quot;Send pending now&quot; to send the next batch immediately.
+                    </span>
+                  )}
                 </span>
                 <div className="flex flex-wrap gap-2 ml-auto">
                   {selectedCampaignData?.status?.toLowerCase() === 'sending' && (
@@ -2035,6 +2186,12 @@ export default function Campaigns() {
                     <Button variant="default" size="sm" onClick={handleResumeCampaign} disabled={resumingCampaign}>
                       {resumingCampaign ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Play className="h-4 w-4 mr-1" />}
                       Resume
+                    </Button>
+                  )}
+                  {pendingRecipientsCount > 0 && (selectedCampaignData?.status?.toLowerCase() === 'sending' || selectedCampaignData?.status?.toLowerCase() === 'paused') && (
+                    <Button variant="default" size="sm" onClick={handleSendPendingNow} disabled={sendingPendingNow}>
+                      {sendingPendingNow ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+                      Send pending now
                     </Button>
                   )}
                   <Button

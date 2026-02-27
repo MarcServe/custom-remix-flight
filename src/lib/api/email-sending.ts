@@ -7,6 +7,7 @@ export interface SendEmailRequest {
   body: string;
   companySequenceId?: string;
   contactId?: string;
+  sender_profile_id?: string | null;
 }
 
 export interface BulkEmailRequest {
@@ -160,6 +161,7 @@ export const emailSendingApi = {
       body: request.body,
       companyId: request.companySequenceId, // Edge function uses companyId
       contactId: request.contactId,
+      sender_profile_id: request.sender_profile_id ?? undefined,
     };
 
     const result = await apiClient.callFunction('send-crm-email', edgeFunctionRequest);

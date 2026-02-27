@@ -48,19 +48,35 @@ serve(async (req) => {
     let from: string, to: string, subject: string, bodyHtml: string, bodyText: string;
     let messageId: string, threadId: string | null = null, inReplyTo: string | null = null;
     let webhookSource = 'unknown';
-    
+    let payload: any = null;
     console.log('Content-Type:', contentType);
 
     if (contentType.includes('application/json')) {
-      // Resend webhook format
+      // Resend webhook format (or synthetic payload from sync-inbound-from-resend)
       webhookSource = 'resend';
-      const payload = await req.json();
+      try {
+        const raw = await req.json();
+        payload = raw && typeof raw === 'object' ? raw : null;
+      } catch (_e) {
+        console.error('Invalid or empty JSON body');
+        return new Response(
+          JSON.stringify({ error: 'Invalid or empty JSON body' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (!payload?.data && !payload?.from) {
+        console.error('Webhook payload missing data/from', payload ? Object.keys(payload) : 'null');
+        return new Response(
+          JSON.stringify({ error: 'Missing payload.data or from' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       console.log('Resend payload keys:', Object.keys(payload));
-      
+
       // Extract from email with multiple fallback paths for nested Resend structure
-      const rawFrom = 
-        payload?.data?.from?.email ?? 
-        payload?.data?.from ?? 
+      const rawFrom =
+        payload?.data?.from?.email ??
+        payload?.data?.from ??
         payload?.from?.email ??
         payload?.from ??
         payload?.data?.envelope?.from ??
@@ -78,13 +94,23 @@ serve(async (req) => {
       const rawTo = payload?.data?.to ?? payload?.to ?? '';
       to = Array.isArray(rawTo) ? (rawTo[0] ? extractEmail(String(rawTo[0])) : '') : extractEmail(String(rawTo));
       subject = payload?.data?.subject ?? payload?.subject ?? '';
-      bodyHtml = payload?.data?.html_body ?? payload?.data?.bodyHtml ?? payload?.html ?? payload?.bodyHtml ?? '';
-      bodyText = payload?.data?.text_body ?? payload?.data?.bodyText ?? payload?.text ?? payload?.bodyText ?? '';
+      bodyHtml = payload?.data?.html ?? payload?.data?.html_body ?? payload?.data?.bodyHtml ?? payload?.html ?? payload?.bodyHtml ?? '';
+      bodyText = payload?.data?.text ?? payload?.data?.text_body ?? payload?.data?.bodyText ?? payload?.text ?? payload?.bodyText ?? '';
       messageId = payload?.data?.message_id ?? payload?.messageId ?? payload?.message_id ?? `resend-${Date.now()}`;
       threadId = payload?.data?.thread_id ?? payload?.threadId ?? payload?.thread_id ?? null;
       inReplyTo = payload?.data?.in_reply_to ?? payload?.inReplyTo ?? payload?.in_reply_to ?? null;
 
-      // Resend email.received webhook does NOT include body; fetch via API if we have email_id
+      // Use headers from payload if provided (e.g. by sync-inbound-from-resend)
+      if (payload?.data?.headers) {
+        const h = payload.data.headers;
+        if (h['in-reply-to']) inReplyTo = String(h['in-reply-to']).replace(/[<>]/g, '');
+        if (h['references']) {
+          const refs = String(h['references']).trim().split(/\s+/);
+          if (refs[0]) threadId = refs[0].replace(/[<>]/g, '');
+        }
+      }
+
+      // Resend email.received webhook does NOT include body; fetch via API if we have email_id and still no body
       const emailId = payload?.data?.email_id ?? payload?.email_id;
       if (webhookSource === 'resend' && emailId && RESEND_API_KEY && (!bodyText || !bodyHtml)) {
         try {
@@ -320,44 +346,19 @@ serve(async (req) => {
 
     if (!matchedSequence) {
       console.log('⚠️ No matching sequence found for email from:', from);
-      console.log('This is normal for first-time contacts or emails not part of an active sequence');
+      console.log('Only replies to campaign/sequence emails are stored in the CRM. This email is not linked to any sent campaign.');
       
-      // Still store the email for visibility, without a sequence
-      const { error: insertError } = await supabaseClient
-        .from('email_threads')
-        .insert({
-          company_sequence_id: null,
-          message_id: messageId,
-          thread_id: threadId,
-          direction: 'inbound',
-          subject,
-          body_html: bodyHtml,
-          body_text: bodyText,
-          from_email: from,
-          to_email: to,
-          metadata: {
-            webhook_source: webhookSource,
-            unmatched: true,
-          },
-        });
-      
-      if (insertError) {
-        console.error('Failed to store inbound email (standalone):', insertError);
-        return new Response(
-          JSON.stringify({ success: false, error: insertError.message, stored: false }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
+      // Do not store: only replies to existing campaign/sequence emails belong in the CRM.
+      // This prevents all inbound mail (e.g. from a shared inbox) from appearing in Personal.
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           success: true,
-          message: 'Email received but no active sequence found',
-          stored: true 
+          message: 'Email not stored — no matching campaign or sequence (only replies to sent campaign emails are imported).',
+          stored: false,
         }),
-        { 
+        {
           status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
@@ -446,6 +447,7 @@ Return a JSON object with: sentiment, keyPoints (array), questionsAsked (array),
       throw new Error(`Missing required email fields. from: ${from}, to: ${to}`);
     }
 
+    const resendEmailId = payload?.data?.email_id ?? payload?.email_id ?? null;
     const { data: thread, error: threadError } = await supabaseClient
       .from('email_threads')
       .insert({
@@ -460,6 +462,7 @@ Return a JSON object with: sentiment, keyPoints (array), questionsAsked (array),
         to_email: to,      // Now guaranteed to be non-null
         sentiment,
         ai_analysis: aiAnalysis,
+        metadata: resendEmailId ? { resend_email_id: resendEmailId } : undefined,
       })
       .select()
       .single();
