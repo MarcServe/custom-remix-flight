@@ -117,6 +117,14 @@ export default function Campaigns() {
   const [saveAsGroupName, setSaveAsGroupName] = useState("");
   const [savingAsGroup, setSavingAsGroup] = useState(false);
   const [addFromGroupOpen, setAddFromGroupOpen] = useState(false);
+  const [addRecipientsDialogOpen, setAddRecipientsDialogOpen] = useState(false);
+  const [addRecipientsTab, setAddRecipientsTab] = useState<'groups' | 'people' | 'companies' | 'paste'>('groups');
+  const [addRecipientsPeopleSearch, setAddRecipientsPeopleSearch] = useState('');
+  const [addRecipientsCompaniesSearch, setAddRecipientsCompaniesSearch] = useState('');
+  const [addRecipientsSelectedPeople, setAddRecipientsSelectedPeople] = useState<Set<string>>(new Set());
+  const [addRecipientsSelectedCompanies, setAddRecipientsSelectedCompanies] = useState<Set<string>>(new Set());
+  const [addRecipientsPasteText, setAddRecipientsPasteText] = useState('');
+  const [addingRecipientsFromDialog, setAddingRecipientsFromDialog] = useState(false);
   const [overviewStatusFilter, setOverviewStatusFilter] = useState<string>("all");
   const [addingFromGroup, setAddingFromGroup] = useState(false);
   const [deliveryReportCampaignId, setDeliveryReportCampaignId] = useState<string | null>(null);
@@ -882,6 +890,103 @@ export default function Campaigns() {
       return data || [];
     },
   });
+
+  const { data: addRecipientsPeopleList = [] } = useQuery({
+    queryKey: ['campaign-add-recipients-people', addRecipientsPeopleSearch],
+    enabled: addRecipientsDialogOpen && addRecipientsTab === 'people',
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      let q = supabase.from('people').select('id, first_name, last_name, email, company_id, companies(name)').eq('user_id', user.id).not('email', 'is', null).order('created_at', { ascending: false }).limit(500);
+      if (addRecipientsPeopleSearch.trim()) {
+        const term = addRecipientsPeopleSearch.trim();
+        q = q.or(`email.ilike.%${term}%,first_name.ilike.%${term}%,last_name.ilike.%${term}%`);
+      }
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data || []) as { id: string; first_name: string | null; last_name: string | null; email: string; company_id: string | null; companies: { name: string | null } | null }[];
+    },
+  });
+
+  const { data: addRecipientsCompaniesList = [] } = useQuery({
+    queryKey: ['campaign-add-recipients-companies', addRecipientsCompaniesSearch],
+    enabled: addRecipientsDialogOpen && addRecipientsTab === 'companies',
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      let q = supabase.from('companies').select('id, name, email, industry').eq('user_id', user.id).not('email', 'is', null).order('created_at', { ascending: false }).limit(500);
+      if (addRecipientsCompaniesSearch.trim()) {
+        const term = addRecipientsCompaniesSearch.trim();
+        q = q.or(`name.ilike.%${term}%,email.ilike.%${term}%,industry.ilike.%${term}%`);
+      }
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data || []) as { id: string; name: string | null; email: string; industry: string | null }[];
+    },
+  });
+
+  const buildRecipientRows = (items: { email: string; first_name?: string | null; last_name?: string | null; name?: string; person_id?: string | null }[]) => {
+    if (!selectedCampaign || !selectedCampaignData) return [];
+    const subjectTemplate = selectedCampaignData.subject_template || '';
+    const bodyHtmlTemplate = selectedCampaignData.body_html_template || '';
+    const bodyTextTemplate = selectedCampaignData.body_text_template || '';
+    const existingEmails = new Set((recipients ?? []).map(r => r.email?.toLowerCase().trim()));
+    return items
+      .filter(r => r.email && !existingEmails.has(r.email.trim().toLowerCase()))
+      .map(r => {
+        const name = r.name ?? [r.first_name, r.last_name].filter(Boolean).join(' ') || r.email;
+        const personalizedSubject = subjectTemplate
+          .replace(/\{\{firstName\}\}/gi, r.first_name || '')
+          .replace(/\{\{lastName\}\}/gi, r.last_name || '')
+          .replace(/\{\{fullName\}\}/gi, name)
+          .replace(/\{\{email\}\}/gi, r.email || '') || '(subject pending)';
+        const personalizedBodyHtml = bodyHtmlTemplate
+          .replace(/\{\{firstName\}\}/gi, r.first_name || '')
+          .replace(/\{\{lastName\}\}/gi, r.last_name || '')
+          .replace(/\{\{fullName\}\}/gi, name)
+          .replace(/\{\{email\}\}/gi, r.email || '') || '<p>(body pending)</p>';
+        const personalizedBodyText = bodyTextTemplate
+          .replace(/\{\{firstName\}\}/gi, r.first_name || '')
+          .replace(/\{\{lastName\}\}/gi, r.last_name || '')
+          .replace(/\{\{fullName\}\}/gi, name)
+          .replace(/\{\{email\}\}/gi, r.email || '') || '(body pending)';
+        return {
+          campaign_id: selectedCampaign,
+          email: r.email.trim(),
+          name,
+          person_id: r.person_id ?? null,
+          personalized_subject: personalizedSubject,
+          personalized_body_html: personalizedBodyHtml,
+          personalized_body_text: personalizedBodyText,
+          status: 'pending' as const,
+        };
+      });
+  };
+
+  const addRecipientsFromDialog = async (rows: ReturnType<typeof buildRecipientRows>) => {
+    if (!selectedCampaign || rows.length === 0) return;
+    setAddingRecipientsFromDialog(true);
+    try {
+      const { error: insertError } = await supabase.from('email_campaign_recipients').insert(rows);
+      if (insertError) throw insertError;
+      const newTotal = (recipients?.length ?? 0) + rows.length;
+      await supabase.from('email_campaigns').update({ total_recipients: newTotal }).eq('id', selectedCampaign);
+      toast.success(`Added ${rows.length} recipient(s) to campaign.`);
+      setAddRecipientsDialogOpen(false);
+      setAddRecipientsSelectedPeople(new Set());
+      setAddRecipientsSelectedCompanies(new Set());
+      setAddRecipientsPasteText('');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
+      ]);
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to add recipients');
+    } finally {
+      setAddingRecipientsFromDialog(false);
+    }
+  };
 
   const handleSaveAsGroup = async () => {
     const name = saveAsGroupName.trim();
@@ -2068,6 +2173,175 @@ export default function Campaigns() {
           </DialogContent>
         </Dialog>
 
+        {/* Add Recipients dialog (customizable: groups, people, companies, paste) */}
+        <Dialog open={addRecipientsDialogOpen} onOpenChange={(open) => { setAddRecipientsDialogOpen(open); if (!open) { setAddRecipientsSelectedPeople(new Set()); setAddRecipientsSelectedCompanies(new Set()); setAddRecipientsPasteText(''); } }}>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Add recipients</DialogTitle>
+              <DialogDescription>Add recipients from groups, People, Companies, or paste a list of emails. Duplicates are skipped.</DialogDescription>
+              {(() => {
+                const hasPrepared = !!localStorage.getItem('leadgenie_draft_recipients');
+                const hasPeople = !!localStorage.getItem('leadgenie_selected_people_ids');
+                const hasCompanies = !!localStorage.getItem('leadgenie_selected_company_ids');
+                if (!hasPrepared && !hasPeople && !hasCompanies) return null;
+                return (
+                  <Button variant="secondary" size="sm" className="mt-2 w-fit" disabled={addingRecipients} onClick={() => { handleAddRecipientsToCampaign(); setAddRecipientsDialogOpen(false); }}>
+                    {addingRecipients ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                    Add from selection (People/Companies page)
+                  </Button>
+                );
+              })()}
+            </DialogHeader>
+            <Tabs value={addRecipientsTab} onValueChange={(v) => setAddRecipientsTab(v as typeof addRecipientsTab)} className="flex-1 min-h-0 flex flex-col">
+              <TabsList className="grid grid-cols-4 w-full">
+                <TabsTrigger value="groups" className="gap-1"><FolderInput className="h-3.5 w-3.5" />Groups</TabsTrigger>
+                <TabsTrigger value="people" className="gap-1"><Users className="h-3.5 w-3.5" />People</TabsTrigger>
+                <TabsTrigger value="companies" className="gap-1"><Building2 className="h-3.5 w-3.5" />Companies</TabsTrigger>
+                <TabsTrigger value="paste" className="gap-1"><FileText className="h-3.5 w-3.5" />Paste</TabsTrigger>
+              </TabsList>
+              <TabsContent value="groups" className="flex-1 min-h-0 mt-3 space-y-3">
+                {recipientGroups.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">No recipient groups yet. Save recipients from a campaign as a group, or create one from People/Companies.</p>
+                ) : (
+                  <div className="space-y-2 max-h-[320px] overflow-y-auto">
+                    {recipientGroups.map((g: any) => (
+                      <Button key={g.id} variant="outline" className="w-full justify-start gap-2" disabled={addingRecipientsFromDialog} onClick={async () => {
+                        const { data: members } = await supabase.from('recipient_group_members').select('email, first_name, last_name, company, person_id').eq('group_id', g.id);
+                        const items = (members || []).map((m: any) => ({ email: m.email, first_name: m.first_name, last_name: m.last_name, name: [m.first_name, m.last_name].filter(Boolean).join(' ') || undefined, person_id: m.person_id }));
+                        const rows = buildRecipientRows(items);
+                        if (rows.length === 0) { toast.info('All group members are already in this campaign.'); return; }
+                        await addRecipientsFromDialog(rows);
+                      }}>
+                        <FolderInput className="h-4 w-4 shrink-0" />
+                        {g.name}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+              <TabsContent value="people" className="flex-1 min-h-0 mt-3 space-y-3">
+                <Input placeholder="Search by name or email..." value={addRecipientsPeopleSearch} onChange={(e) => setAddRecipientsPeopleSearch(e.target.value)} className="max-w-sm" />
+                <div className="max-h-[320px] overflow-y-auto border rounded-md">
+                  {addRecipientsPeopleList.length === 0 ? (
+                    <p className="text-sm text-muted-foreground p-4 text-center">No people with email found.</p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10" />
+                          <TableHead>Name</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Company</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {addRecipientsPeopleList.map((p) => {
+                          const checked = addRecipientsSelectedPeople.has(p.id);
+                          return (
+                            <TableRow key={p.id} className="cursor-pointer" onClick={() => setAddRecipientsSelectedPeople(prev => { const n = new Set(prev); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })}>
+                              <TableCell onClick={(e) => e.stopPropagation()}><Checkbox checked={checked} onCheckedChange={() => setAddRecipientsSelectedPeople(prev => { const n = new Set(prev); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })} /></TableCell>
+                              <TableCell>{[p.first_name, p.last_name].filter(Boolean).join(' ') || '—'}</TableCell>
+                              <TableCell className="font-mono text-xs">{p.email}</TableCell>
+                              <TableCell>{(p.companies as { name: string | null } | null)?.name ?? '—'}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+                <Button disabled={addRecipientsSelectedPeople.size === 0 || addingRecipientsFromDialog} onClick={async () => {
+                  const selected = addRecipientsPeopleList.filter(p => addRecipientsSelectedPeople.has(p.id));
+                  const items = selected.map(p => ({ email: p.email, first_name: p.first_name, last_name: p.last_name, person_id: p.id }));
+                  const rows = buildRecipientRows(items);
+                  if (rows.length === 0) { toast.info('Selected people are already in this campaign.'); return; }
+                  await addRecipientsFromDialog(rows);
+                }}>
+                  {addingRecipientsFromDialog ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                  Add {addRecipientsSelectedPeople.size} selected ({buildRecipientRows(addRecipientsPeopleList.filter(p => addRecipientsSelectedPeople.has(p.id)).map(p => ({ email: p.email, first_name: p.first_name, last_name: p.last_name, person_id: p.id }))).length} new)
+                </Button>
+              </TabsContent>
+              <TabsContent value="companies" className="flex-1 min-h-0 mt-3 space-y-3">
+                <Input placeholder="Search by name, email, or industry..." value={addRecipientsCompaniesSearch} onChange={(e) => setAddRecipientsCompaniesSearch(e.target.value)} className="max-w-sm" />
+                <div className="max-h-[320px] overflow-y-auto border rounded-md">
+                  {addRecipientsCompaniesList.length === 0 ? (
+                    <p className="text-sm text-muted-foreground p-4 text-center">No companies with email found.</p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10" />
+                          <TableHead>Company</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Industry</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {addRecipientsCompaniesList.map((c) => {
+                          const checked = addRecipientsSelectedCompanies.has(c.id);
+                          return (
+                            <TableRow key={c.id} className="cursor-pointer" onClick={() => setAddRecipientsSelectedCompanies(prev => { const n = new Set(prev); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })}>
+                              <TableCell onClick={(e) => e.stopPropagation()}><Checkbox checked={checked} onCheckedChange={() => setAddRecipientsSelectedCompanies(prev => { const n = new Set(prev); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })} /></TableCell>
+                              <TableCell>{c.name || '—'}</TableCell>
+                              <TableCell className="font-mono text-xs">{c.email}</TableCell>
+                              <TableCell>{c.industry || '—'}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+                <Button disabled={addRecipientsSelectedCompanies.size === 0 || addingRecipientsFromDialog} onClick={async () => {
+                  const selected = addRecipientsCompaniesList.filter(c => addRecipientsSelectedCompanies.has(c.id));
+                  const items = selected.map(c => ({ email: c.email, name: c.name || c.email }));
+                  const rows = buildRecipientRows(items);
+                  if (rows.length === 0) { toast.info('Selected companies are already in this campaign.'); return; }
+                  await addRecipientsFromDialog(rows);
+                }}>
+                  {addingRecipientsFromDialog ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                  Add {addRecipientsSelectedCompanies.size} selected ({buildRecipientRows(addRecipientsCompaniesList.filter(c => addRecipientsSelectedCompanies.has(c.id)).map(c => ({ email: c.email, name: c.name || c.email }))).length} new)
+                </Button>
+              </TabsContent>
+              <TabsContent value="paste" className="flex-1 min-h-0 mt-3 space-y-3">
+                <Label className="text-sm">Paste emails (one per line, or "email, Name" or "email, Name, Company")</Label>
+                <textarea className="w-full min-h-[200px] rounded-md border bg-background px-3 py-2 text-sm font-mono" placeholder="john@example.com&#10;jane@example.com, Jane Doe&#10;bob@example.com, Bob, Acme Inc" value={addRecipientsPasteText} onChange={(e) => setAddRecipientsPasteText(e.target.value)} />
+                {addRecipientsPasteText.trim() && (() => {
+                  const lines = addRecipientsPasteText.trim().split(/\n/).map(l => l.trim()).filter(Boolean);
+                  const items = lines.map(line => {
+                    const parts = line.split(/[,;\t]/).map(p => p.trim());
+                    const email = parts[0]?.toLowerCase();
+                    const first_name = parts[1] || undefined;
+                    const last_name = parts[2] && parts.length > 2 && !parts[2].includes('@') ? parts[2] : undefined;
+                    const name = first_name && last_name ? `${first_name} ${last_name}` : first_name;
+                    return email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? { email, first_name, last_name, name } : null;
+                  }).filter(Boolean) as { email: string; first_name?: string; last_name?: string; name?: string }[];
+                  const rows = buildRecipientRows(items);
+                  return <p className="text-xs text-muted-foreground">{items.length} valid email(s), {rows.length} new (not already in campaign)</p>;
+                })()}
+                <Button disabled={!addRecipientsPasteText.trim() || addingRecipientsFromDialog} onClick={async () => {
+                  const lines = addRecipientsPasteText.trim().split(/\n/).map(l => l.trim()).filter(Boolean);
+                  const items = lines.map(line => {
+                    const parts = line.split(/[,;\t]/).map(p => p.trim());
+                    const email = parts[0]?.toLowerCase();
+                    const first_name = parts[1] || undefined;
+                    const last_name = parts[2] && parts.length > 2 && !parts[2].includes('@') ? parts[2] : undefined;
+                    const name = first_name && last_name ? `${first_name} ${last_name}` : first_name;
+                    return email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? { email, first_name, last_name, name } : null;
+                  }).filter(Boolean) as { email: string; first_name?: string; last_name?: string; name?: string }[];
+                  const rows = buildRecipientRows(items);
+                  if (rows.length === 0) { toast.info('No new emails to add (invalid or already in campaign).'); return; }
+                  await addRecipientsFromDialog(rows);
+                }}>
+                  {addingRecipientsFromDialog ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                  Add from paste
+                </Button>
+              </TabsContent>
+            </Tabs>
+            <p className="text-xs text-muted-foreground pt-2">You can also open People or Companies in another tab, select contacts, then click &quot;Add Recipients&quot; here to pull from that selection.</p>
+          </DialogContent>
+        </Dialog>
+
         {/* Campaign Details Dialog */}
         <Dialog
           open={!!selectedCampaign}
@@ -2425,10 +2699,9 @@ export default function Campaigns() {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={handleAddRecipientsToCampaign}
-                    disabled={addingRecipients}
+                    onClick={() => setAddRecipientsDialogOpen(true)}
                   >
-                    {addingRecipients ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                    <Plus className="h-4 w-4 mr-1" />
                     Add Recipients
                   </Button>
                   <Button variant="outline" size="sm" onClick={openCompaniesForNewList}>
@@ -2439,7 +2712,7 @@ export default function Campaigns() {
                     <Users className="h-4 w-4 mr-1" />
                     Open People
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => setAddFromGroupOpen(true)} disabled={recipientGroups.length === 0}>
+                  <Button variant="outline" size="sm" onClick={() => { setAddRecipientsDialogOpen(true); setAddRecipientsTab('groups'); }} disabled={recipientGroups.length === 0}>
                     <FolderInput className="h-4 w-4 mr-1" />
                     Add from group
                   </Button>

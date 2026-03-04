@@ -194,6 +194,38 @@ serve(async (req) => {
         unsubscribe_token: '',
       }];
     } else {
+      // When recipient groups are selected, add all group members as newsletter subscribers first
+      // so the send list can include 1000+ (not just the subset already in newsletter_subscribers)
+      if (recipientGroupIds.length > 0) {
+        const { data: groupMembers, error: groupErr } = await db
+          .from('recipient_group_members')
+          .select('email, first_name, last_name, company')
+          .in('group_id', recipientGroupIds);
+        if (!groupErr && groupMembers && groupMembers.length > 0) {
+          const seen = new Set<string>();
+          const toUpsert: { user_id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; source: string }[] = [];
+          for (const m of groupMembers as { email: string; first_name: string | null; last_name: string | null; company: string | null }[]) {
+            const email = m.email ? String(m.email).trim().toLowerCase() : '';
+            if (!email || seen.has(email)) continue;
+            seen.add(email);
+            toUpsert.push({
+              user_id: user.id,
+              email,
+              first_name: m.first_name || null,
+              last_name: m.last_name || null,
+              company: m.company || null,
+              source: 'recipient_group',
+            });
+          }
+          if (toUpsert.length > 0) {
+            await db.from('newsletter_subscribers').upsert(toUpsert, {
+              onConflict: 'user_id,email',
+              ignoreDuplicates: true,
+            });
+          }
+        }
+      }
+
       const subscriberQuery = db
         .from('newsletter_subscribers')
         .select('id, email, first_name, last_name, company, unsubscribe_token, industry')
@@ -208,9 +240,12 @@ serve(async (req) => {
       let subs = allSubscribers as { id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; unsubscribe_token: string; industry?: string | null }[];
 
       const hasExplicitAudience = categoryFilters.length > 0 || recipientGroupIds.length > 0 || industries.length > 0;
-      const audienceSubscriberIds = new Set<string>();
 
-      if (hasExplicitAudience) {
+      // When "All active subscribers" is selected, send to everyone (ignore categories/groups/industry)
+      if (sendToAllActive) {
+        // subs already holds all active subscribers; optional tag narrow applied below
+      } else if (hasExplicitAudience) {
+        const audienceSubscriberIds = new Set<string>();
         // Union of: subscribers in any selected category, in any selected group, or in any selected industry
         if (categoryFilters.length > 0) {
           const { data: subCats } = await db
@@ -237,9 +272,6 @@ serve(async (req) => {
           });
         }
         subs = subs.filter((s: any) => audienceSubscriberIds.has(s.id));
-      } else if (sendToAllActive) {
-        // "All active subscribers" selected: send to everyone (ignore newsletter target categories)
-        // subs already holds all active subscribers; optional tag narrow applied below
       } else {
         // No explicit audience and not sendToAllActive: use newsletter content selection (target categories)
         const targetCategoryIds: string[] = [];

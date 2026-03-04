@@ -588,8 +588,9 @@ export default function Newsletters() {
     }
     try {
       setUploadingImage(true);
+      if (!user?.id) throw new Error("Not authenticated");
       const ext = file.name.split(".").pop() || "jpg";
-      const fileName = `newsletter-header/${user?.id}/${Date.now()}.${ext}`;
+      const fileName = `${user.id}/newsletter-header/${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage.from("email-branding").upload(fileName, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data } = supabase.storage.from("email-branding").getPublicUrl(fileName);
@@ -880,8 +881,9 @@ Return ONLY the HTML body content.`,
       if (data?.error) throw new Error(data.error);
 
       queryClient.invalidateQueries({ queryKey: ["newsletters"] });
+      queryClient.invalidateQueries({ queryKey: ["newsletter-subscribers"] });
       setShowSendDialog(false);
-      toast({ title: "Sending", description: `Newsletter queued for ${data?.recipientCount || 0} recipients.` });
+      toast({ title: "Sending", description: `Newsletter queued for ${data?.recipientCount ?? data?.sent ?? 0} recipients.` });
     } catch (err: any) {
       toast({ title: "Send Error", description: err.message, variant: "destructive" });
     } finally {
@@ -1011,23 +1013,35 @@ Return ONLY the HTML body content.`,
         const categoryFilters = (opts.categoryFilters as string[] || []).filter(Boolean);
         const recipientGroupIds = (opts.recipientGroupIds as string[] || []).filter(Boolean);
         const industryFilter = ((opts.industryFilter as string[] || []) as string[]).map((i: string) => String(i).trim().toLowerCase()).filter(Boolean);
+
+        // When recipient groups are selected, list = all group members (matches send: group members are added to subscribers then sent)
+        if (recipientGroupIds.length > 0) {
+          const groupEmails = new Map<string, { email: string; first_name: string | null; last_name: string | null; company: string | null }>();
+          for (const gid of recipientGroupIds) {
+            const { data: members } = await supabase.from("recipient_group_members").select("email, first_name, last_name, company").eq("group_id", gid);
+            (members || []).forEach((m: any) => {
+              const email = m.email ? String(m.email).trim().toLowerCase() : "";
+              if (email && !groupEmails.has(email)) groupEmails.set(email, { email, first_name: m.first_name ?? null, last_name: m.last_name ?? null, company: m.company ?? null });
+            });
+          }
+          const listFromGroups = Array.from(groupEmails.values());
+          if (sendToAllActive) {
+            const subEmails = new Set(activeSubscribers.map(s => s.email.trim().toLowerCase()));
+            const onlyInSubs = activeSubscribers.filter(s => !groupEmails.has(s.email.trim().toLowerCase())).map(s => ({ email: s.email, first_name: s.first_name, last_name: s.last_name, company: s.company }));
+            setRecipientsDialogList([...listFromGroups, ...onlyInSubs]);
+          } else {
+            setRecipientsDialogList(listFromGroups);
+          }
+          return;
+        }
+
         let subset = activeSubscribers;
-        if (categoryFilters.length > 0 || recipientGroupIds.length > 0 || industryFilter.length > 0) {
+        if (categoryFilters.length > 0 || industryFilter.length > 0) {
           const ids = new Set<string>();
           if (categoryFilters.length > 0) {
             activeSubscribers.forEach(s => {
               const catIds = subscriberCategoryMap[s.id] || [];
               if (categoryFilters.some(c => catIds.includes(c))) ids.add(s.id);
-            });
-          }
-          if (recipientGroupIds.length > 0) {
-            const groupEmails = new Set<string>();
-            for (const gid of recipientGroupIds) {
-              const { data: members } = await supabase.from("recipient_group_members").select("email").eq("group_id", gid);
-              (members || []).forEach((m: any) => groupEmails.add(String(m.email).trim().toLowerCase()));
-            }
-            activeSubscribers.forEach(s => {
-              if (groupEmails.has(s.email.trim().toLowerCase())) ids.add(s.id);
             });
           }
           if (industryFilter.length > 0) {
@@ -1961,7 +1975,7 @@ Return ONLY the HTML body content.`,
                                 <Checkbox
                                   checked={checked}
                                   onCheckedChange={(c) => {
-                                    if (c) setSendTargets(prev => prev.filter(t => t !== "all").concat(value));
+                                    if (c) setSendTargets(prev => prev.includes(value) ? prev : [...prev, value]);
                                     else setSendTargets(prev => prev.filter(t => t !== value));
                                   }}
                                 />
@@ -1982,7 +1996,7 @@ Return ONLY the HTML body content.`,
                                 <Checkbox
                                   checked={checked}
                                   onCheckedChange={(c) => {
-                                    if (c) setSendTargets(prev => prev.filter(t => t !== "all").concat(value));
+                                    if (c) setSendTargets(prev => prev.includes(value) ? prev : [...prev, value]);
                                     else setSendTargets(prev => prev.filter(t => t !== value));
                                   }}
                                 />
@@ -2011,7 +2025,7 @@ Return ONLY the HTML body content.`,
                                   <Checkbox
                                     checked={checked}
                                     onCheckedChange={(c) => {
-                                      if (c) setSendTargets(prev => prev.filter(t => t !== "all").concat(value));
+                                      if (c) setSendTargets(prev => prev.includes(value) ? prev : [...prev, value]);
                                       else setSendTargets(prev => prev.filter(t => t !== value));
                                     }}
                                   />
