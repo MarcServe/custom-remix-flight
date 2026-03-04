@@ -247,6 +247,7 @@ export default function Newsletters() {
   const [recipientsDialogNewsletter, setRecipientsDialogNewsletter] = useState<Newsletter | null>(null);
   const [recipientsDialogList, setRecipientsDialogList] = useState<RecipientRow[]>([]);
   const [recipientsDialogLoading, setRecipientsDialogLoading] = useState(false);
+  const [recipientsDialogShowsSentStatus, setRecipientsDialogShowsSentStatus] = useState(false);
 
   // Send from (email connection: Gmail, Resend, SendGrid, etc.)
   const [senderConnectionId, setSenderConnectionId] = useState("");
@@ -1165,7 +1166,12 @@ Return ONLY the HTML body content.`,
               if (body && typeof body === "object" && typeof body.error === "string") msg = body.error;
             } catch (_) {}
           }
-          toast({ title: "Newsletter send failed", description: msg, variant: "destructive" });
+          const isTimeoutOrNetwork = /failed to send a request|timeout|network|edge function/i.test(msg);
+          toast({
+            title: "Newsletter send failed",
+            description: isTimeoutOrNetwork ? `${msg} The send may still be in progress (50 per run can take a few minutes). Check View recipients in a few minutes for sent status.` : msg,
+            variant: "destructive",
+          });
           return;
         }
         if (data?.error) {
@@ -1182,7 +1188,13 @@ Return ONLY the HTML body content.`,
       })
       .catch((err: any) => {
         queryClient.invalidateQueries({ queryKey: ["newsletters"] });
-        toast({ title: "Newsletter send failed", description: err?.message ?? "Send failed", variant: "destructive" });
+        const msg = err?.message ?? "Send failed";
+        const isTimeoutOrNetwork = /failed to send a request|timeout|network|edge function/i.test(msg);
+        toast({
+          title: "Newsletter send failed",
+          description: isTimeoutOrNetwork ? `${msg} The send may still be in progress (50 per run can take a few minutes). Check View recipients in a few minutes for sent status.` : msg,
+          variant: "destructive",
+        });
       });
   };
 
@@ -1270,7 +1282,20 @@ Return ONLY the HTML body content.`,
     setRecipientsDialogNewsletter(nl);
     setRecipientsDialogList([]);
     setRecipientsDialogLoading(true);
+    setRecipientsDialogShowsSentStatus(false);
     try {
+      // Refetch newsletter so we have latest status (sending/sent) and scheduled_send_options
+      const { data: freshNl } = await supabase
+        .from("newsletters")
+        .select("*")
+        .eq("id", nl.id)
+        .eq("user_id", user?.id ?? "")
+        .single();
+      if (freshNl) {
+        nl = freshNl as Newsletter;
+        setRecipientsDialogNewsletter(nl);
+      }
+
       const opts = (nl.scheduled_send_options || {}) as Record<string, unknown>;
       const sendToAllActive = opts.sendToAllActive === true;
       const categoryFilters = (opts.categoryFilters as string[] || []).filter(Boolean);
@@ -1278,12 +1303,17 @@ Return ONLY the HTML body content.`,
       const industryFilter = ((opts.industryFilter as string[] || []) as string[]).map((i: string) => String(i).trim().toLowerCase()).filter(Boolean);
 
       const hasStoredAudience = sendToAllActive || recipientGroupIds.length > 0 || categoryFilters.length > 0 || industryFilter.length > 0;
-      // For "sending" (batch) or "sent" with stored audience: show full audience with Sent vs Pending
-      if ((nl.status === "sending") || (nl.status === "sent" && hasStoredAudience)) {
-        const { data: sends } = await supabase
-          .from("newsletter_sends")
-          .select("subscriber_id, sent_at, status")
-          .eq("newsletter_id", nl.id);
+
+      // If we have any send history for this newsletter, show Sent vs Pending (even if status not yet updated)
+      const { data: sendsForHistory } = await supabase
+        .from("newsletter_sends")
+        .select("subscriber_id, sent_at, status")
+        .eq("newsletter_id", nl.id);
+      const hasSendHistory = (sendsForHistory?.length ?? 0) > 0;
+
+      // For "sending" (batch), "sent" with stored audience, or any send history: show full audience with Sent vs Pending
+      if (hasSendHistory || (nl.status === "sending") || (nl.status === "sent" && hasStoredAudience)) {
+        const sends = sendsForHistory ?? [];
         const sendMap: Record<string, { status: string; sent_at: string | null }> = {};
         (sends || []).forEach((s: any) => {
           sendMap[s.subscriber_id] = { status: s.status || "sent", sent_at: s.sent_at ?? null };
@@ -1350,6 +1380,7 @@ Return ONLY the HTML body content.`,
             sent_at: sendMap[s.id]?.sent_at ?? null,
           }));
         }
+        setRecipientsDialogShowsSentStatus(true);
         setRecipientsDialogList(fullList);
       } else if (nl.status === "sent") {
         // Sent without stored audience (non-batch): load only from newsletter_sends
@@ -1381,8 +1412,10 @@ Return ONLY the HTML body content.`,
             sent_at: s.sent_at,
           };
         }).filter(r => r.email);
+        setRecipientsDialogShowsSentStatus(true);
         setRecipientsDialogList(list);
       } else {
+        setRecipientsDialogShowsSentStatus(false);
         // draft or scheduled: resolve audience from scheduled_send_options and/or target categories
         const opts = (nl.scheduled_send_options || {}) as Record<string, unknown>;
         const sendToAllActive = opts.sendToAllActive === true;
@@ -2702,12 +2735,12 @@ Return ONLY the HTML body content.`,
             <DialogHeader>
               <DialogTitle>Recipients — {recipientsDialogNewsletter?.title || "Untitled"}</DialogTitle>
               <DialogDescription>
-                {recipientsDialogNewsletter?.status === "sent"
-                  ? "Recipients who received this newsletter. When sent in batches, Sent vs Pending shows who has received it so far."
-                  : recipientsDialogNewsletter?.status === "sending"
-                    ? "Full audience: Sent = already received this batch run; Pending = will receive in a later batch."
-                    : recipientsDialogNewsletter?.status === "scheduled"
-                      ? "People who will receive this newsletter when it sends (based on schedule audience)."
+                {recipientsDialogNewsletter?.status === "scheduled"
+                  ? "People who will receive this newsletter when it sends (based on schedule audience)."
+                  : recipientsDialogNewsletter?.status === "sent"
+                    ? "Recipients who received this newsletter. When sent in batches, Sent vs Pending shows who has received it so far."
+                    : (recipientsDialogNewsletter?.status === "sending" || recipientsDialogShowsSentStatus)
+                      ? "Full audience: Sent = already received this batch run; Pending = will receive in a later batch."
                       : "People who would receive this newsletter if sent now (based on target categories or schedule audience)."}
               </DialogDescription>
             </DialogHeader>
@@ -2723,7 +2756,7 @@ Return ONLY the HTML body content.`,
                       <th className="text-left font-medium p-2">Email</th>
                       <th className="text-left font-medium p-2">Name</th>
                       <th className="text-left font-medium p-2">Company</th>
-                      {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending") && (
+                      {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending" || recipientsDialogShowsSentStatus) && (
                         <>
                           <th className="text-left font-medium p-2">Status</th>
                           <th className="text-left font-medium p-2">Sent</th>
@@ -2737,7 +2770,7 @@ Return ONLY the HTML body content.`,
                         <td className="p-2 truncate max-w-[200px]" title={r.email}>{r.email}</td>
                         <td className="p-2">{[r.first_name, r.last_name].filter(Boolean).join(" ") || "—"}</td>
                         <td className="p-2 truncate max-w-[140px]" title={r.company ?? ""}>{r.company || "—"}</td>
-                        {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending") && (
+                        {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending" || recipientsDialogShowsSentStatus) && (
                           <>
                             <td className="p-2">
                               <span className={r.status === "sent" ? "text-emerald-600 font-medium" : "text-muted-foreground"}>{r.status === "sent" ? "Sent" : "Pending"}</span>
@@ -2753,7 +2786,7 @@ Return ONLY the HTML body content.`,
             </div>
             <div className="text-xs text-muted-foreground pt-1">
               {recipientsDialogList.length} recipient{recipientsDialogList.length !== 1 ? "s" : ""}
-              {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending") && (() => {
+              {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending" || recipientsDialogShowsSentStatus) && (() => {
                 const sent = recipientsDialogList.filter(r => r.status === "sent").length;
                 const pending = recipientsDialogList.length - sent;
                 if (pending > 0) return ` · ${sent} sent, ${pending} pending`;
@@ -2919,12 +2952,12 @@ Return ONLY the HTML body content.`,
             <DialogHeader>
               <DialogTitle>Recipients — {recipientsDialogNewsletter?.title || "Untitled"}</DialogTitle>
               <DialogDescription>
-                {recipientsDialogNewsletter?.status === "sent"
-                  ? "Recipients who received this newsletter. When sent in batches, Sent vs Pending shows who has received it so far."
-                  : recipientsDialogNewsletter?.status === "sending"
-                    ? "Full audience: Sent = already received this batch run; Pending = will receive in a later batch."
-                    : recipientsDialogNewsletter?.status === "scheduled"
-                      ? "People who will receive this newsletter when it sends (based on schedule audience)."
+                {recipientsDialogNewsletter?.status === "scheduled"
+                  ? "People who will receive this newsletter when it sends (based on schedule audience)."
+                  : recipientsDialogNewsletter?.status === "sent"
+                    ? "Recipients who received this newsletter. When sent in batches, Sent vs Pending shows who has received it so far."
+                    : (recipientsDialogNewsletter?.status === "sending" || recipientsDialogShowsSentStatus)
+                      ? "Full audience: Sent = already received this batch run; Pending = will receive in a later batch."
                       : "People who would receive this newsletter if sent now (based on target categories or schedule audience)."}
               </DialogDescription>
             </DialogHeader>
@@ -2940,7 +2973,7 @@ Return ONLY the HTML body content.`,
                       <th className="text-left font-medium p-2">Email</th>
                       <th className="text-left font-medium p-2">Name</th>
                       <th className="text-left font-medium p-2">Company</th>
-                      {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending") && (
+                      {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending" || recipientsDialogShowsSentStatus) && (
                         <>
                           <th className="text-left font-medium p-2">Status</th>
                           <th className="text-left font-medium p-2">Sent</th>
@@ -2954,7 +2987,7 @@ Return ONLY the HTML body content.`,
                         <td className="p-2 truncate max-w-[200px]" title={r.email}>{r.email}</td>
                         <td className="p-2">{[r.first_name, r.last_name].filter(Boolean).join(" ") || "—"}</td>
                         <td className="p-2 truncate max-w-[140px]" title={r.company ?? ""}>{r.company || "—"}</td>
-                        {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending") && (
+                        {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending" || recipientsDialogShowsSentStatus) && (
                           <>
                             <td className="p-2">
                               <span className={r.status === "sent" ? "text-emerald-600 font-medium" : "text-muted-foreground"}>{r.status === "sent" ? "Sent" : "Pending"}</span>
@@ -2970,7 +3003,7 @@ Return ONLY the HTML body content.`,
             </div>
             <div className="text-xs text-muted-foreground pt-1">
               {recipientsDialogList.length} recipient{recipientsDialogList.length !== 1 ? "s" : ""}
-              {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending") && (() => {
+              {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending" || recipientsDialogShowsSentStatus) && (() => {
                 const sent = recipientsDialogList.filter(r => r.status === "sent").length;
                 const pending = recipientsDialogList.length - sent;
                 if (pending > 0) return ` · ${sent} sent, ${pending} pending`;
