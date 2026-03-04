@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send, Plus, UserPlus, Loader2, CheckCircle2, Filter, X, Clock, Tag, ChevronDown, Search, Trash2, RefreshCw, CalendarDays, Megaphone } from "lucide-react";
+import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send, Plus, UserPlus, Loader2, CheckCircle2, Filter, X, Clock, Tag, ChevronDown, Search, Trash2, RefreshCw, CalendarDays, Megaphone, FolderPlus } from "lucide-react";
 import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
 import { PersonDetailsDialog } from "@/components/PersonDetailsDialog";
 import BulkEmailDialog from "@/components/BulkEmailDialog";
@@ -29,6 +29,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { EmailHistoryView } from "@/components/email/EmailHistoryView";
 import { getCompanySource, SOURCE_TAG_LIST } from "@/lib/company-sources";
 
@@ -59,6 +68,10 @@ export default function People() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [openedFromDraft, setOpenedFromDraft] = useState(false);
+  const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
+  const [createGroupName, setCreateGroupName] = useState("");
+  const [createGroupDescription, setCreateGroupDescription] = useState("");
+  const [creatingGroup, setCreatingGroup] = useState(false);
   useEffect(() => {
     setOpenedFromDraft(!!window.opener);
   }, []);
@@ -353,6 +366,74 @@ export default function People() {
       });
     },
   });
+
+  const openCreateGroupFromPeople = () => {
+    const selectedWithEmail = people?.filter((p) => selectedPeopleIds.has(p.id) && p.email) || [];
+    if (selectedWithEmail.length === 0) {
+      toast({ title: "No emails", description: "Select people with email addresses to create a group.", variant: "destructive" });
+      return;
+    }
+    setCreateGroupName("");
+    setCreateGroupDescription("");
+    setCreateGroupDialogOpen(true);
+  };
+
+  const handleCreateGroupFromPeople = async () => {
+    if (!createGroupName.trim()) {
+      toast({ title: "Enter a group name", variant: "destructive" });
+      return;
+    }
+    const selectedWithEmail = people?.filter((p) => selectedPeopleIds.has(p.id) && p.email) || [];
+    if (selectedWithEmail.length === 0) {
+      toast({ title: "No people with emails", variant: "destructive" });
+      return;
+    }
+    setCreatingGroup(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      const seen = new Set<string>();
+      const members = selectedWithEmail
+        .filter((p: any) => {
+          const key = p.email?.trim().toLowerCase();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map((p: any) => ({
+          group_id: "" as string,
+          email: p.email.trim().toLowerCase(),
+          first_name: p.first_name || null,
+          last_name: p.last_name || null,
+          company: p.companies?.name || null,
+          person_id: p.id,
+        }));
+      if (members.length === 0) {
+        toast({ title: "No recipients", variant: "destructive" });
+        return;
+      }
+      const { data: group, error: groupError } = await supabase
+        .from("recipient_groups")
+        .insert({ user_id: user.id, name: createGroupName.trim(), description: createGroupDescription.trim() || null })
+        .select("id")
+        .single();
+      if (groupError || !group) throw groupError || new Error("Failed to create group");
+      const { error: membersError } = await supabase.from("recipient_group_members").insert(
+        members.map((m) => ({ ...m, group_id: group.id }))
+      );
+      if (membersError) throw membersError;
+      queryClient.invalidateQueries({ queryKey: ["recipient-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["recipient-groups-page"] });
+      setCreateGroupDialogOpen(false);
+      setCreateGroupName("");
+      setCreateGroupDescription("");
+      toast({ title: "Group created", description: `"${createGroupName.trim()}" has ${members.length} member(s). Use it in Newsletters or Campaigns.` });
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message ?? "Failed to create group", variant: "destructive" });
+    } finally {
+      setCreatingGroup(false);
+    }
+  };
 
   // Get all unique tags from people and their companies (prioritize intelligent tags)
   // Extract from both tags column AND enrichment_data.suggestedTags
@@ -1076,6 +1157,21 @@ export default function People() {
                       Add to draft
                     </Button>
                   )}
+                  {(() => {
+                    const withEmail = people?.filter((p) => selectedPeopleIds.has(p.id) && p.email) || [];
+                    return withEmail.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        className="w-full sm:w-auto"
+                        onClick={openCreateGroupFromPeople}
+                        title="Save selected people as a recipient group for newsletters and campaigns"
+                      >
+                        <FolderPlus className="mr-2 h-4 w-4" />
+                        Create group ({withEmail.length})
+                      </Button>
+                    );
+                  })()}
                 </>
               )}
               {selectedPeopleIds.size > 0 && (
@@ -1568,6 +1664,43 @@ export default function People() {
         onOpenChange={setBulkEmailDialogOpen}
         selectedPeople={selectedPeople}
       />
+
+      <Dialog open={createGroupDialogOpen} onOpenChange={setCreateGroupDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create recipient group</DialogTitle>
+            <DialogDescription>
+              Save the selected people as a group. Use it in Newsletters (Import from group) or Campaigns. Only people with an email address are included.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="create-group-name-people">Group name</Label>
+              <Input
+                id="create-group-name-people"
+                value={createGroupName}
+                onChange={(e) => setCreateGroupName(e.target.value)}
+                placeholder="e.g. Q1 leads"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-group-desc-people">Description (optional)</Label>
+              <Input
+                id="create-group-desc-people"
+                value={createGroupDescription}
+                onChange={(e) => setCreateGroupDescription(e.target.value)}
+                placeholder="e.g. From People filter"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateGroupDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreateGroupFromPeople} disabled={creatingGroup || !createGroupName.trim()}>
+              {creatingGroup ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Creating...</> : <><FolderPlus className="h-4 w-4 mr-1.5" />Create group</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

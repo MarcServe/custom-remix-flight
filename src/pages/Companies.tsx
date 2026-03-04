@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2, Search, Plus, RefreshCw, CalendarDays, Send, Megaphone } from "lucide-react";
+import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2, Search, Plus, RefreshCw, CalendarDays, Send, Megaphone, FolderPlus } from "lucide-react";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
 import BulkEmailDialog from "@/components/BulkEmailDialog";
@@ -38,6 +38,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import type { Company } from "@/lib/api/companies";
 import { getCompanySource, SOURCE_TAG_LIST } from "@/lib/company-sources";
@@ -95,6 +103,10 @@ export default function Companies() {
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [groupingDialogOpen, setGroupingDialogOpen] = useState(false);
   const [groupingDialogCompanies, setGroupingDialogCompanies] = useState<CompanyForGrouping[]>([]);
+  const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
+  const [createGroupName, setCreateGroupName] = useState("");
+  const [createGroupDescription, setCreateGroupDescription] = useState("");
+  const [creatingGroup, setCreatingGroup] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<string | null>(null);
   const [groupBySource, setGroupBySource] = useState(true);
   const [dateAddedPreset, setDateAddedPreset] = useState<'all' | 'today' | 'yesterday' | 'last7' | 'last30' | 'last90' | 'custom'>('all');
@@ -1663,6 +1675,108 @@ export default function Companies() {
     setGroupingDialogOpen(true);
   };
 
+  const openCreateGroupFromCompanies = () => {
+    const selectedCompanies = filteredCompanies?.filter((c) => selectedCompanyIds.has(c.id)) || [];
+    const companiesWithEmail = selectedCompanies.filter((company) => {
+      const match = getCompanyEmailContact(company);
+      return !!match?.email;
+    });
+    if (companiesWithEmail.length === 0) {
+      toast({
+        title: "No emails available",
+        description: "Selected companies don't have email addresses. Extract emails or add contacts first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCreateGroupName("");
+    setCreateGroupDescription("");
+    setCreateGroupDialogOpen(true);
+  };
+
+  const handleCreateGroupFromCompanies = async () => {
+    if (!createGroupName.trim()) {
+      toast({ title: "Enter a group name", variant: "destructive" });
+      return;
+    }
+    const selectedCompanies = filteredCompanies?.filter((c) => selectedCompanyIds.has(c.id)) || [];
+    const companiesWithEmail = selectedCompanies.filter((company) => {
+      const match = getCompanyEmailContact(company);
+      return !!match?.email;
+    });
+    if (companiesWithEmail.length === 0) {
+      toast({ title: "No companies with emails", variant: "destructive" });
+      return;
+    }
+    setCreatingGroup(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      const companyIds = companiesWithEmail.map((c) => c.id);
+      const seen = new Set<string>();
+      const members: Array<{ group_id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; person_id: string | null }> = [];
+      const { data: existingPeople } = await supabase
+        .from("people")
+        .select("id, first_name, last_name, email, company_id, companies(name)")
+        .in("company_id", companyIds)
+        .not("email", "is", null);
+      if (existingPeople) {
+        for (const p of existingPeople as any[]) {
+          if (p.email && !seen.has(p.email.toLowerCase().trim())) {
+            seen.add(p.email.toLowerCase().trim());
+            members.push({
+              group_id: "",
+              email: p.email.trim().toLowerCase(),
+              first_name: p.first_name || null,
+              last_name: p.last_name || null,
+              company: p.companies?.name || null,
+              person_id: p.id,
+            });
+          }
+        }
+      }
+      for (const company of companiesWithEmail) {
+        const emailMatch = getCompanyEmailContact(company);
+        if (emailMatch?.email && !seen.has(emailMatch.email.toLowerCase().trim())) {
+          seen.add(emailMatch.email.toLowerCase().trim());
+          const nameParts = emailMatch.type === "contact" && emailMatch.contact?.name ? emailMatch.contact.name.trim().split(" ") : company.name?.trim().split(" ") || [];
+          members.push({
+            group_id: "",
+            email: emailMatch.email.trim().toLowerCase(),
+            first_name: nameParts[0] || null,
+            last_name: nameParts.length > 1 ? nameParts.slice(1).join(" ") : null,
+            company: company.name || null,
+            person_id: null,
+          });
+        }
+      }
+      if (members.length === 0) {
+        toast({ title: "No recipients", description: "Could not resolve any email addresses.", variant: "destructive" });
+        return;
+      }
+      const { data: group, error: groupError } = await supabase
+        .from("recipient_groups")
+        .insert({ user_id: user.id, name: createGroupName.trim(), description: createGroupDescription.trim() || null })
+        .select("id")
+        .single();
+      if (groupError || !group) throw groupError || new Error("Failed to create group");
+      const { error: membersError } = await supabase.from("recipient_group_members").insert(
+        members.map((m) => ({ ...m, group_id: group.id }))
+      );
+      if (membersError) throw membersError;
+      queryClient.invalidateQueries({ queryKey: ["recipient-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["recipient-groups-page"] });
+      setCreateGroupDialogOpen(false);
+      setCreateGroupName("");
+      setCreateGroupDescription("");
+      toast({ title: "Group created", description: `"${createGroupName.trim()}" has ${members.length} member(s). Use it in Newsletters or Campaigns.` });
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message ?? "Failed to create group", variant: "destructive" });
+    } finally {
+      setCreatingGroup(false);
+    }
+  };
+
   const handleBulkEmailFromCompanies = async () => {
     // Use the companies from the grouping dialog (same 731 shown in the modal), not filteredCompanies/selectedCompanyIds,
     // which can be paginated or stale and would open compose with wrong count or fail.
@@ -2785,6 +2899,18 @@ export default function Companies() {
                           )}
                         </Button>
                       )}
+                      {companiesWithEmail.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={openCreateGroupFromCompanies}
+                          disabled={bulkExtractEmailMutation.isPending}
+                          title="Save selected companies as a recipient group for newsletters and campaigns"
+                        >
+                          <FolderPlus className="h-4 w-4 mr-1" />
+                          Create group ({companiesWithEmail.length})
+                        </Button>
+                      )}
                       {/* When opened from draft/campaign: prioritize Add/Replace to campaign */}
                       {openedFromDraft ? (
                         <>
@@ -3388,6 +3514,44 @@ export default function Companies() {
         companies={groupingDialogCompanies}
         onContinueToCompose={handleBulkEmailFromCompanies}
       />
+
+      {/* Create group from selection */}
+      <Dialog open={createGroupDialogOpen} onOpenChange={setCreateGroupDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create recipient group</DialogTitle>
+            <DialogDescription>
+              Save the selected companies as a group. You can use it in Newsletters (Import from group) or Campaigns. Only companies with an email address are included.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="create-group-name">Group name</Label>
+              <Input
+                id="create-group-name"
+                value={createGroupName}
+                onChange={(e) => setCreateGroupName(e.target.value)}
+                placeholder="e.g. Q1 prospects"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-group-desc">Description (optional)</Label>
+              <Input
+                id="create-group-desc"
+                value={createGroupDescription}
+                onChange={(e) => setCreateGroupDescription(e.target.value)}
+                placeholder="e.g. Filtered by industry"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateGroupDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreateGroupFromCompanies} disabled={creatingGroup || !createGroupName.trim()}>
+              {creatingGroup ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Creating...</> : <><FolderPlus className="h-4 w-4 mr-1.5" />Create group</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Bulk Delete Confirmation Dialog */}
       <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>

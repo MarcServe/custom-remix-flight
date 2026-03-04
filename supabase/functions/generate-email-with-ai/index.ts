@@ -36,22 +36,30 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const authHeader = req.headers.get('Authorization')!;
     
-    // Use anon key client for auth
-    const supabaseAnon = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
-    // Get authenticated user
-    const { data: { user }, error: userError } = await supabaseAnon.auth.getUser();
-    if (userError || !user) {
-      console.error('Auth error:', userError);
-      throw new Error('User not authenticated');
-    }
-
-    console.log('Authenticated user ID:', user.id);
-
-    // Use service role client to fetch profile data (bypasses RLS)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const isCronWithUserId = requestBody.triggeredByCron === true &&
+      authHeader === `Bearer ${supabaseServiceKey}` &&
+      typeof requestBody.user_id === 'string';
+
+    let user: { id: string; email?: string } | null = null;
+
+    if (isCronWithUserId) {
+      const { data } = await supabaseAdmin.auth.admin.getUserById(requestBody.user_id);
+      user = data?.user ?? null;
+      if (!user) throw new Error('Cron: user_id not found');
+      console.log('Cron mode: acting as user ID:', user.id);
+    } else {
+      const supabaseAnon = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const { data: { user: authUser }, error: userError } = await supabaseAnon.auth.getUser();
+      if (userError || !authUser) {
+        console.error('Auth error:', userError);
+        throw new Error('User not authenticated');
+      }
+      user = authUser;
+      console.log('Authenticated user ID:', user.id);
+    }
 
     // Fetch user profile
     const { data: profile, error: profileError } = await supabaseAdmin

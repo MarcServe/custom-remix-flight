@@ -41,6 +41,7 @@ import Auth from "./pages/Auth";
 import Subscription from "./pages/Subscription";
 import EmailBranding from "./pages/EmailBranding";
 import Newsletters from "./pages/Newsletters";
+import NewsletterSeries from "./pages/NewsletterSeries";
 import RecipientGroups from "./pages/RecipientGroups";
 import NotFound from "./pages/NotFound";
 
@@ -91,6 +92,7 @@ const App = () => (
           <Route path="/campaigns" element={<Campaigns />} />
                           <Route path="/email-branding" element={<PageErrorBoundary fallbackTitle="Email Branding failed to load"><EmailBranding /></PageErrorBoundary>} />
                           <Route path="/newsletters" element={<Newsletters />} />
+                          <Route path="/newsletter-series" element={<PageErrorBoundary fallbackTitle="Newsletter Series failed to load"><NewsletterSeries /></PageErrorBoundary>} />
                           <Route path="/recipient-groups" element={<RecipientGroups />} />
                           <Route path="/notes" element={<Notes />} />
                           <Route path="/conversations" element={<PageErrorBoundary fallbackTitle="Conversations failed to load"><Conversations /></PageErrorBoundary>} />

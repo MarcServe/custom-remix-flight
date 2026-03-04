@@ -19,6 +19,7 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "react-router-dom";
 import { EmailTemplatePreview, type EmailTemplatePreviewStyle } from "@/components/email/EmailTemplatePreview";
@@ -34,6 +35,7 @@ type Newsletter = {
   cta_url: string | null;
   sender_profile_id: string | null;
   template_style: string;
+  header_image_url: string | null;
   status: string;
   scheduled_at: string | null;
   sent_at: string | null;
@@ -43,6 +45,7 @@ type Newsletter = {
   total_clicked: number;
   created_at: string;
   updated_at: string;
+  scheduled_send_options?: Record<string, unknown> | null;
 };
 
 type Category = {
@@ -86,6 +89,7 @@ export default function Newsletters() {
   const [ctaUrl, setCtaUrl] = useState("");
   const [senderProfileId, setSenderProfileId] = useState("");
   const [templateStyle, setTemplateStyle] = useState<EmailTemplateStyle>("professional");
+  const [headerImageUrl, setHeaderImageUrl] = useState("");
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
 
   // AI generation
@@ -94,6 +98,7 @@ export default function Newsletters() {
   const [aiTargetAudience, setAiTargetAudience] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
   const newsletterImgRef = useRef<HTMLInputElement>(null);
+  const headerImageFileRef = useRef<HTMLInputElement>(null);
   const newsletterBodyEditorRef = useRef<RichTextEditorHandle | null>(null);
   const newsletterEditorFormRef = useRef<HTMLDivElement>(null);
   const subjectInputRef = useRef<HTMLInputElement>(null);
@@ -131,8 +136,10 @@ export default function Newsletters() {
 
   // Send dialog
   const [showSendDialog, setShowSendDialog] = useState(false);
-  const [sendTarget, setSendTarget] = useState<string>("all"); // "all" | "cat:id" | "group:id" | "industry:Name"
+  const [sendTargets, setSendTargets] = useState<string[]>([]); // ["all"] or ["cat:id", "group:id", "industry:Name", ...] (multiple allowed)
   const [sendTagIds, setSendTagIds] = useState<string[]>([]); // optional tags (categories) to narrow
+  const [sendScheduleLater, setSendScheduleLater] = useState(false);
+  const [sendDialogScheduleDateTime, setSendDialogScheduleDateTime] = useState("");
 
   // Send test dialog
   const [showTestDialog, setShowTestDialog] = useState(false);
@@ -144,6 +151,12 @@ export default function Newsletters() {
   const [scheduleDateTime, setScheduleDateTime] = useState("");
   const [scheduling, setScheduling] = useState(false);
   const [cancellingSchedule, setCancellingSchedule] = useState(false);
+
+  // Recipients dialog (view who received / will receive a newsletter)
+  type RecipientRow = { email: string; first_name: string | null; last_name: string | null; company: string | null; status?: string; sent_at?: string | null };
+  const [recipientsDialogNewsletter, setRecipientsDialogNewsletter] = useState<Newsletter | null>(null);
+  const [recipientsDialogList, setRecipientsDialogList] = useState<RecipientRow[]>([]);
+  const [recipientsDialogLoading, setRecipientsDialogLoading] = useState(false);
 
   // Send from (email connection: Gmail, Resend, SendGrid, etc.)
   const [senderConnectionId, setSenderConnectionId] = useState("");
@@ -414,6 +427,7 @@ export default function Newsletters() {
     setCtaUrl("");
     setSenderProfileId("");
     setTemplateStyle("professional");
+    setHeaderImageUrl("");
     setSelectedCategoryIds([]);
     setView("editor");
   };
@@ -427,6 +441,7 @@ export default function Newsletters() {
     setCtaUrl(nl.cta_url || "");
     setSenderProfileId(nl.sender_profile_id || "");
     setTemplateStyle((nl.template_style || "professional") as EmailTemplateStyle);
+    setHeaderImageUrl(nl.header_image_url || "");
     setSelectedCategoryIds([]);
     setView("editor");
   };
@@ -443,6 +458,7 @@ export default function Newsletters() {
         cta_url: ctaUrl.trim() || null,
         sender_profile_id: senderProfileId || null,
         template_style: templateStyle,
+        header_image_url: headerImageUrl.trim() || null,
         updated_at: new Date().toISOString(),
       };
 
@@ -500,6 +516,7 @@ export default function Newsletters() {
       cta_url: nl.cta_url,
       sender_profile_id: nl.sender_profile_id,
       template_style: nl.template_style,
+      header_image_url: nl.header_image_url || null,
     });
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -557,6 +574,32 @@ export default function Newsletters() {
       }
       return match;
     });
+  };
+
+  const handleHeaderImageUpload = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Please select an image under 5MB.", variant: "destructive" });
+      return;
+    }
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!validTypes.includes(file.type)) {
+      toast({ title: "Invalid file type", description: "JPG, PNG, WEBP, or GIF only.", variant: "destructive" });
+      return;
+    }
+    try {
+      setUploadingImage(true);
+      const ext = file.name.split(".").pop() || "jpg";
+      const fileName = `newsletter-header/${user?.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("email-branding").upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("email-branding").getPublicUrl(fileName);
+      setHeaderImageUrl(data.publicUrl);
+      toast({ title: "Header image uploaded" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err?.message || "Failed to upload.", variant: "destructive" });
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleReplaceImageByUpload = async (file: File) => {
@@ -796,6 +839,32 @@ Return ONLY the HTML body content.`,
 
   // ---------- SEND ----------
 
+  const buildSendAudiencePayload = () => {
+    const useAll = sendTargets.length === 0 || sendTargets.includes("all");
+    if (useAll) {
+      return {
+        sendToAllActive: true,
+        tagCategoryIds: sendTagIds.length ? sendTagIds : undefined,
+        sender_connection_id: senderConnectionId || undefined,
+      };
+    }
+    const categoryFilters: string[] = [];
+    const recipientGroupIds: string[] = [];
+    const industryFilter: string[] = [];
+    for (const t of sendTargets) {
+      if (t.startsWith("cat:")) categoryFilters.push(t.slice(5));
+      else if (t.startsWith("group:")) recipientGroupIds.push(t.slice(6));
+      else if (t.startsWith("industry:")) industryFilter.push(decodeURIComponent(t.slice(9)));
+    }
+    return {
+      categoryFilters: categoryFilters.length ? categoryFilters : undefined,
+      recipientGroupIds: recipientGroupIds.length ? recipientGroupIds : undefined,
+      industryFilter: industryFilter.length ? industryFilter : undefined,
+      tagCategoryIds: sendTagIds.length ? sendTagIds : undefined,
+      sender_connection_id: senderConnectionId || undefined,
+    };
+  };
+
   const handleSendNewsletter = async () => {
     if (!user) return;
     try {
@@ -803,22 +872,9 @@ Return ONLY the HTML body content.`,
       const id = await handleSaveNewsletter();
       if (!id) return;
 
-      let categoryFilter: string | null = null;
-      let recipientGroupId: string | null = null;
-      let industryFilter: string[] = [];
-      if (sendTarget.startsWith("cat:")) categoryFilter = sendTarget.slice(5);
-      else if (sendTarget.startsWith("group:")) recipientGroupId = sendTarget.slice(6);
-      else if (sendTarget.startsWith("industry:")) industryFilter = [decodeURIComponent(sendTarget.slice(9))];
-
+      const payload = buildSendAudiencePayload();
       const { data, error } = await supabase.functions.invoke("send-newsletter", {
-        body: {
-          newsletterId: id,
-          categoryFilter,
-          recipientGroupId,
-          industryFilter: industryFilter.length ? industryFilter : undefined,
-          tagCategoryIds: sendTagIds.length ? sendTagIds : undefined,
-          sender_connection_id: senderConnectionId || undefined,
-        },
+        body: { newsletterId: id, ...payload },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -833,9 +889,10 @@ Return ONLY the HTML body content.`,
     }
   };
 
-  const handleScheduleNewsletter = async () => {
-    if (!scheduleDateTime.trim() || !user) return;
-    const at = new Date(scheduleDateTime);
+  const handleScheduleNewsletter = async (opts?: { scheduled_send_options?: Record<string, unknown> }) => {
+    const dateTime = showSendDialog ? sendDialogScheduleDateTime : scheduleDateTime;
+    if (!dateTime.trim() || !user) return;
+    const at = new Date(dateTime);
     if (isNaN(at.getTime()) || at <= new Date()) {
       toast({ title: "Invalid time", description: "Choose a future date and time.", variant: "destructive" });
       return;
@@ -844,15 +901,25 @@ Return ONLY the HTML body content.`,
       setScheduling(true);
       const id = await handleSaveNewsletter();
       if (!id) return;
+      const scheduled_send_options = opts?.scheduled_send_options ?? null;
       const { error } = await supabase
         .from("newsletters")
-        .update({ status: "scheduled", scheduled_at: at.toISOString() })
+        .update({
+          status: "scheduled",
+          scheduled_at: at.toISOString(),
+          ...(scheduled_send_options != null && { scheduled_send_options }),
+        })
         .eq("id", id)
         .eq("user_id", user.id);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["newsletters"] });
       setShowScheduleDialog(false);
       setScheduleDateTime("");
+      if (showSendDialog) {
+        setShowSendDialog(false);
+        setSendScheduleLater(false);
+        setSendDialogScheduleDateTime("");
+      }
       toast({ title: "Scheduled", description: `Newsletter will send at ${at.toLocaleString()}.` });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -861,13 +928,35 @@ Return ONLY the HTML body content.`,
     }
   };
 
+  const handleScheduleFromSendDialog = () => {
+    const useAll = sendTargets.length === 0 || sendTargets.includes("all");
+    const categoryFilters: string[] = [];
+    const recipientGroupIds: string[] = [];
+    const industryFilter: string[] = [];
+    if (!useAll) {
+      for (const t of sendTargets) {
+        if (t.startsWith("cat:")) categoryFilters.push(t.slice(5));
+        else if (t.startsWith("group:")) recipientGroupIds.push(t.slice(6));
+        else if (t.startsWith("industry:")) industryFilter.push(decodeURIComponent(t.slice(9)));
+      }
+    }
+    const scheduled_send_options: Record<string, unknown> = {};
+    if (useAll) scheduled_send_options.sendToAllActive = true;
+    if (categoryFilters.length) scheduled_send_options.categoryFilters = categoryFilters;
+    if (recipientGroupIds.length) scheduled_send_options.recipientGroupIds = recipientGroupIds;
+    if (industryFilter.length) scheduled_send_options.industryFilter = industryFilter;
+    if (sendTagIds.length) scheduled_send_options.tagCategoryIds = sendTagIds;
+    if (senderConnectionId) scheduled_send_options.sender_connection_id = senderConnectionId;
+    handleScheduleNewsletter({ scheduled_send_options });
+  };
+
   const handleCancelSchedule = async (newsletterId: string) => {
     if (!user) return;
     try {
       setCancellingSchedule(true);
       const { error } = await supabase
         .from("newsletters")
-        .update({ status: "draft", scheduled_at: null })
+        .update({ status: "draft", scheduled_at: null, scheduled_send_options: null })
         .eq("id", newsletterId)
         .eq("user_id", user.id);
       if (error) throw error;
@@ -877,6 +966,91 @@ Return ONLY the HTML body content.`,
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setCancellingSchedule(false);
+    }
+  };
+
+  const openRecipientsDialog = async (nl: Newsletter) => {
+    setRecipientsDialogNewsletter(nl);
+    setRecipientsDialogList([]);
+    setRecipientsDialogLoading(true);
+    try {
+      if (nl.status === "sent") {
+        const { data: sends, error: sendsError } = await supabase
+          .from("newsletter_sends")
+          .select("subscriber_id, sent_at, status")
+          .eq("newsletter_id", nl.id)
+          .order("sent_at", { ascending: true });
+        if (sendsError) throw sendsError;
+        if (!sends?.length) {
+          setRecipientsDialogList([]);
+          return;
+        }
+        const ids = [...new Set(sends.map((s: any) => s.subscriber_id))];
+        const { data: subs, error: subsError } = await supabase
+          .from("newsletter_subscribers")
+          .select("id, email, first_name, last_name, company")
+          .in("id", ids);
+        if (subsError) throw subsError;
+        const subMap = Object.fromEntries((subs || []).map((s: any) => [s.id, s]));
+        const list: RecipientRow[] = sends.map((s: any) => {
+          const sub = subMap[s.subscriber_id];
+          return {
+            email: sub?.email ?? "",
+            first_name: sub?.first_name ?? null,
+            last_name: sub?.last_name ?? null,
+            company: sub?.company ?? null,
+            status: s.status,
+            sent_at: s.sent_at,
+          };
+        }).filter(r => r.email);
+        setRecipientsDialogList(list);
+      } else {
+        // draft or scheduled: resolve audience from scheduled_send_options and/or target categories
+        const opts = (nl.scheduled_send_options || {}) as Record<string, unknown>;
+        const sendToAllActive = opts.sendToAllActive === true;
+        const categoryFilters = (opts.categoryFilters as string[] || []).filter(Boolean);
+        const recipientGroupIds = (opts.recipientGroupIds as string[] || []).filter(Boolean);
+        const industryFilter = ((opts.industryFilter as string[] || []) as string[]).map((i: string) => String(i).trim().toLowerCase()).filter(Boolean);
+        let subset = activeSubscribers;
+        if (categoryFilters.length > 0 || recipientGroupIds.length > 0 || industryFilter.length > 0) {
+          const ids = new Set<string>();
+          if (categoryFilters.length > 0) {
+            activeSubscribers.forEach(s => {
+              const catIds = subscriberCategoryMap[s.id] || [];
+              if (categoryFilters.some(c => catIds.includes(c))) ids.add(s.id);
+            });
+          }
+          if (recipientGroupIds.length > 0) {
+            const groupEmails = new Set<string>();
+            for (const gid of recipientGroupIds) {
+              const { data: members } = await supabase.from("recipient_group_members").select("email").eq("group_id", gid);
+              (members || []).forEach((m: any) => groupEmails.add(String(m.email).trim().toLowerCase()));
+            }
+            activeSubscribers.forEach(s => {
+              if (groupEmails.has(s.email.trim().toLowerCase())) ids.add(s.id);
+            });
+          }
+          if (industryFilter.length > 0) {
+            activeSubscribers.forEach(s => {
+              const ind = (s as Subscriber).industry?.trim().toLowerCase();
+              if (ind && industryFilter.includes(ind)) ids.add(s.id);
+            });
+          }
+          subset = activeSubscribers.filter(s => ids.has(s.id));
+        } else if (!sendToAllActive) {
+          const { data: targetCats } = await supabase.from("newsletter_target_categories").select("category_id").eq("newsletter_id", nl.id);
+          const targetIds = (targetCats || []).map((c: any) => c.category_id);
+          if (targetIds.length > 0) {
+            subset = activeSubscribers.filter(s => (subscriberCategoryMap[s.id] || []).some((cid: string) => targetIds.includes(cid)));
+          }
+        }
+        setRecipientsDialogList(subset.map(s => ({ email: s.email, first_name: s.first_name, last_name: s.last_name, company: s.company })));
+      }
+    } catch (err: any) {
+      toast({ title: "Could not load recipients", description: err?.message, variant: "destructive" });
+      setRecipientsDialogList([]);
+    } finally {
+      setRecipientsDialogLoading(false);
     }
   };
 
@@ -939,7 +1113,8 @@ Return ONLY the HTML body content.`,
   const getPreviewProps = () => {
     const sp = senderProfiles.find((p: any) => p.id === senderProfileId);
     const bc = sp?.brand_color || businessProfile?.email_brand_color || "#8b5cf6";
-    const logo = sp?.logo_url || businessProfile?.email_logo_url || undefined;
+    const defaultLogo = sp?.logo_url || businessProfile?.email_logo_url || undefined;
+    const logo = headerImageUrl.trim() ? headerImageUrl.trim() : defaultLogo;
     const headerName = sp?.display_name || businessProfile?.email_header_name || undefined;
     const companyName = businessProfile?.company_name || undefined;
     const senderName = sp?.sender_name || userProfile?.full_name || "Your Name";
@@ -1341,10 +1516,10 @@ Return ONLY the HTML body content.`,
               <Button variant="outline" onClick={() => { setTestEmail(user?.email ?? ""); setShowTestDialog(true); }} disabled={!subject.trim()}>
                 <FlaskConical className="h-4 w-4 mr-1.5" />Send test
               </Button>
-              <Button variant="outline" onClick={() => { if (!subject.trim()) { toast({ title: "Subject required", variant: "destructive" }); return; } setScheduleDateTime(() => { const d = new Date(); d.setMinutes(d.getMinutes() + 30); d.setSeconds(0, 0); return d.toISOString().slice(0, 16); }); setShowScheduleDialog(true); }} disabled={!editingId && !subject.trim()}>
+              <Button variant="outline" onClick={() => { if (!subject.trim()) { toast({ title: "Subject required", variant: "destructive" }); return; } setSendScheduleLater(true); setSendDialogScheduleDateTime(() => { const d = new Date(); d.setMinutes(d.getMinutes() + 30); d.setSeconds(0, 0); return d.toISOString().slice(0, 16); }); setShowSendDialog(true); }} disabled={!editingId && !subject.trim()}>
                 <CalendarClock className="h-4 w-4 mr-1.5" />Schedule
               </Button>
-              <Button onClick={() => { if (!subject.trim()) { toast({ title: "Subject required", variant: "destructive" }); return; } setShowSendDialog(true); }} disabled={!editingId && !subject.trim()}>
+              <Button onClick={() => { if (!subject.trim()) { toast({ title: "Subject required", variant: "destructive" }); return; } setSendScheduleLater(false); setShowSendDialog(true); }} disabled={!editingId && !subject.trim()}>
                 <Send className="h-4 w-4 mr-1.5" />Send
               </Button>
             </div>
@@ -1433,6 +1608,43 @@ Return ONLY the HTML body content.`,
                     </Select>
                     <p className="text-xs text-muted-foreground">Account used to send this newsletter and test emails. Configure in <Link to="/integrations/email-providers" className="text-primary hover:underline">Settings → Email Providers</Link>.</p>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Header image (optional) */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Header image (optional)</CardTitle>
+                  <CardDescription className="text-xs">Override the email branding logo for this newsletter so each send can have a custom header. Leave empty to use your sender profile or default branding.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      value={headerImageUrl}
+                      onChange={e => setHeaderImageUrl(e.target.value)}
+                      placeholder="https://… or upload below"
+                      className="flex-1"
+                    />
+                    <input
+                      ref={headerImageFileRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleHeaderImageUpload(f); e.target.value = ""; }}
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={() => headerImageFileRef.current?.click()} disabled={uploadingImage}>
+                      {uploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    </Button>
+                    {headerImageUrl && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setHeaderImageUrl("")}>Clear</Button>
+                    )}
+                  </div>
+                  {headerImageUrl && (
+                    <div className="rounded border p-2 bg-muted/30">
+                      <p className="text-xs text-muted-foreground mb-1">Preview (shown at top of email):</p>
+                      <img src={headerImageUrl} alt="" className="max-h-16 w-auto object-contain rounded" onError={() => {}} />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1713,46 +1925,106 @@ Return ONLY the HTML body content.`,
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <Label>Send to</Label>
-                <Select value={sendTarget} onValueChange={setSendTarget}>
-                  <SelectTrigger><SelectValue placeholder="Choose audience" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All active subscribers ({activeSubscribers.length})</SelectItem>
-                    {categories.length > 0 && (
-                      <SelectGroup>
-                        <SelectLabel className="text-muted-foreground">Categories / tags</SelectLabel>
-                        {categories.map(cat => {
-                          const count = activeSubscribers.filter(s => (subscriberCategoryMap[s.id] || []).includes(cat.id)).length;
-                          return <SelectItem key={cat.id} value={`cat:${cat.id}`}>{cat.name} ({count})</SelectItem>;
-                        })}
-                      </SelectGroup>
-                    )}
-                    {recipientGroups.length > 0 && (
-                      <SelectGroup>
-                        <SelectLabel className="text-muted-foreground">Recipient groups</SelectLabel>
-                        {recipientGroups.map((g: { id: string; name: string }) => (
-                          <SelectItem key={g.id} value={`group:${g.id}`}>Group: {g.name}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                    )}
-                    {(() => {
-                      const industryCounts = activeSubscribers.reduce((acc: Record<string, number>, s) => {
-                        const ind = (s as Subscriber).industry?.trim();
-                        if (ind) { acc[ind] = (acc[ind] || 0) + 1; }
-                        return acc;
-                      }, {});
-                      const industryList = Object.keys(industryCounts).sort();
-                      if (industryList.length === 0) return null;
-                      return (
-                        <SelectGroup>
-                          <SelectLabel className="text-muted-foreground">Industry</SelectLabel>
-                          {industryList.map(ind => (
-                            <SelectItem key={ind} value={`industry:${encodeURIComponent(ind)}`}>{ind} ({industryCounts[ind]})</SelectItem>
-                          ))}
-                        </SelectGroup>
-                      );
-                    })()}
-                  </SelectContent>
-                </Select>
+                <p className="text-xs text-muted-foreground">Select one or more audiences; recipients are combined (union). Leave empty or select All for newsletter content selection.</p>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between font-normal">
+                      <span className="truncate">
+                        {sendTargets.length === 0 || sendTargets.includes("all")
+                          ? `All active subscribers (${activeSubscribers.length})`
+                          : `${sendTargets.length} audience(s) selected`}
+                      </span>
+                      <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-h-[320px] overflow-y-auto p-2" align="start">
+                    <div className="space-y-1">
+                      <label className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer hover:bg-muted">
+                        <Checkbox
+                          checked={sendTargets.length === 0 || sendTargets.includes("all")}
+                          onCheckedChange={(checked) => {
+                            if (checked) setSendTargets(["all"]);
+                            else setSendTargets([]);
+                          }}
+                        />
+                        All active subscribers ({activeSubscribers.length})
+                      </label>
+                      {categories.length > 0 && (
+                        <>
+                          <div className="text-xs font-medium text-muted-foreground px-2 pt-2">Categories / tags</div>
+                          {categories.map(cat => {
+                            const count = activeSubscribers.filter(s => (subscriberCategoryMap[s.id] || []).includes(cat.id)).length;
+                            const value = `cat:${cat.id}`;
+                            const checked = sendTargets.includes(value);
+                            return (
+                              <label key={cat.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer hover:bg-muted">
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(c) => {
+                                    if (c) setSendTargets(prev => prev.filter(t => t !== "all").concat(value));
+                                    else setSendTargets(prev => prev.filter(t => t !== value));
+                                  }}
+                                />
+                                {cat.name} ({count})
+                              </label>
+                            );
+                          })}
+                        </>
+                      )}
+                      {recipientGroups.length > 0 && (
+                        <>
+                          <div className="text-xs font-medium text-muted-foreground px-2 pt-2">Recipient groups</div>
+                          {recipientGroups.map((g: { id: string; name: string }) => {
+                            const value = `group:${g.id}`;
+                            const checked = sendTargets.includes(value);
+                            return (
+                              <label key={g.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer hover:bg-muted">
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(c) => {
+                                    if (c) setSendTargets(prev => prev.filter(t => t !== "all").concat(value));
+                                    else setSendTargets(prev => prev.filter(t => t !== value));
+                                  }}
+                                />
+                                Group: {g.name}
+                              </label>
+                            );
+                          })}
+                        </>
+                      )}
+                      {(() => {
+                        const industryCounts = activeSubscribers.reduce((acc: Record<string, number>, s) => {
+                          const ind = (s as Subscriber).industry?.trim();
+                          if (ind) { acc[ind] = (acc[ind] || 0) + 1; }
+                          return acc;
+                        }, {});
+                        const industryList = Object.keys(industryCounts).sort();
+                        if (industryList.length === 0) return null;
+                        return (
+                          <>
+                            <div className="text-xs font-medium text-muted-foreground px-2 pt-2">Industry</div>
+                            {industryList.map(ind => {
+                              const value = `industry:${encodeURIComponent(ind)}`;
+                              const checked = sendTargets.includes(value);
+                              return (
+                                <label key={ind} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer hover:bg-muted">
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={(c) => {
+                                      if (c) setSendTargets(prev => prev.filter(t => t !== "all").concat(value));
+                                      else setSendTargets(prev => prev.filter(t => t !== value));
+                                    }}
+                                  />
+                                  {ind} ({industryCounts[ind]})
+                                </label>
+                              );
+                            })}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-muted-foreground">Also in tags (optional)</Label>
@@ -1804,12 +2076,38 @@ Return ONLY the HTML body content.`,
                 <strong>Subject:</strong> {subject || "(no subject)"}<br />
                 <strong>From (branding):</strong> {senderProfiles.find((p: any) => p.id === senderProfileId)?.display_name || businessProfile?.company_name || "Default"}
               </div>
+
+              <div className="space-y-3 border-t pt-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox checked={sendScheduleLater} onCheckedChange={(c) => setSendScheduleLater(!!c)} />
+                  <span className="text-sm font-medium">Schedule for later</span>
+                </label>
+                {sendScheduleLater && (
+                  <div className="space-y-1.5 pl-6">
+                    <Label htmlFor="send-dialog-schedule-datetime">Date & time</Label>
+                    <input
+                      id="send-dialog-schedule-datetime"
+                      type="datetime-local"
+                      value={sendDialogScheduleDateTime}
+                      onChange={e => setSendDialogScheduleDateTime(e.target.value)}
+                      min={new Date(new Date().getTime() + 15 * 60 * 1000).toISOString().slice(0, 16)}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowSendDialog(false)}>Cancel</Button>
-              <Button onClick={handleSendNewsletter} disabled={sending || connections.length === 0}>
-                {sending ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Sending...</> : <><Send className="h-4 w-4 mr-1.5" />Send Now</>}
-              </Button>
+              <Button variant="outline" onClick={() => { setShowSendDialog(false); setSendScheduleLater(false); setSendDialogScheduleDateTime(""); }}>Cancel</Button>
+              {sendScheduleLater ? (
+                <Button onClick={handleScheduleFromSendDialog} disabled={scheduling || connections.length === 0 || !sendDialogScheduleDateTime.trim()}>
+                  {scheduling ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Scheduling...</> : <><CalendarClock className="h-4 w-4 mr-1.5" />Schedule send</>}
+                </Button>
+              ) : (
+                <Button onClick={handleSendNewsletter} disabled={sending || connections.length === 0}>
+                  {sending ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Sending...</> : <><Send className="h-4 w-4 mr-1.5" />Send Now</>}
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1859,6 +2157,9 @@ Return ONLY the HTML body content.`,
             <Button variant="outline" onClick={() => setView("subscribers")}>
               <Users className="h-4 w-4 mr-1.5" />Subscribers ({activeSubscribers.length})
             </Button>
+            <Link to="/newsletter-series">
+              <Button variant="outline"><CalendarClock className="h-4 w-4 mr-1.5" />Series</Button>
+            </Link>
             <Button onClick={openNewNewsletter}>
               <Plus className="h-4 w-4 mr-1.5" />New Newsletter
             </Button>
@@ -1937,6 +2238,7 @@ Return ONLY the HTML body content.`,
                           {cancellingSchedule ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Cancel schedule"}
                         </Button>
                       )}
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="View recipients" onClick={(e) => { e.stopPropagation(); openRecipientsDialog(nl); }}><Users className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditNewsletter(nl)}><Pencil className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicate(nl)}><Copy className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteNewsletter(nl.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
@@ -1947,6 +2249,63 @@ Return ONLY the HTML body content.`,
             )}
           </CardContent>
         </Card>
+
+        {/* Recipients dialog */}
+        <Dialog open={!!recipientsDialogNewsletter} onOpenChange={(open) => { if (!open) setRecipientsDialogNewsletter(null); }}>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Recipients — {recipientsDialogNewsletter?.title || "Untitled"}</DialogTitle>
+              <DialogDescription>
+                {recipientsDialogNewsletter?.status === "sent"
+                  ? "People who received this newsletter."
+                  : recipientsDialogNewsletter?.status === "scheduled"
+                    ? "People who will receive this newsletter when it sends (based on schedule audience)."
+                    : "People who would receive this newsletter if sent now (based on target categories or schedule audience)."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 overflow-auto min-h-0 border rounded-md">
+              {recipientsDialogLoading ? (
+                <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : recipientsDialogList.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground text-sm">No recipients</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="text-left font-medium p-2">Email</th>
+                      <th className="text-left font-medium p-2">Name</th>
+                      <th className="text-left font-medium p-2">Company</th>
+                      {recipientsDialogNewsletter?.status === "sent" && (
+                        <>
+                          <th className="text-left font-medium p-2">Status</th>
+                          <th className="text-left font-medium p-2">Sent</th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recipientsDialogList.map((r, i) => (
+                      <tr key={i} className="border-t border-border/50">
+                        <td className="p-2 truncate max-w-[200px]" title={r.email}>{r.email}</td>
+                        <td className="p-2">{[r.first_name, r.last_name].filter(Boolean).join(" ") || "—"}</td>
+                        <td className="p-2 truncate max-w-[140px]" title={r.company ?? ""}>{r.company || "—"}</td>
+                        {recipientsDialogNewsletter?.status === "sent" && (
+                          <>
+                            <td className="p-2">{r.status || "—"}</td>
+                            <td className="p-2 text-muted-foreground">{r.sent_at ? new Date(r.sent_at).toLocaleString() : "—"}</td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground pt-1">
+              {recipientsDialogList.length} recipient{recipientsDialogList.length !== 1 ? "s" : ""}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

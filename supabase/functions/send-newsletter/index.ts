@@ -30,14 +30,6 @@ serve(async (req) => {
 
     if (!newsletterId) throw new Error('Missing newsletterId');
 
-    const categoryFilter = body.categoryFilter ?? body.category_filter;
-    const recipientGroupId = body.recipientGroupId ?? body.recipient_group_id;
-    const industryFilter = body.industryFilter ?? body.industry_filter;
-    const tagCategoryIds = body.tagCategoryIds ?? body.tag_category_ids;
-    const senderConnectionId = body.sender_connection_id ?? body.senderConnectionId ?? null;
-    const industries: string[] = Array.isArray(industryFilter) ? industryFilter.filter((i: any) => i != null && String(i).trim()) : [];
-    const tagIds: string[] = Array.isArray(tagCategoryIds) ? tagCategoryIds.filter((id: any) => id) : [];
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const authHeader = req.headers.get('Authorization')!;
@@ -80,6 +72,41 @@ serve(async (req) => {
       nlError = err;
     }
     if (nlError || !newsletter) throw new Error('Newsletter not found');
+
+    // When cron triggers, use stored audience/sender from scheduled_send_options
+    if (triggeredByCron && newsletter.scheduled_send_options && typeof newsletter.scheduled_send_options === 'object') {
+      const opts = newsletter.scheduled_send_options as Record<string, unknown>;
+      if (opts.categoryFilters != null) body.categoryFilters = opts.categoryFilters;
+      if (opts.recipientGroupIds != null) body.recipientGroupIds = opts.recipientGroupIds;
+      if (opts.industryFilter != null) body.industryFilter = opts.industryFilter;
+      if (opts.tagCategoryIds != null) body.tagCategoryIds = opts.tagCategoryIds;
+      if (opts.sender_connection_id != null) body.sender_connection_id = opts.sender_connection_id;
+      if (opts.sendToAllActive === true) body.sendToAllActive = true;
+    }
+
+    const categoryFilter = body.categoryFilter ?? body.category_filter;
+    const categoryFiltersRaw = body.categoryFilters ?? body.category_filters;
+    const categoryFilters: string[] = Array.isArray(categoryFiltersRaw)
+      ? categoryFiltersRaw.filter((id: any) => id != null && String(id).trim())
+      : categoryFilter ? [String(categoryFilter).trim()] : [];
+
+    const recipientGroupId = body.recipientGroupId ?? body.recipient_group_id;
+    const recipientGroupIdsRaw = body.recipientGroupIds ?? body.recipient_group_ids;
+    const recipientGroupIds: string[] = Array.isArray(recipientGroupIdsRaw)
+      ? recipientGroupIdsRaw.filter((id: any) => id != null && String(id).trim())
+      : recipientGroupId ? [String(recipientGroupId).trim()] : [];
+
+    const industryFilter = body.industryFilter ?? body.industry_filter;
+    const industries: string[] = Array.isArray(industryFilter)
+      ? industryFilter.filter((i: any) => i != null && String(i).trim())
+      : industryFilter ? [String(industryFilter).trim()] : [];
+
+    const tagCategoryIds = body.tagCategoryIds ?? body.tag_category_ids;
+    const tagIds: string[] = Array.isArray(tagCategoryIds) ? tagCategoryIds.filter((id: any) => id) : [];
+
+    const sendToAllActive = body.sendToAllActive === true || body.send_to_all_active === true;
+
+    const senderConnectionId = body.sender_connection_id ?? body.senderConnectionId ?? null;
 
     const db = triggeredByCron ? supabaseAdmin : supabaseAnon;
 
@@ -147,6 +174,11 @@ serve(async (req) => {
       }
     }
 
+    // Per-newsletter header image override (fully customise branding for this send)
+    if (newsletter.header_image_url && String(newsletter.header_image_url).trim()) {
+      branding.logoUrl = newsletter.header_image_url.trim();
+    }
+
     // Determine subscribers (or single test recipient)
     let targetSubscribers: { id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; unsubscribe_token: string }[];
 
@@ -175,11 +207,42 @@ serve(async (req) => {
 
       let subs = allSubscribers as { id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; unsubscribe_token: string; industry?: string | null }[];
 
-      // Primary audience: category, or newsletter target categories only when no group/industry selected
-      const targetCategoryIds: string[] = [];
-      if (categoryFilter) {
-        targetCategoryIds.push(categoryFilter);
-      } else if (tagIds.length === 0 && !recipientGroupId && industries.length === 0) {
+      const hasExplicitAudience = categoryFilters.length > 0 || recipientGroupIds.length > 0 || industries.length > 0;
+      const audienceSubscriberIds = new Set<string>();
+
+      if (hasExplicitAudience) {
+        // Union of: subscribers in any selected category, in any selected group, or in any selected industry
+        if (categoryFilters.length > 0) {
+          const { data: subCats } = await db
+            .from('newsletter_subscriber_categories')
+            .select('subscriber_id')
+            .in('category_id', categoryFilters);
+          (subCats || []).forEach((sc: any) => audienceSubscriberIds.add(sc.subscriber_id));
+        }
+        if (recipientGroupIds.length > 0) {
+          const { data: groupMembers, error: groupErr } = await db
+            .from('recipient_group_members')
+            .select('email')
+            .in('group_id', recipientGroupIds);
+          if (groupErr) throw new Error('Failed to load recipient groups');
+          const groupEmails = new Set((groupMembers || []).map((m: any) => String(m.email).toLowerCase().trim()));
+          subs.forEach((s: any) => {
+            if (groupEmails.has(String(s.email).toLowerCase().trim())) audienceSubscriberIds.add(s.id);
+          });
+        }
+        if (industries.length > 0) {
+          const industrySet = new Set(industries.map((i: string) => String(i).trim().toLowerCase()));
+          subs.forEach((s: any) => {
+            if (s.industry && industrySet.has(String(s.industry).trim().toLowerCase())) audienceSubscriberIds.add(s.id);
+          });
+        }
+        subs = subs.filter((s: any) => audienceSubscriberIds.has(s.id));
+      } else if (sendToAllActive) {
+        // "All active subscribers" selected: send to everyone (ignore newsletter target categories)
+        // subs already holds all active subscribers; optional tag narrow applied below
+      } else {
+        // No explicit audience and not sendToAllActive: use newsletter content selection (target categories)
+        const targetCategoryIds: string[] = [];
         const { data: nlCats } = await db
           .from('newsletter_target_categories')
           .select('category_id')
@@ -187,17 +250,17 @@ serve(async (req) => {
         if (nlCats && nlCats.length > 0) {
           nlCats.forEach((c: any) => targetCategoryIds.push(c.category_id));
         }
-      }
-      if (targetCategoryIds.length > 0) {
-        const { data: subCats } = await db
-          .from('newsletter_subscriber_categories')
-          .select('subscriber_id')
-          .in('category_id', targetCategoryIds);
-        const subscriberIds = new Set((subCats || []).map((sc: any) => sc.subscriber_id));
-        subs = subs.filter((s: any) => subscriberIds.has(s.id));
+        if (targetCategoryIds.length > 0) {
+          const { data: subCats } = await db
+            .from('newsletter_subscriber_categories')
+            .select('subscriber_id')
+            .in('category_id', targetCategoryIds);
+          const subscriberIds = new Set((subCats || []).map((sc: any) => sc.subscriber_id));
+          subs = subs.filter((s: any) => subscriberIds.has(s.id));
+        }
       }
 
-      // Optional: filter by tags (subscriber must be in at least one of these categories)
+      // Optional: narrow by tags (subscriber must be in at least one of these categories)
       if (tagIds.length > 0) {
         const { data: tagSubCats } = await db
           .from('newsletter_subscriber_categories')
@@ -205,23 +268,6 @@ serve(async (req) => {
           .in('category_id', tagIds);
         const tagSubscriberIds = new Set((tagSubCats || []).map((sc: any) => sc.subscriber_id));
         subs = subs.filter((s: any) => tagSubscriberIds.has(s.id));
-      }
-
-      // Optional: filter by industry
-      if (industries.length > 0) {
-        const industrySet = new Set(industries.map((i: string) => String(i).trim().toLowerCase()));
-        subs = subs.filter((s: any) => s.industry && industrySet.has(String(s.industry).trim().toLowerCase()));
-      }
-
-      // Optional: limit to recipient group (subscribers whose email is in the group)
-      if (recipientGroupId) {
-        const { data: groupMembers, error: groupErr } = await db
-          .from('recipient_group_members')
-          .select('email')
-          .eq('group_id', recipientGroupId);
-        if (groupErr) throw new Error('Failed to load recipient group');
-        const groupEmails = new Set((groupMembers || []).map((m: any) => String(m.email).toLowerCase().trim()));
-        subs = subs.filter((s: any) => groupEmails.has(String(s.email).toLowerCase().trim()));
       }
 
       if (subs.length === 0) {

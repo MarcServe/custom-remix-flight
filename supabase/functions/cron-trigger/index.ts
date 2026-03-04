@@ -295,6 +295,27 @@ Deno.serve(async (req) => {
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      case 'process-newsletter-series': {
+        console.log('[cron-trigger] Processing newsletter series (daily AI sends)');
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/process-newsletter-series`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        });
+        const result = await response.json().catch(() => ({}));
+        console.log('[cron-trigger] Newsletter series result:', result);
+        return new Response(JSON.stringify({
+          success: response.ok,
+          action: 'process-newsletter-series',
+          result,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       case 'sync-inbound-from-resend': {
         // Pull received emails from Resend into CRM (backup when webhook doesn't fire)
         console.log('[cron-trigger] Syncing inbound emails from Resend');
