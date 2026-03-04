@@ -108,13 +108,19 @@ serve(async (req) => {
 
     const senderConnectionId = body.sender_connection_id ?? body.senderConnectionId ?? null;
 
+    const sendInBatches = body.sendInBatches === true || body.send_in_batches === true;
+    const batchSize = Math.min(10000, Math.max(1, Number(body.batchSize ?? body.batch_size ?? 50) | 0)) || 50;
+    const continueBatch = body.continueBatch === true || body.continue_batch === true;
+    const dailySendLimitRaw = body.dailySendLimit ?? body.daily_send_limit;
+    const dailySendLimitFromBody = dailySendLimitRaw != null ? Math.min(2000, Math.max(1, Number(dailySendLimitRaw) | 0)) : null;
+
     const db = triggeredByCron ? supabaseAdmin : supabaseAnon;
 
     // Never block test sends: if request has test email (any key) or isTest, allow regardless of newsletter status
     const hasTestEmailInBody = !!(String(body.testEmail ?? body.test_email ?? body.body?.testEmail ?? body.body?.test_email ?? '').trim())
       || (typeof body === 'object' && Object.keys(body).some((k) => /^test_?email$/i.test(k) && String((body as any)[k] || '').trim()));
-    if (!isTest && !hasTestEmailInBody && (newsletter.status === 'sent' || newsletter.status === 'sending')) {
-      throw new Error('Newsletter already sent or sending');
+    if (!isTest && !hasTestEmailInBody && newsletter.status === 'sent') {
+      throw new Error('Newsletter already fully sent. Duplicate or create a new newsletter to send again.');
     }
 
     // Fetch branding
@@ -155,21 +161,23 @@ serve(async (req) => {
         .eq('user_id', user.id)
         .maybeSingle();
       if (sp) {
+        const str = (v: any) => (v != null && String(v).trim() !== '' ? String(v).trim() : null);
         branding = {
           ...branding,
-          headerName: sp.display_name || branding.headerName,
-          logoUrl: sp.logo_url || branding.logoUrl,
-          brandColor: sp.brand_color || branding.brandColor,
-          footerText: sp.footer_text || branding.footerText,
-          footerImageUrl: sp.footer_logo_url || sp.logo_url || branding.footerImageUrl,
-          signature: sp.signature || branding.signature,
-          templateStyle: sp.template_style || branding.templateStyle,
-          senderName: sp.sender_name,
-          signatureName: sp.signature_name ?? branding.signatureName,
-          senderEmail: sp.sender_email,
-          senderTitle: sp.sender_title,
-          senderImageUrl: sp.sender_image_url,
-          websiteUrl: sp.website_url ?? branding.websiteUrl,
+          headerName: str(sp.display_name) ?? branding.headerName,
+          logoUrl: str(sp.logo_url) ?? branding.logoUrl,
+          brandColor: str(sp.brand_color) ?? branding.brandColor,
+          footerText: str(sp.footer_text) ?? branding.footerText,
+          footerImageUrl: str(sp.footer_logo_url) ?? str(sp.logo_url) ?? branding.footerImageUrl,
+          signature: str(sp.signature) ?? branding.signature,
+          templateStyle: str(sp.template_style) ?? branding.templateStyle,
+          // From line (inbox): prefer sender_name, then display_name so header-name change reflects when From name is empty
+          senderName: str(sp.sender_name) ?? str(sp.display_name) ?? branding.senderName,
+          signatureName: str(sp.signature_name) ?? branding.signatureName,
+          senderEmail: str(sp.sender_email) ?? branding.senderEmail,
+          senderTitle: str(sp.sender_title) ?? branding.senderTitle,
+          senderImageUrl: str(sp.sender_image_url) ?? branding.senderImageUrl,
+          websiteUrl: str(sp.website_url) ?? branding.websiteUrl,
         };
       }
     }
@@ -195,7 +203,9 @@ serve(async (req) => {
       }];
     } else {
       // When recipient groups are selected, add all group members as newsletter subscribers first
-      // so the send list can include 1000+ (not just the subset already in newsletter_subscribers)
+      // so the send list can include 1000+ (not just the subset already in newsletter_subscribers).
+      // Use service role so RLS cannot block the insert (e.g. when user has no subscribers yet).
+      let groupMembersForFallback: { email: string; first_name: string | null; last_name: string | null; company: string | null }[] = [];
       if (recipientGroupIds.length > 0) {
         const { data: groupMembers, error: groupErr } = await db
           .from('recipient_group_members')
@@ -203,11 +213,12 @@ serve(async (req) => {
           .in('group_id', recipientGroupIds);
         if (!groupErr && groupMembers && groupMembers.length > 0) {
           const seen = new Set<string>();
-          const toUpsert: { user_id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; source: string }[] = [];
+          const toUpsert: { user_id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; source: string; status: string }[] = [];
           for (const m of groupMembers as { email: string; first_name: string | null; last_name: string | null; company: string | null }[]) {
             const email = m.email ? String(m.email).trim().toLowerCase() : '';
             if (!email || seen.has(email)) continue;
             seen.add(email);
+            groupMembersForFallback.push({ email, first_name: m.first_name || null, last_name: m.last_name || null, company: m.company || null });
             toUpsert.push({
               user_id: user.id,
               email,
@@ -215,26 +226,65 @@ serve(async (req) => {
               last_name: m.last_name || null,
               company: m.company || null,
               source: 'recipient_group',
+              status: 'active',
             });
           }
           if (toUpsert.length > 0) {
-            await db.from('newsletter_subscribers').upsert(toUpsert, {
-              onConflict: 'user_id,email',
-              ignoreDuplicates: true,
-            });
+            const { error: upsertErr } = await supabaseAdmin
+              .from('newsletter_subscribers')
+              .upsert(toUpsert, { onConflict: 'user_id,email', ignoreDuplicates: true });
+            if (upsertErr) {
+              console.warn('Newsletter send: upsert group members failed', upsertErr.message);
+            }
           }
         }
       }
 
-      const subscriberQuery = db
-        .from('newsletter_subscribers')
-        .select('id, email, first_name, last_name, company, unsubscribe_token, industry')
-        .eq('user_id', user.id)
-        .eq('status', 'active');
+      // Use service role to fetch subscribers so RLS cannot block (user is already authenticated)
+      let allSubscribers: { id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; unsubscribe_token: string; industry?: string | null }[] | null = null;
+      {
+        const { data: subData, error: subErr } = await supabaseAdmin
+          .from('newsletter_subscribers')
+          .select('id, email, first_name, last_name, company, unsubscribe_token, industry')
+          .eq('user_id', user.id)
+          .eq('status', 'active');
+        if (subErr) {
+          throw new Error(`Could not load subscribers: ${subErr.message}`);
+        }
+        allSubscribers = (subData || null) as typeof allSubscribers;
+      }
 
-      const { data: allSubscribers } = await subscriberQuery;
+      // If we have selected groups but still no active subscribers, try inserting via admin (ensures RLS doesn't block)
+      if ((!allSubscribers || allSubscribers.length === 0) && groupMembersForFallback.length > 0) {
+        const toInsert = groupMembersForFallback.map((m) => ({
+          user_id: user.id,
+          email: m.email,
+          first_name: m.first_name,
+          last_name: m.last_name,
+          company: m.company,
+          source: 'recipient_group',
+          status: 'active',
+        }));
+        const { error: insertErr } = await supabaseAdmin
+          .from('newsletter_subscribers')
+          .upsert(toInsert, { onConflict: 'user_id,email', ignoreDuplicates: true });
+        if (!insertErr) {
+          const { data: resData } = await supabaseAdmin
+            .from('newsletter_subscribers')
+            .select('id, email, first_name, last_name, company, unsubscribe_token, industry')
+            .eq('user_id', user.id)
+            .eq('status', 'active');
+          allSubscribers = (resData || []) as typeof allSubscribers;
+        }
+      }
+
       if (!allSubscribers || allSubscribers.length === 0) {
-        throw new Error('No active subscribers found');
+        if (recipientGroupIds.length > 0 || categoryFilters.length > 0 || industries.length > 0) {
+          throw new Error(
+            'No recipients found for the selected audiences. Check that your groups have members with valid emails, or add subscribers in Newsletters > Subscribers first.'
+          );
+        }
+        throw new Error('No active subscribers found. Add subscribers in Newsletters > Subscribers, or select recipient groups that have members.');
       }
 
       let subs = allSubscribers as { id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; unsubscribe_token: string; industry?: string | null }[];
@@ -308,11 +358,74 @@ serve(async (req) => {
       targetSubscribers = subs;
     }
 
+    // Exclude anyone already sent this newsletter (so resend/cleaned-list sends and cron batches never double-send)
+    if (!isTest) {
+      const { data: alreadySentRows } = await db
+        .from('newsletter_sends')
+        .select('subscriber_id')
+        .eq('newsletter_id', newsletterId)
+        .eq('status', 'sent');
+      const alreadySentIds = new Set((alreadySentRows || []).map((r: { subscriber_id: string }) => r.subscriber_id));
+      targetSubscribers = targetSubscribers.filter((s) => !alreadySentIds.has(s.id));
+      targetSubscribers.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      if (targetSubscribers.length === 0) {
+        throw new Error('No recipients left to send to. Everyone in the audience has already received this newsletter.');
+      }
+    }
+
+    const totalRecipients = targetSubscribers.length;
+
+    // Batch send: send in chunks (e.g. 400/day for Gmail limit)
+    if (!isTest && (sendInBatches || continueBatch)) {
+      const batchSend = (newsletter as any).batch_send === true;
+      const currentBatchSent = Math.max(0, Number((newsletter as any).batch_sent_count) | 0);
+      const defaultContinueSize = Math.max(1, Number((newsletter as any).batch_size) | 0) || 50;
+      const requestedSize = Math.max(1, Number(body.batchSize ?? body.batch_size ?? 0) | 0);
+      const size = continueBatch ? (requestedSize > 0 ? Math.min(requestedSize, 10000) : defaultContinueSize) : batchSize;
+
+      if (sendInBatches && !continueBatch) {
+        // First batch: save audience to scheduled_send_options for cron, then send first chunk
+        const dailyLimitForCron = dailySendLimitFromBody ?? 400;
+        const scheduledOpts: Record<string, unknown> = {
+          sendToAllActive: body.sendToAllActive === true,
+          recipientGroupIds: body.recipientGroupIds ?? body.recipient_group_ids ?? undefined,
+          categoryFilters: body.categoryFilters ?? body.category_filters ?? undefined,
+          industryFilter: body.industryFilter ?? body.industry_filter ?? undefined,
+          tagCategoryIds: body.tagCategoryIds ?? body.tag_category_ids ?? undefined,
+          sender_connection_id: senderConnectionId ?? undefined,
+          daily_send_limit: dailyLimitForCron,
+        };
+        await db.from('newsletters').update({
+          batch_send: true,
+          batch_size: size,
+          batch_sent_count: 0,
+          batch_next_at: null,
+          total_recipients: totalRecipients,
+          scheduled_send_options: scheduledOpts,
+        }).eq('id', newsletterId);
+
+        targetSubscribers = targetSubscribers.slice(0, size);
+      } else if (continueBatch && batchSend) {
+        // Next batch: send next chunk
+        targetSubscribers = targetSubscribers.slice(currentBatchSent, currentBatchSent + size);
+        if (targetSubscribers.length === 0) {
+          await db.from('newsletters').update({
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+          }).eq('id', newsletterId);
+          return new Response(
+            JSON.stringify({ success: true, continueBatch: true, batchComplete: true, sent: 0 }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+    }
+
     // Mark newsletter as sending (skip for test)
     if (!isTest) {
       await db.from('newsletters').update({
         status: 'sending',
-        total_recipients: targetSubscribers.length,
+        total_recipients: totalRecipients,
       }).eq('id', newsletterId);
     }
 
@@ -337,14 +450,44 @@ serve(async (req) => {
       const matchConnection = desiredFromEmail && connList.length
         ? connList.find((c: any) => (c.from_email || '').trim().toLowerCase() === desiredFromEmail)
         : null;
+      // Prefer Gmail when no connection selected — typically lands in Primary; Resend/SendGrid often in Promotions
+      const gmailFirst = connList.find((c: any) => ['gmail', 'gmail_direct'].includes(c.provider));
       effectiveConnection = matchConnection
-        || connList.find((c: any) => ['resend', 'sendgrid', 'gmail_direct', 'gmail'].includes(c.provider))
+        || gmailFirst
+        || connList.find((c: any) => ['resend', 'sendgrid'].includes(c.provider))
         || connList[0];
     }
 
     const defaultProvider = businessProfile?.email_provider || 'resend';
     if (!effectiveConnection && connList.length === 0) {
       throw new Error('No active email connection. Add an email account in Settings > Integrations or Email Providers, then try again.');
+    }
+
+    // Daily send limit only for Gmail (500/day). Resend/SendGrid have no daily cap; 50 every 15 min applies to all.
+    const isGmail = effectiveConnection && ['gmail', 'gmail_direct'].includes(effectiveConnection.provider);
+    const batchSend = (newsletter as any).batch_send === true;
+    const isBatchMode = sendInBatches || batchSend;
+    let sentTodayForConnection = 0;
+    let dailySendLimit = 400;
+    if (!isTest && isBatchMode && effectiveConnection?.id && isGmail) {
+      const opts = (newsletter as any).scheduled_send_options as Record<string, unknown> | null;
+      dailySendLimit = dailySendLimitFromBody ?? (opts?.daily_send_limit != null ? Math.min(2000, Math.max(1, Number(opts.daily_send_limit) | 0)) : 400);
+      const now = new Date();
+      const startOfTodayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+      const { count } = await db.from('newsletter_sends').select('id', { count: 'exact', head: true }).eq('sender_connection_id', effectiveConnection.id).eq('status', 'sent').gte('sent_at', startOfTodayUTC);
+      sentTodayForConnection = count ?? 0;
+      if (continueBatch && sentTodayForConnection >= dailySendLimit) {
+        const startOfNextDayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString();
+        await db.from('newsletters').update({ batch_next_at: startOfNextDayUTC }).eq('id', newsletterId);
+        return new Response(
+          JSON.stringify({ success: true, continueBatch: true, dailyLimitReached: true, sent: 0, nextBatchAt: startOfNextDayUTC }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const maxCanSendToday = dailySendLimit - sentTodayForConnection;
+      if (targetSubscribers.length > maxCanSendToday) {
+        targetSubscribers = targetSubscribers.slice(0, maxCanSendToday);
+      }
     }
 
     const emailProvider = effectiveConnection?.provider || defaultProvider;
@@ -366,6 +509,7 @@ serve(async (req) => {
       : '';
 
     for (const subscriber of targetSubscribers) {
+      let sendRecord: { id: string } | null = null;
       try {
         const unsubscribeUrl = `${unsubscribeBaseUrl}?token=${subscriber.unsubscribe_token}`;
 
@@ -422,12 +566,12 @@ serve(async (req) => {
           .replace(/\[company\]/gi, subscriber.company || '');
 
         // Create send record (skip for test)
-        let sendRecord: { id: string } | null = null;
         if (!isTest) {
           const { data: sr } = await db.from('newsletter_sends').insert({
             newsletter_id: newsletterId,
             subscriber_id: subscriber.id,
             status: 'pending',
+            sender_connection_id: effectiveConnection?.id ?? null,
           }).select('id').single();
           sendRecord = sr;
         }
@@ -497,9 +641,15 @@ serve(async (req) => {
               body: JSON.stringify({
                 personalizations: [{ to: [{ email: subscriber.email }] }],
                 from: { email: fromEmail, name: senderName },
+                reply_to: { email: fromEmail, name: senderName },
                 subject: personalizedSubject,
                 content: [{ type: 'text/html', value: finalHtml }],
-                headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` },
+                headers: {
+                  'List-Unsubscribe': `<${unsubscribeUrl}>`,
+                  'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+                  'X-Priority': '3',
+                  'Importance': 'normal',
+                },
               }),
             });
             if (sgRes.ok || sgRes.status === 202) {
@@ -522,7 +672,13 @@ serve(async (req) => {
               to: [subscriber.email],
               subject: personalizedSubject,
               html: finalHtml,
-              headers: { 'List-Unsubscribe': unsubscribeUrl },
+              reply_to: fromEmail,
+              headers: {
+                'List-Unsubscribe': `<${unsubscribeUrl}>`,
+                'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+                'X-Priority': '3',
+                'Importance': 'normal',
+              },
             }),
           });
           if (resendRes.ok) {
@@ -551,17 +707,46 @@ serve(async (req) => {
           // For test send, surface the error so the user sees why it failed
           throw new Error(sendError?.message || 'Test send failed');
         }
+        if (sendRecord) {
+          await supabaseAdmin.from('newsletter_sends').update({
+            status: 'failed',
+            error_message: (sendError?.message || 'Send failed').slice(0, 500),
+          }).eq('id', sendRecord.id);
+        }
         failedCount++;
       }
     }
 
     // Update newsletter status (skip for test)
     if (!isTest) {
-      await db.from('newsletters').update({
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-        total_sent: sentCount,
-      }).eq('id', newsletterId);
+      const prevBatchSent = Math.max(0, Number((newsletter as any).batch_sent_count) | 0);
+      const newBatchSent = prevBatchSent + sentCount;
+      const totalExpected = batchSend ? (Number((newsletter as any).total_recipients) || totalRecipients) : totalRecipients;
+      const allBatchesDone = batchSend && newBatchSent >= totalExpected;
+      const sentTodayAfter = sentTodayForConnection + sentCount;
+      const hitDailyLimit = isBatchMode && isGmail && effectiveConnection?.id && sentTodayAfter >= dailySendLimit;
+      const nowForNext = new Date();
+      const nextBatchAt = allBatchesDone
+        ? null
+        : hitDailyLimit
+          ? new Date(Date.UTC(nowForNext.getUTCFullYear(), nowForNext.getUTCMonth(), nowForNext.getUTCDate() + 1)).toISOString()
+          : new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+      if (batchSend) {
+        await db.from('newsletters').update({
+          batch_sent_count: newBatchSent,
+          batch_next_at: allBatchesDone ? null : nextBatchAt,
+          status: allBatchesDone ? 'sent' : 'sending',
+          sent_at: allBatchesDone ? new Date().toISOString() : (newsletter as any).sent_at,
+          total_sent: newBatchSent,
+        }).eq('id', newsletterId);
+      } else {
+        await db.from('newsletters').update({
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+          total_sent: sentCount,
+        }).eq('id', newsletterId);
+      }
     } else if (sentCount > 0 && newsletter.status === 'sending') {
       // Unstick newsletter that was left in 'sending' after a failed run so test sends work next time
       await db.from('newsletters').update({ status: 'draft' }).eq('id', newsletterId);

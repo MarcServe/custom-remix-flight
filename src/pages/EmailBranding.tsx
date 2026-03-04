@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Save, Palette, Plus, Pencil, Trash2, Upload, X } from "lucide-react";
+import { Loader2, Save, Send, Palette, Plus, Pencil, Trash2, Upload, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -88,6 +88,9 @@ export default function EmailBranding() {
 
   const [senderProfileDialogOpen, setSenderProfileDialogOpen] = useState(false);
   const [editingSenderProfileId, setEditingSenderProfileId] = useState<string | null>(null);
+  const [profileTestEmail, setProfileTestEmail] = useState("");
+  const [sendingProfileTest, setSendingProfileTest] = useState(false);
+  const [profileTestConnectionId, setProfileTestConnectionId] = useState("");
   const [senderProfileForm, setSenderProfileForm] = useState({
     name: "",
     display_name: "",
@@ -235,6 +238,31 @@ export default function EmailBranding() {
     },
     enabled: !!user?.id,
   });
+
+  const { data: profileConnections = [] } = useQuery({
+    queryKey: ["crm-connections-email-branding", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("crm_connections")
+        .select("id, provider, from_email, status")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .in("provider", ["gmail", "gmail_direct", "resend", "sendgrid"]);
+      if (error) return [];
+      return (data || []).sort((a: { provider: string }, b: { provider: string }) => {
+        const r = (p: string) => (p === "gmail" || p === "gmail_direct" ? 0 : p === "resend" ? 1 : 2);
+        return r(a.provider) - r(b.provider);
+      });
+    },
+    enabled: !!user?.id && senderProfileDialogOpen,
+  });
+
+  useEffect(() => {
+    if (profileConnections.length > 0 && !profileTestConnectionId) {
+      setProfileTestConnectionId(profileConnections[0].id);
+    }
+  }, [profileConnections, profileTestConnectionId]);
 
   useEffect(() => {
     loadData();
@@ -517,6 +545,70 @@ export default function EmailBranding() {
       setSenderProfileDialogOpen(false);
     } catch (e: any) {
       toast({ title: "Error", description: e.message || "Failed to delete", variant: "destructive" });
+    }
+  };
+
+  const handleSendProfileTest = async () => {
+    const to = profileTestEmail.trim();
+    if (!to) {
+      toast({ title: "Enter an email", description: "Provide the address to send the test to.", variant: "destructive" });
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      toast({ title: "Invalid email", description: "Enter a valid email address.", variant: "destructive" });
+      return;
+    }
+    try {
+      setSendingProfileTest(true);
+      const signatureToSend = senderProfileForm.signature_use_structured
+        ? (buildStructuredSignatureHtml({
+            closing: senderProfileForm.signature_closing,
+            name: senderProfileForm.signature_name || senderProfileForm.sender_name,
+            title: senderProfileForm.sender_title,
+            company: senderProfileForm.signature_company,
+            phone: senderProfileForm.sender_phone,
+            email: senderProfileForm.sender_email,
+            website: senderProfileForm.website_url,
+            address: senderProfileForm.sender_address,
+            includeEmail: senderProfileForm.signature_show_email,
+          }) || undefined)
+        : (senderProfileForm.signature?.trim() || undefined);
+      const { data, error } = await supabase.functions.invoke("send-test-email", {
+        body: {
+          testEmail: to,
+          templateStyle: senderProfileForm.template_style || "professional",
+          brandColor: senderProfileForm.brand_color || "#8b5cf6",
+          logoUrl: senderProfileForm.logo_url || null,
+          companyName: senderProfileForm.display_name || senderProfileForm.signature_company || businessProfile.company_name || "",
+          footerText: senderProfileForm.footer_text || null,
+          signature: signatureToSend,
+          websiteUrl: senderProfileForm.website_url || null,
+          headerName: senderProfileForm.display_name || null,
+          senderName: senderProfileForm.sender_name || senderProfileForm.display_name || null,
+          signatureName: senderProfileForm.signature_name || null,
+          senderEmail: senderProfileForm.sender_email || null,
+          senderTitle: senderProfileForm.sender_title || null,
+          senderImageUrl: senderProfileForm.sender_image_url || null,
+          footerImageUrl: senderProfileForm.footer_logo_url || senderProfileForm.logo_url || null,
+          senderConnectionId: profileTestConnectionId || undefined,
+        },
+      });
+      if (error) {
+        let msg = (data as any)?.error ?? error?.message ?? "Failed to send test";
+        const ctx = (error as { context?: Response })?.context;
+        if (ctx && typeof (ctx as Response).json === "function") {
+          try {
+            const body = await (ctx as Response).json();
+            if (body?.error) msg = body.error;
+          } catch (_) {}
+        }
+        throw new Error(msg);
+      }
+      toast({ title: "Test sent", description: `Check ${to} for the test email.` });
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message || "Failed to send test", variant: "destructive" });
+    } finally {
+      setSendingProfileTest(false);
     }
   };
 
@@ -1187,9 +1279,9 @@ export default function EmailBranding() {
                     <Input
                       value={senderProfileForm.sender_name}
                       onChange={(e) => setSenderProfileForm((f) => ({ ...f, sender_name: e.target.value }))}
-                      placeholder="e.g. Sales Team"
+                      placeholder="e.g. Michael Orji"
                     />
-                    <p className="text-xs text-muted-foreground">Name shown as the sender (From line). Independent of the signature name below.</p>
+                    <p className="text-xs text-muted-foreground">Name shown in the inbox (From line). Use a real person&apos;s name to help land in Primary instead of Promotions.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Signature name</Label>
@@ -1319,6 +1411,45 @@ export default function EmailBranding() {
                   <p className="text-xs text-muted-foreground mt-1">Optional. Overrides the structured signature when you save.</p>
                 </TabsContent>
               </Tabs>
+            </div>
+
+            {/* Send test email from this profile */}
+            <div className="space-y-3 rounded-lg border p-4 bg-muted/20">
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <Send className="h-4 w-4 text-primary" />
+                Send test email
+              </h4>
+              <p className="text-xs text-muted-foreground">Preview how this profile looks in the inbox. Uses the branding above.</p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  type="email"
+                  placeholder="test@example.com"
+                  value={profileTestEmail}
+                  onChange={(e) => setProfileTestEmail(e.target.value)}
+                  className="flex-1"
+                />
+                {profileConnections.length > 1 && (
+                  <Select value={profileTestConnectionId || profileConnections[0]?.id} onValueChange={setProfileTestConnectionId}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Send from" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {profileConnections.map((conn: { id: string; provider: string; from_email?: string }) => (
+                        <SelectItem key={conn.id} value={conn.id}>
+                          {conn.provider === "gmail" || conn.provider === "gmail_direct" ? "Gmail" : conn.provider === "resend" ? "Resend" : conn.provider === "sendgrid" ? "SendGrid" : conn.provider} · {(conn.from_email || "").trim() || "—"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <Button type="button" variant="secondary" onClick={handleSendProfileTest} disabled={sendingProfileTest || profileConnections.length === 0}>
+                  {sendingProfileTest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {sendingProfileTest ? " Sending…" : " Send test"}
+                </Button>
+              </div>
+              {profileConnections.length === 0 && (
+                <p className="text-xs text-amber-600">Add an email account in Settings → Email Providers to send tests.</p>
+              )}
             </div>
 
             {/* In-dialog preview: see template before saving */}

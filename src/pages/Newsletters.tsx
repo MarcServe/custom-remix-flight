@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,9 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "react-router-dom";
@@ -46,6 +49,10 @@ type Newsletter = {
   created_at: string;
   updated_at: string;
   scheduled_send_options?: Record<string, unknown> | null;
+  batch_send?: boolean | null;
+  batch_size?: number | null;
+  batch_sent_count?: number | null;
+  batch_next_at?: string | null;
 };
 
 type Category = {
@@ -68,6 +75,80 @@ type Subscriber = {
 };
 
 type ViewMode = "list" | "editor" | "subscribers";
+
+/** Default timezone for displaying dates/times (London). */
+const DEFAULT_TIMEZONE = "Europe/London";
+function formatInLondon(date: Date | string, options?: Intl.DateTimeFormatOptions): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleString(undefined, { timeZone: DEFAULT_TIMEZONE, ...options });
+}
+function formatDateInLondon(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleDateString(undefined, { timeZone: DEFAULT_TIMEZONE });
+}
+
+/** Placeholder / fake domains that are not real inboxes. Helps avoid bounces and protect sender reputation. */
+const PLACEHOLDER_DOMAINS = new Set([
+  "domain.com", "domain.org", "domain.net", "example.com", "example.org", "example.net", "example.edu", "example.co",
+  "test.com", "test.org", "test.net", "test.co", "email.com", "sample.com", "abc.xyz", "foo.com", "bar.com", "user.com",
+  "placeholder.com", "fake.com", "mail.test",
+  "yopmail.com", "mailinator.com", "guerrillamail.com", "tempmail.com", "throwaway.email", "10minutemail.com",
+]);
+
+/** Placeholder local parts that often indicate fake/example addresses when combined with a fake-looking domain. */
+const PLACEHOLDER_LOCAL_PARTS = new Set([
+  "name", "email", "user", "test", "example", "ex", "sample", "demo", "foo", "bar", "contact", "info", "admin",
+  "noreply", "no-reply", "donotreply", "mailer-daemon",
+]);
+
+/** Domain looks like a placeholder (example/test/domain/sample/fake in the domain name). */
+function isPlaceholderLikeDomain(domain: string): boolean {
+  const d = domain.toLowerCase();
+  return /example|^test\.|\.test\.|domain\.|sample\.|fake\.|placeholder\.|^email\.|^user\./.test(d) || PLACEHOLDER_DOMAINS.has(d);
+}
+
+/** Validation: format, no file-extension domains, no placeholder domains, no placeholder local+domain combos. */
+function isValidNewsletterEmail(email: string): boolean {
+  const e = (email || "").trim().toLowerCase();
+  if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return false;
+  const [local, domain] = e.split("@");
+  const dom = (domain || "").toLowerCase();
+  // File-extension-style domains (stretch.png, 1x.svg, orange-arrow-tall@1x.svg, etc.)
+  const fileExtTld = /\.(png|jpeg|jpg|gif|pdf|doc|docx|xls|xlsx|txt|html|css|js|zip|exe|svg|webp|bmp|ico|mov|mp4|wav)$/i;
+  if (fileExtTld.test(dom)) return false;
+  // Known placeholder / fake domains (Name@domain.com, ex@abc.xyz, etc.)
+  if (PLACEHOLDER_DOMAINS.has(dom)) return false;
+  // Placeholder local part + placeholder-like domain (name@..., test@..., ex@... on example/test/domain-style domains)
+  if (PLACEHOLDER_LOCAL_PARTS.has((local || "").toLowerCase()) && isPlaceholderLikeDomain(dom)) return false;
+  return true;
+}
+
+/** Split "a@x.com, b@y.com" into ["a@x.com", "b@y.com"] (trimmed, no empty). */
+function parseCommaSeparatedEmails(value: string): string[] {
+  return (value || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => s.length > 0);
+}
+
+/** Row is invalid if it contains at least one invalid email (when split by comma). All valid = not invalid. */
+function isSubscriberEmailInvalid(email: string): boolean {
+  const parts = parseCommaSeparatedEmails(email);
+  if (parts.length === 0) return true;
+  return parts.some((p) => !isValidNewsletterEmail(p));
+}
+
+/** Row has multiple emails on one line (should be split so each email is on its own row). */
+function hasMultipleEmailsOnOneLine(email: string): boolean {
+  const parts = parseCommaSeparatedEmails(email);
+  return parts.length > 1;
+}
+
+/** Row has at least one valid email (useful for mixed valid/invalid rows — split to keep valid only). */
+function hasAtLeastOneValidEmail(email: string): boolean {
+  const parts = parseCommaSeparatedEmails(email);
+  return parts.some((p) => isValidNewsletterEmail(p));
+}
 
 export default function Newsletters() {
   const { toast } = useToast();
@@ -131,6 +212,12 @@ export default function Newsletters() {
   const [importSelectedIds, setImportSelectedIds] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
   const [showImportFromGroupDialog, setShowImportFromGroupDialog] = useState(false);
+  const [showConfirmCleanInvalid, setShowConfirmCleanInvalid] = useState(false);
+  const [showConfirmCleanFailed, setShowConfirmCleanFailed] = useState(false);
+  const [showConfirmSplitMulti, setShowConfirmSplitMulti] = useState(false);
+  const [cleaningInvalid, setCleaningInvalid] = useState(false);
+  const [cleaningFailed, setCleaningFailed] = useState(false);
+  const [splittingMulti, setSplittingMulti] = useState(false);
   const [importFromGroupCategoryIds, setImportFromGroupCategoryIds] = useState<string[]>([]);
   const [importingFromGroup, setImportingFromGroup] = useState(false);
 
@@ -139,6 +226,9 @@ export default function Newsletters() {
   const [sendTargets, setSendTargets] = useState<string[]>([]); // ["all"] or ["cat:id", "group:id", "industry:Name", ...] (multiple allowed)
   const [sendTagIds, setSendTagIds] = useState<string[]>([]); // optional tags (categories) to narrow
   const [sendScheduleLater, setSendScheduleLater] = useState(false);
+  const [sendInBatches, setSendInBatches] = useState(false);
+  const [dailySendLimit, setDailySendLimit] = useState(400);
+  const [sendNextBatchCount, setSendNextBatchCount] = useState(200);
   const [sendDialogScheduleDateTime, setSendDialogScheduleDateTime] = useState("");
 
   // Send test dialog
@@ -153,7 +243,7 @@ export default function Newsletters() {
   const [cancellingSchedule, setCancellingSchedule] = useState(false);
 
   // Recipients dialog (view who received / will receive a newsletter)
-  type RecipientRow = { email: string; first_name: string | null; last_name: string | null; company: string | null; status?: string; sent_at?: string | null };
+  type RecipientRow = { email: string; first_name: string | null; last_name: string | null; company: string | null; status?: string; sent_at?: string | null; subscriber_id?: string };
   const [recipientsDialogNewsletter, setRecipientsDialogNewsletter] = useState<Newsletter | null>(null);
   const [recipientsDialogList, setRecipientsDialogList] = useState<RecipientRow[]>([]);
   const [recipientsDialogLoading, setRecipientsDialogLoading] = useState(false);
@@ -175,6 +265,31 @@ export default function Newsletters() {
       if (error) throw error;
       return (data || []) as Newsletter[];
     },
+    refetchInterval: (query) => {
+      const list = query.state.data as Newsletter[] | undefined;
+      const hasSending = list?.some((n: Newsletter) => n.status === "sending");
+      return hasSending ? 60 * 1000 : false;
+    },
+  });
+
+  const { data: sentCountByNewsletterId = {} } = useQuery({
+    queryKey: ["newsletter-sent-counts", newsletters.length, newsletters.map((n) => n.id).sort().join(",")],
+    queryFn: async () => {
+      if (newsletters.length === 0) return {};
+      const ids = newsletters.map((n) => n.id);
+      const { data, error } = await supabase
+        .from("newsletter_sends")
+        .select("newsletter_id")
+        .eq("status", "sent")
+        .in("newsletter_id", ids);
+      if (error) return {};
+      const count: Record<string, number> = {};
+      (data || []).forEach((r: { newsletter_id: string }) => {
+        count[r.newsletter_id] = (count[r.newsletter_id] ?? 0) + 1;
+      });
+      return count;
+    },
+    enabled: newsletters.length > 0,
   });
 
   const { data: categories = [], isLoading: loadingCategories } = useQuery({
@@ -205,6 +320,20 @@ export default function Newsletters() {
       if (error) throw error;
       return (data || []) as Subscriber[];
     },
+  });
+
+  const { data: failedSubscriberIds = [] } = useQuery({
+    queryKey: ["newsletter-failed-subscriber-ids"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("newsletter_sends")
+        .select("subscriber_id")
+        .eq("status", "failed");
+      if (error) return [];
+      const ids = [...new Set((data || []).map((r: { subscriber_id: string }) => r.subscriber_id))];
+      return ids as string[];
+    },
+    enabled: view === "subscribers",
   });
 
   const { data: senderProfiles = [] } = useQuery({
@@ -268,11 +397,24 @@ export default function Newsletters() {
     enabled: view === "editor" || showTestDialog || showSendDialog,
   });
 
+  // Prefer Gmail first (typically Inbox); Resend/SendGrid often land in Promotions
+  const connectionsForSend = useMemo(() => {
+    const list = [...connections];
+    const rank = (p: string) => (p === "gmail" || p === "gmail_direct" ? 0 : p === "resend" ? 1 : p === "sendgrid" ? 2 : 3);
+    return list.sort((a: { provider: string }, b: { provider: string }) => rank(a.provider) - rank(b.provider));
+  }, [connections]);
+
   useEffect(() => {
-    if (connections.length > 0 && !senderConnectionId) {
-      setSenderConnectionId(connections[0].id);
+    if (connectionsForSend.length > 0 && !senderConnectionId) {
+      setSenderConnectionId(connectionsForSend[0].id);
     }
-  }, [connections, senderConnectionId]);
+  }, [connectionsForSend, senderConnectionId]);
+
+  const isGmailSendConnection = useMemo(() => {
+    const id = senderConnectionId || (connectionsForSend[0] as { id: string; provider: string } | undefined)?.id;
+    const conn = connectionsForSend.find((c: { id: string; provider: string }) => c.id === id);
+    return conn ? ["gmail", "gmail_direct"].includes(conn.provider) : false;
+  }, [senderConnectionId, connectionsForSend]);
 
   const { data: newsletterCategoryMap = {} } = useQuery({
     queryKey: ["newsletter-target-categories", editingId],
@@ -377,30 +519,33 @@ export default function Newsletters() {
       let imported = 0;
       for (const m of members as { email: string; first_name: string | null; last_name: string | null; company: string | null }[]) {
         if (!m.email) continue;
-        const { data: sub, error: insertError } = await supabase
-          .from("newsletter_subscribers")
-          .upsert({
-            user_id: user.id,
-            email: m.email.toLowerCase(),
-            first_name: m.first_name || null,
-            last_name: m.last_name || null,
-            company: m.company || null,
-            source: "recipient_group",
-          }, { onConflict: "user_id,email" })
-          .select("id")
-          .single();
-        if (!insertError && sub && importFromGroupCategoryIds.length > 0) {
-          for (const catId of importFromGroupCategoryIds) {
-            await supabase.from("newsletter_subscriber_categories").upsert({ subscriber_id: sub.id, category_id: catId }, { onConflict: "subscriber_id,category_id" });
+        const emails = [...new Set(parseCommaSeparatedEmails(m.email).filter(isValidNewsletterEmail))];
+        for (const email of emails) {
+          const { data: sub, error: insertError } = await supabase
+            .from("newsletter_subscribers")
+            .upsert({
+              user_id: user.id,
+              email,
+              first_name: m.first_name || null,
+              last_name: m.last_name || null,
+              company: m.company || null,
+              source: "recipient_group",
+            }, { onConflict: "user_id,email" })
+            .select("id")
+            .single();
+          if (!insertError && sub && importFromGroupCategoryIds.length > 0) {
+            for (const catId of importFromGroupCategoryIds) {
+              await supabase.from("newsletter_subscriber_categories").upsert({ subscriber_id: sub.id, category_id: catId }, { onConflict: "subscriber_id,category_id" });
+            }
           }
+          if (!insertError) imported++;
         }
-        if (!insertError) imported++;
       }
       queryClient.invalidateQueries({ queryKey: ["newsletter-subscribers"] });
       queryClient.invalidateQueries({ queryKey: ["subscriber-categories-map"] });
       setShowImportFromGroupDialog(false);
       setImportFromGroupCategoryIds([]);
-      toast({ title: "Imported", description: `${imported} subscribers added from group for newsletter grouping.` });
+      toast({ title: "Imported", description: `${imported} subscribers added from group (one per valid email).` });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -720,22 +865,30 @@ Return ONLY the HTML body content.`,
   const handleAddSubscriber = async () => {
     if (!user || !subscriberEmail.trim()) return;
     try {
-      const { data, error } = await supabase.from("newsletter_subscribers").insert({
-        user_id: user.id,
-        email: subscriberEmail.trim().toLowerCase(),
-        first_name: subscriberFirstName.trim() || null,
-        last_name: subscriberLastName.trim() || null,
-        company: subscriberCompany.trim() || null,
-        source: "manual",
-      }).select("id").single();
-      if (error) throw error;
-
-      if (subscriberCategoryIds.length > 0 && data) {
-        await supabase.from("newsletter_subscriber_categories").insert(
-          subscriberCategoryIds.map(cid => ({ subscriber_id: data.id, category_id: cid }))
-        );
+      const emails = [...new Set(parseCommaSeparatedEmails(subscriberEmail).filter(isValidNewsletterEmail))];
+      if (emails.length === 0) {
+        toast({ title: "No valid emails", description: "Enter at least one valid email address.", variant: "destructive" });
+        return;
       }
-
+      let added = 0;
+      for (const email of emails) {
+        const { data, error } = await supabase.from("newsletter_subscribers").upsert({
+          user_id: user.id,
+          email,
+          first_name: subscriberFirstName.trim() || null,
+          last_name: subscriberLastName.trim() || null,
+          company: subscriberCompany.trim() || null,
+          source: "manual",
+        }, { onConflict: "user_id,email" }).select("id").single();
+        if (error) throw error;
+        if (data && subscriberCategoryIds.length > 0) {
+          await supabase.from("newsletter_subscriber_categories").upsert(
+            subscriberCategoryIds.map(cid => ({ subscriber_id: data.id, category_id: cid })),
+            { onConflict: "subscriber_id,category_id" }
+          );
+        }
+        added++;
+      }
       queryClient.invalidateQueries({ queryKey: ["newsletter-subscribers"] });
       queryClient.invalidateQueries({ queryKey: ["subscriber-categories-map"] });
       setShowAddSubscriberDialog(false);
@@ -744,7 +897,7 @@ Return ONLY the HTML body content.`,
       setSubscriberLastName("");
       setSubscriberCompany("");
       setSubscriberCategoryIds([]);
-      toast({ title: "Added", description: "Subscriber added." });
+      toast({ title: "Added", description: added === 1 ? "Subscriber added." : `${added} subscribers added (one per email).` });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -754,6 +907,103 @@ Return ONLY the HTML body content.`,
     if (!confirm("Remove this subscriber?")) return;
     await supabase.from("newsletter_subscribers").delete().eq("id", id);
     queryClient.invalidateQueries({ queryKey: ["newsletter-subscribers"] });
+  };
+
+  const invalidSubscribers = useMemo(() => subscribers.filter(s => isSubscriberEmailInvalid(s.email)), [subscribers]);
+  const multiEmailSubscribers = useMemo(
+    () => subscribers.filter(s => hasMultipleEmailsOnOneLine(s.email)),
+    [subscribers]
+  );
+  const failedSubscribersToRemove = useMemo(() => {
+    const set = new Set(failedSubscriberIds);
+    return subscribers.filter(s => set.has(s.id));
+  }, [subscribers, failedSubscriberIds]);
+
+  const handleCleanInvalidEmails = async () => {
+    if (invalidSubscribers.length === 0) return;
+    setCleaningInvalid(true);
+    try {
+      for (const sub of invalidSubscribers) {
+        await supabase.from("newsletter_subscribers").delete().eq("id", sub.id);
+      }
+      queryClient.invalidateQueries({ queryKey: ["newsletter-subscribers"] });
+      queryClient.invalidateQueries({ queryKey: ["subscriber-categories-map"] });
+      setShowConfirmCleanInvalid(false);
+      toast({ title: "List cleaned", description: `Removed ${invalidSubscribers.length} invalid email(s).` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message || "Failed to remove invalid emails", variant: "destructive" });
+    } finally {
+      setCleaningInvalid(false);
+    }
+  };
+
+  const handleCleanFailedEmails = async () => {
+    if (failedSubscribersToRemove.length === 0) return;
+    setCleaningFailed(true);
+    try {
+      for (const sub of failedSubscribersToRemove) {
+        await supabase.from("newsletter_subscribers").delete().eq("id", sub.id);
+      }
+      queryClient.invalidateQueries({ queryKey: ["newsletter-subscribers"] });
+      queryClient.invalidateQueries({ queryKey: ["subscriber-categories-map"] });
+      queryClient.invalidateQueries({ queryKey: ["newsletter-failed-subscriber-ids"] });
+      setShowConfirmCleanFailed(false);
+      toast({ title: "List cleaned", description: `Removed ${failedSubscribersToRemove.length} subscriber(s) with failed sends.` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message || "Failed to remove failed subscribers", variant: "destructive" });
+    } finally {
+      setCleaningFailed(false);
+    }
+  };
+
+  const handleSplitMultiEmailRows = async () => {
+    if (!user || multiEmailSubscribers.length === 0) return;
+    setSplittingMulti(true);
+    try {
+      let rowsSplit = 0;
+      let newEmailsCreated = 0;
+      for (const sub of multiEmailSubscribers) {
+        const emails = [...new Set(parseCommaSeparatedEmails(sub.email).filter(isValidNewsletterEmail))];
+        for (const email of emails) {
+          const { data: newSub, error: upsertErr } = await supabase
+            .from("newsletter_subscribers")
+            .upsert(
+              {
+                user_id: user.id,
+                email,
+                first_name: sub.first_name ?? null,
+                last_name: sub.last_name ?? null,
+                company: sub.company ?? null,
+                industry: sub.industry ?? null,
+                source: sub.source,
+              },
+              { onConflict: "user_id,email" }
+            )
+            .select("id")
+            .single();
+          if (!upsertErr && newSub) {
+            newEmailsCreated++;
+            const catIds = subscriberCategoryMap[sub.id] || [];
+            for (const catId of catIds) {
+              await supabase.from("newsletter_subscriber_categories").upsert(
+                { subscriber_id: newSub.id, category_id: catId },
+                { onConflict: "subscriber_id,category_id" }
+              );
+            }
+          }
+        }
+        await supabase.from("newsletter_subscribers").delete().eq("id", sub.id);
+        rowsSplit++;
+      }
+      queryClient.invalidateQueries({ queryKey: ["newsletter-subscribers"] });
+      queryClient.invalidateQueries({ queryKey: ["subscriber-categories-map"] });
+      setShowConfirmSplitMulti(false);
+      toast({ title: "Split complete", description: `${rowsSplit} row(s) split into separate emails (${newEmailsCreated} total addresses).` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message || "Failed to split rows", variant: "destructive" });
+    } finally {
+      setSplittingMulti(false);
+    }
   };
 
   const runImportPeople = async (toImport: { email: string; first_name: string | null; last_name: string | null; company_id: string | null; companies?: { name: string | null; industry: string | null } | null }[]) => {
@@ -773,26 +1023,29 @@ Return ONLY the HTML body content.`,
       const companyInfo = p.company_id ? companyMap[p.company_id] : null;
       const companyName = companyInfo?.name ?? (p.companies as any)?.name ?? null;
       const industry = companyInfo?.industry ?? (p.companies as any)?.industry ?? null;
-      const { data: sub, error: insertError } = await supabase
-        .from("newsletter_subscribers")
-        .upsert({
-          user_id: user.id,
-          email: p.email.toLowerCase(),
-          first_name: p.first_name || null,
-          last_name: p.last_name || null,
-          company: companyName,
-          industry: industry || null,
-          source: "crm",
-        }, { onConflict: "user_id,email" })
-        .select("id")
-        .single();
-      if (!insertError && sub && importCategoryIds.length > 0) {
-        for (const catId of importCategoryIds) {
-          await supabase.from("newsletter_subscriber_categories")
-            .upsert({ subscriber_id: sub.id, category_id: catId }, { onConflict: "subscriber_id,category_id" });
+      const emails = [...new Set(parseCommaSeparatedEmails(p.email).filter(isValidNewsletterEmail))];
+      for (const email of emails) {
+        const { data: sub, error: insertError } = await supabase
+          .from("newsletter_subscribers")
+          .upsert({
+            user_id: user.id,
+            email: email.toLowerCase(),
+            first_name: p.first_name || null,
+            last_name: p.last_name || null,
+            company: companyName,
+            industry: industry || null,
+            source: "crm",
+          }, { onConflict: "user_id,email" })
+          .select("id")
+          .single();
+        if (!insertError && sub && importCategoryIds.length > 0) {
+          for (const catId of importCategoryIds) {
+            await supabase.from("newsletter_subscriber_categories")
+              .upsert({ subscriber_id: sub.id, category_id: catId }, { onConflict: "subscriber_id,category_id" });
+          }
         }
+        if (!insertError) imported++;
       }
-      if (!insertError) imported++;
     }
     return imported;
   };
@@ -868,27 +1121,69 @@ Return ONLY the HTML body content.`,
 
   const handleSendNewsletter = async () => {
     if (!user) return;
-    try {
-      setSending(true);
-      const id = await handleSaveNewsletter();
-      if (!id) return;
-
-      const payload = buildSendAudiencePayload();
-      const { data, error } = await supabase.functions.invoke("send-newsletter", {
-        body: { newsletterId: id, ...payload },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      queryClient.invalidateQueries({ queryKey: ["newsletters"] });
-      queryClient.invalidateQueries({ queryKey: ["newsletter-subscribers"] });
-      setShowSendDialog(false);
-      toast({ title: "Sending", description: `Newsletter queued for ${data?.recipientCount ?? data?.sent ?? 0} recipients.` });
-    } catch (err: any) {
-      toast({ title: "Send Error", description: err.message, variant: "destructive" });
-    } finally {
+    setSending(true);
+    const id = await handleSaveNewsletter();
+    if (!id) {
       setSending(false);
+      return;
     }
+
+    const payload = buildSendAudiencePayload();
+    const currentNewsletter = newsletters.find((n) => n.id === id);
+    const isAlreadySending = currentNewsletter?.status === "sending";
+    const effectiveConnectionId = senderConnectionId || (connectionsForSend[0] as { id: string } | undefined)?.id;
+    const sendPromise = supabase.functions.invoke("send-newsletter", {
+      body: {
+        newsletterId: id,
+        ...payload,
+        sender_connection_id: effectiveConnectionId || undefined,
+        sendInBatches: sendInBatches,
+        batchSize: isAlreadySending ? Math.max(1, Math.min(10000, sendNextBatchCount || 200)) : (sendInBatches ? 50 : undefined),
+        dailySendLimit: sendInBatches && isGmailSendConnection ? dailySendLimit : undefined,
+        continueBatch: isAlreadySending,
+      },
+    });
+
+    // Close dialog and let send run in background; progress on newsletter list and View recipients
+    setShowSendDialog(false);
+    setSending(false);
+    toast({
+      title: "Sending in background",
+      description: "You can keep working. Progress on the newsletter card; use View recipients for details. We'll notify you if something goes wrong.",
+    });
+
+    sendPromise
+      .then(async ({ data, error }) => {
+        queryClient.invalidateQueries({ queryKey: ["newsletters"] });
+        queryClient.invalidateQueries({ queryKey: ["newsletter-subscribers"] });
+        if (error) {
+          let msg: string = (data as any)?.error ?? (error as Error)?.message ?? "Edge function error";
+          const ctx = (error as { context?: Response })?.context;
+          if (ctx && typeof (ctx as Response).json === "function") {
+            try {
+              const body = await (ctx as Response).json();
+              if (body && typeof body === "object" && typeof body.error === "string") msg = body.error;
+            } catch (_) {}
+          }
+          toast({ title: "Newsletter send failed", description: msg, variant: "destructive" });
+          return;
+        }
+        if (data?.error) {
+          toast({ title: "Newsletter send failed", description: data.error, variant: "destructive" });
+          return;
+        }
+        const sent = data?.sent ?? data?.recipientCount ?? 0;
+        const batchNote = isAlreadySending
+          ? " Only not-yet-sent recipients were included."
+          : sendInBatches
+            ? " First 50 sent; next 50 every 15 min (see newsletter card for progress)."
+            : "";
+        toast({ title: "Batch sent", description: `Sent to ${sent} recipients.${batchNote}` });
+      })
+      .catch((err: any) => {
+        queryClient.invalidateQueries({ queryKey: ["newsletters"] });
+        toast({ title: "Newsletter send failed", description: err?.message ?? "Send failed", variant: "destructive" });
+      });
   };
 
   const handleScheduleNewsletter = async (opts?: { scheduled_send_options?: Record<string, unknown> }) => {
@@ -922,7 +1217,7 @@ Return ONLY the HTML body content.`,
         setSendScheduleLater(false);
         setSendDialogScheduleDateTime("");
       }
-      toast({ title: "Scheduled", description: `Newsletter will send at ${at.toLocaleString()}.` });
+      toast({ title: "Scheduled", description: `Newsletter will send at ${formatInLondon(at)}.` });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -976,7 +1271,88 @@ Return ONLY the HTML body content.`,
     setRecipientsDialogList([]);
     setRecipientsDialogLoading(true);
     try {
-      if (nl.status === "sent") {
+      const opts = (nl.scheduled_send_options || {}) as Record<string, unknown>;
+      const sendToAllActive = opts.sendToAllActive === true;
+      const categoryFilters = (opts.categoryFilters as string[] || []).filter(Boolean);
+      const recipientGroupIds = (opts.recipientGroupIds as string[] || []).filter(Boolean);
+      const industryFilter = ((opts.industryFilter as string[] || []) as string[]).map((i: string) => String(i).trim().toLowerCase()).filter(Boolean);
+
+      const hasStoredAudience = sendToAllActive || recipientGroupIds.length > 0 || categoryFilters.length > 0 || industryFilter.length > 0;
+      // For "sending" (batch) or "sent" with stored audience: show full audience with Sent vs Pending
+      if ((nl.status === "sending") || (nl.status === "sent" && hasStoredAudience)) {
+        const { data: sends } = await supabase
+          .from("newsletter_sends")
+          .select("subscriber_id, sent_at, status")
+          .eq("newsletter_id", nl.id);
+        const sendMap: Record<string, { status: string; sent_at: string | null }> = {};
+        (sends || []).forEach((s: any) => {
+          sendMap[s.subscriber_id] = { status: s.status || "sent", sent_at: s.sent_at ?? null };
+        });
+
+        // Resolve full audience (same as draft/scheduled) so we can show Sent vs Pending
+        let fullList: RecipientRow[] = [];
+        if (recipientGroupIds.length > 0) {
+          const groupEmails = new Map<string, { email: string; first_name: string | null; last_name: string | null; company: string | null }>();
+          for (const gid of recipientGroupIds) {
+            const { data: members } = await supabase.from("recipient_group_members").select("email, first_name, last_name, company").eq("group_id", gid);
+            (members || []).forEach((m: any) => {
+              const email = m.email ? String(m.email).trim().toLowerCase() : "";
+              if (email && !groupEmails.has(email)) groupEmails.set(email, { email, first_name: m.first_name ?? null, last_name: m.last_name ?? null, company: m.company ?? null });
+            });
+          }
+          const emails = [...groupEmails.keys()];
+          const { data: subsByEmail } = await supabase.from("newsletter_subscribers").select("id, email, first_name, last_name, company").eq("user_id", user?.id ?? "").eq("status", "active");
+          const emailToSub = Object.fromEntries(((subsByEmail || []) as { id: string; email: string }[]).map(s => [s.email.trim().toLowerCase(), s]));
+          fullList = Array.from(groupEmails.entries()).map(([email, info]) => {
+            const sub = emailToSub[email];
+            return {
+              email: info.email,
+              first_name: info.first_name,
+              last_name: info.last_name,
+              company: info.company,
+              subscriber_id: sub?.id,
+              status: sub ? (sendMap[sub.id]?.status ?? "pending") : "pending",
+              sent_at: sub ? (sendMap[sub.id]?.sent_at ?? null) : null,
+            };
+          });
+          if (sendToAllActive) {
+            const inGroup = new Set(emails);
+            const onlyInSubs = activeSubscribers.filter(s => !inGroup.has(s.email.trim().toLowerCase())).map(s => ({
+              email: s.email,
+              first_name: s.first_name,
+              last_name: s.last_name,
+              company: s.company,
+              subscriber_id: s.id,
+              status: sendMap[s.id]?.status ?? "pending",
+              sent_at: sendMap[s.id]?.sent_at ?? null,
+            }));
+            fullList = [...fullList, ...onlyInSubs];
+          }
+        } else {
+          let subset = activeSubscribers;
+          if (categoryFilters.length > 0 || industryFilter.length > 0) {
+            const ids = new Set<string>();
+            if (categoryFilters.length > 0) activeSubscribers.forEach(s => { if ((subscriberCategoryMap[s.id] || []).some((c: string) => categoryFilters.includes(c))) ids.add(s.id); });
+            if (industryFilter.length > 0) activeSubscribers.forEach(s => { const ind = (s as Subscriber).industry?.trim().toLowerCase(); if (ind && industryFilter.includes(ind)) ids.add(s.id); });
+            subset = activeSubscribers.filter(s => ids.has(s.id));
+          } else if (!sendToAllActive) {
+            const { data: targetCats } = await supabase.from("newsletter_target_categories").select("category_id").eq("newsletter_id", nl.id);
+            const targetIds = (targetCats || []).map((c: any) => c.category_id);
+            if (targetIds.length > 0) subset = activeSubscribers.filter(s => (subscriberCategoryMap[s.id] || []).some((cid: string) => targetIds.includes(cid)));
+          }
+          fullList = subset.map(s => ({
+            email: s.email,
+            first_name: s.first_name,
+            last_name: s.last_name,
+            company: s.company,
+            subscriber_id: s.id,
+            status: sendMap[s.id]?.status ?? "pending",
+            sent_at: sendMap[s.id]?.sent_at ?? null,
+          }));
+        }
+        setRecipientsDialogList(fullList);
+      } else if (nl.status === "sent") {
+        // Sent without stored audience (non-batch): load only from newsletter_sends
         const { data: sends, error: sendsError } = await supabase
           .from("newsletter_sends")
           .select("subscriber_id, sent_at, status")
@@ -1218,7 +1594,7 @@ Return ONLY the HTML body content.`,
           </Card>
 
           {/* Subscriber actions */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button onClick={() => setShowAddSubscriberDialog(true)}>
               <UserPlus className="h-4 w-4 mr-1.5" />Add Subscriber
             </Button>
@@ -1228,6 +1604,21 @@ Return ONLY the HTML body content.`,
             <Button variant="outline" onClick={() => setShowImportFromGroupDialog(true)} disabled={recipientGroups.length === 0}>
               <FolderInput className="h-4 w-4 mr-1.5" />Import from group
             </Button>
+            {invalidSubscribers.length > 0 && (
+              <Button variant="outline" onClick={() => setShowConfirmCleanInvalid(true)} className="text-amber-600 border-amber-300 hover:bg-amber-50">
+                Remove invalid ({invalidSubscribers.length})
+              </Button>
+            )}
+            {failedSubscribersToRemove.length > 0 && (
+              <Button variant="outline" onClick={() => setShowConfirmCleanFailed(true)} className="text-red-600 border-red-300 hover:bg-red-50">
+                Remove failed / bounced ({failedSubscribersToRemove.length})
+              </Button>
+            )}
+            {multiEmailSubscribers.length > 0 && (
+              <Button variant="outline" onClick={() => setShowConfirmSplitMulti(true)} className="text-blue-600 border-blue-300 hover:bg-blue-50">
+                Split to one per line ({multiEmailSubscribers.length})
+              </Button>
+            )}
           </div>
 
           {/* Subscriber list */}
@@ -1242,8 +1633,20 @@ Return ONLY the HTML body content.`,
                   {subscribers.map(sub => (
                     <div key={sub.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/50">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm truncate">{sub.email}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm break-all">
+                            {hasMultipleEmailsOnOneLine(sub.email)
+                              ? parseCommaSeparatedEmails(sub.email).map((e, i) => <span key={i}>{e}<br /></span>)
+                              : sub.email}
+                          </span>
+                          {isSubscriberEmailInvalid(sub.email) && (
+                            <Badge variant="outline" className="text-[10px] h-5 text-amber-600 border-amber-400">Invalid</Badge>
+                          )}
+                          {hasMultipleEmailsOnOneLine(sub.email) && (
+                            <Badge variant="outline" className="text-[10px] h-5 text-blue-600 border-blue-400">
+                              {isSubscriberEmailInvalid(sub.email) && hasAtLeastOneValidEmail(sub.email) ? "Multiple · split to keep valid" : "Multiple"}
+                            </Badge>
+                          )}
                           <Badge variant={sub.status === "active" ? "default" : "destructive"} className="text-[10px] h-5">{sub.status}</Badge>
                           <Badge variant="outline" className="text-[10px] h-5">{sub.source}</Badge>
                         </div>
@@ -1263,6 +1666,66 @@ Return ONLY the HTML body content.`,
               )}
             </CardContent>
           </Card>
+
+          {/* Confirm: Remove invalid emails */}
+          <AlertDialog open={showConfirmCleanInvalid} onOpenChange={setShowConfirmCleanInvalid}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove invalid emails?</AlertDialogTitle>
+                <AlertDialogDescription className="space-y-2">
+                  <span className="block">This will permanently remove {invalidSubscribers.length} subscriber(s) whose emails look invalid (e.g. wrong format or domain like .png). This helps protect your sender reputation with Gmail and Resend.</span>
+                  <span className="block text-muted-foreground">Safe to do during batch sending: the next batch uses the current list, so removed addresses simply won’t receive future batches. Already-sent emails are unchanged.</span>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={cleaningInvalid}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={(e) => { e.preventDefault(); handleCleanInvalidEmails(); }} disabled={cleaningInvalid}>
+                  {cleaningInvalid ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {cleaningInvalid ? "Removing…" : "Remove invalid"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Confirm: Split multi-email to one per row */}
+          <AlertDialog open={showConfirmSplitMulti} onOpenChange={setShowConfirmSplitMulti}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Split to one email per row?</AlertDialogTitle>
+                <AlertDialogDescription className="space-y-2">
+                  <span className="block">This will turn {multiEmailSubscribers.length} row(s) that have multiple comma-separated entries into separate subscriber rows — one valid email per row. Invalid entries (e.g. icon@2x.png, .svg) are skipped; only valid emails get a row, so you don’t lose good addresses when a row mixes valid and invalid.</span>
+                  <span className="block text-muted-foreground">Duplicates in a row are merged. Existing categories are copied to each new row.</span>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={splittingMulti}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={(e) => { e.preventDefault(); handleSplitMultiEmailRows(); }} disabled={splittingMulti}>
+                  {splittingMulti ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {splittingMulti ? "Splitting…" : "Split to one per line"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Confirm: Remove failed / bounced */}
+          <AlertDialog open={showConfirmCleanFailed} onOpenChange={setShowConfirmCleanFailed}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove failed / bounced subscribers?</AlertDialogTitle>
+                <AlertDialogDescription className="space-y-2">
+                  <span className="block">This will permanently remove {failedSubscribersToRemove.length} subscriber(s) who had at least one failed send (e.g. address not found, domain not found). Removing them helps keep your list clean and protects your reputation.</span>
+                  <span className="block text-muted-foreground">Safe during batch sending: the next batch uses the current list; removed addresses won’t receive future batches.</span>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={cleaningFailed}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={(e) => { e.preventDefault(); handleCleanFailedEmails(); }} disabled={cleaningFailed}>
+                  {cleaningFailed ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {cleaningFailed ? "Removing…" : "Remove failed"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
 
         {/* Add Subscriber Dialog */}
@@ -1274,7 +1737,8 @@ Return ONLY the HTML body content.`,
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label>Email *</Label>
-                <Input value={subscriberEmail} onChange={e => setSubscriberEmail(e.target.value)} placeholder="name@example.com" />
+                <Input value={subscriberEmail} onChange={e => setSubscriberEmail(e.target.value)} placeholder="name@example.com or a@x.com, b@y.com" />
+                <p className="text-xs text-muted-foreground">Comma-separated entries are split into one subscriber per valid email (invalid entries skipped).</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -1543,7 +2007,7 @@ Return ONLY the HTML body content.`,
             <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-4 py-2 text-sm">
               <Clock className="h-4 w-4 text-muted-foreground" />
               <span className="text-muted-foreground">Scheduled for</span>
-              <span className="font-medium">{newsletters.find(n => n.id === editingId)?.scheduled_at ? new Date(newsletters.find(n => n.id === editingId)!.scheduled_at!).toLocaleString() : ""}</span>
+              <span className="font-medium">{newsletters.find(n => n.id === editingId)?.scheduled_at ? formatInLondon(newsletters.find(n => n.id === editingId)!.scheduled_at!) : ""}</span>
               <Button variant="ghost" size="sm" className="ml-2" onClick={() => handleCancelSchedule(editingId)} disabled={cancellingSchedule}>
                 {cancellingSchedule ? <Loader2 className="h-3 w-3 animate-spin" /> : "Cancel schedule"}
               </Button>
@@ -1576,12 +2040,16 @@ Return ONLY the HTML body content.`,
                           ))}
                         </SelectContent>
                       </Select>
-                      {senderProfiles.length === 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          <Link to="/email-branding" className="text-primary hover:underline">Add sender profiles in Email Branding</Link>
-                          {" "}to send as different brands (e.g. TalkWeb, Biz Boosters).
-                        </p>
-                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {senderProfiles.length === 0 ? (
+                          <><Link to="/email-branding" className="text-primary hover:underline">Add sender profiles in Email Branding</Link>
+                          {" "}to send as different brands (e.g. TalkWeb, Biz Boosters).</>
+                        ) : senderProfileId ? (
+                          <>Using this profile’s logo, colors, and name; empty fields fall back to <Link to="/email-branding" className="text-primary hover:underline">default Email Branding</Link>.</>
+                        ) : (
+                          <>Using <Link to="/email-branding" className="text-primary hover:underline">default Email Branding</Link>.</>
+                        )}
+                      </p>
                     </div>
                     <div className="space-y-1.5">
                       <Label>Template Style</Label>
@@ -1597,10 +2065,10 @@ Return ONLY the HTML body content.`,
                   </div>
                   <div className="space-y-1.5 mt-3">
                     <Label>Send from</Label>
-                    <Select value={senderConnectionId || (connections[0]?.id ?? "")} onValueChange={setSenderConnectionId}>
+                    <Select value={senderConnectionId || (connectionsForSend[0]?.id ?? "")} onValueChange={setSenderConnectionId}>
                       <SelectTrigger><SelectValue placeholder="Choose email account" /></SelectTrigger>
                       <SelectContent>
-                        {connections.map((conn: { id: string; provider: string; from_email?: string }) => {
+                        {connectionsForSend.map((conn: { id: string; provider: string; from_email?: string }) => {
                           const fromEmail = (conn.from_email || "").trim();
                           const matchProfile = senderProfiles.find((p: { sender_email?: string }) => p.sender_email && fromEmail && String(p.sender_email).toLowerCase() === fromEmail.toLowerCase());
                           const displayName = matchProfile?.display_name || matchProfile?.name || businessProfile?.company_name || "Your Business";
@@ -1620,7 +2088,7 @@ Return ONLY the HTML body content.`,
                         })}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">Account used to send this newsletter and test emails. Configure in <Link to="/integrations/email-providers" className="text-primary hover:underline">Settings → Email Providers</Link>.</p>
+                    <p className="text-xs text-muted-foreground">Account used to send this newsletter and test emails. <strong>Gmail</strong> typically lands in Primary but is limited to ~500 emails/day; use “Send in batches” for larger lists. <strong>Resend/SendGrid</strong> often land in Promotions until domain reputation improves. Configure in <Link to="/integrations/email-providers" className="text-primary hover:underline">Settings → Email Providers</Link>.</p>
                   </div>
                 </CardContent>
               </Card>
@@ -1898,10 +2366,10 @@ Return ONLY the HTML body content.`,
               </div>
               <div className="space-y-1.5">
                 <Label>Send from</Label>
-                <Select value={senderConnectionId || (connections[0]?.id ?? "")} onValueChange={setSenderConnectionId}>
+                <Select value={senderConnectionId || (connectionsForSend[0]?.id ?? "")} onValueChange={setSenderConnectionId}>
                   <SelectTrigger><SelectValue placeholder="Choose email account" /></SelectTrigger>
                   <SelectContent>
-                    {connections.map((conn: { id: string; provider: string; from_email?: string }) => {
+                    {connectionsForSend.map((conn: { id: string; provider: string; from_email?: string }) => {
                       const fromEmail = (conn.from_email || "").trim();
                       const matchProfile = senderProfiles.find((p: { sender_email?: string }) => p.sender_email && fromEmail && String(p.sender_email).toLowerCase() === fromEmail.toLowerCase());
                       const displayName = matchProfile?.display_name || matchProfile?.name || businessProfile?.company_name || "Your Business";
@@ -1936,6 +2404,49 @@ Return ONLY the HTML body content.`,
                 Send to subscribers by audience: all, by category (tags), recipient group, or industry. Optionally narrow by tags.
               </DialogDescription>
             </DialogHeader>
+            {(() => {
+              const sendingNl = newsletters.find((n) => n.id === editingId);
+              if (sendingNl?.status !== "sending") return null;
+              return (
+                <div className="space-y-3 rounded-md bg-muted/50 p-2.5">
+                  <p className="text-sm text-muted-foreground">
+                    {isGmailSendConnection
+                      ? <>This newsletter is already sending in batches. Send the <strong>next batch</strong> only to recipients who have not received it yet. Pick <strong>Send from</strong> below (Gmail) and use &quot;Send next X now&quot; to stay within Gmail’s daily limit (e.g. 200 more today).</>
+                      : <>This newsletter is already sending in batches. <strong>Send next X now</strong> sends that many in one go (only not-yet-sent). With Resend/SendGrid there’s no daily cap — cron continues 50 every 15 min until the list is done.</>}
+                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Label className="text-sm font-medium shrink-0">Send next</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={isGmailSendConnection ? 500 : 10000}
+                      value={sendNextBatchCount}
+                      onChange={(e) => { const v = parseInt(e.target.value, 10); if (!Number.isNaN(v)) setSendNextBatchCount(Math.max(1, Math.min(isGmailSendConnection ? 500 : 10000, v))); }}
+                      className="w-20 h-8"
+                    />
+                    <span className="text-sm text-muted-foreground">now</span>
+                    <span className="text-xs text-muted-foreground">— sends this many in one run (only not-yet-sent)</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="ml-2"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowSendDialog(false);
+                        openRecipientsDialog(sendingNl);
+                      }}
+                    >
+                      <Users className="h-3.5 w-3.5 mr-1" />View who’s already received
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    To send the same content to everyone again (including already-sent) with a different sender, duplicate this newsletter and send the copy from the other connection (e.g. Resend).
+                  </p>
+                </div>
+              );
+            })()}
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <Label>Send to</Label>
@@ -2068,10 +2579,10 @@ Return ONLY the HTML body content.`,
               )}
               <div className="space-y-1.5">
                 <Label>Send from</Label>
-                <Select value={senderConnectionId || (connections[0]?.id ?? "")} onValueChange={setSenderConnectionId}>
+                <Select value={senderConnectionId || (connectionsForSend[0]?.id ?? "")} onValueChange={setSenderConnectionId}>
                   <SelectTrigger><SelectValue placeholder="Choose email account" /></SelectTrigger>
                   <SelectContent>
-                    {connections.map((conn: { id: string; provider: string; from_email?: string }) => {
+                    {connectionsForSend.map((conn: { id: string; provider: string; from_email?: string }) => {
                       const fromEmail = (conn.from_email || "").trim();
                       const matchProfile = senderProfiles.find((p: { sender_email?: string }) => p.sender_email && fromEmail && String(p.sender_email).toLowerCase() === fromEmail.toLowerCase());
                       const displayName = matchProfile?.display_name || matchProfile?.name || businessProfile?.company_name || "Your Business";
@@ -2085,6 +2596,13 @@ Return ONLY the HTML body content.`,
                     })}
                   </SelectContent>
                 </Select>
+                {newsletters.find((n) => n.id === editingId)?.status === "sending" && (
+                  <p className="text-xs text-muted-foreground">
+                    {isGmailSendConnection
+                      ? "This batch will send from the selected account. With Gmail, stay within the daily cap (use “Send next X now” to control how many more today)."
+                      : "This batch will send from the selected account. With Resend/SendGrid, no daily cap — batches continue until the list is done."}
+                  </p>
+                )}
               </div>
               <div className="rounded-lg bg-muted/50 border p-3 text-sm">
                 <strong>Subject:</strong> {subject || "(no subject)"}<br />
@@ -2092,6 +2610,30 @@ Return ONLY the HTML body content.`,
               </div>
 
               <div className="space-y-3 border-t pt-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox checked={sendInBatches} onCheckedChange={(c) => setSendInBatches(!!c)} />
+                  <span className="text-sm font-medium">Send in batches of 50 every 15 min</span>
+                </label>
+                {sendInBatches && isGmailSendConnection && (
+                  <div className="pl-6 flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Daily cap (Gmail limit):</span>
+                    <select
+                      value={dailySendLimit}
+                      onChange={e => setDailySendLimit(Number(e.target.value))}
+                      className="h-8 rounded border border-input bg-background px-2 text-sm"
+                    >
+                      <option value={400}>400/day</option>
+                      <option value={500}>500/day</option>
+                    </select>
+                  </div>
+                )}
+                {sendInBatches && (
+                  <p className="text-xs text-muted-foreground pl-6">
+                    {isGmailSendConnection
+                      ? "Up to the daily cap today (50 every 15 min); remaining list continues tomorrow. Fits within timeouts."
+                      : "50 every 15 min until done. No daily cap for Resend/SendGrid. Fits within timeouts."}
+                  </p>
+                )}
                 <label className="flex items-center gap-2 cursor-pointer">
                   <Checkbox checked={sendScheduleLater} onCheckedChange={(c) => setSendScheduleLater(!!c)} />
                   <span className="text-sm font-medium">Schedule for later</span>
@@ -2112,7 +2654,7 @@ Return ONLY the HTML body content.`,
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => { setShowSendDialog(false); setSendScheduleLater(false); setSendDialogScheduleDateTime(""); }}>Cancel</Button>
+              <Button variant="outline" onClick={() => { setShowSendDialog(false); setSendScheduleLater(false); setSendInBatches(false); setDailySendLimit(400); setSendDialogScheduleDateTime(""); }}>Cancel</Button>
               {sendScheduleLater ? (
                 <Button onClick={handleScheduleFromSendDialog} disabled={scheduling || connections.length === 0 || !sendDialogScheduleDateTime.trim()}>
                   {scheduling ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Scheduling...</> : <><CalendarClock className="h-4 w-4 mr-1.5" />Schedule send</>}
@@ -2153,6 +2695,73 @@ Return ONLY the HTML body content.`,
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Recipients dialog (also in editor so "View who's already received" from Send dialog works) */}
+        <Dialog open={!!recipientsDialogNewsletter} onOpenChange={(open) => { if (!open) setRecipientsDialogNewsletter(null); }}>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Recipients — {recipientsDialogNewsletter?.title || "Untitled"}</DialogTitle>
+              <DialogDescription>
+                {recipientsDialogNewsletter?.status === "sent"
+                  ? "Recipients who received this newsletter. When sent in batches, Sent vs Pending shows who has received it so far."
+                  : recipientsDialogNewsletter?.status === "sending"
+                    ? "Full audience: Sent = already received this batch run; Pending = will receive in a later batch."
+                    : recipientsDialogNewsletter?.status === "scheduled"
+                      ? "People who will receive this newsletter when it sends (based on schedule audience)."
+                      : "People who would receive this newsletter if sent now (based on target categories or schedule audience)."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 overflow-auto min-h-0 border rounded-md">
+              {recipientsDialogLoading ? (
+                <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : recipientsDialogList.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground text-sm">No recipients</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="text-left font-medium p-2">Email</th>
+                      <th className="text-left font-medium p-2">Name</th>
+                      <th className="text-left font-medium p-2">Company</th>
+                      {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending") && (
+                        <>
+                          <th className="text-left font-medium p-2">Status</th>
+                          <th className="text-left font-medium p-2">Sent</th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recipientsDialogList.map((r, i) => (
+                      <tr key={i} className="border-t border-border/50">
+                        <td className="p-2 truncate max-w-[200px]" title={r.email}>{r.email}</td>
+                        <td className="p-2">{[r.first_name, r.last_name].filter(Boolean).join(" ") || "—"}</td>
+                        <td className="p-2 truncate max-w-[140px]" title={r.company ?? ""}>{r.company || "—"}</td>
+                        {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending") && (
+                          <>
+                            <td className="p-2">
+                              <span className={r.status === "sent" ? "text-emerald-600 font-medium" : "text-muted-foreground"}>{r.status === "sent" ? "Sent" : "Pending"}</span>
+                            </td>
+                            <td className="p-2 text-muted-foreground">{r.sent_at ? formatInLondon(r.sent_at) : "—"}</td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground pt-1">
+              {recipientsDialogList.length} recipient{recipientsDialogList.length !== 1 ? "s" : ""}
+              {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending") && (() => {
+                const sent = recipientsDialogList.filter(r => r.status === "sent").length;
+                const pending = recipientsDialogList.length - sent;
+                if (pending > 0) return ` · ${sent} sent, ${pending} pending`;
+                return sent > 0 ? ` · All ${sent} sent` : "";
+              })()}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -2181,7 +2790,7 @@ Return ONLY the HTML body content.`,
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card>
             <CardContent className="pt-5 pb-4">
               <div className="text-2xl font-bold">{newsletters.length}</div>
@@ -2202,11 +2811,29 @@ Return ONLY the HTML body content.`,
           </Card>
           <Card>
             <CardContent className="pt-5 pb-4">
+              <div className="text-2xl font-bold">{newsletters.filter(n => n.status === "sending").length}</div>
+              <p className="text-xs text-muted-foreground">Sending (batch)</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5 pb-4">
               <div className="text-2xl font-bold">{categories.length}</div>
               <p className="text-xs text-muted-foreground">Categories</p>
             </CardContent>
           </Card>
         </div>
+
+        {/* Batch sending explanation when any newsletter is in progress */}
+        {newsletters.some(n => n.status === "sending") && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="py-3 px-4">
+              <p className="text-sm font-medium">Batch sending in progress</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                First batch (50) sent. Cron sends 50 every 15 min up to the daily cap; remaining list continues tomorrow with the same schedule. No action needed. Progress below and in &quot;View recipients&quot;. You can leave this page; we&apos;ll notify you if something goes wrong.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Newsletter List */}
         <Card>
@@ -2240,11 +2867,33 @@ Return ONLY the HTML body content.`,
                             <span className="flex items-center gap-1"><MousePointerClick className="h-3 w-3" />{nl.total_clicked} clicked</span>
                           </>
                         )}
-                        {nl.status === "scheduled" && nl.scheduled_at && (
-                          <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Scheduled for {new Date(nl.scheduled_at).toLocaleString()}</span>
+                        {nl.status === "sending" && (
+                          <>
+                            <span className="flex items-center gap-1 font-medium text-foreground">
+                              <Send className="h-3 w-3" />
+                              {Math.max(
+                                nl.batch_sent_count ?? nl.total_sent ?? 0,
+                                sentCountByNewsletterId[nl.id] ?? 0
+                              )} / {(nl.total_recipients ?? 0)} sent
+                            </span>
+                            {nl.batch_next_at && (
+                              <span className="flex items-center gap-1">
+                                <CalendarClock className="h-3 w-3" />
+                                Next batch: {formatInLondon(nl.batch_next_at, { dateStyle: "short", timeStyle: "short" })}
+                              </span>
+                            )}
+                          </>
                         )}
-                        <span>{new Date(nl.updated_at).toLocaleDateString()}</span>
+                        {nl.status === "scheduled" && nl.scheduled_at && (
+                          <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Scheduled for {formatInLondon(nl.scheduled_at)}</span>
+                        )}
+                        <span>{formatDateInLondon(nl.updated_at)}</span>
                       </div>
+                      {nl.status === "sending" && (
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                          Batch sending: 50 per run. Next batch in 15 min (or tomorrow after daily cap). Cron runs every 15 min — no action needed.
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-1 shrink-0 ml-3 items-center">
                       {nl.status === "scheduled" && (
@@ -2271,10 +2920,12 @@ Return ONLY the HTML body content.`,
               <DialogTitle>Recipients — {recipientsDialogNewsletter?.title || "Untitled"}</DialogTitle>
               <DialogDescription>
                 {recipientsDialogNewsletter?.status === "sent"
-                  ? "People who received this newsletter."
-                  : recipientsDialogNewsletter?.status === "scheduled"
-                    ? "People who will receive this newsletter when it sends (based on schedule audience)."
-                    : "People who would receive this newsletter if sent now (based on target categories or schedule audience)."}
+                  ? "Recipients who received this newsletter. When sent in batches, Sent vs Pending shows who has received it so far."
+                  : recipientsDialogNewsletter?.status === "sending"
+                    ? "Full audience: Sent = already received this batch run; Pending = will receive in a later batch."
+                    : recipientsDialogNewsletter?.status === "scheduled"
+                      ? "People who will receive this newsletter when it sends (based on schedule audience)."
+                      : "People who would receive this newsletter if sent now (based on target categories or schedule audience)."}
               </DialogDescription>
             </DialogHeader>
             <div className="flex-1 overflow-auto min-h-0 border rounded-md">
@@ -2289,7 +2940,7 @@ Return ONLY the HTML body content.`,
                       <th className="text-left font-medium p-2">Email</th>
                       <th className="text-left font-medium p-2">Name</th>
                       <th className="text-left font-medium p-2">Company</th>
-                      {recipientsDialogNewsletter?.status === "sent" && (
+                      {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending") && (
                         <>
                           <th className="text-left font-medium p-2">Status</th>
                           <th className="text-left font-medium p-2">Sent</th>
@@ -2303,10 +2954,12 @@ Return ONLY the HTML body content.`,
                         <td className="p-2 truncate max-w-[200px]" title={r.email}>{r.email}</td>
                         <td className="p-2">{[r.first_name, r.last_name].filter(Boolean).join(" ") || "—"}</td>
                         <td className="p-2 truncate max-w-[140px]" title={r.company ?? ""}>{r.company || "—"}</td>
-                        {recipientsDialogNewsletter?.status === "sent" && (
+                        {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending") && (
                           <>
-                            <td className="p-2">{r.status || "—"}</td>
-                            <td className="p-2 text-muted-foreground">{r.sent_at ? new Date(r.sent_at).toLocaleString() : "—"}</td>
+                            <td className="p-2">
+                              <span className={r.status === "sent" ? "text-emerald-600 font-medium" : "text-muted-foreground"}>{r.status === "sent" ? "Sent" : "Pending"}</span>
+                            </td>
+                            <td className="p-2 text-muted-foreground">{r.sent_at ? formatInLondon(r.sent_at) : "—"}</td>
                           </>
                         )}
                       </tr>
@@ -2317,6 +2970,12 @@ Return ONLY the HTML body content.`,
             </div>
             <div className="text-xs text-muted-foreground pt-1">
               {recipientsDialogList.length} recipient{recipientsDialogList.length !== 1 ? "s" : ""}
+              {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending") && (() => {
+                const sent = recipientsDialogList.filter(r => r.status === "sent").length;
+                const pending = recipientsDialogList.length - sent;
+                if (pending > 0) return ` · ${sent} sent, ${pending} pending`;
+                return sent > 0 ? ` · All ${sent} sent` : "";
+              })()}
             </div>
           </DialogContent>
         </Dialog>

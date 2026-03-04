@@ -146,30 +146,38 @@ Deno.serve(async (req) => {
       }
 
       case 'send-newsletters': {
-        // Find and send scheduled newsletters (status = scheduled, scheduled_at <= now)
-        console.log('[cron-trigger] Processing scheduled newsletters');
+        // 1) Send scheduled newsletters (status = scheduled, scheduled_at <= now)
+        // 2) Continue batch sends (status = sending, batch_send = true, batch_next_at <= now)
+        console.log('[cron-trigger] Processing scheduled and batch newsletters');
+
+        const now = new Date().toISOString();
 
         const { data: scheduledNewsletters, error: nlError } = await supabase
           .from('newsletters')
           .select('id, user_id, title, scheduled_at')
           .eq('status', 'scheduled')
-          .lte('scheduled_at', new Date().toISOString());
+          .lte('scheduled_at', now);
+
+        const { data: batchNewsletters, error: batchError } = await supabase
+          .from('newsletters')
+          .select('id, user_id, title, batch_sent_count, batch_size, total_recipients')
+          .eq('status', 'sending')
+          .eq('batch_send', true)
+          .not('batch_next_at', 'is', null)
+          .lte('batch_next_at', now);
 
         if (nlError) {
           console.error('[cron-trigger] Error fetching scheduled newsletters:', nlError);
-          return new Response(JSON.stringify({
-            success: false,
-            error: nlError.message,
-          }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+        }
+        if (batchError) {
+          console.error('[cron-trigger] Error fetching batch newsletters:', batchError);
         }
 
-        console.log(`[cron-trigger] Found ${scheduledNewsletters?.length || 0} scheduled newsletters ready to send`);
+        const toProcess = [...(scheduledNewsletters || []).map((nl: any) => ({ ...nl, continueBatch: false })), ...(batchNewsletters || []).map((nl: any) => ({ ...nl, continueBatch: true }))];
+        console.log(`[cron-trigger] Found ${scheduledNewsletters?.length || 0} scheduled + ${batchNewsletters?.length || 0} batch newsletters`);
 
         const results: any[] = [];
-        for (const nl of scheduledNewsletters || []) {
+        for (const nl of toProcess) {
           try {
             const response = await fetch(`${SUPABASE_URL}/functions/v1/send-newsletter`, {
               method: 'POST',
@@ -180,11 +188,13 @@ Deno.serve(async (req) => {
               body: JSON.stringify({
                 newsletterId: nl.id,
                 triggeredByCron: true,
+                continueBatch: nl.continueBatch === true,
+                batchSize: nl.continueBatch === true ? 50 : undefined,
               }),
             });
             const result = await response.json().catch(() => ({}));
-            results.push({ newsletterId: nl.id, title: nl.title, result });
-            console.log(`[cron-trigger] Newsletter ${nl.title} result:`, result);
+            results.push({ newsletterId: nl.id, title: nl.title, continueBatch: nl.continueBatch, result });
+            console.log(`[cron-trigger] Newsletter ${nl.title} (batch=${nl.continueBatch}) result:`, result);
           } catch (err) {
             console.error(`[cron-trigger] Error sending newsletter ${nl.id}:`, err);
             results.push({ newsletterId: nl.id, error: err instanceof Error ? err.message : 'Unknown error' });
@@ -194,7 +204,7 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({
           success: true,
           action: 'send-newsletters',
-          newslettersProcessed: scheduledNewsletters?.length || 0,
+          newslettersProcessed: toProcess.length,
           results,
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

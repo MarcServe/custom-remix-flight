@@ -31,6 +31,14 @@ Deno.serve(async (req) => {
       signature,
       websiteUrl: payloadWebsiteUrl,
       provider,
+      // Branding overrides (e.g. from Email Branding sender profile)
+      headerName: overrideHeaderName,
+      senderName: overrideSenderName,
+      signatureName: overrideSignatureName,
+      senderEmail: overrideSenderEmail,
+      senderTitle: overrideSenderTitle,
+      senderImageUrl: overrideSenderImageUrl,
+      footerImageUrl: overrideFooterImageUrl,
     } = payload;
 
     // Profile "Send Test Email" sends recipientEmail only; support both
@@ -66,15 +74,26 @@ Deno.serve(async (req) => {
     }
 
     // Get sender connection (optional for API-key providers like Resend/SendGrid)
+    // Accept either row id (crm_connections.id) or connection_id
     let connection = null;
     if (senderConnectionId) {
       console.log('Looking for connection with ID:', senderConnectionId);
-      const { data: conn, error: connError } = await supabase
+      let { data: conn, error: connError } = await supabase
         .from('crm_connections')
         .select('*')
-        .eq('connection_id', senderConnectionId)
+        .eq('id', senderConnectionId)
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
+      if (connError || !conn) {
+        const byConnId = await supabase
+          .from('crm_connections')
+          .select('*')
+          .eq('connection_id', senderConnectionId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        conn = byConnId.data;
+        connError = byConnId.error;
+      }
       
       if (connError) {
         console.error('Error fetching connection:', connError);
@@ -335,17 +354,18 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
       const websiteUrl = payloadWebsiteUrl ?? businessProfile?.website ?? undefined;
       const html = renderEmailTemplate(templateStyle, {
         body: sampleBody,
-        senderName: businessProfile?.email_sender_name || userProfile?.full_name || 'Test Sender',
-        signatureName: businessProfile?.email_signature_name ?? undefined,
-        senderEmail: businessProfile?.email_sender_email || userProfile?.email || user?.email || testEmail,
-        senderTitle: businessProfile?.email_sender_title || userProfile?.job_title,
-        companyName: businessProfile?.company_name,
-        headerName: companyName || businessProfile?.email_header_name || undefined,
-        logoUrl,
+        senderName: (overrideSenderName ?? businessProfile?.email_sender_name) || userProfile?.full_name || 'Test Sender',
+        signatureName: overrideSignatureName ?? businessProfile?.email_signature_name ?? undefined,
+        senderEmail: (overrideSenderEmail ?? businessProfile?.email_sender_email) || userProfile?.email || user?.email || testEmail,
+        senderTitle: overrideSenderTitle ?? businessProfile?.email_sender_title ?? userProfile?.job_title,
+        companyName: companyName ?? businessProfile?.company_name,
+        headerName: overrideHeaderName ?? companyName ?? businessProfile?.email_header_name ?? undefined,
+        logoUrl: logoUrl ?? businessProfile?.email_logo_url ?? undefined,
         brandColor: brandColor || '#8b5cf6',
-        footerText,
-        signature,
-        senderImageUrl: businessProfile?.email_sender_image_url || userProfile?.avatar_url,
+        footerText: footerText ?? businessProfile?.email_footer_text ?? undefined,
+        signature: signature ?? businessProfile?.email_signature ?? undefined,
+        footerImageUrl: overrideFooterImageUrl ?? businessProfile?.email_footer_logo_url ?? businessProfile?.email_logo_url ?? undefined,
+        senderImageUrl: (overrideSenderImageUrl ?? businessProfile?.email_sender_image_url) || userProfile?.avatar_url,
         websiteUrl: websiteUrl || undefined,
       });
 
@@ -386,8 +406,8 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
           throw new Error('Gmail access token not found. Please reconnect your Gmail account.');
         }
 
-        const fromEmail = gmailConn.from_email || userProfile?.email || user.email;
-        const fromName = companyName || userProfile?.full_name || 'CRM';
+        const fromEmail = overrideSenderEmail?.trim() || gmailConn.from_email || userProfile?.email || user.email;
+        const fromName = (overrideSenderName || companyName || userProfile?.full_name || 'CRM').trim() || 'CRM';
         const boundary = '===============' + Math.random().toString().substr(2) + '==';
         const emailLines = [
           `From: ${encodeRfc2047(fromName)} <${fromEmail}>`,
@@ -443,8 +463,8 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
               subject: '🎨 Test Email - Your Email Template Preview',
             }],
             from: {
-              email: apiKeyConnection?.from_email || connection?.from_email || userProfile?.email || 'noreply@yourdomain.com',
-              name: companyName || 'CRM',
+              email: (overrideSenderEmail?.trim() || apiKeyConnection?.from_email || connection?.from_email || userProfile?.email || 'noreply@yourdomain.com'),
+              name: (overrideSenderName || companyName || 'CRM').trim() || 'CRM',
             },
             content: [
               {
@@ -467,7 +487,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
           throw new Error('Email provider not configured. Please set up Gmail, Resend, or SendGrid.');
         }
         
-        const resendFrom = apiKeyConnection?.from_email || connection?.from_email;
+        const resendFrom = (overrideSenderEmail?.trim() || apiKeyConnection?.from_email || connection?.from_email);
         if (!resendFrom) {
           throw new Error('No verified sending domain configured for Resend. Add a verified domain at https://resend.com/domains or switch to Gmail in Settings > Email Provider.');
         }
@@ -479,7 +499,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: `${companyName || 'CRM'} <${resendFrom}>`,
+            from: `${(overrideSenderName || companyName || 'CRM').trim() || 'CRM'} <${resendFrom}>`,
             to: [testEmail],
             subject: '🎨 Test Email - Your Email Template Preview',
             html,
