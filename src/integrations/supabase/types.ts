@@ -1975,6 +1975,7 @@ export type Database = {
           campaign_id: string
           clicked_at: string | null
           created_at: string
+          delivered_at: string | null
           email: string
           error_message: string | null
           external_message_id: string | null
@@ -1995,6 +1996,7 @@ export type Database = {
           campaign_id: string
           clicked_at?: string | null
           created_at?: string
+          delivered_at?: string | null
           email: string
           error_message?: string | null
           external_message_id?: string | null
@@ -2015,6 +2017,7 @@ export type Database = {
           campaign_id?: string
           clicked_at?: string | null
           created_at?: string
+          delivered_at?: string | null
           email?: string
           error_message?: string | null
           external_message_id?: string | null
@@ -2061,6 +2064,7 @@ export type Database = {
           created_at: string
           failed_count: number
           follow_up_sequence_id: string | null
+          header_image_url: string | null
           id: string
           name: string
           opened_count: number
@@ -2089,6 +2093,7 @@ export type Database = {
           created_at?: string
           failed_count?: number
           follow_up_sequence_id?: string | null
+          header_image_url?: string | null
           id?: string
           name: string
           opened_count?: number
@@ -2117,6 +2122,7 @@ export type Database = {
           created_at?: string
           failed_count?: number
           follow_up_sequence_id?: string | null
+          header_image_url?: string | null
           id?: string
           name?: string
           opened_count?: number
@@ -2759,6 +2765,8 @@ export type Database = {
           sent_at: string | null
           opened_at: string | null
           clicked_at: string | null
+          delivered_at: string | null
+          external_message_id: string | null
           error_message: string | null
           created_at: string
         }
@@ -2770,6 +2778,8 @@ export type Database = {
           sent_at?: string | null
           opened_at?: string | null
           clicked_at?: string | null
+          delivered_at?: string | null
+          external_message_id?: string | null
           error_message?: string | null
           created_at?: string
         }
@@ -2781,6 +2791,8 @@ export type Database = {
           sent_at?: string | null
           opened_at?: string | null
           clicked_at?: string | null
+          delivered_at?: string | null
+          external_message_id?: string | null
           error_message?: string | null
           created_at?: string
         }

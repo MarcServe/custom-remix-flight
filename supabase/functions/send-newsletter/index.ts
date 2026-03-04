@@ -689,11 +689,12 @@ serve(async (req) => {
           }
         }
 
-        // Update send record (skip for test)
+        // Update send record (skip for test); store external_message_id for Resend webhook/sync
         if (!isTest && sendRecord) {
           await supabaseAdmin.from('newsletter_sends').update({
             status: 'sent',
             sent_at: new Date().toISOString(),
+            ...(messageId && { external_message_id: messageId }),
           }).eq('id', sendRecord.id);
         }
         sentCount++;

@@ -116,6 +116,8 @@ serve(async (req) => {
               recipientUpdates.status = 'clicked';
             } else if (eventType === 'email.bounced') {
               recipientUpdates.status = 'bounced';
+            } else if (eventType === 'email.delivered') {
+              recipientUpdates.delivered_at = new Date().toISOString();
             }
             if (Object.keys(recipientUpdates).length > 0) {
               await supabase
@@ -140,6 +142,95 @@ serve(async (req) => {
             results.push({ success: true, recipientId: directRecipient.id, event: eventType });
             continue;
           }
+
+          // Try to find a newsletter_sends row by external_message_id or by recipient email
+          let newsletterSend = (await supabase
+            .from('newsletter_sends')
+            .select('id, newsletter_id')
+            .eq('external_message_id', emailId)
+            .maybeSingle()).data;
+          if (!newsletterSend && eventData?.to?.length > 0) {
+            const recipientEmail = (eventData.to[0] && typeof eventData.to[0] === 'string')
+              ? eventData.to[0].trim().toLowerCase()
+              : null;
+            if (recipientEmail) {
+              const { data: sub } = await supabase
+                .from('newsletter_subscribers')
+                .select('id')
+                .ilike('email', recipientEmail)
+                .limit(1)
+                .maybeSingle();
+              if (sub) {
+                const { data: bySub } = await supabase
+                  .from('newsletter_sends')
+                  .select('id, newsletter_id')
+                  .eq('subscriber_id', sub.id)
+                  .eq('status', 'sent')
+                  .order('sent_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                if (bySub) {
+                  newsletterSend = bySub;
+                  await supabase
+                    .from('newsletter_sends')
+                    .update({ external_message_id: emailId })
+                    .eq('id', bySub.id);
+                  console.log(`Backfilled external_message_id for newsletter_send ${bySub.id} (matched by email ${recipientEmail})`);
+                }
+              }
+            }
+          }
+          if (newsletterSend) {
+            const sendUpdates: Record<string, any> = {};
+            if (eventType === 'email.opened') {
+              sendUpdates.opened_at = new Date().toISOString();
+              sendUpdates.status = 'opened';
+            } else if (eventType === 'email.clicked') {
+              sendUpdates.opened_at = new Date().toISOString();
+              sendUpdates.clicked_at = new Date().toISOString();
+              sendUpdates.status = 'clicked';
+            } else if (eventType === 'email.bounced') {
+              sendUpdates.status = 'bounced';
+            } else if (eventType === 'email.delivered') {
+              sendUpdates.delivered_at = new Date().toISOString();
+            }
+            if (Object.keys(sendUpdates).length > 0) {
+              await supabase
+                .from('newsletter_sends')
+                .update(sendUpdates)
+                .eq('id', newsletterSend.id);
+              if (eventType === 'email.opened' || eventType === 'email.clicked') {
+                const { count } = await supabase
+                  .from('newsletter_sends')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('newsletter_id', newsletterSend.newsletter_id)
+                  .not('opened_at', 'is', null);
+                if (count !== null) {
+                  await supabase
+                    .from('newsletters')
+                    .update({ total_opened: count })
+                    .eq('id', newsletterSend.newsletter_id);
+                }
+                if (eventType === 'email.clicked') {
+                  const { count: clickCount } = await supabase
+                    .from('newsletter_sends')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('newsletter_id', newsletterSend.newsletter_id)
+                    .not('clicked_at', 'is', null);
+                  if (clickCount !== null) {
+                    await supabase
+                      .from('newsletters')
+                      .update({ total_clicked: clickCount })
+                      .eq('id', newsletterSend.newsletter_id);
+                  }
+                }
+              }
+              console.log(`✅ Updated newsletter_send ${newsletterSend.id} for ${emailId} (${eventType})`);
+            }
+            results.push({ success: true, newsletterSendId: newsletterSend.id, event: eventType });
+            continue;
+          }
+
           console.error('Email activity not found:', emailId);
           results.push({ success: false, error: 'Activity not found', emailId, payload });
           continue;
@@ -312,6 +403,8 @@ serve(async (req) => {
             campaignRecipientUpdates.status = 'clicked';
           } else if (eventType === 'email.bounced') {
             campaignRecipientUpdates.status = 'bounced';
+          } else if (eventType === 'email.delivered') {
+            campaignRecipientUpdates.delivered_at = new Date().toISOString();
           }
           if (Object.keys(campaignRecipientUpdates).length > 0) {
             const { data: campaignRecipient } = await supabase

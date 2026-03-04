@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical, ExternalLink, Edit2 } from "lucide-react";
+import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical, ExternalLink, Edit2, Upload } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUpdateSequence } from "@/hooks/use-sequences";
 import { PersonaSelector, type MarketingPersona } from "./email/PersonaSelector";
@@ -126,6 +126,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const [abTrafficSplit, setAbTrafficSplit] = useState(50);
   const [abWinnerMetric, setAbWinnerMetric] = useState<'open_rate' | 'click_rate' | 'reply_rate'>('open_rate');
   const [creatingSequenceFromBody, setCreatingSequenceFromBody] = useState(false);
+  const [headerImageUrl, setHeaderImageUrl] = useState("");
+  const [uploadingHeaderImage, setUploadingHeaderImage] = useState(false);
+  const headerImageFileRef = useRef<HTMLInputElement>(null);
 
   // Fetch previous campaigns for exclusion
   const { data: previousCampaigns } = useQuery({
@@ -339,7 +342,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
       const { data, error } = await supabase
         .from('email_campaigns')
-        .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric')
+        .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric, header_image_url')
         .eq('user_id', user.id)
         .eq('status', 'draft')
         .order('updated_at', { ascending: false })
@@ -593,7 +596,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
           const { data: draftData, error } = await supabase
             .from('email_campaigns')
-            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, status, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric')
+            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, status, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric, header_image_url')
             .eq('id', initialDraftId)
             .in('status', ['draft', 'scheduled', 'sending', 'paused', 'completed'])
             .single();
@@ -1079,6 +1082,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           ab_body_text_b: abBodyTextB?.trim() || null,
           ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
           ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
+          header_image_url: headerImageUrl.trim() || null,
         };
         if (!contentOnly) {
           updatePayload.scheduled_at = scheduledAt;
@@ -1163,6 +1167,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             ab_body_text_b: abBodyTextB?.trim() || null,
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
+            header_image_url: headerImageUrl.trim() || null,
           })
           .select()
           .single();
@@ -1220,6 +1225,34 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     }
   };
 
+  const handleHeaderImageUpload = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Please select an image under 5MB.", variant: "destructive" });
+      return;
+    }
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!validTypes.includes(file.type)) {
+      toast({ title: "Invalid file type", description: "JPG, PNG, WEBP, or GIF only.", variant: "destructive" });
+      return;
+    }
+    try {
+      setUploadingHeaderImage(true);
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser?.id) throw new Error("Not authenticated");
+      const ext = file.name.split(".").pop() || "jpg";
+      const fileName = `${authUser.id}/campaign-header/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("email-branding").upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("email-branding").getPublicUrl(fileName);
+      setHeaderImageUrl(data.publicUrl);
+      toast({ title: "Header image uploaded" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err?.message || "Failed to upload.", variant: "destructive" });
+    } finally {
+      setUploadingHeaderImage(false);
+    }
+  };
+
   const handleLoadDraft = async (draft: any) => {
     try {
       setLoadDraftOpen(false);
@@ -1269,6 +1302,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setBodyText(loadedBodyText);
       setSenderConnectionId(draft.sender_connection_id || '');
       setSenderProfileId(draft.sender_profile_id || '');
+      setHeaderImageUrl((draft as any).header_image_url || '');
       setDraftId(draft.id);
       
       if (draft.scheduled_at) {
@@ -1933,6 +1967,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           ab_body_text_b: abBodyTextB?.trim() || null,
           ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
           ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
+          header_image_url: headerImageUrl.trim() || null,
         };
         if (scheduleEnabled && scheduledAt) {
           updatePayload.status = 'scheduled';
@@ -1997,6 +2032,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             ab_body_text_b: abBodyTextB?.trim() || null,
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
+            header_image_url: headerImageUrl.trim() || null,
           })
           .eq('id', draftId)
           .select()
@@ -2034,6 +2070,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             ab_body_text_b: abBodyTextB?.trim() || null,
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
+            header_image_url: headerImageUrl.trim() || null,
           })
           .select()
           .single();
@@ -2132,6 +2169,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setBodyText("");
       setSenderConnectionId("");
       setSenderProfileId("");
+      setHeaderImageUrl("");
       setSelectedTags([]);
       setTemplate('blank');
       setAbTestEnabled(false);
@@ -2770,6 +2808,40 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             <p className="text-xs text-muted-foreground">
               Brand identity, name, and logo shown to recipients. Manage profiles in Email Branding.
             </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Header image (optional)</Label>
+            <p className="text-xs text-muted-foreground">
+              Override the email branding logo for this campaign. Leave empty to use your sender profile or default branding.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                value={headerImageUrl}
+                onChange={(e) => setHeaderImageUrl(e.target.value)}
+                placeholder="https://… or upload below"
+                className="flex-1"
+              />
+              <input
+                ref={headerImageFileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleHeaderImageUpload(f); e.target.value = ""; }}
+              />
+              <Button type="button" variant="outline" size="sm" onClick={() => headerImageFileRef.current?.click()} disabled={uploadingHeaderImage}>
+                {uploadingHeaderImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              </Button>
+              {headerImageUrl ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setHeaderImageUrl("")}>Clear</Button>
+              ) : null}
+            </div>
+            {headerImageUrl ? (
+              <div className="rounded border p-2 bg-muted/30">
+                <p className="text-xs text-muted-foreground mb-1">Preview (shown at top of email):</p>
+                <img src={headerImageUrl} alt="" className="max-h-16 w-auto object-contain rounded" onError={() => {}} />
+              </div>
+            ) : null}
           </div>
 
           <div className="flex items-center justify-between space-x-2 p-4 rounded-lg border bg-muted/50">

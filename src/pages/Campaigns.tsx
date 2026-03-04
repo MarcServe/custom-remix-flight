@@ -77,6 +77,7 @@ interface CampaignRecipient {
   sent_at?: string;
   opened_at?: string;
   clicked_at?: string | null;
+  delivered_at?: string | null;
   error_message?: string;
   ab_variant?: 'A' | 'B' | null;
 }
@@ -142,12 +143,16 @@ export default function Campaigns() {
   const [enrollFollowUpSequenceId, setEnrollFollowUpSequenceId] = useState<string>("");
   const [enrollingFollowUp, setEnrollingFollowUp] = useState(false);
   // Resend-style status filter: server-side for large lists, counts from RPC
-  type RecipientStatusFilter = 'all' | 'pending' | 'sent' | 'opened' | 'clicked' | 'opened_no_click' | 'bounced' | 'failed';
+  type RecipientStatusFilter = 'all' | 'pending' | 'sent' | 'delivered' | 'delivered_not_opened' | 'opened' | 'clicked' | 'opened_no_click' | 'bounced' | 'failed';
   const [recipientStatusFilter, setRecipientStatusFilter] = useState<RecipientStatusFilter>('all');
   // Segment for follow-up enrollment (server-side filtered)
-  type EnrollSegment = 'all_sent' | 'opened' | 'clicked' | 'opened_no_click';
+  type EnrollSegment = 'all_sent' | 'not_opened' | 'opened' | 'clicked' | 'opened_no_click';
   const [enrollSegment, setEnrollSegment] = useState<EnrollSegment>('all_sent');
   const [recipientSearchQuery, setRecipientSearchQuery] = useState('');
+  const [syncingFromResend, setSyncingFromResend] = useState(false);
+  const [createFollowUpOpen, setCreateFollowUpOpen] = useState(false);
+  const [createFollowUpSegment, setCreateFollowUpSegment] = useState<'delivered_not_opened' | 'not_opened' | 'opened_no_click'>('not_opened');
+  const [creatingFollowUp, setCreatingFollowUp] = useState(false);
 
   const { data: followUpSequences = [] } = useQuery({
     queryKey: ['email-sequences'],
@@ -252,7 +257,7 @@ export default function Campaigns() {
         p_campaign_id: selectedCampaign!,
       });
       if (error) throw error;
-      return data as { all: number; pending: number; sent: number; opened: number; clicked: number; opened_no_click: number; bounced: number; failed: number };
+      return data as { all: number; pending: number; sent: number; delivered: number; delivered_not_opened: number; opened: number; clicked: number; opened_no_click: number; bounced: number; failed: number };
     },
   });
 
@@ -273,6 +278,12 @@ export default function Campaigns() {
           break;
         case 'sent':
           query = query.eq('status', 'sent').not('sent_at', 'is', null);
+          break;
+        case 'delivered':
+          query = query.not('delivered_at', 'is', null);
+          break;
+        case 'delivered_not_opened':
+          query = query.not('delivered_at', 'is', null).is('opened_at', null);
           break;
         case 'opened':
           query = query.not('opened_at', 'is', null);
@@ -810,8 +821,8 @@ export default function Campaigns() {
     }
   };
 
-  // Create new draft from any campaign (master draft / template)
-  const handleCreateFromTemplate = async (source: Campaign) => {
+  // Duplicate campaign: new draft with same content/sender, no recipients (refresh list or change sender/SMTP)
+  const handleDuplicateCampaign = async (source: Campaign) => {
     setCloningFromTemplate(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -819,6 +830,7 @@ export default function Campaigns() {
         toast.error('Not authenticated');
         return;
       }
+      const s = source as any;
       const { data: newCampaign, error } = await supabase
         .from('email_campaigns')
         .insert({
@@ -828,11 +840,69 @@ export default function Campaigns() {
           subject_template: source.subject_template || '',
           body_html_template: source.body_html_template || '',
           body_text_template: source.body_text_template || '',
-          sender_connection_id: (source as any).sender_connection_id ?? null,
-          sender_profile_id: (source as any).sender_profile_id ?? null,
+          sender_connection_id: s.sender_connection_id ?? null,
+          sender_profile_id: s.sender_profile_id ?? null,
+          header_image_url: s.header_image_url ?? null,
           tags: source.tags ?? null,
-          auto_follow_up_enabled: (source as any).auto_follow_up_enabled !== false,
-          follow_up_sequence_id: (source as any).follow_up_sequence_id ?? null,
+          auto_follow_up_enabled: s.auto_follow_up_enabled !== false,
+          follow_up_sequence_id: s.follow_up_sequence_id ?? null,
+          ab_test_enabled: s.ab_test_enabled === true,
+          ab_subject_b: s.ab_subject_b ?? null,
+          ab_body_html_b: s.ab_body_html_b ?? null,
+          ab_body_text_b: s.ab_body_text_b ?? null,
+          ab_traffic_split: typeof s.ab_traffic_split === 'number' ? s.ab_traffic_split : 50,
+          ab_winner_metric: s.ab_winner_metric ?? null,
+          total_recipients: 0,
+          sent_count: 0,
+          opened_count: 0,
+          failed_count: 0,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      if (!newCampaign?.id) throw new Error('Failed to duplicate campaign');
+      setDraftToEdit(newCampaign.id);
+      setBulkEmailDialogOpen(true);
+      await queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+      toast.success('Campaign duplicated. Add recipients or change sender, then send.');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to duplicate campaign');
+    } finally {
+      setCloningFromTemplate(false);
+    }
+  };
+
+  // Create new draft from any campaign (master draft / template)
+  const handleCreateFromTemplate = async (source: Campaign) => {
+    setCloningFromTemplate(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Not authenticated');
+        return;
+      }
+      const s = source as any;
+      const { data: newCampaign, error } = await supabase
+        .from('email_campaigns')
+        .insert({
+          user_id: user.id,
+          name: `${source.name} (Copy)`,
+          status: 'draft',
+          subject_template: source.subject_template || '',
+          body_html_template: source.body_html_template || '',
+          body_text_template: source.body_text_template || '',
+          sender_connection_id: s.sender_connection_id ?? null,
+          sender_profile_id: s.sender_profile_id ?? null,
+          header_image_url: s.header_image_url ?? null,
+          tags: source.tags ?? null,
+          auto_follow_up_enabled: s.auto_follow_up_enabled !== false,
+          follow_up_sequence_id: s.follow_up_sequence_id ?? null,
+          ab_test_enabled: s.ab_test_enabled === true,
+          ab_subject_b: s.ab_subject_b ?? null,
+          ab_body_html_b: s.ab_body_html_b ?? null,
+          ab_body_text_b: s.ab_body_text_b ?? null,
+          ab_traffic_split: typeof s.ab_traffic_split === 'number' ? s.ab_traffic_split : 50,
+          ab_winner_metric: s.ab_winner_metric ?? null,
           total_recipients: 0,
           sent_count: 0,
           opened_count: 0,
@@ -1303,6 +1373,9 @@ export default function Campaigns() {
         .not('person_id', 'is', null);
 
       switch (enrollSegment) {
+        case 'not_opened':
+          enrollQuery = enrollQuery.in('status', ['sent', 'opened', 'clicked']).is('opened_at', null);
+          break;
         case 'opened':
           enrollQuery = enrollQuery.not('opened_at', 'is', null);
           break;
@@ -1418,6 +1491,118 @@ export default function Campaigns() {
       toast.error(e?.message ?? 'Failed to enroll in follow-up sequence');
     } finally {
       setEnrollingFollowUp(false);
+    }
+  };
+
+  const handleSyncFromResend = async () => {
+    if (!selectedCampaign) return;
+    setSyncingFromResend(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-resend-campaign-status', {
+        body: { campaignId: selectedCampaign },
+      });
+      if (error) throw error;
+      const updated = (data as { updated?: number; message?: string })?.updated ?? 0;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
+      ]);
+      toast.success((data as { message?: string })?.message ?? `Synced ${updated} recipient(s) from Resend.`);
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to sync from Resend');
+    } finally {
+      setSyncingFromResend(false);
+    }
+  };
+
+  const handleCreateFollowUpCampaign = async () => {
+    if (!selectedCampaign || !selectedCampaignData) return;
+    setCreatingFollowUp(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Not authenticated');
+        return;
+      }
+      const s = selectedCampaignData as any;
+      let segmentQuery = supabase
+        .from('email_campaign_recipients')
+        .select('id, person_id, email, name, personalized_subject, personalized_body_html, personalized_body_text')
+        .eq('campaign_id', selectedCampaign)
+        .in('status', ['sent', 'opened', 'clicked']);
+      switch (createFollowUpSegment) {
+        case 'delivered_not_opened':
+          segmentQuery = segmentQuery.not('delivered_at', 'is', null).is('opened_at', null);
+          break;
+        case 'not_opened':
+          segmentQuery = segmentQuery.is('opened_at', null);
+          break;
+        case 'opened_no_click':
+          segmentQuery = segmentQuery.not('opened_at', 'is', null).is('clicked_at', null);
+          break;
+        default:
+          break;
+      }
+      const { data: segmentRecipients, error: segErr } = await segmentQuery;
+      if (segErr) throw segErr;
+      if (!segmentRecipients?.length) {
+        toast.error('No recipients in this segment. Sync from Resend first or choose another segment.');
+        return;
+      }
+      const { data: newCampaign, error: insertErr } = await supabase
+        .from('email_campaigns')
+        .insert({
+          user_id: user.id,
+          name: `${selectedCampaignData.name} (Follow-up)`,
+          status: 'draft',
+          subject_template: s.subject_template || '',
+          body_html_template: s.body_html_template || '',
+          body_text_template: s.body_text_template || '',
+          sender_connection_id: s.sender_connection_id ?? null,
+          sender_profile_id: s.sender_profile_id ?? null,
+          header_image_url: s.header_image_url ?? null,
+          tags: s.tags ?? null,
+          auto_follow_up_enabled: s.auto_follow_up_enabled !== false,
+          follow_up_sequence_id: s.follow_up_sequence_id ?? null,
+          ab_test_enabled: false,
+          ab_subject_b: null,
+          ab_body_html_b: null,
+          ab_body_text_b: null,
+          ab_traffic_split: 50,
+          ab_winner_metric: null,
+          total_recipients: segmentRecipients.length,
+          sent_count: 0,
+          opened_count: 0,
+          failed_count: 0,
+        })
+        .select('id')
+        .single();
+      if (insertErr || !newCampaign?.id) throw new Error('Failed to create campaign');
+      const personIdForDb = (p: { person_id?: string | null }) =>
+        p?.person_id && !String(p.person_id).startsWith('rec-') ? p.person_id : null;
+      const recipients = (segmentRecipients as any[]).map((r) => ({
+        campaign_id: newCampaign.id,
+        person_id: personIdForDb(r),
+        email: r.email,
+        name: r.name || '',
+        personalized_subject: r.personalized_subject || '',
+        personalized_body_html: r.personalized_body_html || '',
+        personalized_body_text: r.personalized_body_text || '',
+        status: 'pending',
+        email_period: 'new',
+      }));
+      const { error: recErr } = await supabase.from('email_campaign_recipients').insert(recipients);
+      if (recErr) throw recErr;
+      setCreateFollowUpOpen(false);
+      setDraftToEdit(newCampaign.id);
+      setBulkEmailDialogOpen(true);
+      await queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+      toast.success(`Follow-up campaign created with ${segmentRecipients.length} recipient(s). Edit and send when ready.`);
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to create follow-up campaign');
+    } finally {
+      setCreatingFollowUp(false);
     }
   };
 
@@ -1750,6 +1935,17 @@ export default function Campaigns() {
                                 Send pending now
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem
+                              disabled={cloningFromTemplate}
+                              onClick={() => handleDuplicateCampaign(campaign)}
+                            >
+                              {cloningFromTemplate ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <Copy className="h-4 w-4 mr-2" />
+                              )}
+                              Duplicate
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
                               onClick={() => setCampaignToDelete(campaign.id)}
@@ -2541,6 +2737,71 @@ export default function Campaigns() {
               </Button>
             </div>
 
+            {/* Sync from Resend + Create follow-up campaign (tracking-based) */}
+            {(selectedCampaignData?.status?.toLowerCase() === 'completed' || selectedCampaignData?.status?.toLowerCase() === 'sending' || selectedCampaignData?.status?.toLowerCase() === 'paused') &&
+             (selectedCampaignData as Campaign).sent_count > 0 && (
+              <div className="rounded-lg border bg-muted/30 px-4 py-3 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <BarChart3 className="h-4 w-4 text-primary shrink-0" />
+                  Tracking & follow-up
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Sync delivered/opened/clicked from Resend into the CRM, then create a reminder campaign for a segment (e.g. not opened).
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSyncFromResend}
+                    disabled={syncingFromResend}
+                  >
+                    {syncingFromResend ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                    Sync from Resend
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCreateFollowUpOpen(true)}
+                  >
+                    Create follow-up campaign
+                  </Button>
+                </div>
+                <Dialog open={createFollowUpOpen} onOpenChange={setCreateFollowUpOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Create follow-up campaign</DialogTitle>
+                      <DialogDescription>
+                        Create a new draft with only the selected segment as recipients. Edit subject/body if needed, then send.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <div className="space-y-2">
+                        <Label>Segment</Label>
+                        <Select value={createFollowUpSegment} onValueChange={(v: 'delivered_not_opened' | 'not_opened' | 'opened_no_click') => setCreateFollowUpSegment(v)}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="not_opened">Not opened (sent but no open)</SelectItem>
+                            <SelectItem value="delivered_not_opened">Delivered, not opened</SelectItem>
+                            <SelectItem value="opened_no_click">Opened, no click</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        className="w-full"
+                        onClick={handleCreateFollowUpCampaign}
+                        disabled={creatingFollowUp}
+                      >
+                        {creatingFollowUp ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                        Create draft with segment
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            )}
+
             {/* Auto follow-up for sent campaigns: show status or enroll in sequence */}
             {(selectedCampaignData?.status?.toLowerCase() === 'completed' || selectedCampaignData?.status?.toLowerCase() === 'sending' || selectedCampaignData?.status?.toLowerCase() === 'paused') &&
              (selectedCampaignData as Campaign).sent_count > 0 && (
@@ -2592,6 +2853,7 @@ export default function Campaigns() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all_sent">All sent</SelectItem>
+                        <SelectItem value="not_opened">Not opened (reminders)</SelectItem>
                         <SelectItem value="opened">Only opened</SelectItem>
                         <SelectItem value="clicked">Only clicked</SelectItem>
                         <SelectItem value="opened_no_click">Opened, no click</SelectItem>
@@ -2779,7 +3041,13 @@ export default function Campaigns() {
                       Pending {statusCounts ? `(${statusCounts.pending})` : ''}
                     </SelectItem>
                     <SelectItem value="sent">
-                      Sent / Delivered {statusCounts ? `(${statusCounts.sent})` : ''}
+                      Sent {statusCounts ? `(${statusCounts.sent})` : ''}
+                    </SelectItem>
+                    <SelectItem value="delivered">
+                      Delivered {statusCounts ? `(${statusCounts.delivered ?? 0})` : ''}
+                    </SelectItem>
+                    <SelectItem value="delivered_not_opened">
+                      Delivered, not opened {statusCounts ? `(${statusCounts.delivered_not_opened ?? 0})` : ''}
                     </SelectItem>
                     <SelectItem value="opened">
                       Opened {statusCounts ? `(${statusCounts.opened})` : ''}

@@ -226,6 +226,8 @@ serve(async (req) => {
         };
       }
     }
+    // Campaign-level header image overrides sender/business logo when set
+    if (campaign.header_image_url) branding.logoUrl = campaign.header_image_url;
     // Ensure we always have a name next to the logo when logo is present
     if (branding.logoUrl && !branding.companyName) branding.companyName = businessProfile?.company_name || 'Company';
 

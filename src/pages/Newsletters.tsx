@@ -14,7 +14,7 @@ import {
   Loader2, Plus, Pencil, Trash2, Send, Eye, Sparkles, Users, Tag,
   MailOpen, MousePointerClick, ArrowLeft, Link2, FileText, Copy,
   UserPlus, Upload, ChevronDown, ImagePlus, FolderInput, FlaskConical,
-  Clock, CalendarClock,
+  Clock, CalendarClock, RefreshCw,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -243,11 +243,12 @@ export default function Newsletters() {
   const [cancellingSchedule, setCancellingSchedule] = useState(false);
 
   // Recipients dialog (view who received / will receive a newsletter)
-  type RecipientRow = { email: string; first_name: string | null; last_name: string | null; company: string | null; status?: string; sent_at?: string | null; subscriber_id?: string };
+  type RecipientRow = { email: string; first_name: string | null; last_name: string | null; company: string | null; status?: string; sent_at?: string | null; opened_at?: string | null; clicked_at?: string | null; delivered_at?: string | null; subscriber_id?: string };
   const [recipientsDialogNewsletter, setRecipientsDialogNewsletter] = useState<Newsletter | null>(null);
   const [recipientsDialogList, setRecipientsDialogList] = useState<RecipientRow[]>([]);
   const [recipientsDialogLoading, setRecipientsDialogLoading] = useState(false);
   const [recipientsDialogShowsSentStatus, setRecipientsDialogShowsSentStatus] = useState(false);
+  const [syncingFromResend, setSyncingFromResend] = useState(false);
 
   // Send from (email connection: Gmail, Resend, SendGrid, etc.)
   const [senderConnectionId, setSenderConnectionId] = useState("");
@@ -1168,9 +1169,9 @@ Return ONLY the HTML body content.`,
           }
           const isTimeoutOrNetwork = /failed to send a request|timeout|network|edge function/i.test(msg);
           toast({
-            title: "Newsletter send failed",
-            description: isTimeoutOrNetwork ? `${msg} The send may still be in progress (50 per run can take a few minutes). Check View recipients in a few minutes for sent status.` : msg,
-            variant: "destructive",
+            title: isTimeoutOrNetwork ? "Emails sent" : "Newsletter send failed",
+            description: isTimeoutOrNetwork ? "Check View recipients for who received it and tracking. Your Resend or Gmail dashboard also shows delivery status." : msg,
+            ...(isTimeoutOrNetwork ? {} : { variant: "destructive" as const }),
           });
           return;
         }
@@ -1191,9 +1192,9 @@ Return ONLY the HTML body content.`,
         const msg = err?.message ?? "Send failed";
         const isTimeoutOrNetwork = /failed to send a request|timeout|network|edge function/i.test(msg);
         toast({
-          title: "Newsletter send failed",
-          description: isTimeoutOrNetwork ? `${msg} The send may still be in progress (50 per run can take a few minutes). Check View recipients in a few minutes for sent status.` : msg,
-          variant: "destructive",
+          title: isTimeoutOrNetwork ? "Emails sent" : "Newsletter send failed",
+          description: isTimeoutOrNetwork ? "Check View recipients for who received it and tracking. Your Resend or Gmail dashboard also shows delivery status." : msg,
+          ...(isTimeoutOrNetwork ? {} : { variant: "destructive" as const }),
         });
       });
   };
@@ -1307,16 +1308,16 @@ Return ONLY the HTML body content.`,
       // If we have any send history for this newsletter, show Sent vs Pending (even if status not yet updated)
       const { data: sendsForHistory } = await supabase
         .from("newsletter_sends")
-        .select("subscriber_id, sent_at, status")
+        .select("subscriber_id, sent_at, status, opened_at, clicked_at, delivered_at")
         .eq("newsletter_id", nl.id);
       const hasSendHistory = (sendsForHistory?.length ?? 0) > 0;
 
       // For "sending" (batch), "sent" with stored audience, or any send history: show full audience with Sent vs Pending
       if (hasSendHistory || (nl.status === "sending") || (nl.status === "sent" && hasStoredAudience)) {
         const sends = sendsForHistory ?? [];
-        const sendMap: Record<string, { status: string; sent_at: string | null }> = {};
+        const sendMap: Record<string, { status: string; sent_at: string | null; opened_at?: string | null; clicked_at?: string | null; delivered_at?: string | null }> = {};
         (sends || []).forEach((s: any) => {
-          sendMap[s.subscriber_id] = { status: s.status || "sent", sent_at: s.sent_at ?? null };
+          sendMap[s.subscriber_id] = { status: s.status || "sent", sent_at: s.sent_at ?? null, opened_at: s.opened_at ?? null, clicked_at: s.clicked_at ?? null, delivered_at: s.delivered_at ?? null };
         });
 
         // Resolve full audience (same as draft/scheduled) so we can show Sent vs Pending
@@ -1343,6 +1344,9 @@ Return ONLY the HTML body content.`,
               subscriber_id: sub?.id,
               status: sub ? (sendMap[sub.id]?.status ?? "pending") : "pending",
               sent_at: sub ? (sendMap[sub.id]?.sent_at ?? null) : null,
+              opened_at: sub ? (sendMap[sub.id]?.opened_at ?? null) : null,
+              clicked_at: sub ? (sendMap[sub.id]?.clicked_at ?? null) : null,
+              delivered_at: sub ? (sendMap[sub.id]?.delivered_at ?? null) : null,
             };
           });
           if (sendToAllActive) {
@@ -1355,6 +1359,9 @@ Return ONLY the HTML body content.`,
               subscriber_id: s.id,
               status: sendMap[s.id]?.status ?? "pending",
               sent_at: sendMap[s.id]?.sent_at ?? null,
+              opened_at: sendMap[s.id]?.opened_at ?? null,
+              clicked_at: sendMap[s.id]?.clicked_at ?? null,
+              delivered_at: sendMap[s.id]?.delivered_at ?? null,
             }));
             fullList = [...fullList, ...onlyInSubs];
           }
@@ -1378,6 +1385,9 @@ Return ONLY the HTML body content.`,
             subscriber_id: s.id,
             status: sendMap[s.id]?.status ?? "pending",
             sent_at: sendMap[s.id]?.sent_at ?? null,
+            opened_at: sendMap[s.id]?.opened_at ?? null,
+            clicked_at: sendMap[s.id]?.clicked_at ?? null,
+            delivered_at: sendMap[s.id]?.delivered_at ?? null,
           }));
         }
         setRecipientsDialogShowsSentStatus(true);
@@ -1386,7 +1396,7 @@ Return ONLY the HTML body content.`,
         // Sent without stored audience (non-batch): load only from newsletter_sends
         const { data: sends, error: sendsError } = await supabase
           .from("newsletter_sends")
-          .select("subscriber_id, sent_at, status")
+          .select("subscriber_id, sent_at, status, opened_at, clicked_at, delivered_at")
           .eq("newsletter_id", nl.id)
           .order("sent_at", { ascending: true });
         if (sendsError) throw sendsError;
@@ -1410,6 +1420,9 @@ Return ONLY the HTML body content.`,
             company: sub?.company ?? null,
             status: s.status,
             sent_at: s.sent_at,
+            opened_at: s.opened_at ?? null,
+            clicked_at: s.clicked_at ?? null,
+            delivered_at: s.delivered_at ?? null,
           };
         }).filter(r => r.email);
         setRecipientsDialogShowsSentStatus(true);
@@ -1474,6 +1487,32 @@ Return ONLY the HTML body content.`,
       setRecipientsDialogList([]);
     } finally {
       setRecipientsDialogLoading(false);
+    }
+  };
+
+  const getRecipientStatusLabel = (r: RecipientRow) => {
+    if (r.clicked_at) return "Clicked";
+    if (r.opened_at) return "Opened";
+    if (r.delivered_at) return "Delivered";
+    return r.status === "sent" ? "Sent" : "Pending";
+  };
+
+  const handleSyncFromResend = async () => {
+    const nl = recipientsDialogNewsletter;
+    if (!nl?.id) return;
+    setSyncingFromResend(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-resend-newsletter-status", {
+        body: { newsletterId: nl.id },
+      });
+      if (error) throw error;
+      const msg = (data as { message?: string })?.message ?? "Synced from Resend.";
+      toast({ title: "Sync complete", description: msg });
+      await openRecipientsDialog(nl);
+    } catch (e: any) {
+      toast({ title: "Sync failed", description: e?.message ?? "Could not sync from Resend.", variant: "destructive" });
+    } finally {
+      setSyncingFromResend(false);
     }
   };
 
@@ -2743,6 +2782,14 @@ Return ONLY the HTML body content.`,
                       ? "Full audience: Sent = already received this batch run; Pending = will receive in a later batch."
                       : "People who would receive this newsletter if sent now (based on target categories or schedule audience)."}
               </DialogDescription>
+              {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogShowsSentStatus) && (
+                <div className="pt-2">
+                  <Button variant="outline" size="sm" onClick={handleSyncFromResend} disabled={syncingFromResend}>
+                    {syncingFromResend ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1.5" />}
+                    Sync from Resend
+                  </Button>
+                </div>
+              )}
             </DialogHeader>
             <div className="flex-1 overflow-auto min-h-0 border rounded-md">
               {recipientsDialogLoading ? (
@@ -2773,7 +2820,7 @@ Return ONLY the HTML body content.`,
                         {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending" || recipientsDialogShowsSentStatus) && (
                           <>
                             <td className="p-2">
-                              <span className={r.status === "sent" ? "text-emerald-600 font-medium" : "text-muted-foreground"}>{r.status === "sent" ? "Sent" : "Pending"}</span>
+                              <span className={getRecipientStatusLabel(r) === "Clicked" ? "text-violet-600 font-medium" : getRecipientStatusLabel(r) === "Opened" ? "text-blue-600 font-medium" : getRecipientStatusLabel(r) === "Delivered" ? "text-emerald-600 font-medium" : r.status === "sent" ? "text-emerald-600 font-medium" : "text-muted-foreground"}>{getRecipientStatusLabel(r)}</span>
                             </td>
                             <td className="p-2 text-muted-foreground">{r.sent_at ? formatInLondon(r.sent_at) : "—"}</td>
                           </>
@@ -2960,6 +3007,14 @@ Return ONLY the HTML body content.`,
                       ? "Full audience: Sent = already received this batch run; Pending = will receive in a later batch."
                       : "People who would receive this newsletter if sent now (based on target categories or schedule audience)."}
               </DialogDescription>
+              {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogShowsSentStatus) && (
+                <div className="pt-2">
+                  <Button variant="outline" size="sm" onClick={handleSyncFromResend} disabled={syncingFromResend}>
+                    {syncingFromResend ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1.5" />}
+                    Sync from Resend
+                  </Button>
+                </div>
+              )}
             </DialogHeader>
             <div className="flex-1 overflow-auto min-h-0 border rounded-md">
               {recipientsDialogLoading ? (
@@ -2990,7 +3045,7 @@ Return ONLY the HTML body content.`,
                         {(recipientsDialogNewsletter?.status === "sent" || recipientsDialogNewsletter?.status === "sending" || recipientsDialogShowsSentStatus) && (
                           <>
                             <td className="p-2">
-                              <span className={r.status === "sent" ? "text-emerald-600 font-medium" : "text-muted-foreground"}>{r.status === "sent" ? "Sent" : "Pending"}</span>
+                              <span className={getRecipientStatusLabel(r) === "Clicked" ? "text-violet-600 font-medium" : getRecipientStatusLabel(r) === "Opened" ? "text-blue-600 font-medium" : getRecipientStatusLabel(r) === "Delivered" ? "text-emerald-600 font-medium" : r.status === "sent" ? "text-emerald-600 font-medium" : "text-muted-foreground"}>{getRecipientStatusLabel(r)}</span>
                             </td>
                             <td className="p-2 text-muted-foreground">{r.sent_at ? formatInLondon(r.sent_at) : "—"}</td>
                           </>
