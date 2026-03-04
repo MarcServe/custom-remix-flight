@@ -934,7 +934,7 @@ export default function Campaigns() {
     return items
       .filter(r => r.email && !existingEmails.has(r.email.trim().toLowerCase()))
       .map(r => {
-        const name = r.name ?? [r.first_name, r.last_name].filter(Boolean).join(' ') || r.email;
+        const name = r.name ?? ([r.first_name, r.last_name].filter(Boolean).join(' ') || r.email);
         const personalizedSubject = subjectTemplate
           .replace(/\{\{firstName\}\}/gi, r.first_name || '')
           .replace(/\{\{lastName\}\}/gi, r.last_name || '')
