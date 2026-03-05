@@ -711,6 +711,9 @@ export type Database = {
           email_template_style: string | null
           id: string
           industry: string | null
+          newsletter_cron_end_hour_utc: number | null
+          newsletter_cron_start_hour_utc: number | null
+          newsletter_cron_timezone: string | null
           phone: string | null
           services_description: string
           target_audience: string | null
@@ -752,6 +755,9 @@ export type Database = {
           email_template_style?: string | null
           id?: string
           industry?: string | null
+          newsletter_cron_end_hour_utc?: number | null
+          newsletter_cron_start_hour_utc?: number | null
+          newsletter_cron_timezone?: string | null
           phone?: string | null
           services_description: string
           target_audience?: string | null
@@ -793,6 +799,9 @@ export type Database = {
           email_template_style?: string | null
           id?: string
           industry?: string | null
+          newsletter_cron_end_hour_utc?: number | null
+          newsletter_cron_start_hour_utc?: number | null
+          newsletter_cron_timezone?: string | null
           phone?: string | null
           services_description?: string
           target_audience?: string | null

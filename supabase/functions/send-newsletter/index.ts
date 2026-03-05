@@ -53,8 +53,10 @@ serve(async (req) => {
       newsletter = nl;
       nlError = err;
       if (nlError || !newsletter) throw new Error('Newsletter not found');
-      if (newsletter.status !== 'scheduled') {
-        throw new Error(`Newsletter is not scheduled (status: ${newsletter.status})`);
+      const continueBatchCron = body.continueBatch === true || body.continue_batch === true;
+      const allowedForCron = newsletter.status === 'scheduled' || (newsletter.status === 'sending' && continueBatchCron);
+      if (!allowedForCron) {
+        throw new Error(`Newsletter not eligible for cron (status: ${newsletter.status}, continueBatch: ${continueBatchCron})`);
       }
       const { data: profile } = await supabaseAdmin.from('profiles').select('email').eq('id', newsletter.user_id).maybeSingle();
       user = { id: newsletter.user_id, email: profile?.email };

@@ -147,8 +147,9 @@ Deno.serve(async (req) => {
 
       case 'send-newsletters': {
         // 1) Send scheduled newsletters (status = scheduled, scheduled_at <= now)
-        // 2) Continue batch sends (status = sending, batch_send = true, batch_next_at <= now)
-        console.log('[cron-trigger] Processing scheduled and batch newsletters');
+        // 2) Continue batch sends (status = sending, batch_send = true, batch_next_at <= now, or any pending if forceNextBatch)
+        const forceNextBatch = body.forceNextBatch === true || body.force_next_batch === true;
+        console.log('[cron-trigger] Processing scheduled and batch newsletters', forceNextBatch ? '(force next batch now)' : '');
 
         const now = new Date().toISOString();
 
@@ -158,13 +159,16 @@ Deno.serve(async (req) => {
           .eq('status', 'scheduled')
           .lte('scheduled_at', now);
 
-        const { data: batchNewsletters, error: batchError } = await supabase
+        let batchQuery = supabase
           .from('newsletters')
           .select('id, user_id, title, batch_sent_count, batch_size, total_recipients')
           .eq('status', 'sending')
           .eq('batch_send', true)
-          .not('batch_next_at', 'is', null)
-          .lte('batch_next_at', now);
+          .not('batch_next_at', 'is', null);
+        if (!forceNextBatch) {
+          batchQuery = batchQuery.lte('batch_next_at', now);
+        }
+        const { data: batchNewsletters, error: batchError } = await batchQuery;
 
         if (nlError) {
           console.error('[cron-trigger] Error fetching scheduled newsletters:', nlError);
@@ -173,8 +177,51 @@ Deno.serve(async (req) => {
           console.error('[cron-trigger] Error fetching batch newsletters:', batchError);
         }
 
-        const toProcess = [...(scheduledNewsletters || []).map((nl: any) => ({ ...nl, continueBatch: false })), ...(batchNewsletters || []).map((nl: any) => ({ ...nl, continueBatch: true }))];
+        let toProcess = [...(scheduledNewsletters || []).map((nl: any) => ({ ...nl, continueBatch: false })), ...(batchNewsletters || []).map((nl: any) => ({ ...nl, continueBatch: true }))];
         console.log(`[cron-trigger] Found ${scheduledNewsletters?.length || 0} scheduled + ${batchNewsletters?.length || 0} batch newsletters`);
+
+        // Respect sending window: only process when current hour is within user's start–end (in user's timezone or UTC). Skip when forceNextBatch.
+        if (!forceNextBatch && toProcess.length > 0) {
+          const userIds = [...new Set(toProcess.map((nl: any) => nl.user_id))];
+          const { data: profiles } = await supabase
+            .from('business_profiles')
+            .select('user_id, newsletter_cron_start_hour_utc, newsletter_cron_end_hour_utc, newsletter_cron_timezone')
+            .in('user_id', userIds);
+          const profileByUser = (profiles || []).reduce((acc: Record<string, { start: number; end: number; timezone: string | null }>, p: any) => {
+            acc[p.user_id] = {
+              start: p.newsletter_cron_start_hour_utc != null ? Math.max(0, Math.min(23, Number(p.newsletter_cron_start_hour_utc) | 0)) : 9,
+              end: p.newsletter_cron_end_hour_utc != null ? Math.max(0, Math.min(23, Number(p.newsletter_cron_end_hour_utc) | 0)) : 22,
+              timezone: (p.newsletter_cron_timezone && String(p.newsletter_cron_timezone).trim()) || null,
+            };
+            return acc;
+          }, {});
+          const now = new Date();
+          const utcHour = now.getUTCHours();
+          toProcess = toProcess.filter((nl: any) => {
+            const w = profileByUser[nl.user_id] ?? { start: 9, end: 22, timezone: null };
+            let currentHour: number;
+            let tzLabel: string;
+            if (w.timezone) {
+              try {
+                currentHour = parseInt(
+                  new Intl.DateTimeFormat('en-CA', { timeZone: w.timezone, hour: 'numeric', hour12: false }).format(now),
+                  10
+                );
+                tzLabel = w.timezone;
+              } catch {
+                currentHour = utcHour;
+                tzLabel = 'UTC (fallback)';
+              }
+            } else {
+              currentHour = utcHour;
+              tzLabel = 'UTC';
+            }
+            const inWindow = currentHour >= w.start && currentHour <= w.end;
+            if (!inWindow) console.log(`[cron-trigger] Skipping ${nl.title} (window ${w.start}:00–${w.end}:00 ${tzLabel}, now ${currentHour}:00)`);
+            return inWindow;
+          });
+          console.log(`[cron-trigger] After sending window filter: ${toProcess.length} newsletters to process`);
+        }
 
         const results: any[] = [];
         for (const nl of toProcess) {

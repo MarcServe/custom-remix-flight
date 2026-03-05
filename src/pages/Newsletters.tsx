@@ -161,6 +161,11 @@ export default function Newsletters() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendingBatchNow, setSendingBatchNow] = useState(false);
+  const [cronStartHourUtc, setCronStartHourUtc] = useState(9);
+  const [cronEndHourUtc, setCronEndHourUtc] = useState(22);
+  const [cronTimezone, setCronTimezone] = useState("");
+  const [savingCronWindow, setSavingCronWindow] = useState(false);
 
   // Editor state
   const [title, setTitle] = useState("");
@@ -360,7 +365,7 @@ export default function Newsletters() {
       if (!u) return null;
       const { data } = await supabase
         .from("business_profiles")
-        .select("company_name, email_header_name, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_title, email_signature, email_template_style, email_provider, website, email_sender_name, email_sender_email")
+        .select("company_name, email_header_name, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_title, email_signature, email_template_style, email_provider, website, email_sender_name, email_sender_email, newsletter_cron_start_hour_utc, newsletter_cron_end_hour_utc, newsletter_cron_timezone")
         .eq("user_id", u.id)
         .maybeSingle();
       return data;
@@ -411,6 +416,16 @@ export default function Newsletters() {
       setSenderConnectionId(connectionsForSend[0].id);
     }
   }, [connectionsForSend, senderConnectionId]);
+
+  useEffect(() => {
+    const bp = businessProfile as { newsletter_cron_start_hour_utc?: number | null; newsletter_cron_end_hour_utc?: number | null; newsletter_cron_timezone?: string | null } | undefined;
+    if (bp) {
+      if (bp.newsletter_cron_start_hour_utc != null) setCronStartHourUtc(Math.max(0, Math.min(23, bp.newsletter_cron_start_hour_utc)));
+      if (bp.newsletter_cron_end_hour_utc != null) setCronEndHourUtc(Math.max(0, Math.min(23, bp.newsletter_cron_end_hour_utc)));
+      if (bp.newsletter_cron_timezone != null && String(bp.newsletter_cron_timezone).trim()) setCronTimezone(String(bp.newsletter_cron_timezone).trim());
+      else setCronTimezone("");
+    }
+  }, [businessProfile]);
 
   const isGmailSendConnection = useMemo(() => {
     const id = senderConnectionId || (connectionsForSend[0] as { id: string; provider: string } | undefined)?.id;
@@ -2903,14 +2918,163 @@ Return ONLY the HTML body content.`,
           </Card>
         </div>
 
+        {/* Sending window: when cron may send (local time or UTC) */}
+        <Card className="border-muted">
+          <CardContent className="py-3 px-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Cron sending window</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Automated batch/scheduled sends run only between these hours. Choose a timezone so 9:00 means 9 AM in your region (e.g. 9:00 London = first run 9 AM UK). Default 9:00–22:00.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Label className="text-xs shrink-0">Timezone</Label>
+              {(() => {
+                const CRON_TZ_PRESETS = ["Europe/London", "Europe/Paris", "Europe/Berlin", "Europe/Dublin", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Toronto", "Asia/Dubai", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney"];
+                const isOther = cronTimezone && !CRON_TZ_PRESETS.includes(cronTimezone);
+                const selectValue = isOther ? "OTHER" : (cronTimezone || "UTC");
+                return (
+                  <>
+                    <Select
+                      value={selectValue}
+                      onValueChange={(v) => {
+                        if (v === "UTC") setCronTimezone("");
+                        else if (v === "OTHER") setCronTimezone(cronTimezone || " ");
+                        else setCronTimezone(v);
+                      }}
+                    >
+                      <SelectTrigger className="w-[220px] h-8 text-sm">
+                        <SelectValue placeholder="UTC">
+                          {isOther ? cronTimezone : null}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="UTC">UTC</SelectItem>
+                        <SelectGroup>
+                          <SelectLabel>Europe</SelectLabel>
+                          <SelectItem value="Europe/London">Europe/London (GMT/BST)</SelectItem>
+                          <SelectItem value="Europe/Paris">Europe/Paris</SelectItem>
+                          <SelectItem value="Europe/Berlin">Europe/Berlin</SelectItem>
+                          <SelectItem value="Europe/Dublin">Europe/Dublin</SelectItem>
+                        </SelectGroup>
+                        <SelectGroup>
+                          <SelectLabel>Americas</SelectLabel>
+                          <SelectItem value="America/New_York">America/New_York (ET)</SelectItem>
+                          <SelectItem value="America/Chicago">America/Chicago (CT)</SelectItem>
+                          <SelectItem value="America/Denver">America/Denver (MT)</SelectItem>
+                          <SelectItem value="America/Los_Angeles">America/Los_Angeles (PT)</SelectItem>
+                          <SelectItem value="America/Toronto">America/Toronto</SelectItem>
+                        </SelectGroup>
+                        <SelectGroup>
+                          <SelectLabel>Asia / Pacific</SelectLabel>
+                          <SelectItem value="Asia/Dubai">Asia/Dubai</SelectItem>
+                          <SelectItem value="Asia/Singapore">Asia/Singapore</SelectItem>
+                          <SelectItem value="Asia/Tokyo">Asia/Tokyo</SelectItem>
+                          <SelectItem value="Australia/Sydney">Australia/Sydney</SelectItem>
+                        </SelectGroup>
+                        <SelectItem value="OTHER">Other (enter below)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {isOther && (
+                      <Input
+                        placeholder="e.g. Africa/Lagos, Asia/Kolkata"
+                        value={cronTimezone === " " ? "" : cronTimezone}
+                        onChange={(e) => setCronTimezone(e.target.value.trim() || " ")}
+                        className="w-[200px] h-8 text-sm"
+                      />
+                    )}
+                  </>
+                );
+              })()}
+              <Label className="text-xs shrink-0 ml-2">Start</Label>
+              <Input
+                type="number"
+                min={0}
+                max={23}
+                value={cronStartHourUtc}
+                onChange={(e) => setCronStartHourUtc(Math.max(0, Math.min(23, parseInt(e.target.value, 10) || 0)))}
+                className="w-16 h-8 text-sm"
+              />
+              <span className="text-xs text-muted-foreground">:00</span>
+              <Label className="text-xs shrink-0">End</Label>
+              <Input
+                type="number"
+                min={0}
+                max={23}
+                value={cronEndHourUtc}
+                onChange={(e) => setCronEndHourUtc(Math.max(0, Math.min(23, parseInt(e.target.value, 10) || 0)))}
+                className="w-16 h-8 text-sm"
+              />
+              <span className="text-xs text-muted-foreground">:00{cronTimezone ? ` ${cronTimezone}` : " UTC"}</span>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={savingCronWindow}
+                onClick={async () => {
+                  setSavingCronWindow(true);
+                  try {
+                    const { data: { user: u } } = await supabase.auth.getUser();
+                    if (!u) throw new Error("Not authenticated");
+                    const { error } = await supabase
+                      .from("business_profiles")
+                      .update({
+                        newsletter_cron_start_hour_utc: cronStartHourUtc,
+                        newsletter_cron_end_hour_utc: cronEndHourUtc,
+                        newsletter_cron_timezone: cronTimezone.trim() || null,
+                      })
+                      .eq("user_id", u.id);
+                    if (error) throw error;
+                    queryClient.invalidateQueries({ queryKey: ["business-profile-newsletter"] });
+                    const tzLabel = cronTimezone ? ` ${cronTimezone}` : " UTC";
+                    toast.success("Sending window saved. Cron runs between " + cronStartHourUtc + ":00 and " + cronEndHourUtc + ":00" + tzLabel + ".");
+                  } catch (e: any) {
+                    toast.error(e?.message ?? "Failed to save");
+                  } finally {
+                    setSavingCronWindow(false);
+                  }
+                }}
+              >
+                {savingCronWindow ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                Save
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Batch sending explanation when any newsletter is in progress */}
         {newsletters.some(n => n.status === "sending") && (
           <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="py-3 px-4">
-              <p className="text-sm font-medium">Batch sending in progress</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                First batch (50) sent. Cron sends 50 every 15 min up to the daily cap; remaining list continues tomorrow with the same schedule. No action needed. Progress below and in &quot;View recipients&quot;. You can leave this page; we&apos;ll notify you if something goes wrong.
-              </p>
+            <CardContent className="py-3 px-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Batch sending in progress</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  First batch (50) sent. Cron sends 50 every 15 min up to the daily cap; remaining list continues tomorrow with the same schedule. No action needed. Progress below and in &quot;View recipients&quot;.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={sendingBatchNow}
+                onClick={async () => {
+                  setSendingBatchNow(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke("trigger-newsletter-batch-now", { body: {} });
+                    if (error) throw error;
+                    const count = (data?.results as { result?: { sent?: number } }[] | undefined)?.filter((r) => r.result && !(r.result as any).error).length ?? 0;
+                    queryClient.invalidateQueries({ queryKey: ["newsletters"] });
+                    queryClient.invalidateQueries({ queryKey: ["newsletter-sent-counts"] });
+                    toast.success(count > 0 ? `Next batch triggered for ${count} newsletter(s).` : "No batch newsletters in progress, or next batch already sent.");
+                  } catch (e: any) {
+                    toast.error(e?.message ?? "Failed to trigger next batch");
+                  } finally {
+                    setSendingBatchNow(false);
+                  }
+                }}
+              >
+                {sendingBatchNow ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
+                Send next batch now
+              </Button>
             </CardContent>
           </Card>
         )}
