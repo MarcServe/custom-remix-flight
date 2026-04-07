@@ -63,6 +63,59 @@ function previewBodyToHtml(text: string): string {
   return out.join('');
 }
 
+/**
+ * Browser IANA zone, or Europe/London when the engine reports UTC and the user locale is en-GB
+ * (common on misconfigured servers / some embedded browsers).
+ */
+function getDefaultCampaignTimeZone(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz && tz !== "UTC") return tz;
+    const lang = typeof navigator !== "undefined" ? navigator.language : "";
+    if (lang.toLowerCase().startsWith("en-gb")) return "Europe/London";
+    return tz || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+/** Wall-clock HH:mm for an instant in an IANA zone — matches how scheduled_at is encoded on save. */
+function formatHourMinuteInTimeZone(isoOrDate: Date | string, timeZone: string): string {
+  const date = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(date);
+    const h = parseInt(parts.find((p) => p.type === "hour")?.value ?? "9", 10);
+    const m = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10);
+    return `${String(isNaN(h) ? 9 : h).padStart(2, "0")}:${String(isNaN(m) ? 0 : m).padStart(2, "0")}`;
+  } catch {
+    return format(date, "HH:mm");
+  }
+}
+
+/** Calendar day in `timeZone` as a local Date for the picker (local midnight of that civil day). */
+function calendarDateFromInstantInTimeZone(instant: Date, timeZone: string): Date {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    }).formatToParts(instant);
+    const y = parseInt(parts.find((p) => p.type === "year")?.value ?? "0", 10);
+    const mo = parseInt(parts.find((p) => p.type === "month")?.value ?? "1", 10);
+    const d = parseInt(parts.find((p) => p.type === "day")?.value ?? "1", 10);
+    if (!y) return new Date(instant);
+    return new Date(y, mo - 1, d);
+  } catch {
+    return new Date(instant);
+  }
+}
+
 interface BulkEmailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -198,14 +251,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined);
   const [scheduledTime, setScheduledTime] = useState<string>("09:00");
-  const [scheduledTimezone, setScheduledTimezone] = useState<string>(() => {
-    // Get user's timezone or default to UTC
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch {
-      return 'UTC';
-    }
-  });
+  const [scheduledTimezone, setScheduledTimezone] = useState<string>(() => getDefaultCampaignTimeZone());
   const [excludedCampaignIds, setExcludedCampaignIds] = useState<string[]>([]);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -2117,10 +2163,14 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       
       if (draft.scheduled_at) {
         setScheduleEnabled(true);
-        const scheduledDate = new Date(draft.scheduled_at);
-        setScheduledDate(scheduledDate);
-        setScheduledTime(format(scheduledDate, 'HH:mm'));
-        // scheduled_timezone column doesn't exist - removed
+        const at = new Date(draft.scheduled_at);
+        const tz =
+          typeof (draft as { scheduled_timezone?: string }).scheduled_timezone === "string"
+            ? (draft as { scheduled_timezone: string }).scheduled_timezone
+            : getDefaultCampaignTimeZone();
+        setScheduledTimezone(tz);
+        setScheduledDate(calendarDateFromInstantInTimeZone(at, tz));
+        setScheduledTime(formatHourMinuteInTimeZone(at, tz));
       }
       
       if (draft.tags && Array.isArray(draft.tags)) {
@@ -3045,13 +3095,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setScheduleEnabled(false);
       setScheduledDate(undefined);
       setScheduledTime("09:00");
-      setScheduledTimezone(() => {
-        try {
-          return Intl.DateTimeFormat().resolvedOptions().timeZone;
-        } catch {
-          return 'UTC';
-        }
-      });
+      setScheduledTimezone(getDefaultCampaignTimeZone());
       setAutoFollowUpEnabled(true);
       setFollowUpSequenceId("");
       setExcludedCampaignIds([]);
@@ -3783,7 +3827,20 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
               <Switch
                 id="schedule-enabled"
                 checked={scheduleEnabled}
-                onCheckedChange={setScheduleEnabled}
+                onCheckedChange={(checked) => {
+                  setScheduleEnabled(checked);
+                  if (checked) {
+                    setScheduledTimezone(getDefaultCampaignTimeZone());
+                    setScheduledDate((d) => {
+                      if (d) return d;
+                      const tomorrow = new Date();
+                      tomorrow.setDate(tomorrow.getDate() + 1);
+                      tomorrow.setHours(12, 0, 0, 0);
+                      return tomorrow;
+                    });
+                    setScheduledTime((t) => (/^\d{2}:\d{2}$/.test(t) ? t : "09:00"));
+                  }
+                }}
                 disabled={sending || generatingAi}
               />
             </div>
@@ -3841,17 +3898,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                     disabled={sending || generatingAi}
                   >
                     <SelectTrigger id="schedule-timezone">
-                      <SelectValue>
-                        {(() => {
-                          try {
-                            const tz = scheduledTimezone;
-                            const offset = new Date().toLocaleString('en-US', { timeZone: tz, timeZoneName: 'short' }).split(' ').pop() || '';
-                            return `${tz.replace(/_/g, ' ')} (${offset})`;
-                          } catch {
-                            return scheduledTimezone;
-                          }
-                        })()}
-                      </SelectValue>
+                      <SelectValue placeholder="Select timezone" />
                     </SelectTrigger>
                     <SelectContent className="max-h-[300px]">
                       {(() => {
