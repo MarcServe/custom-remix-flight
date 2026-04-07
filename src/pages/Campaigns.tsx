@@ -27,7 +27,7 @@ import { PhoneCampaignDialog } from "@/components/PhoneCampaignDialog";
 import { PhoneServiceDialog } from "@/components/integrations/PhoneServiceDialog";
 import BulkEmailDialog, { type BulkEmailDialogHandle } from "@/components/BulkEmailDialog";
 import { format } from "date-fns";
-import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
+import { useSearchParams, useLocation, useNavigate, Link } from "react-router-dom";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1721,7 +1721,20 @@ export default function Campaigns() {
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl font-bold truncate">Campaigns Hub</h1>
               <p className="text-sm text-muted-foreground">
-                Manage your email and phone campaigns, monitor health, and optimize performance
+                Manage your email and phone campaigns, monitor health, and optimize performance.
+              </p>
+              <p className="mt-2 text-sm">
+                <Link
+                  to="/campaigns/import-email"
+                  className="font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  Per-recipient campaign page
+                </Link>
+                <span className="text-muted-foreground">
+                  {" "}
+                  — import a file or generate a different subject and body for each person (not the same as &quot;New email
+                  campaign&quot;).
+                </span>
               </p>
             </div>
           </div>
