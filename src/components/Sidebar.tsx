@@ -59,10 +59,11 @@ const navigation: NavigationItem[] = [
     href: "#outreach", 
     icon: Send,
     children: [
+      // First so it stays visible without scrolling; same as /campaigns/import-email
+      { name: "Personalized emails", href: "/campaigns/import-email", icon: FileSpreadsheet },
       { name: "Sequences", href: "/sequences", icon: Mail },
       { name: "Active Campaigns", href: "/company-sequences", icon: Activity },
       { name: "Campaigns", href: "/campaigns", icon: Briefcase },
-      { name: "Personalized emails", href: "/campaigns/import-email", icon: FileSpreadsheet },
       { name: "Email Branding", href: "/email-branding", icon: Palette },
       { name: "Newsletters", href: "/newsletters", icon: Newspaper },
       { name: "Newsletter Series", href: "/newsletter-series", icon: CalendarClock },
