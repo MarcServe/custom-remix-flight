@@ -1728,7 +1728,7 @@ export default function Campaigns() {
                   to="/campaigns/import-email"
                   className="font-medium text-primary underline-offset-2 hover:underline"
                 >
-                  Per-recipient campaign page
+                  Personalized emails (import / per-recipient)
                 </Link>
                 <span className="text-muted-foreground">
                   {" "}
