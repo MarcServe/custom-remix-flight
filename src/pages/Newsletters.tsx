@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,10 +24,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { EmailTemplatePreview, type EmailTemplatePreviewStyle } from "@/components/email/EmailTemplatePreview";
 import { TemplateStyleSelector, type EmailTemplateStyle } from "@/components/email/TemplateStyleSelector";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/email/RichTextEditor";
+import { replaceNthImage } from "@/lib/replace-nth-image-html";
 
 type Newsletter = {
   id: string;
@@ -154,6 +155,7 @@ export default function Newsletters() {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [view, setView] = useState<ViewMode>("list");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -594,7 +596,7 @@ export default function Newsletters() {
     setView("editor");
   };
 
-  const openEditNewsletter = (nl: Newsletter) => {
+  const openEditNewsletter = useCallback((nl: Newsletter) => {
     setEditingId(nl.id);
     setTitle(nl.title);
     setSubject(nl.subject);
@@ -606,7 +608,68 @@ export default function Newsletters() {
     setHeaderImageUrl(nl.header_image_url || "");
     setSelectedCategoryIds([]);
     setView("editor");
-  };
+  }, []);
+
+  const deepLinkEditConsumed = useRef<string | null>(null);
+
+  // Open editor from /newsletters?edit=<id> (e.g. Newsletter Series → Edit edition)
+  useEffect(() => {
+    const editId = searchParams.get("edit");
+    if (!editId) {
+      deepLinkEditConsumed.current = null;
+      return;
+    }
+    if (!user?.id || loadingNewsletters) return;
+    if (deepLinkEditConsumed.current === editId) return;
+
+    const applyAndClear = (nl: Newsletter) => {
+      deepLinkEditConsumed.current = editId;
+      openEditNewsletter(nl);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("edit");
+          return next;
+        },
+        { replace: true }
+      );
+    };
+
+    const match = newsletters.find((n) => n.id === editId);
+    if (match) {
+      applyAndClear(match);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("newsletters")
+        .select("*")
+        .eq("id", editId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error || !data) {
+        deepLinkEditConsumed.current = editId;
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("edit");
+            return next;
+          },
+          { replace: true }
+        );
+        toast({ title: "Newsletter not found", description: "Check the link or open it from Newsletter Series.", variant: "destructive" });
+        return;
+      }
+      applyAndClear(data as Newsletter);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, loadingNewsletters, newsletters, user?.id, openEditNewsletter, setSearchParams, toast]);
 
   const handleSaveNewsletter = async (): Promise<string | null> => {
     if (!user) return null;
@@ -723,19 +786,6 @@ export default function Newsletters() {
     } finally {
       setUploadingImage(false);
     }
-  };
-
-  const replaceNthImage = (html: string, index: number, newSrc: string | null): string => {
-    const imgRegex = /<img[^>]*>/gi;
-    let i = 0;
-    return html.replace(imgRegex, (match) => {
-      if (i++ === index) {
-        if (newSrc === null) return "";
-        const safe = newSrc.replace(/"/g, "&quot;");
-        return match.replace(/src\s*=\s*["'][^"']*["']/i, `src="${safe}"`);
-      }
-      return match;
-    });
   };
 
   const handleHeaderImageUpload = async (file: File) => {
@@ -2883,6 +2933,44 @@ Return ONLY the HTML body content.`,
             </Button>
           </div>
         </div>
+
+        <Card className="border-primary/25 bg-gradient-to-br from-primary/5 to-background">
+          <CardHeader className="pb-2">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="space-y-1">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <CalendarClock className="h-5 w-5 text-primary" />
+                  Automated daily newsletter series
+                </CardTitle>
+                <CardDescription className="text-sm leading-relaxed max-w-3xl">
+                  Set up a <strong>Newsletter Series</strong> to send every day on a schedule: the server generates{" "}
+                  <strong>new HTML with AI</strong> (rotating editorial angles), applies a{" "}
+                  <strong>different template design</strong> each day from your style list, optionally rotates{" "}
+                  <strong>header images</strong>, creates a newsletter, and sends to your subscribers—no manual compose step.
+                </CardDescription>
+              </div>
+              <Link to="/newsletter-series" className="shrink-0">
+                <Button>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Open Newsletter Series
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="text-xs text-muted-foreground space-y-2 pt-0">
+            <p>
+              <strong className="text-foreground">How it runs:</strong> pg_cron calls <code className="rounded bg-muted px-1">cron-trigger</code> →{" "}
+              <code className="rounded bg-muted px-1">process-newsletter-series</code> every 15 minutes (after your local send time, one send per calendar day per series).
+              Ensure Supabase Vault has <code className="rounded bg-muted px-1">cron_project_url</code> and{" "}
+              <code className="rounded bg-muted px-1">cron_service_role_key</code> and migration{" "}
+              <code className="rounded bg-muted px-1">20260407120000_newsletter_series_template_styles_and_cron.sql</code> is applied.
+              On the series page you can use <strong>Run check now</strong> to process your account immediately (same rules as cron).
+            </p>
+            <p>
+              Batch/scheduled sends from this page also respect the <strong>Cron sending window</strong> below; series editions trigger send directly after generation.
+            </p>
+          </CardContent>
+        </Card>
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">

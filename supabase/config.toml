@@ -107,3 +107,7 @@ verify_jwt = true
 
 [functions.bulk-extract-emails]
 verify_jwt = true
+
+# Service role (cron) or user JWT; auth enforced inside the function
+[functions.process-newsletter-series]
+verify_jwt = false

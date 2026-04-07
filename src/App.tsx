@@ -25,6 +25,7 @@ import Pipeline from "./pages/Pipeline";
 import Sequences from "./pages/Sequences";
 import CompanySequences from "./pages/CompanySequences";
 import Campaigns from "./pages/Campaigns";
+import PersonalizedEmailCampaign from "./pages/PersonalizedEmailCampaign";
 import Notes from "./pages/Notes";
 import UnifiedCampaigns from "./pages/UnifiedCampaigns";
 import AutoResponseHub from "./pages/AutoResponseHub";
@@ -90,6 +91,7 @@ const App = () => (
           <Route path="/all-campaigns" element={<UnifiedCampaigns />} />
           <Route path="/auto-responses" element={<AutoResponseHub />} />
           <Route path="/campaigns" element={<Campaigns />} />
+          <Route path="/campaigns/import-email" element={<PersonalizedEmailCampaign />} />
                           <Route path="/email-branding" element={<PageErrorBoundary fallbackTitle="Email Branding failed to load"><EmailBranding /></PageErrorBoundary>} />
                           <Route path="/newsletters" element={<Newsletters />} />
                           <Route path="/newsletter-series" element={<PageErrorBoundary fallbackTitle="Newsletter Series failed to load"><NewsletterSeries /></PageErrorBoundary>} />

@@ -33,35 +33,89 @@ function isTimeAtOrAfter(current: string, sendTime: string): boolean {
   return cm >= sm;
 }
 
+const VALID_TEMPLATE_STYLES = new Set([
+  "professional",
+  "minimal",
+  "modern",
+  "creative",
+  "corporate",
+  "bold",
+  "elegant",
+]);
+
+function normalizeTemplateStyles(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    const s = String(item ?? "").toLowerCase().trim();
+    if (VALID_TEMPLATE_STYLES.has(s)) out.push(s);
+  }
+  return out;
+}
+
+function pickTemplateStyle(
+  seriesStyles: string[],
+  dayIndex0: number,
+  senderFallback: string | null
+): string {
+  if (seriesStyles.length > 0) return seriesStyles[dayIndex0 % seriesStyles.length];
+  const fb = (senderFallback || "").toLowerCase().trim();
+  if (fb && VALID_TEMPLATE_STYLES.has(fb)) return fb;
+  return "professional";
+}
+
+const CONTENT_ANGLES = [
+  "Focus on one actionable tip readers can use today.",
+  "Lead with a short industry insight or trend, then explain why it matters.",
+  "Use a mini case-style narrative: challenge → approach → outcome (hypothetical is fine).",
+  "Structure as a tight listicle of 3–5 best practices with short explanations.",
+  "Open with a common mistake, then correct it with clear guidance.",
+  "Highlight a checklist readers can skim and apply.",
+];
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const authHeader = req.headers.get("Authorization") || "";
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    if (authHeader !== `Bearer ${supabaseServiceKey}`) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    /** Cron / internal: service role, all series (optional filterUserId for ops). Logged-in user: JWT, own series only. */
+    let filterUserId: string | null = null;
+    if (authHeader === `Bearer ${supabaseServiceKey}`) {
+      const raw = body.filterUserId ?? body.filter_user_id;
+      filterUserId = typeof raw === "string" && raw.trim() ? raw.trim() : null;
+    } else {
+      const anon = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: authErr } = await anon.auth.getUser();
+      if (authErr || !user?.id) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      filterUserId = user.id;
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get current date and time in Europe/London (default; series can override)
+    // Default timezone label for logs (each series uses its own timezone for send window)
     const defaultTz = "Europe/London";
-    const { dateStr: todayDefault, timeStr: currentTimeDefault } = getTodayAndTimeInTimezone(defaultTz);
+    const { dateStr: todayDefault } = getTodayAndTimeInTimezone(defaultTz);
 
     // Fetch active series where start_date <= today <= start_date + duration_days
-    const { data: allActive, error: fetchError } = await supabase
-      .from("newsletter_series")
-      .select("*")
-      .eq("status", "active");
+    let seriesQuery = supabase.from("newsletter_series").select("*").eq("status", "active");
+    if (filterUserId) {
+      seriesQuery = seriesQuery.eq("user_id", filterUserId);
+    }
+    const { data: allActive, error: fetchError } = await seriesQuery;
 
     if (fetchError) {
       console.error("[process-newsletter-series] Fetch series error:", fetchError);
@@ -72,8 +126,6 @@ serve(async (req) => {
     }
 
     const results: { seriesId: string; name: string; action: string; error?: string }[] = [];
-    const tz = defaultTz;
-    const { dateStr: today, timeStr: currentTime } = getTodayAndTimeInTimezone(tz);
 
     for (const series of allActive || []) {
       const seriesTz = series.timezone || defaultTz;
@@ -108,22 +160,36 @@ serve(async (req) => {
       try {
         const dayNum = Math.floor((todayDate.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
         const total = series.duration_days;
+        const dayIndex0 = dayNum - 1;
+        const seriesStyles = normalizeTemplateStyles(series.template_styles);
+        let senderTemplateStyle: string | null = null;
+        if (series.sender_profile_id) {
+          const { data: sp } = await supabase
+            .from("sender_profiles")
+            .select("template_style")
+            .eq("id", series.sender_profile_id)
+            .maybeSingle();
+          senderTemplateStyle = (sp as { template_style?: string } | null)?.template_style ?? null;
+        }
+        const templateStyle = pickTemplateStyle(seriesStyles, dayIndex0, senderTemplateStyle);
+        const contentAngle = CONTENT_ANGLES[dayIndex0 % CONTENT_ANGLES.length];
+
         const topicTemplate = series.ai_topic_template || "Daily newsletter content for our subscribers.";
         const promptText = topicTemplate
           .replace(/\{day\}/g, String(dayNum))
           .replace(/\{total\}/g, String(total));
-        const companyName = ""; // will be filled by generate-email-with-ai from business profile
         const prompt = `Write a marketing newsletter email about: ${promptText}
 Day ${dayNum} of ${total} in this series.
 Target audience: ${series.ai_target_audience || "subscribers"}.
 Tone: ${series.ai_tone || "professional"}.
-Company: ${companyName || "our company"}.
+Today's editorial angle: ${contentAngle}
+Email wrapper design for this send: "${templateStyle}" (match the writing to this vibe; body is still HTML for email).
 
 The newsletter should:
-- Have an engaging opening
-- Include 2-3 key points or tips
-- Be 200-400 words
-- Use HTML with <p>, <h3>, <strong>, <ul>/<li>
+- Have an engaging opening that differs from a generic "welcome"
+- Include 2-3 key points or tips (or follow today's editorial angle)
+- Be roughly 200-450 words
+- Use semantic HTML: <h2> for sections, <p>, <strong>, <ul>/<li> as appropriate
 - Do NOT include subject line or signature
 
 Return ONLY the HTML body content.`;
@@ -137,6 +203,7 @@ Return ONLY the HTML body content.`;
           body: JSON.stringify({
             context: "newsletter",
             prompt,
+            templateStyle,
             triggeredByCron: true,
             user_id: series.user_id,
           }),
@@ -158,7 +225,7 @@ Return ONLY the HTML body content.`;
             subject,
             body_html: bodyHtml,
             sender_profile_id: series.sender_profile_id || null,
-            template_style: "professional",
+            template_style: templateStyle,
             status: "scheduled",
             scheduled_at: new Date().toISOString(),
             scheduled_send_options: series.scheduled_send_options || null,
@@ -206,6 +273,7 @@ Return ONLY the HTML body content.`;
         success: true,
         action: "process-newsletter-series",
         today: todayDefault,
+        scope: filterUserId ? "user" : "all",
         results,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

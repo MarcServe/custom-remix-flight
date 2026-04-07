@@ -107,12 +107,25 @@ ${senderCompany}${senderEmail ? '\n' + senderEmail : ''}${senderPhone ? '\n' + s
     // Check if this is a newsletter generation request
     if (requestBody.context === 'newsletter' && requestBody.prompt) {
       console.log('Processing newsletter generation');
+      const templateStyle = typeof requestBody.templateStyle === 'string' ? requestBody.templateStyle.toLowerCase().trim() : '';
+      const styleHints: Record<string, string> = {
+        professional: 'Use a balanced, trustworthy tone. Clear section headings and concise paragraphs.',
+        minimal: 'Keep it sparse: at most 2 sections with <h2>, short paragraphs, minimal lists. No filler.',
+        modern: 'Use a confident, contemporary voice. Include one tight bullet list and a clear takeaway.',
+        creative: 'Be vivid and distinctive; varied sentence length; one memorable metaphor or example is welcome.',
+        corporate: 'Formal, precise language; emphasize reliability and outcomes; suitable for B2B readers.',
+        bold: 'Strong opinions welcome; short punchy sentences; a clear call-to-action style closing section.',
+        elegant: 'Polished, refined wording; slightly more formal; smooth transitions between sections.',
+      };
+      const styleExtra = templateStyle && styleHints[templateStyle] ? `\nVisual/voice target for this edition (${templateStyle}): ${styleHints[templateStyle]}` : '';
+
       systemPrompt = `You are an expert newsletter copywriter. Write engaging, well-structured marketing newsletter content in HTML. 
 Use semantic HTML tags: <h2> for section headings, <p> for paragraphs, <strong> for emphasis, <ul>/<li> for lists.
-Structure the newsletter with 2-4 clearly separated sections, each with its own <h2> heading.
+Structure the newsletter with 2-4 clearly separated sections, each with its own <h2> heading (unless the design brief asks for fewer).
 Between sections, insert a placeholder comment <!-- IMAGE_PLACEHOLDER --> so the user knows where to add images.
 Do NOT include a subject line, greeting, or email signature — just the newsletter body content.
-Make the content informative, valuable, and action-oriented.`;
+Make the content informative, valuable, and action-oriented.
+Each edition should feel fresh: vary opening hook, section titles, and examples from one day to the next.${styleExtra}`;
 
       userPrompt = requestBody.prompt;
 

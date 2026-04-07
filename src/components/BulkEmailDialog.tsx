@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useRef, forwardRef, useImperativeHandle } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,18 +13,30 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical, ExternalLink, Edit2, Upload } from "lucide-react";
+import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, ChevronLeft, ChevronRight, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical, ExternalLink, Edit2, Upload, ImagePlus, Trash2, FileType } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUpdateSequence } from "@/hooks/use-sequences";
 import { PersonaSelector, type MarketingPersona } from "./email/PersonaSelector";
 import { TagInput } from "@/components/ui/tag-input";
 import { useCompanyTags } from "@/hooks/use-company-tags";
-import { RichTextEditor } from "./email/RichTextEditor";
+import { RichTextEditor, type RichTextEditorHandle } from "./email/RichTextEditor";
 import { EmailTemplateSelector, EMAIL_TEMPLATES, type EmailTemplate } from "./email/EmailTemplateSelector";
 import { FileAttachmentSelector } from "./email/FileAttachmentSelector";
 import { EmailTemplatePreview, type EmailTemplatePreviewStyle } from "./email/EmailTemplatePreview";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
+import {
+  parseDelimited,
+  parseSpreadsheetText,
+  detectColumnMap,
+  parseCampaignCsvRows,
+  type CsvImportRow,
+} from "@/lib/csv-campaign-import";
+import { parseCampaignJson } from "@/lib/json-campaign-import";
+import { parseCampaignXlsxToRows } from "@/lib/xlsx-campaign-import";
+import { extractCampaignMessagesFromPdf, pdfMessageToCsvRow } from "@/lib/pdf-campaign-import";
+import { replaceNthImage } from "@/lib/replace-nth-image-html";
 
 export interface BulkEmailDialogHandle {
   addRecipientsFromSelection: () => Promise<void>;
@@ -67,9 +79,83 @@ interface BulkEmailDialogProps {
     };
   }>;
   initialDraftId?: string | null; // Optional: draft ID to auto-load when dialog opens
+  /** Full-page layout (e.g. `/campaigns/import-email`) instead of a modal — avoids mixing with template bulk send. */
+  variant?: "dialog" | "page";
 }
 
-const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(function BulkEmailDialog({ open, onOpenChange, selectedPeople, initialDraftId }, ref) {
+type PersonalizedEmailEntry = { subject: string; bodyHtml: string; bodyText: string };
+
+type BulkRecipientRow = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  company_id?: string;
+  companies?: { id?: string; name?: string; tags?: string[] };
+};
+
+const BULK_EMAIL_DRAFT_KEY = "leadgenie_bulk_email_draft";
+
+/** Strip BOM / unicode quirks so CRM exports match People emails. */
+function normalizeEmailForMatch(email: string | undefined | null): string {
+  if (!email) return "";
+  try {
+    return email.replace(/^\uFEFF+/, "").trim().toLowerCase().normalize("NFKC");
+  } catch {
+    return email.trim().toLowerCase();
+  }
+}
+
+/**
+ * Merge imported rows into existing recipients: match by normalized email first;
+ * if counts match and no email match, assign row i → recipient i (same order as list + file).
+ */
+function mergeImportRowsIntoRecipients(
+  ok: CsvImportRow[],
+  mergedRecipients: BulkRecipientRow[],
+  mergedPersonalized: Record<string, PersonalizedEmailEntry>,
+  applyFooters: (row: CsvImportRow) => { bodyHtml: string; bodyText: string },
+  idPrefix: string,
+): void {
+  const used = new Set<number>();
+  for (let ri = 0; ri < ok.length; ri++) {
+    const row = ok[ri];
+    const { bodyHtml, bodyText } = applyFooters(row);
+    const rowEm = normalizeEmailForMatch(row.email);
+    let idx = mergedRecipients.findIndex(
+      (p, pi) => !used.has(pi) && rowEm !== "" && normalizeEmailForMatch(p.email) === rowEm,
+    );
+    if (idx < 0 && ok.length === mergedRecipients.length && ri < mergedRecipients.length && !used.has(ri)) {
+      idx = ri;
+    }
+    if (idx >= 0) {
+      used.add(idx);
+      const p = mergedRecipients[idx];
+      mergedRecipients[idx] = {
+        ...p,
+        first_name: row.first_name || p.first_name,
+        last_name: row.last_name || p.last_name,
+        email: row.email || p.email,
+      };
+      mergedPersonalized[p.id] = { subject: row.subject, bodyHtml, bodyText };
+    } else {
+      const id = `${idPrefix}${crypto.randomUUID()}`;
+      mergedRecipients.push({
+        id,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        email: row.email,
+      });
+      mergedPersonalized[id] = { subject: row.subject, bodyHtml, bodyText };
+    }
+  }
+}
+
+const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(function BulkEmailDialog(
+  { open, onOpenChange, selectedPeople, initialDraftId, variant = "dialog" },
+  ref
+) {
+  const isPage = variant === "page";
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { allSuggestions } = useCompanyTags();
@@ -102,6 +188,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const [generatingPersonalized, setGeneratingPersonalized] = useState(false);
   const [personalizedEmails, setPersonalizedEmails] = useState<Record<string, { subject: string; bodyHtml: string; bodyText: string }>>({});
   const [usePersonalizedEmails, setUsePersonalizedEmails] = useState(false);
+  /** When per-recipient mode is on, which recipient’s subject/body the editor & preview show. */
+  const [perRecipientEditId, setPerRecipientEditId] = useState<string | null>(null);
+  /** When true, append business profile email signature after each row body (and after row `footer` if present). */
+  const [csvAppendDefaultFooter, setCsvAppendDefaultFooter] = useState(true);
+  const campaignImportFileRef = useRef<HTMLInputElement>(null);
+  const campaignImportModeRef = useRef<"replace" | "merge">("replace");
+  const [importingCampaignFile, setImportingCampaignFile] = useState(false);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined);
   const [scheduledTime, setScheduledTime] = useState<string>("09:00");
@@ -129,6 +222,23 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const [headerImageUrl, setHeaderImageUrl] = useState("");
   const [uploadingHeaderImage, setUploadingHeaderImage] = useState(false);
   const headerImageFileRef = useRef<HTMLInputElement>(null);
+  const campaignBodyEditorRef = useRef<RichTextEditorHandle | null>(null);
+  const campaignBodyImgInputRef = useRef<HTMLInputElement>(null);
+  const replaceBodyImageInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingBodyImage, setUploadingBodyImage] = useState(false);
+  const [editBodyImageOpen, setEditBodyImageOpen] = useState(false);
+  const [editBodyImageSrc, setEditBodyImageSrc] = useState("");
+  const [editBodyImageIndex, setEditBodyImageIndex] = useState(0);
+  const [editBodyImageNewUrl, setEditBodyImageNewUrl] = useState("");
+  /** Which body the preview image edit applies to (B uses variant B HTML / text). */
+  const [editBodyImageAbVariant, setEditBodyImageAbVariant] = useState<"a" | "b">("a");
+  const abBodyTextBRef = useRef("");
+  abBodyTextBRef.current = abBodyTextB;
+  const [brandingQuickOpen, setBrandingQuickOpen] = useState(false);
+  const [bpQuickCompany, setBpQuickCompany] = useState("");
+  const [bpQuickColor, setBpQuickColor] = useState("#4b5cf6");
+  const [bpQuickSignature, setBpQuickSignature] = useState("");
+  const [savingBrandingQuick, setSavingBrandingQuick] = useState(false);
 
   // Fetch previous campaigns for exclusion
   const { data: previousCampaigns } = useQuery({
@@ -211,9 +321,93 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     return baseRecipients;
   }, [filteredRecipients, excludedRecipients]);
 
-  // Synthetic recipient ids (rec-*) are not valid UUIDs; use null for person_id in DB inserts.
-  const personIdForDb = (person: { id?: string }) =>
-    person?.id && !String(person.id).startsWith('rec-') ? person.id : null;
+  /** Map used for validation, send, and draft persist — includes the editor buffer for the active recipient. */
+  const personalizedEmailsEffective = useMemo(() => {
+    if (!usePersonalizedEmails || !perRecipientEditId) return personalizedEmails;
+    return {
+      ...personalizedEmails,
+      [perRecipientEditId]: { subject, bodyHtml, bodyText },
+    };
+  }, [usePersonalizedEmails, perRecipientEditId, personalizedEmails, subject, bodyHtml, bodyText]);
+
+  const perRecipientContentReady = useMemo(() => {
+    if (!usePersonalizedEmails || recipientsToUse.length === 0) return false;
+    return recipientsToUse.every(
+      (p) =>
+        p.email &&
+        personalizedEmailsEffective[p.id]?.subject?.trim() &&
+        (personalizedEmailsEffective[p.id]?.bodyText?.trim() || personalizedEmailsEffective[p.id]?.bodyHtml?.trim())
+    );
+  }, [usePersonalizedEmails, recipientsToUse, personalizedEmailsEffective]);
+
+  const personalizedEmailsRef = useRef(personalizedEmails);
+  personalizedEmailsRef.current = personalizedEmails;
+
+  useEffect(() => {
+    if (!usePersonalizedEmails) {
+      setPerRecipientEditId(null);
+      return;
+    }
+    if (recipientsToUse.length === 0) return;
+    setPerRecipientEditId((prev) => {
+      if (prev && recipientsToUse.some((p) => p.id === prev)) return prev;
+      return recipientsToUse[0].id;
+    });
+  }, [usePersonalizedEmails, recipientsToUse]);
+
+  useLayoutEffect(() => {
+    if (!usePersonalizedEmails || !perRecipientEditId) return;
+    const pe = personalizedEmailsRef.current[perRecipientEditId];
+    if (pe) {
+      setSubject(pe.subject);
+      setBodyHtml(pe.bodyHtml);
+      setBodyText(pe.bodyText);
+    } else {
+      setSubject("");
+      setBodyHtml("");
+      setBodyText("");
+    }
+  }, [perRecipientEditId, usePersonalizedEmails]);
+
+  useEffect(() => {
+    if (!usePersonalizedEmails || !perRecipientEditId) return;
+    setPersonalizedEmails((prev) => ({
+      ...prev,
+      [perRecipientEditId]: { subject, bodyHtml, bodyText },
+    }));
+  }, [subject, bodyHtml, bodyText, perRecipientEditId, usePersonalizedEmails]);
+
+  const switchPerRecipient = useCallback(
+    (newId: string) => {
+      if (newId === perRecipientEditId) return;
+      setPersonalizedEmails((prev) => {
+        const next = { ...prev };
+        if (usePersonalizedEmails && perRecipientEditId) {
+          next[perRecipientEditId] = { subject, bodyHtml, bodyText };
+        }
+        return next;
+      });
+      setPerRecipientEditId(newId);
+    },
+    [usePersonalizedEmails, perRecipientEditId, subject, bodyHtml, bodyText]
+  );
+
+  const previewRecipientIndex = useMemo(() => {
+    if (!perRecipientEditId) return 0;
+    const i = recipientsToUse.findIndex((p) => p.id === perRecipientEditId);
+    return i >= 0 ? i : 0;
+  }, [recipientsToUse, perRecipientEditId]);
+
+  const canSendOrTestContent = perRecipientContentReady || (!!subject.trim() && !!bodyText.trim());
+
+  // Synthetic ids are not people UUIDs; use null for person_id in DB inserts.
+  const personIdForDb = (person: { id?: string }) => {
+    const id = person?.id;
+    if (!id) return null;
+    const s = String(id);
+    if (s.startsWith("rec-") || s.startsWith("csv-") || s.startsWith("imp-") || s.startsWith("pdf-")) return null;
+    return id;
+  };
 
   // Check for duplicate emails (people who already received emails in previous campaigns)
   const { data: duplicateRecipients } = useQuery({
@@ -221,10 +415,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     queryFn: async () => {
       if (recipientsToUse.length === 0) return [];
       
-      // Only real UUIDs (exclude synthetic "rec-*" ids) for person_id query
       const personIds = recipientsToUse
-        .filter(p => p.id && !String(p.id).startsWith('rec-'))
-        .map(p => p.id);
+        .filter((p) => p.id && personIdForDb(p))
+        .map((p) => p.id);
       
       if (personIds.length === 0) return [];
 
@@ -423,8 +616,8 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const prevSelectedPeopleRef = useRef<typeof selectedPeople>(selectedPeople);
   const hasAutoLoadedDraft = useRef(false);
   const hasRestoredLocalDraft = useRef(false);
+  const skipPersistOnCloseOnceRef = useRef(false);
   const contentOnlyEditRef = useRef(false); // true when editing a sending/completed campaign (update content only, don't replace recipients)
-  const BULK_EMAIL_DRAFT_KEY = 'leadgenie_bulk_email_draft';
 
   const draftSnapshotRef = useRef({
     campaignName: '',
@@ -460,6 +653,43 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     };
   }, [campaignName, subject, bodyHtml, bodyText, senderConnectionId, senderProfileId, selectedTags, scheduleEnabled, scheduledDate, scheduledTime, scheduledTimezone, autoFollowUpEnabled, followUpSequenceId]);
 
+  const latestImportStateRef = useRef({
+    personalizedEmails: {} as Record<string, PersonalizedEmailEntry>,
+    usePersonalizedEmails: false,
+    filteredRecipients: [] as BulkRecipientRow[],
+  });
+  useEffect(() => {
+    latestImportStateRef.current = {
+      personalizedEmails: personalizedEmailsEffective,
+      usePersonalizedEmails,
+      filteredRecipients: filteredRecipients as BulkRecipientRow[],
+    };
+  }, [personalizedEmailsEffective, usePersonalizedEmails, filteredRecipients]);
+
+  const persistBulkLocalDraft = useCallback(() => {
+    try {
+      const imp = latestImportStateRef.current;
+      const base = draftSnapshotRef.current;
+      const payload: Record<string, unknown> = { ...base, savedAt: new Date().toISOString() };
+      if (imp.usePersonalizedEmails && Object.keys(imp.personalizedEmails).length > 0) {
+        payload.usePersonalizedEmails = true;
+        payload.personalizedEmails = imp.personalizedEmails;
+        payload.importRecipients = imp.filteredRecipients.map((p) => ({
+          id: p.id,
+          first_name: p.first_name ?? "",
+          last_name: p.last_name ?? "",
+          email: p.email ?? "",
+          ...(p.company_id ? { company_id: p.company_id } : {}),
+        }));
+      } else {
+        payload.usePersonalizedEmails = false;
+      }
+      localStorage.setItem(BULK_EMAIL_DRAFT_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) {
       setDraftId(null);
@@ -469,15 +699,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       hasRestoredLocalDraft.current = false;
       contentOnlyEditRef.current = false;
       localStorage.removeItem('leadgenie_draft_recipients');
-      // Persist current form to localStorage on close (so we can restore later)
-      try {
-        const payload = {
-          ...draftSnapshotRef.current,
-          savedAt: new Date().toISOString(),
-        };
-        localStorage.setItem(BULK_EMAIL_DRAFT_KEY, JSON.stringify(payload));
-      } catch {
-        // ignore
+      if (!skipPersistOnCloseOnceRef.current) {
+        persistBulkLocalDraft();
+      } else {
+        skipPersistOnCloseOnceRef.current = false;
       }
     } else {
       // Dedupe by email so no duplicate is ever shown; keep first occurrence
@@ -514,23 +739,51 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           try {
             const raw = localStorage.getItem(BULK_EMAIL_DRAFT_KEY);
             if (!raw) return;
-            const data = JSON.parse(raw) as typeof draftSnapshotRef.current & { savedAt?: string };
-            const hasContent = (data.campaignName?.trim() || data.subject?.trim() || data.bodyText?.trim());
+            const data = JSON.parse(raw) as typeof draftSnapshotRef.current & {
+              savedAt?: string;
+              usePersonalizedEmails?: boolean;
+              personalizedEmails?: Record<string, PersonalizedEmailEntry>;
+              importRecipients?: BulkRecipientRow[];
+            };
+            const hasImportedRecipients =
+              data.usePersonalizedEmails &&
+              Array.isArray(data.importRecipients) &&
+              data.importRecipients.length > 0 &&
+              data.personalizedEmails &&
+              typeof data.personalizedEmails === "object";
+            const hasContent =
+              data.campaignName?.trim() ||
+              data.subject?.trim() ||
+              data.bodyText?.trim() ||
+              hasImportedRecipients;
             if (!hasContent) return;
-            setCampaignName(data.campaignName || '');
-            setSubject(data.subject || '');
-            setBodyHtml(data.bodyHtml || '');
-            setBodyText(data.bodyText || '');
+            setCampaignName(data.campaignName || "");
+            setSubject(data.subject || "");
+            setBodyHtml(data.bodyHtml || "");
+            setBodyText(data.bodyText || "");
             if (data.senderConnectionId) setSenderConnectionId(data.senderConnectionId);
             if (data.senderProfileId) setSenderProfileId(data.senderProfileId);
             if (Array.isArray(data.selectedTags)) setSelectedTags(data.selectedTags);
             setScheduleEnabled(!!data.scheduleEnabled);
             setScheduledDate(data.scheduledDate ? new Date(data.scheduledDate) : undefined);
-            setScheduledTime(data.scheduledTime || '09:00');
+            setScheduledTime(data.scheduledTime || "09:00");
             if (data.scheduledTimezone) setScheduledTimezone(data.scheduledTimezone);
             setAutoFollowUpEnabled(data.autoFollowUpEnabled !== false);
-            setFollowUpSequenceId(data.followUpSequenceId || '');
-            toast({ title: 'Draft restored', description: 'Your previous campaign has been restored from this device.' });
+            setFollowUpSequenceId(data.followUpSequenceId || "");
+            if (hasImportedRecipients) {
+              const ir = data.importRecipients as BulkRecipientRow[];
+              const pe = data.personalizedEmails as Record<string, PersonalizedEmailEntry>;
+              setFilteredRecipients(ir);
+              unfilteredRecipientsRef.current = ir;
+              setPersonalizedEmails(pe);
+              setUsePersonalizedEmails(true);
+            }
+            toast({
+              title: "Draft restored",
+              description: hasImportedRecipients
+                ? "Campaign and per-recipient messages restored from this device."
+                : "Your previous campaign has been restored from this device.",
+            });
           } catch {
             // ignore
           }
@@ -538,40 +791,44 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         return () => clearTimeout(t);
       }
     }
-  }, [open, selectedPeople, initialDraftId, toast]);
+  }, [open, selectedPeople, initialDraftId, toast, persistBulkLocalDraft]);
 
   // Debounced persist to localStorage while dialog is open
   useEffect(() => {
     if (!open) return;
     const id = setTimeout(() => {
-      try {
-        const payload = {
-          ...draftSnapshotRef.current,
-          savedAt: new Date().toISOString(),
-        };
-        localStorage.setItem(BULK_EMAIL_DRAFT_KEY, JSON.stringify(payload));
-      } catch {
-        // ignore
-      }
+      persistBulkLocalDraft();
     }, 1500);
     return () => clearTimeout(id);
-  }, [open, campaignName, subject, bodyHtml, bodyText, senderConnectionId, senderProfileId, selectedTags, scheduleEnabled, scheduledDate, scheduledTime, scheduledTimezone, autoFollowUpEnabled, followUpSequenceId]);
+  }, [
+    open,
+    campaignName,
+    subject,
+    bodyHtml,
+    bodyText,
+    senderConnectionId,
+    senderProfileId,
+    selectedTags,
+    scheduleEnabled,
+    scheduledDate,
+    scheduledTime,
+    scheduledTimezone,
+    autoFollowUpEnabled,
+    followUpSequenceId,
+    personalizedEmailsEffective,
+    usePersonalizedEmails,
+    filteredRecipients,
+    persistBulkLocalDraft,
+  ]);
 
   // Persist to localStorage on page unload (e.g. tab close) so draft is not lost
   useEffect(() => {
     const onBeforeUnload = () => {
-      try {
-        localStorage.setItem(BULK_EMAIL_DRAFT_KEY, JSON.stringify({
-          ...draftSnapshotRef.current,
-          savedAt: new Date().toISOString(),
-        }));
-      } catch {
-        // ignore
-      }
+      persistBulkLocalDraft();
     };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, []);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [persistBulkLocalDraft]);
 
   // Reset load flag when initialDraftId changes so we load the new campaign (not skip because we already loaded a previous one)
   const prevInitialDraftIdRef = useRef<string | null | undefined>(undefined);
@@ -782,10 +1039,457 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
   // Personalize text with variables (case-insensitive to match {{firstName}}, {{FirstName}}, etc.)
   const personalizeText = (template: string, person: typeof selectedPeople[0]) => {
+    const full = `${person.first_name} ${person.last_name}`.trim();
     return template
       .replace(/\{\{firstName\}\}/gi, person.first_name || '')
       .replace(/\{\{lastName\}\}/gi, person.last_name || '')
-      .replace(/\{\{fullName\}\}/gi, `${person.first_name} ${person.last_name}`.trim() || '');
+      .replace(/\{\{fullName\}\}/gi, full || '')
+      .replace(/\{\{email\}\}/gi, person.email || '');
+  };
+
+  /** Build one DB row; when `usePersonalizedEmails` is set, per-recipient content wins and A/B is skipped. */
+  const buildRecipientDbRow = (
+    person: any,
+    campaignId: string,
+    opts: {
+      useAb: boolean;
+      subjA: string;
+      textA: string;
+      htmlA: string;
+      subjB: string;
+      textB: string;
+      htmlB: string;
+      abTrafficSplit: number;
+    },
+    peMap: Record<string, PersonalizedEmailEntry> = personalizedEmails,
+    usePe: boolean = usePersonalizedEmails
+  ) => {
+    const pe = usePe && peMap[person.id];
+    if (pe) {
+      return {
+        campaign_id: campaignId,
+        person_id: personIdForDb(person),
+        email: person.email,
+        name: `${person.first_name} ${person.last_name}`.trim() || person.email,
+        personalized_subject: pe.subject,
+        personalized_body_html: pe.bodyHtml,
+        personalized_body_text: pe.bodyText,
+        status: 'pending',
+        email_period: 'new',
+      };
+    }
+    const variant = opts.useAb ? (Math.random() * 100 < opts.abTrafficSplit ? 'A' : 'B') : null;
+    const subj = variant === 'B' ? opts.subjB : opts.subjA;
+    const text = variant === 'B' ? opts.textB : opts.textA;
+    const htmlForDb = variant === 'B' ? opts.htmlB : opts.htmlA;
+    return {
+      campaign_id: campaignId,
+      person_id: personIdForDb(person),
+      email: person.email,
+      name: `${person.first_name} ${person.last_name}`.trim() || person.email,
+      personalized_subject: personalizeText(subj, person),
+      personalized_body_html: personalizeText(htmlForDb, person),
+      personalized_body_text: personalizeText(text, person),
+      status: 'pending',
+      email_period: 'new',
+      ...(variant && { ab_variant: variant }),
+    };
+  };
+
+  const applyImportedCampaignRows = async (
+    ok: CsvImportRow[],
+    errors: string[],
+    mode: "replace" | "merge",
+    opts: { sourceLabel: string },
+  ) => {
+    const { sourceLabel } = opts;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+    const { data: businessProfile } = await supabase
+      .from("business_profiles")
+      .select("email_signature")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const defaultFooterHtml = (businessProfile?.email_signature || "").trim();
+    const defaultFooterText = defaultFooterHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+    const applyFooters = (row: CsvImportRow) => {
+      let html = row.bodyHtml;
+      let txt = row.bodyText;
+      if (row.rowFooter) {
+        const f = row.rowFooter.trim();
+        if (f.includes("<") && f.includes(">")) {
+          html += f.startsWith("<") ? f : `<p>${f}</p>`;
+        } else {
+          html += `<p style="margin:12px 0 0 0;">${f.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>")}</p>`;
+        }
+        txt += `\n\n${f}`;
+      }
+      if (csvAppendDefaultFooter && defaultFooterHtml) {
+        html += defaultFooterHtml.startsWith("<") ? defaultFooterHtml : `<p>${defaultFooterHtml}</p>`;
+        if (defaultFooterText) txt += `\n\n${defaultFooterText}`;
+      }
+      return { bodyHtml: html, bodyText: txt };
+    };
+
+    const idPrefix = "imp-";
+
+    if (mode === "merge") {
+      const mergedRecipients = [...(filteredRecipients as BulkRecipientRow[])];
+      const mergedPersonalized = { ...personalizedEmails };
+      mergeImportRowsIntoRecipients(ok, mergedRecipients, mergedPersonalized, applyFooters, idPrefix);
+      setFilteredRecipients(mergedRecipients);
+      unfilteredRecipientsRef.current = mergedRecipients;
+      setPersonalizedEmails(mergedPersonalized);
+      setUsePersonalizedEmails(true);
+      setAbTestEnabled(false);
+      if (ok[0]) {
+        const first = ok[0];
+        const { bodyHtml, bodyText } = applyFooters(first);
+        setSubject(first.subject);
+        setBodyText(bodyText);
+        setBodyHtml(bodyHtml);
+      }
+      if (errors.length > 0) {
+        toast({
+          title: `${sourceLabel}: merged ${ok.length} row(s)`,
+          description: `Skipped ${errors.length} row(s). ${errors.slice(0, 3).join(" ")}`,
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: `${sourceLabel} merged`,
+          description: `${ok.length} row(s) applied. Recipients matched by email (BOM/unicode normalized); when row count equals your list, rows also align by position. New addresses were appended.`,
+        });
+      }
+      return;
+    }
+
+    const emailsMap: Record<string, { subject: string; bodyHtml: string; bodyText: string }> = {};
+    const newRecipients: Array<{
+      id: string;
+      first_name: string;
+      last_name: string;
+      email: string;
+    }> = [];
+
+    ok.forEach((row) => {
+      const { bodyHtml, bodyText } = applyFooters(row);
+      const id = `${idPrefix}${crypto.randomUUID()}`;
+      newRecipients.push({
+        id,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        email: row.email,
+      });
+      emailsMap[id] = {
+        subject: row.subject,
+        bodyHtml,
+        bodyText,
+      };
+    });
+
+    setFilteredRecipients(newRecipients);
+    unfilteredRecipientsRef.current = newRecipients;
+    setPersonalizedEmails(emailsMap);
+    setUsePersonalizedEmails(true);
+    setAbTestEnabled(false);
+
+    if (ok[0]) {
+      const first = ok[0];
+      const { bodyHtml, bodyText } = applyFooters(first);
+      setSubject(first.subject);
+      setBodyText(bodyText);
+      setBodyHtml(bodyHtml);
+    }
+
+    if (errors.length > 0) {
+      toast({
+        title: `${sourceLabel}: imported ${ok.length} row(s)`,
+        description: `Skipped ${errors.length} row(s). ${errors.slice(0, 3).join(" ")}`,
+        variant: "default",
+      });
+    } else {
+      toast({
+        title: `${sourceLabel} imported`,
+        description: `${ok.length} recipient(s) with per-row subject and body. Save draft or send when ready.`,
+      });
+    }
+  };
+
+  const handleCampaignDataImport = async (file: File, mode: "replace" | "merge" = "replace") => {
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    if (ext === "pdf" || file.type === "application/pdf") {
+      return handleCampaignPdfImport(file, mode);
+    }
+
+    setImportingCampaignFile(true);
+    try {
+      const defaultSubj = subject.trim() || "Campaign";
+      let ok: CsvImportRow[] = [];
+      let errors: string[] = [];
+      let sourceLabel = "File";
+
+      if (ext === "json" || file.type === "application/json" || (file.type && file.type.includes("json"))) {
+        const text = await file.text();
+        const r = parseCampaignJson(text, defaultSubj);
+        ok = r.ok;
+        errors = r.errors;
+        sourceLabel = "JSON";
+      } else if (
+        ext === "xlsx" ||
+        ext === "xls" ||
+        ext === "xlsm" ||
+        file.type === "application/vnd.ms-excel" ||
+        file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      ) {
+        const rows = await parseCampaignXlsxToRows(await file.arrayBuffer());
+        sourceLabel = "Excel";
+        if (rows.length < 2) {
+          toast({
+            title: "Empty spreadsheet",
+            description: "Add a header row and at least one data row.",
+            variant: "destructive",
+          });
+          return;
+        }
+        const { map, error: mapErr } = detectColumnMap(rows[0].map((c) => String(c).trim()));
+        if (mapErr || !map) {
+          toast({ title: "Spreadsheet headers", description: mapErr ?? "Could not read headers.", variant: "destructive" });
+          return;
+        }
+        const parsed = parseCampaignCsvRows(
+          rows.map((r) => r.map((c) => String(c))),
+          map,
+          defaultSubj,
+        );
+        ok = parsed.ok;
+        errors = parsed.errors;
+      } else {
+        const text = await file.text();
+        const rows =
+          ext === "tsv" ? parseDelimited(text.replace(/^\uFEFF/, ""), "\t") : parseSpreadsheetText(text);
+        sourceLabel = ext === "tsv" ? "TSV" : "CSV";
+        if (rows.length < 2) {
+          toast({
+            title: "Empty file",
+            description: "Add a header row and at least one data row.",
+            variant: "destructive",
+          });
+          return;
+        }
+        const { map, error: mapErr } = detectColumnMap(rows[0].map((c) => String(c).trim()));
+        if (mapErr || !map) {
+          toast({ title: "File headers", description: mapErr ?? "Could not read headers.", variant: "destructive" });
+          return;
+        }
+        const parsed = parseCampaignCsvRows(
+          rows.map((r) => r.map((c) => String(c))),
+          map,
+          defaultSubj,
+        );
+        ok = parsed.ok;
+        errors = parsed.errors;
+      }
+
+      if (errors.length > 0 && ok.length === 0) {
+        toast({
+          title: `${sourceLabel} errors`,
+          description: errors.slice(0, 5).join(" ") + (errors.length > 5 ? ` …and ${errors.length - 5} more` : ""),
+          variant: "destructive",
+        });
+        return;
+      }
+      if (ok.length === 0) {
+        toast({ title: "No valid rows", variant: "destructive" });
+        return;
+      }
+
+      await applyImportedCampaignRows(ok, errors, mode, { sourceLabel });
+    } catch (e: any) {
+      toast({
+        title: "Import failed",
+        description: e?.message ?? "Could not read this file.",
+        variant: "destructive",
+      });
+    } finally {
+      setImportingCampaignFile(false);
+      if (campaignImportFileRef.current) campaignImportFileRef.current.value = "";
+    }
+  };
+
+  const handleCampaignPdfImport = async (file: File, mode: "replace" | "merge" = "replace") => {
+    try {
+      setImportingCampaignFile(true);
+      const { messages, usedPageWise, warnings } = await extractCampaignMessagesFromPdf(file);
+      if (messages.length === 0) {
+        toast({
+          title: "No messages found in PDF",
+          description:
+            "Tip: put one email per page (Subject: … then body), or separate blocks with a line of dashes (---). Each block needs a subject and body.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      const { data: businessProfile } = await supabase
+        .from("business_profiles")
+        .select("email_signature")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const defaultFooterHtml = (businessProfile?.email_signature || "").trim();
+      const defaultFooterText = defaultFooterHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+      const applyFooters = (row: CsvImportRow) => {
+        let html = row.bodyHtml;
+        let txt = row.bodyText;
+        if (row.rowFooter) {
+          const f = row.rowFooter.trim();
+          if (f.includes("<") && f.includes(">")) {
+            html += f.startsWith("<") ? f : `<p>${f}</p>`;
+          } else {
+            html += `<p style="margin:12px 0 0 0;">${f.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>")}</p>`;
+          }
+          txt += `\n\n${f}`;
+        }
+        if (csvAppendDefaultFooter && defaultFooterHtml) {
+          html += defaultFooterHtml.startsWith("<") ? defaultFooterHtml : `<p>${defaultFooterHtml}</p>`;
+          if (defaultFooterText) txt += `\n\n${defaultFooterText}`;
+        }
+        return { bodyHtml: html, bodyText: txt };
+      };
+
+      const rows = messages.map(pdfMessageToCsvRow);
+      const allHaveEmail = rows.every(
+        (r) => r.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email),
+      );
+
+      const hint = `${messages.length} message(s)${usedPageWise ? " (one per page)" : ""}.${warnings.length ? ` ${warnings[0]}` : ""}`;
+
+      if (mode === "replace") {
+        if (!allHaveEmail) {
+          toast({
+            title: "Replace list needs emails in the PDF",
+            description:
+              "Add To: or Email: on each message, or keep your People selection and use Merge PDF (applies messages in list order).",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const emailsMap: Record<string, { subject: string; bodyHtml: string; bodyText: string }> = {};
+        const newRecipients: Array<{
+          id: string;
+          first_name: string;
+          last_name: string;
+          email: string;
+        }> = [];
+
+        rows.forEach((row) => {
+          const { bodyHtml, bodyText } = applyFooters(row);
+          const id = `pdf-${crypto.randomUUID()}`;
+          newRecipients.push({
+            id,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            email: row.email,
+          });
+          emailsMap[id] = { subject: row.subject, bodyHtml, bodyText };
+        });
+
+        setFilteredRecipients(newRecipients);
+        unfilteredRecipientsRef.current = newRecipients;
+        setPersonalizedEmails(emailsMap);
+        setUsePersonalizedEmails(true);
+        setAbTestEnabled(false);
+
+        const first = rows[0];
+        if (first) {
+          const { bodyHtml, bodyText } = applyFooters(first);
+          setSubject(first.subject);
+          setBodyText(bodyText);
+          setBodyHtml(bodyHtml);
+        }
+
+        toast({
+          title: "PDF imported",
+          description: `${hint} Recipients replaced from PDF.`,
+        });
+        if (campaignImportFileRef.current) campaignImportFileRef.current.value = "";
+        return;
+      }
+
+      // merge
+      if (allHaveEmail) {
+        const mergedRecipients = [...(filteredRecipients as BulkRecipientRow[])];
+        const mergedPersonalized = { ...personalizedEmails };
+        mergeImportRowsIntoRecipients(rows, mergedRecipients, mergedPersonalized, applyFooters, "pdf-");
+        setFilteredRecipients(mergedRecipients);
+        unfilteredRecipientsRef.current = mergedRecipients;
+        setPersonalizedEmails(mergedPersonalized);
+        setUsePersonalizedEmails(true);
+        setAbTestEnabled(false);
+        if (rows[0]) {
+          const { bodyHtml, bodyText } = applyFooters(rows[0]);
+          setSubject(rows[0].subject);
+          setBodyText(bodyText);
+          setBodyHtml(bodyHtml);
+        }
+        toast({
+          title: "PDF merged",
+          description: `${hint} Matched by normalized email or row order when counts match; new addresses were appended.`,
+        });
+      } else {
+        if (filteredRecipients.length < messages.length) {
+          toast({
+            title: "Not enough recipients",
+            description: `PDF has ${messages.length} messages but only ${filteredRecipients.length} people in the list. Add more recipients so order matches (1st message → 1st person).`,
+            variant: "destructive",
+          });
+          return;
+        }
+        const mergedRecipients = [...filteredRecipients];
+        const mergedPersonalized = { ...personalizedEmails };
+        for (let i = 0; i < messages.length; i++) {
+          const row = rows[i];
+          const { bodyHtml, bodyText } = applyFooters(row);
+          const p = mergedRecipients[i];
+          mergedRecipients[i] = {
+            ...p,
+            first_name: row.first_name || p.first_name,
+            last_name: row.last_name || p.last_name,
+          };
+          mergedPersonalized[p.id] = { subject: row.subject, bodyHtml, bodyText };
+        }
+        setFilteredRecipients(mergedRecipients);
+        unfilteredRecipientsRef.current = mergedRecipients;
+        setPersonalizedEmails(mergedPersonalized);
+        setUsePersonalizedEmails(true);
+        setAbTestEnabled(false);
+        if (rows[0]) {
+          const { bodyHtml, bodyText } = applyFooters(rows[0]);
+          setSubject(rows[0].subject);
+          setBodyText(bodyText);
+          setBodyHtml(bodyHtml);
+        }
+        toast({
+          title: "PDF merged by order",
+          description: `${hint} Message 1 → first recipient, etc. No To:/Email: lines were required.`,
+        });
+      }
+      if (campaignImportFileRef.current) campaignImportFileRef.current.value = "";
+    } catch (e: any) {
+      toast({
+        title: "PDF import failed",
+        description: e?.message ?? "Could not read this PDF.",
+        variant: "destructive",
+      });
+    } finally {
+      setImportingCampaignFile(false);
+      if (campaignImportFileRef.current) campaignImportFileRef.current.value = "";
+    }
   };
 
   const handlePersonaChange = (persona: MarketingPersona | null, personaContext: string) => {
@@ -1102,30 +1806,29 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             .delete()
             .eq('campaign_id', draftId);
 
-          const useAb = abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
+          const useAb = !usePersonalizedEmails && abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
           const bodyHtmlA = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
           const bodyTextB = abBodyTextB || bodyText;
           const bodyHtmlB = abBodyHtmlB || (bodyTextB ? previewBodyToHtml(bodyTextB) : '');
           const recipients = recipientsToUse
             .filter(person => person.email)
-            .map((person: any) => {
-              const variant = useAb ? (Math.random() * 100 < abTrafficSplit ? 'A' : 'B') : null;
-              const subj = variant === 'B' ? (abSubjectB || subject) : subject;
-              const text = variant === 'B' ? bodyTextB : bodyText;
-              const htmlForDb = variant === 'B' ? bodyHtmlB : bodyHtmlA;
-              return {
-                campaign_id: draftId,
-                person_id: personIdForDb(person),
-                email: person.email,
-                name: `${person.first_name} ${person.last_name}`.trim(),
-                personalized_subject: personalizeText(subj, person),
-                personalized_body_html: personalizeText(htmlForDb, person),
-                personalized_body_text: personalizeText(text, person),
-                status: 'pending',
-                email_period: 'new',
-                ...(variant && { ab_variant: variant }),
-              };
-            });
+            .map((person: any) =>
+              buildRecipientDbRow(
+                person,
+                draftId,
+                {
+                  useAb: !!useAb,
+                  subjA: subject,
+                  textA: bodyText,
+                  htmlA: bodyHtmlA,
+                  subjB: abSubjectB || subject,
+                  textB: bodyTextB,
+                  htmlB: bodyHtmlB,
+                  abTrafficSplit,
+                },
+                personalizedEmailsEffective
+              )
+            );
 
           const { error: recipientsError } = await supabase
             .from('email_campaign_recipients')
@@ -1176,31 +1879,29 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
         setDraftId(campaign.id);
 
-        const useAbDraft = abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
+        const useAbDraft = !usePersonalizedEmails && abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
         const bodyHtmlADraft = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
         const bodyTextBDraft = abBodyTextB || bodyText;
         const bodyHtmlBDraft = abBodyHtmlB || (bodyTextBDraft ? previewBodyToHtml(bodyTextBDraft) : '');
-        // Create recipients (person_id must be a real UUID; synthetic "rec-*" ids are null)
         const recipients = recipientsToUse
           .filter(person => person.email)
-          .map((person: any) => {
-            const variant = useAbDraft ? (Math.random() * 100 < abTrafficSplit ? 'A' : 'B') : null;
-            const subj = variant === 'B' ? (abSubjectB || subject) : subject;
-            const text = variant === 'B' ? bodyTextBDraft : bodyText;
-            const htmlForDb = variant === 'B' ? bodyHtmlBDraft : bodyHtmlADraft;
-            return {
-              campaign_id: campaign.id,
-              person_id: personIdForDb(person),
-              email: person.email,
-              name: `${person.first_name} ${person.last_name}`.trim(),
-              personalized_subject: personalizeText(subj, person),
-              personalized_body_html: personalizeText(htmlForDb, person),
-              personalized_body_text: personalizeText(text, person),
-              status: 'pending',
-              email_period: 'new',
-              ...(variant && { ab_variant: variant }),
-            };
-          });
+          .map((person: any) =>
+            buildRecipientDbRow(
+              person,
+              campaign.id,
+              {
+                useAb: !!useAbDraft,
+                subjA: subject,
+                textA: bodyText,
+                htmlA: bodyHtmlADraft,
+                subjB: abSubjectB || subject,
+                textB: bodyTextBDraft,
+                htmlB: bodyHtmlBDraft,
+                abTrafficSplit,
+              },
+              personalizedEmailsEffective
+            )
+          );
 
         const { error: recipientsError } = await supabase
           .from('email_campaign_recipients')
@@ -1252,6 +1953,115 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setUploadingHeaderImage(false);
     }
   };
+
+  const handleCampaignBodyImageUpload = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Please select an image under 5MB.", variant: "destructive" });
+      return;
+    }
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!validTypes.includes(file.type)) {
+      toast({ title: "Invalid file type", description: "JPG, PNG, WEBP, or GIF only.", variant: "destructive" });
+      return;
+    }
+    try {
+      setUploadingBodyImage(true);
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) throw new Error("Not authenticated");
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${authUser.id}/campaign-images/${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from("email-branding").upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("email-branding").getPublicUrl(fileName);
+      if (bodyHtml.includes("newsletter-image-slot")) {
+        const imgTag = `<div style="text-align:center;margin:16px 0;"><img src="${data.publicUrl}" alt="" style="max-width:100%;height:auto;border-radius:8px;" /></div>`;
+        setBodyHtml((prev) => prev.replace(/<div class="newsletter-image-slot"[^>]*>.*?<\/div>/, imgTag));
+      } else {
+        campaignBodyEditorRef.current?.insertImage(data.publicUrl);
+      }
+      toast({ title: "Image inserted", description: "Image added to the email body." });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err?.message || "Failed to upload image.", variant: "destructive" });
+    } finally {
+      setUploadingBodyImage(false);
+    }
+  };
+
+  const handleReplaceBodyImageByUpload = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Please select an image under 5MB.", variant: "destructive" });
+      return;
+    }
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!validTypes.includes(file.type)) {
+      toast({ title: "Invalid file type", description: "JPG, PNG, WEBP, or GIF only.", variant: "destructive" });
+      return;
+    }
+    const idx = editBodyImageIndex;
+    const variant = editBodyImageAbVariant;
+    try {
+      setUploadingBodyImage(true);
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) throw new Error("Not authenticated");
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${authUser.id}/campaign-images/${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from("email-branding").upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("email-branding").getPublicUrl(fileName);
+      if (variant === "b") {
+        setAbBodyHtmlB((prev) => {
+          const textB = abBodyTextBRef.current;
+          const current = prev.trim() ? prev : (textB ? previewBodyToHtml(textB) : "");
+          const next = replaceNthImage(current, idx, data.publicUrl);
+          setAbBodyTextB(next.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+          return next;
+        });
+      } else {
+        setBodyHtml((prev) => {
+          const next = replaceNthImage(prev, idx, data.publicUrl);
+          setBodyText(next.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+          return next;
+        });
+      }
+      setEditBodyImageOpen(false);
+      toast({ title: "Image updated", description: "Image replaced in the body." });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err?.message || "Failed to upload image.", variant: "destructive" });
+    } finally {
+      setUploadingBodyImage(false);
+    }
+  };
+
+  const handleSaveBrandingQuick = async () => {
+    try {
+      setSavingBrandingQuick(true);
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) throw new Error("Not authenticated");
+      const { error } = await supabase
+        .from("business_profiles")
+        .update({
+          company_name: bpQuickCompany.trim() || null,
+          email_brand_color: bpQuickColor.trim() || null,
+          email_signature: bpQuickSignature.trim() || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", u.id);
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ["business-profile"] });
+      toast({ title: "Branding saved", description: "Updates apply to this dialog and future sends." });
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e?.message ?? "Could not save", variant: "destructive" });
+    } finally {
+      setSavingBrandingQuick(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!open || !brandingQuickOpen || !businessProfile) return;
+    setBpQuickCompany((businessProfile as { company_name?: string }).company_name || "");
+    setBpQuickColor((businessProfile as { email_brand_color?: string }).email_brand_color || "#4b5cf6");
+    setBpQuickSignature((businessProfile as { email_signature?: string }).email_signature || "");
+  }, [open, brandingQuickOpen, businessProfile]);
 
   const handleLoadDraft = async (draft: any) => {
     try {
@@ -1338,7 +2148,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       // Some rows may have been stored with null/different status or added from Campaign Details.
       const { data: recipientRows, error: recError } = await supabase
         .from('email_campaign_recipients')
-        .select('id, person_id, email, name')
+        .select('id, person_id, email, name, personalized_subject, personalized_body_html, personalized_body_text')
         .eq('campaign_id', draft.id);
 
       if (recError) {
@@ -1346,6 +2156,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       } else if ((draft.total_recipients ?? 0) > 0 && (!recipientRows || recipientRows.length === 0)) {
         console.warn('[BulkEmailDialog] Campaign has total_recipients =', draft.total_recipients, 'but email_campaign_recipients returned 0 rows for campaign_id', draft.id, '- possible RLS or data mismatch');
       }
+      const emailsFromDb: Record<string, { subject: string; bodyHtml: string; bodyText: string }> = {};
       if (recipientRows && recipientRows.length > 0) {
         const personIds = [...new Set((recipientRows as any[]).map((r: any) => r.person_id).filter(Boolean))];
         let peopleMap: Record<string, any> = {};
@@ -1361,8 +2172,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           const existingKey = r.person_id ? r.person_id : 'rec-' + r.id;
           if (seenKeys.has(existingKey)) continue;
           seenKeys.add(existingKey);
+          let rowId: string;
           if (r.person_id && peopleMap[r.person_id]) {
             const p = peopleMap[r.person_id];
+            rowId = p.id;
             newRecipients.push({
               id: p.id,
               first_name: p.first_name ?? '',
@@ -1373,14 +2186,49 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             });
           } else {
             const parts = (r.name || '').trim().split(/\s+/);
+            rowId = 'rec-' + r.id;
             newRecipients.push({
-              id: 'rec-' + r.id,
+              id: rowId,
               first_name: parts[0] || r.email || '',
               last_name: parts.slice(1).join(' ') || '',
               email: r.email,
             });
           }
+          emailsFromDb[rowId] = {
+            subject: r.personalized_subject ?? '',
+            bodyHtml: r.personalized_body_html ?? '',
+            bodyText: r.personalized_body_text ?? '',
+          };
         }
+      }
+
+      const rowsArr = (recipientRows as any[]) || [];
+      const subjSet = new Set(rowsArr.map((r: any) => r.personalized_subject ?? ""));
+      const textSet = new Set(rowsArr.map((r: any) => r.personalized_body_text ?? ""));
+      const htmlSet = new Set(rowsArr.map((r: any) => r.personalized_body_html ?? ""));
+      const hasEmailOnlyRecipient = rowsArr.some((r: any) => !r.person_id);
+      const firstRow = rowsArr[0];
+      const recipientsContentDiffers =
+        rowsArr.length > 1 &&
+        rowsArr.some(
+          (r: any) =>
+            (r.personalized_subject ?? "") !== (firstRow?.personalized_subject ?? "") ||
+            (r.personalized_body_text ?? "") !== (firstRow?.personalized_body_text ?? "") ||
+            (r.personalized_body_html ?? "") !== (firstRow?.personalized_body_html ?? ""),
+        );
+      const usePer =
+        rowsArr.length > 0 &&
+        (hasEmailOnlyRecipient ||
+          recipientsContentDiffers ||
+          subjSet.size > 1 ||
+          textSet.size > 1 ||
+          htmlSet.size > 1);
+      if (usePer) {
+        setPersonalizedEmails(emailsFromDb);
+        setUsePersonalizedEmails(true);
+      } else {
+        setPersonalizedEmails({});
+        setUsePersonalizedEmails(false);
       }
 
       // Replace recipients with this campaign's list (do not merge with previous campaign's recipients)
@@ -1820,10 +2668,22 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   };
 
   const handleSend = async () => {
-    if (!campaignName.trim() || !subject.trim() || !bodyText.trim()) {
+    if (!campaignName.trim()) {
+      toast({ title: "Missing fields", description: "Please enter a campaign name", variant: "destructive" });
+      return;
+    }
+    if (usePersonalizedEmails && recipientsToUse.length > 0 && !perRecipientContentReady) {
+      toast({
+        title: "Incomplete per-recipient content",
+        description: "Each imported recipient needs a subject and body. Re-import your data file or generate personalized emails.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!usePersonalizedEmails && (!subject.trim() || !bodyText.trim())) {
       toast({
         title: "Missing fields",
-        description: "Please fill in campaign name, subject, and body",
+        description: "Please fill in subject and body, or import a file (CSV, Excel, JSON, …) with subject and body per row",
         variant: "destructive",
       });
       return;
@@ -2079,31 +2939,29 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         campaign = newCampaign;
       }
 
-      const useAbSend = abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
+      const useAbSend = !usePersonalizedEmails && abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
       const bodyHtmlASend = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
       const bodyTextBSend = abBodyTextB || bodyText;
       const bodyHtmlBSend = abBodyHtmlB || (bodyTextBSend ? previewBodyToHtml(bodyTextBSend) : '');
-      // Create recipients with personalized content (same mechanism for A and B: store HTML + text)
       const recipients = recipientsToUse
-        .filter(person => person.email) // Only include people with emails
-        .map((person: any) => {
-          const variant = useAbSend ? (Math.random() * 100 < abTrafficSplit ? 'A' : 'B') : null;
-          const subj = variant === 'B' ? (abSubjectB || subject) : subject;
-          const text = variant === 'B' ? bodyTextBSend : bodyText;
-          const htmlForDb = variant === 'B' ? bodyHtmlBSend : bodyHtmlASend;
-          return {
-            campaign_id: campaign.id,
-            person_id: personIdForDb(person),
-            email: person.email,
-            name: `${person.first_name} ${person.last_name}`.trim(),
-            personalized_subject: personalizeText(subj, person),
-            personalized_body_html: personalizeText(htmlForDb, person),
-            personalized_body_text: personalizeText(text, person),
-            status: 'pending',
-            email_period: 'new', // Mark as new email
-            ...(variant && { ab_variant: variant }),
-          };
-        });
+        .filter(person => person.email)
+        .map((person: any) =>
+          buildRecipientDbRow(
+            person,
+            campaign.id,
+            {
+              useAb: !!useAbSend,
+              subjA: subject,
+              textA: bodyText,
+              htmlA: bodyHtmlASend,
+              subjB: abSubjectB || subject,
+              textB: bodyTextBSend,
+              htmlB: bodyHtmlBSend,
+              abTrafficSplit,
+            },
+            personalizedEmailsEffective
+          )
+        );
 
       const { error: recipientsError } = await supabase
         .from('email_campaign_recipients')
@@ -2183,6 +3041,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setEnableAutoResponder(false);
       setPersonalizedEmails({});
       setUsePersonalizedEmails(false);
+      setPerRecipientEditId(null);
       setScheduleEnabled(false);
       setScheduledDate(undefined);
       setScheduledTime("09:00");
@@ -2198,6 +3057,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setExcludedCampaignIds([]);
       setDraftId(null);
       try {
+        skipPersistOnCloseOnceRef.current = true;
         localStorage.removeItem(BULK_EMAIL_DRAFT_KEY);
       } catch {
         // ignore
@@ -2215,36 +3075,49 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     }
   };
 
-  const previewPerson = recipientsToUse[0];
+  const previewPerson = useMemo(() => {
+    if (!recipientsToUse.length) return undefined;
+    if (usePersonalizedEmails && perRecipientEditId) {
+      const p = recipientsToUse.find((r) => r.id === perRecipientEditId);
+      if (p) return p;
+    }
+    return recipientsToUse[0];
+  }, [recipientsToUse, usePersonalizedEmails, perRecipientEditId]);
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>Send Bulk Email</DialogTitle>
-          <DialogDescription className="space-y-1">
-            <span>
-              Send personalized emails to {recipientsToUse.length} {selectedTags.length > 0 ? 'filtered' : 'selected'} {recipientsToUse.length === 1 ? 'person' : 'people'}
-              {selectedTags.length > 0 && (
-                <span className="text-muted-foreground"> (filtered by {selectedTags.length} tag{selectedTags.length > 1 ? 's' : ''})</span>
-              )}
-              {excludedCampaignIds.length > 0 && (
-                <span className="text-blue-600 dark:text-blue-400 font-medium">
-                  {' • '}{excludedRecipients?.size || 0} excluded from {excludedCampaignIds.length} previous campaign{excludedCampaignIds.length > 1 ? 's' : ''}
-                </span>
-              )}
-              {duplicateRecipients && duplicateRecipients.length > 0 && (
-                <span className="text-amber-600 dark:text-amber-400 font-medium">
-                  {' • '}{duplicateRecipients.length} already received email{duplicateRecipients.length > 1 ? 's' : ''}
-                </span>
-              )}
-            </span>
-            <p className="text-xs text-muted-foreground pt-0.5">
-              Use filters below to exclude recipients from previous campaigns and avoid duplicate sends. Duplicate emails in the list are removed automatically.
-            </p>
-          </DialogDescription>
-        </DialogHeader>
-        
+  const recipientSummaryBlock = (
+    <>
+      <span>
+        Send personalized emails to {recipientsToUse.length} {selectedTags.length > 0 ? "filtered" : "selected"}{" "}
+        {recipientsToUse.length === 1 ? "person" : "people"}
+        {selectedTags.length > 0 && (
+          <span className="text-muted-foreground">
+            {" "}
+            (filtered by {selectedTags.length} tag{selectedTags.length > 1 ? "s" : ""})
+          </span>
+        )}
+        {excludedCampaignIds.length > 0 && (
+          <span className="text-blue-600 dark:text-blue-400 font-medium">
+            {" • "}
+            {excludedRecipients?.size || 0} excluded from {excludedCampaignIds.length} previous campaign
+            {excludedCampaignIds.length > 1 ? "s" : ""}
+          </span>
+        )}
+        {duplicateRecipients && duplicateRecipients.length > 0 && (
+          <span className="text-amber-600 dark:text-amber-400 font-medium">
+            {" • "}
+            {duplicateRecipients.length} already received email{duplicateRecipients.length > 1 ? "s" : ""}
+          </span>
+        )}
+      </span>
+      <p className="text-xs text-muted-foreground pt-0.5">
+        Use filters below to exclude recipients from previous campaigns and avoid duplicate sends. Duplicate emails in the
+        list are removed automatically.
+      </p>
+    </>
+  );
+
+  const mainInner = (
+    <>
         {/* Load Draft Button */}
         {draftCampaigns && draftCampaigns.length > 0 && (
           <div className="flex justify-end px-6 pb-2 border-b">
@@ -2626,6 +3499,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                     <Switch
                       id="ab-test-enabled"
                       checked={abTestEnabled}
+                      disabled={usePersonalizedEmails}
                       onCheckedChange={(checked) => {
                         setAbTestEnabled(checked);
                         if (checked) setAbSectionOpen(true);
@@ -2843,6 +3717,39 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
               </div>
             ) : null}
           </div>
+
+          <Collapsible open={brandingQuickOpen} onOpenChange={setBrandingQuickOpen}>
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="outline" size="sm" className="w-full justify-between gap-2">
+                <span>Quick business branding</span>
+                <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${brandingQuickOpen ? "rotate-180" : ""}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 pt-3 rounded-lg border bg-muted/20 p-3">
+              <p className="text-xs text-muted-foreground">
+                Updates your default business profile (used when a sender profile field is empty).{" "}
+                <Link to="/email-branding" className="text-primary underline underline-offset-2">
+                  Open full email branding
+                </Link>
+              </p>
+              <div className="space-y-2">
+                <Label className="text-xs">Company name</Label>
+                <Input value={bpQuickCompany} onChange={(e) => setBpQuickCompany(e.target.value)} placeholder="Company" className="h-9" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">Brand color</Label>
+                <Input type="color" value={bpQuickColor} onChange={(e) => setBpQuickColor(e.target.value)} className="h-9 w-24 cursor-pointer p-1" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">Email signature (HTML ok)</Label>
+                <Textarea value={bpQuickSignature} onChange={(e) => setBpQuickSignature(e.target.value)} rows={4} className="font-mono text-xs resize-y min-h-[80px]" />
+              </div>
+              <Button type="button" size="sm" onClick={handleSaveBrandingQuick} disabled={savingBrandingQuick}>
+                {savingBrandingQuick ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Save branding
+              </Button>
+            </CollapsibleContent>
+          </Collapsible>
 
           <div className="flex items-center justify-between space-x-2 p-4 rounded-lg border bg-muted/50">
             <div className="flex items-center gap-3">
@@ -3195,6 +4102,76 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             disabled={sending || generatingAi}
           />
 
+          {usePersonalizedEmails && recipientsToUse.length > 1 && perRecipientEditId && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-sm font-medium">Review recipient</Label>
+                <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                  {previewRecipientIndex + 1} / {recipientsToUse.length}
+                </span>
+              </div>
+              <div className="flex items-stretch gap-2 min-w-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  disabled={sending || generatingAi || previewRecipientIndex <= 0}
+                  onClick={() => {
+                    const i = previewRecipientIndex;
+                    if (i <= 0) return;
+                    switchPerRecipient(recipientsToUse[i - 1].id);
+                  }}
+                  title="Previous recipient"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="flex-1 min-w-0 overflow-x-auto rounded-md border bg-background/50 p-2 overscroll-x-contain">
+                  <div className="flex gap-2 w-max min-h-[36px] items-center">
+                    {recipientsToUse.map((person) => {
+                      const active = person.id === perRecipientEditId;
+                      const label = `${person.first_name || ""} ${person.last_name || ""}`.trim() || person.email || "Recipient";
+                      return (
+                        <button
+                          key={person.id}
+                          type="button"
+                          disabled={sending || generatingAi}
+                          onClick={() => switchPerRecipient(person.id)}
+                          className={`shrink-0 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors max-w-[140px] truncate ${
+                            active
+                              ? "border-primary bg-primary/10 text-foreground"
+                              : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          }`}
+                          title={label}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  disabled={sending || generatingAi || previewRecipientIndex >= recipientsToUse.length - 1}
+                  onClick={() => {
+                    const i = previewRecipientIndex;
+                    if (i >= recipientsToUse.length - 1) return;
+                    switchPerRecipient(recipientsToUse[i + 1].id);
+                  }}
+                  title="Next recipient"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-snug">
+                Subject and body below match this person. Switch recipients to edit each message; changes are stored per recipient.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             {abTestEnabled && (
               <div className="flex items-center gap-2 text-sm font-medium text-primary">
@@ -3219,7 +4196,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 variant="outline"
                 size="sm"
                 onClick={() => setTestEmailDialogOpen(true)}
-                disabled={sending || (!subject.trim() && !usePersonalizedEmails) || (!bodyText.trim() && !usePersonalizedEmails) || !senderConnectionId}
+                disabled={sending || !canSendOrTestContent || !senderConnectionId}
                 className="border-primary/50 hover:bg-primary/10"
               >
                 <Mail className="mr-2 h-3 w-3" />
@@ -3259,14 +4236,44 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
               </TabsTrigger>
             </TabsList>
             <TabsContent value="editor" className="mt-4">
+              <input
+                ref={campaignBodyImgInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleCampaignBodyImageUpload(f);
+                  e.target.value = "";
+                }}
+              />
               <RichTextEditor
+                ref={campaignBodyEditorRef}
+                allowImages
+                toolbarExtra={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                    disabled={uploadingBodyImage || sending || generatingAi}
+                    onClick={() => campaignBodyImgInputRef.current?.click()}
+                  >
+                    {uploadingBodyImage ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ImagePlus className="h-4 w-4" />
+                    )}
+                    <span className="ml-1.5 text-xs">Insert image</span>
+                  </Button>
+                }
                 content={bodyHtml}
                 onChange={(html, text) => {
                   setBodyHtml(html);
                   setBodyText(text);
                 }}
                 disabled={sending || generatingAi}
-              placeholder="Hi {{firstName}},&#10;&#10;I noticed..."
+                placeholder="Hi {{firstName}},&#10;&#10;I noticed..."
               />
             </TabsContent>
             <TabsContent value="html" className="mt-4">
@@ -3294,7 +4301,8 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
               (businessProfile?.email_template_style as EmailTemplatePreviewStyle) ||
               'professional';
             const previewBrandColor = sp?.brand_color || businessProfile?.email_brand_color || '#4b5cf6';
-            const previewLogoUrl = sp?.logo_url || businessProfile?.email_logo_url || undefined;
+            const defaultPreviewLogo = sp?.logo_url || businessProfile?.email_logo_url || undefined;
+            const previewLogoUrl = headerImageUrl.trim() ? headerImageUrl.trim() : defaultPreviewLogo;
             const previewHeaderName = sp?.display_name || businessProfile?.email_header_name || undefined;
             const previewCompanyName = businessProfile?.company_name || undefined;
             const previewSenderName = sp?.sender_name || businessProfile?.email_sender_name || userProfile?.full_name || 'John Doe';
@@ -3305,19 +4313,27 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             const previewWebsiteUrl = sp?.website_url || businessProfile?.website || undefined;
             const previewSenderImageUrl = sp?.sender_image_url || businessProfile?.email_sender_image_url || userProfile?.avatar_url || undefined;
             const previewSignature = (sp?.signature ?? businessProfile?.email_signature ?? '')?.trim() || undefined;
-            const previewSubjectA = personalizeText(subject, previewPerson) || 'No subject';
-            const previewBodyA = personalizeText(bodyHtml || previewBodyToHtml(bodyText), previewPerson) || '<p>Your email body will appear here...</p>';
+            const previewSubjectA = usePersonalizedEmails
+              ? (subject?.trim() || 'No subject')
+              : personalizeText(subject, previewPerson) || 'No subject';
+            const previewBodyA = usePersonalizedEmails
+              ? (bodyHtml || previewBodyToHtml(bodyText) || '<p>Your email body will appear here...</p>')
+              : personalizeText(bodyHtml || previewBodyToHtml(bodyText), previewPerson) || '<p>Your email body will appear here...</p>';
             const bodyHtmlB = abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : '');
             const previewSubjectB = personalizeText(abSubjectB || subject, previewPerson) || 'No subject';
             const previewBodyB = personalizeText(bodyHtmlB || previewBodyA, previewPerson) || '<p>Variant B body...</p>';
-            const showAbPreviews = (abSubjectB?.trim() || abBodyTextB?.trim()) ? true : false;
+            const showAbPreviews =
+              !usePersonalizedEmails && !!(abSubjectB?.trim() || abBodyTextB?.trim());
 
             return (
               <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Eye className="h-4 w-4" />
-                  Preview for {previewPerson.first_name} {previewPerson.last_name}
-                  {sp && <Badge variant="secondary" className="text-xs">{sp.name}</Badge>}
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Eye className="h-4 w-4" />
+                    Preview for {previewPerson.first_name} {previewPerson.last_name}
+                    {sp && <Badge variant="secondary" className="text-xs">{sp.name}</Badge>}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Click an image in the preview to change URL, upload, or remove it.</p>
                 </div>
                 {showAbPreviews ? (
                   <Tabs defaultValue="previewA" className="w-full">
@@ -3345,6 +4361,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                           websiteUrl={previewWebsiteUrl}
                           signature={previewSignature}
                           bodyHtml={previewBodyA}
+                          onEditImage={(src, index) => {
+                            setEditBodyImageAbVariant("a");
+                            setEditBodyImageSrc(src);
+                            setEditBodyImageIndex(index);
+                            setEditBodyImageNewUrl(src);
+                            setEditBodyImageOpen(true);
+                          }}
                         />
                       </div>
                     </TabsContent>
@@ -3368,6 +4391,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                           websiteUrl={previewWebsiteUrl}
                           signature={previewSignature}
                           bodyHtml={previewBodyB}
+                          onEditImage={(src, index) => {
+                            setEditBodyImageAbVariant("b");
+                            setEditBodyImageSrc(src);
+                            setEditBodyImageIndex(index);
+                            setEditBodyImageNewUrl(src);
+                            setEditBodyImageOpen(true);
+                          }}
                         />
                       </div>
                     </TabsContent>
@@ -3395,6 +4425,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                         websiteUrl={previewWebsiteUrl}
                         signature={previewSignature}
                         bodyHtml={previewBodyA}
+                        onEditImage={(src, index) => {
+                          setEditBodyImageAbVariant("a");
+                          setEditBodyImageSrc(src);
+                          setEditBodyImageIndex(index);
+                          setEditBodyImageNewUrl(src);
+                          setEditBodyImageOpen(true);
+                        }}
                       />
                     </div>
                   </>
@@ -3475,6 +4512,79 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 </Button>
               </div>
             </div>
+            <div className="pt-3 mt-3 border-t space-y-2">
+              <div className="flex flex-wrap items-center gap-3 justify-between">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Import data (CSV, TSV, Excel, JSON, PDF)
+                </span>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="csv_append_sig" className="text-xs font-normal cursor-pointer">
+                    Append account signature
+                  </Label>
+                  <Switch id="csv_append_sig" checked={csvAppendDefaultFooter} onCheckedChange={setCsvAppendDefaultFooter} />
+                </div>
+              </div>
+              <input
+                ref={campaignImportFileRef}
+                type="file"
+                accept=".csv,.tsv,.txt,.json,.xlsx,.xls,.xlsm,.pdf,text/csv,text/tab-separated-values,text/plain,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleCampaignDataImport(f, campaignImportModeRef.current);
+                }}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={importingCampaignFile}
+                  onClick={() => {
+                    campaignImportModeRef.current = "replace";
+                    campaignImportFileRef.current?.click();
+                  }}
+                >
+                  {importingCampaignFile ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Import file (replace list)
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={importingCampaignFile}
+                  onClick={() => {
+                    campaignImportModeRef.current = "merge";
+                    campaignImportFileRef.current?.click();
+                  }}
+                >
+                  {importingCampaignFile ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileType className="h-4 w-4 mr-2" />
+                  )}
+                  Merge file
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                <strong>CSV / TSV / Excel (.xlsx, .xls)</strong>: header row with{" "}
+                <code className="text-[10px]">email</code> (required), <code className="text-[10px]">subject</code>,{" "}
+                <code className="text-[10px]">body</code> or <code className="text-[10px]">body_html</code>, optional{" "}
+                <code className="text-[10px]">first_name</code>, <code className="text-[10px]">last_name</code>,{" "}
+                <code className="text-[10px]">name</code>, <code className="text-[10px]">footer</code>.{" "}
+                <strong>JSON</strong>: array of objects, or{" "}
+                <code className="text-[10px]">{`{ "recipients": [ … ] }`}</code> (also <code className="text-[10px]">messages</code>,{" "}
+                <code className="text-[10px]">rows</code>) with the same field names.{" "}
+                <strong>PDF</strong>: one message per page or blocks separated by dashes; optional{" "}
+                <code className="text-[10px]">Subject:</code>, <code className="text-[10px]">To:</code>,{" "}
+                <code className="text-[10px]">Footer:</code>. Replace clears the list; merge matches by email for
+                tabular/JSON, or by row order for PDFs without addresses.
+              </p>
+            </div>
             <div className="max-h-32 overflow-y-auto space-y-1">
               {recipientsToUse.map((person) => (
                 <div
@@ -3501,7 +4611,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Use <Plus className="h-3 w-3 inline" /> Add to merge from Companies/People; use <Minus className="h-3 w-3 inline" /> to remove from the list. Use Remove duplicates to clean the list by email.
+              Use <Plus className="h-3 w-3 inline" /> Add to merge from Companies/People, or import a data file (CSV, TSV,
+              Excel, JSON, PDF) for per-recipient subjects and bodies. Use <Minus className="h-3 w-3 inline" /> to remove
+              from the list.
               {draftId && " Save draft to keep changes."}
             </p>
             </div>
@@ -3512,13 +4624,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           <Button
             variant="outline"
             onClick={() => setTestEmailDialogOpen(true)}
-            disabled={sending || (!subject.trim() && !usePersonalizedEmails) || (!bodyText.trim() && !usePersonalizedEmails) || !senderConnectionId}
+            disabled={sending || !canSendOrTestContent || !senderConnectionId}
             className="border-primary/50 hover:bg-primary/10"
           >
             <Mail className="h-4 w-4 mr-2" />
             Send Test Email
-            {(!subject.trim() || !bodyText.trim() || !senderConnectionId) && !usePersonalizedEmails && (
-              <span className="ml-2 text-xs text-muted-foreground">(Fill subject & body first)</span>
+            {(!canSendOrTestContent || !senderConnectionId) && (
+              <span className="ml-2 text-xs text-muted-foreground">(Fill subject & body or import a data file)</span>
             )}
           </Button>
           
@@ -3547,9 +4659,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 </>
               )}
             </Button>
-            <Button 
-              onClick={handleSend} 
-              disabled={sending || !campaignName.trim() || (!subject.trim() && !usePersonalizedEmails) || (!bodyText.trim() && !usePersonalizedEmails) || !senderConnectionId}
+            <Button
+              onClick={handleSend}
+              disabled={sending || !campaignName.trim() || !canSendOrTestContent || !senderConnectionId}
             >
               {sending ? (
                 <>
@@ -3782,8 +4894,165 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+    </>
+  );
+
+  return (
+    <>
+    {!isPage ? (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Send Bulk Email</DialogTitle>
+            <DialogDescription className="space-y-1">{recipientSummaryBlock}</DialogDescription>
+          </DialogHeader>
+          {mainInner}
+        </DialogContent>
+      </Dialog>
+    ) : (
+      <div className="flex w-full max-w-3xl flex-1 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm min-h-0 max-h-[min(90vh,calc(100vh-10rem))]">
+        <DialogHeader className="px-6 pt-6 shrink-0">
+          <h1 className="text-lg font-semibold leading-none tracking-tight">Per-recipient email campaign</h1>
+          <div className="space-y-2 text-sm text-muted-foreground pt-1.5">
+            <p>
+              This flow is for a <strong>different subject and body per person</strong> (import CSV, Excel, JSON, or PDF, or
+              use <strong>Generate Personalized Emails for All</strong> in AI). After importing, use <strong>Review recipient</strong>{" "}
+              (above the subject line) to edit each message.
+            </p>
+            <div className="space-y-1 text-sm text-muted-foreground">{recipientSummaryBlock}</div>
+          </div>
+        </DialogHeader>
+        {mainInner}
+      </div>
+    )}
+
+    <Dialog
+      open={editBodyImageOpen}
+      onOpenChange={(nextOpen) => {
+        setEditBodyImageOpen(nextOpen);
+        if (!nextOpen) {
+          setEditBodyImageNewUrl("");
+          setEditBodyImageAbVariant("a");
+        }
+      }}
+    >
+      <DialogContent className="sm:max-w-md w-[calc(100vw-2rem)] max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle>Edit image</DialogTitle>
+          <DialogDescription>
+            Change the image URL, upload a replacement, or remove it from the campaign body.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2 overflow-y-auto min-h-0 flex-1">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Current URL</Label>
+            <p className="text-xs text-muted-foreground break-all line-clamp-2 max-h-10 overflow-hidden" title={editBodyImageSrc}>
+              {editBodyImageSrc}
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">New URL</Label>
+            <Input
+              value={editBodyImageNewUrl}
+              onChange={(e) => setEditBodyImageNewUrl(e.target.value)}
+              placeholder="https://..."
+              className="min-w-0"
+            />
+            <Button
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                const idx = editBodyImageIndex;
+                if (editBodyImageAbVariant === "b") {
+                  setAbBodyHtmlB((prev) => {
+                    const textB = abBodyTextBRef.current;
+                    const current = prev.trim() ? prev : (textB ? previewBodyToHtml(textB) : "");
+                    const next = replaceNthImage(current, idx, editBodyImageNewUrl);
+                    setAbBodyTextB(next.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+                    return next;
+                  });
+                } else {
+                  setBodyHtml((prev) => {
+                    const next = replaceNthImage(prev, idx, editBodyImageNewUrl);
+                    setBodyText(next.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+                    return next;
+                  });
+                }
+                setEditBodyImageOpen(false);
+                toast({ title: "Image updated" });
+              }}
+            >
+              Update URL
+            </Button>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <input
+              ref={replaceBodyImageInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleReplaceBodyImageByUpload(file);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              disabled={uploadingBodyImage}
+              onClick={() => replaceBodyImageInputRef.current?.click()}
+            >
+              {uploadingBodyImage ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-3.5 w-3.5 mr-1" />
+                  Upload new image
+                </>
+              )}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                const idx = editBodyImageIndex;
+                if (editBodyImageAbVariant === "b") {
+                  setAbBodyHtmlB((prev) => {
+                    const textB = abBodyTextBRef.current;
+                    const current = prev.trim() ? prev : (textB ? previewBodyToHtml(textB) : "");
+                    const next = replaceNthImage(current, idx, null);
+                    setAbBodyTextB(next.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+                    return next;
+                  });
+                } else {
+                  setBodyHtml((prev) => {
+                    const next = replaceNthImage(prev, idx, null);
+                    setBodyText(next.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+                    return next;
+                  });
+                }
+                setEditBodyImageOpen(false);
+                toast({ title: "Image removed" });
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              Remove
+            </Button>
+          </div>
+        </div>
+        <DialogFooter className="flex-shrink-0">
+          <Button type="button" variant="outline" onClick={() => setEditBodyImageOpen(false)}>
+            Cancel
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 });
 

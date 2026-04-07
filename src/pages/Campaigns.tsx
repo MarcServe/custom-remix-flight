@@ -199,6 +199,13 @@ export default function Campaigns() {
     }
   };
 
+  /** Opens the bulk email composer without a server draft—use data import (CSV, Excel, JSON, PDF, …) or Add from People/Companies. */
+  const openNewEmailCampaign = () => {
+    setSearchParams({ tab: "overview" });
+    setDraftToEdit(null);
+    setBulkEmailDialogOpen(true);
+  };
+
   const openDraftWithRecipients = (draftId: string) => {
     setDraftToEdit(draftId);
     setBulkEmailDialogOpen(true);
@@ -1719,6 +1726,16 @@ export default function Campaigns() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
+            <Button onClick={openNewEmailCampaign} className="gap-2">
+              <Mail className="h-4 w-4 shrink-0" />
+              <Plus className="h-4 w-4 shrink-0" />
+              <span className="truncate">New email campaign</span>
+            </Button>
+            <Button variant="secondary" onClick={() => navigate("/campaigns/import-email")} className="gap-2">
+              <FileText className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline truncate">Per-recipient import</span>
+              <span className="sm:hidden truncate">Import each</span>
+            </Button>
             <Button 
               variant="outline" 
               onClick={() => setPhoneServiceDialogOpen(true)} 
@@ -1727,7 +1744,7 @@ export default function Campaigns() {
               <Settings className="h-4 w-4 shrink-0" />
               <span className="truncate">Phone Services</span>
             </Button>
-            <Button onClick={() => setPhoneCampaignDialogOpen(true)} className="gap-2">
+            <Button variant="outline" onClick={() => setPhoneCampaignDialogOpen(true)} className="gap-2">
               <Phone className="h-4 w-4 shrink-0" />
               <Plus className="h-4 w-4 shrink-0" />
               <span className="truncate">Phone Campaign</span>
@@ -1782,9 +1799,21 @@ export default function Campaigns() {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Mail className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No campaigns yet</h3>
-            <p className="text-sm text-muted-foreground text-center max-w-md">
-              Create your first bulk email campaign from the People page by selecting multiple contacts
+            <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
+              Start here with a data file or PDF (per-recipient subject and body), or add contacts from the People or Companies
+              pages. You do not need CRM contacts to compose.
             </p>
+            <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2">
+              <Button onClick={openNewEmailCampaign} className="gap-2">
+                <Mail className="h-4 w-4" />
+                <Plus className="h-4 w-4" />
+                New email campaign
+              </Button>
+              <Button variant="secondary" onClick={() => navigate("/campaigns/import-email")} className="gap-2">
+                <FileText className="h-4 w-4" />
+                Per-recipient import (full page)
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -2162,14 +2191,22 @@ export default function Campaigns() {
                 <FileText className="h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No drafts yet</h3>
                 <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
-                  Save a campaign as a draft from the Bulk Email dialog, or create a new draft from an existing campaign (draft or completed).
+                  Start a new email campaign and import CSV, Excel, JSON, or PDF for customized messages per recipient, or duplicate an existing
+                  campaign as a template.
                 </p>
-                {templateCampaigns.length > 0 && (
-                  <Button variant="outline" onClick={() => setCreateFromTemplateOpen(true)} className="gap-2">
-                    <Copy className="h-4 w-4" />
-                    Create from template
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button onClick={openNewEmailCampaign} className="gap-2">
+                    <Mail className="h-4 w-4" />
+                    <Plus className="h-4 w-4" />
+                    New email campaign
                   </Button>
-                )}
+                  {templateCampaigns.length > 0 && (
+                    <Button variant="outline" onClick={() => setCreateFromTemplateOpen(true)} className="gap-2">
+                      <Copy className="h-4 w-4" />
+                      Create from template
+                    </Button>
+                  )}
+                </div>
                 {campaigns && campaigns.length > 0 && templateCampaigns.length === 0 && (
                   <div className="mt-4 text-xs text-muted-foreground space-y-1">
                     <p>Found {campaigns.length} total campaign(s)</p>
@@ -2184,17 +2221,23 @@ export default function Campaigns() {
               <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <CardTitle>Draft Campaigns</CardTitle>
-                  <CardDescription>Continue editing your saved drafts or create a new one from a template</CardDescription>
+                  <CardDescription>Continue editing your saved drafts, import a spreadsheet/JSON/PDF, or start from a template</CardDescription>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCreateFromTemplateOpen(true)}
-                  className="shrink-0 gap-2 w-full sm:w-auto"
-                >
-                  <Copy className="h-4 w-4" />
-                  Create from template
-                </Button>
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
+                  <Button size="sm" onClick={openNewEmailCampaign} className="gap-2 shrink-0">
+                    <Mail className="h-4 w-4" />
+                    New email
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCreateFromTemplateOpen(true)}
+                    className="shrink-0 gap-2"
+                  >
+                    <Copy className="h-4 w-4" />
+                    From template
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="p-0 sm:p-6">
                 <div className="overflow-x-auto">
