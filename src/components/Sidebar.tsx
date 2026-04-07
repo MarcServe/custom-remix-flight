@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, CalendarClock, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FolderOpen, CreditCard, Inbox, Brain, Wand2, StickyNote, Palette, Newspaper, UsersRound } from "lucide-react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, CalendarClock, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FileSpreadsheet, FolderOpen, CreditCard, Inbox, Brain, Wand2, StickyNote, Palette, Newspaper, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -62,6 +62,7 @@ const navigation: NavigationItem[] = [
       { name: "Sequences", href: "/sequences", icon: Mail },
       { name: "Active Campaigns", href: "/company-sequences", icon: Activity },
       { name: "Campaigns", href: "/campaigns", icon: Briefcase },
+      { name: "Import per recipient", href: "/campaigns/import-email", icon: FileSpreadsheet },
       { name: "Email Branding", href: "/email-branding", icon: Palette },
       { name: "Newsletters", href: "/newsletters", icon: Newspaper },
       { name: "Newsletter Series", href: "/newsletter-series", icon: CalendarClock },

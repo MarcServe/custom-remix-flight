@@ -1725,16 +1725,15 @@ export default function Campaigns() {
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 shrink-0">
+          <div className="flex w-full max-w-full flex-wrap gap-2 sm:w-auto sm:max-w-none sm:justify-end">
             <Button onClick={openNewEmailCampaign} className="gap-2">
               <Mail className="h-4 w-4 shrink-0" />
               <Plus className="h-4 w-4 shrink-0" />
               <span className="truncate">New email campaign</span>
             </Button>
-            <Button variant="secondary" onClick={() => navigate("/campaigns/import-email")} className="gap-2">
+            <Button variant="secondary" onClick={() => navigate("/campaigns/import-email")} className="gap-2 shrink-0">
               <FileText className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline truncate">Per-recipient import</span>
-              <span className="sm:hidden truncate">Import each</span>
+              <span className="truncate">Per-recipient import</span>
             </Button>
             <Button 
               variant="outline" 
