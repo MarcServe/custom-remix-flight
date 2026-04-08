@@ -1766,18 +1766,19 @@ export default function Campaigns() {
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setSearchParams({ tab: value })}>
-        <TabsList className="grid w-full grid-cols-6 mb-6">
-          <TabsTrigger value="overview" className="flex items-center gap-2">
+        <div className="-mx-2 mb-6 overflow-x-auto overscroll-x-contain pb-1 [-webkit-overflow-scrolling:touch] sm:mx-0 sm:overflow-visible">
+          <TabsList className="inline-flex h-auto min-h-10 w-max max-w-none flex-nowrap justify-start gap-0.5 rounded-md bg-muted p-1 sm:grid sm:h-10 sm:w-full sm:grid-cols-6 sm:gap-0">
+          <TabsTrigger value="overview" className="flex shrink-0 items-center gap-2">
             <Mail className="h-4 w-4" />
             <span className="hidden sm:inline">All Campaigns</span>
             <span className="sm:hidden">All</span>
           </TabsTrigger>
-          <TabsTrigger value="delivery" className="flex items-center gap-2">
+          <TabsTrigger value="delivery" className="flex shrink-0 items-center gap-2">
             <BarChart3 className="h-4 w-4" />
             <span className="hidden sm:inline">Delivery report</span>
             <span className="sm:hidden">Report</span>
           </TabsTrigger>
-          <TabsTrigger value="drafts" className="flex items-center gap-2">
+          <TabsTrigger value="drafts" className="flex shrink-0 items-center gap-2">
             <FileText className="h-4 w-4" />
             <span className="hidden sm:inline">Drafts</span>
             <span className="sm:hidden">Drafts</span>
@@ -1787,22 +1788,23 @@ export default function Campaigns() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="health" className="flex items-center gap-2">
+          <TabsTrigger value="health" className="flex shrink-0 items-center gap-2">
             <Shield className="h-4 w-4" />
             <span className="hidden sm:inline">Email Health</span>
             <span className="sm:hidden">Health</span>
           </TabsTrigger>
-          <TabsTrigger value="automation" className="flex items-center gap-2">
+          <TabsTrigger value="automation" className="flex shrink-0 items-center gap-2">
             <Zap className="h-4 w-4" />
             <span className="hidden sm:inline">Automation</span>
             <span className="sm:hidden">Auto</span>
           </TabsTrigger>
-          <TabsTrigger value="testing" className="flex items-center gap-2">
+          <TabsTrigger value="testing" className="flex shrink-0 items-center gap-2">
             <FlaskConical className="h-4 w-4" />
             <span className="hidden sm:inline">A/B Testing</span>
             <span className="sm:hidden">Test</span>
           </TabsTrigger>
-        </TabsList>
+          </TabsList>
+        </div>
 
         <TabsContent value="overview" className="space-y-6">
 

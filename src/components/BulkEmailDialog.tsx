@@ -37,6 +37,7 @@ import { parseCampaignJson } from "@/lib/json-campaign-import";
 import { parseCampaignXlsxToRows } from "@/lib/xlsx-campaign-import";
 import { extractCampaignMessagesFromPdf, pdfMessageToCsvRow } from "@/lib/pdf-campaign-import";
 import { replaceNthImage } from "@/lib/replace-nth-image-html";
+import { cn } from "@/lib/utils";
 
 export interface BulkEmailDialogHandle {
   addRecipientsFromSelection: () => Promise<void>;
@@ -3162,9 +3163,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
   const mainInner = (
     <>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Load Draft Button */}
         {draftCampaigns && draftCampaigns.length > 0 && (
-          <div className="flex justify-end px-6 pb-2 border-b">
+          <div className="flex justify-end border-b px-4 pb-2 sm:px-6">
             <Button
               variant="outline"
               size="sm"
@@ -3177,7 +3179,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
           <div className="space-y-6">
           {/* Campaign Exclusion Section - More Prominent */}
           {previousCampaigns && previousCampaigns.length > 0 && (
@@ -4667,25 +4669,28 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           </div>
         </div>
 
-        <div className="flex justify-between gap-3 px-6 pb-6 pt-4 border-t shrink-0 bg-muted/30">
+        <div className="flex shrink-0 flex-col gap-3 border-t bg-muted/30 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6 sm:pb-6">
           <Button
             variant="outline"
             onClick={() => setTestEmailDialogOpen(true)}
             disabled={sending || !canSendOrTestContent || !senderConnectionId}
-            className="border-primary/50 hover:bg-primary/10"
+            className="min-h-11 w-full shrink-0 border-primary/50 hover:bg-primary/10 sm:min-h-10 sm:w-auto"
           >
-            <Mail className="h-4 w-4 mr-2" />
-            Send Test Email
-            {(!canSendOrTestContent || !senderConnectionId) && (
-              <span className="ml-2 text-xs text-muted-foreground">(Fill subject & body or import a data file)</span>
-            )}
+            <Mail className="h-4 w-4 mr-2 shrink-0" />
+            <span className="text-left">
+              Send Test Email
+              {(!canSendOrTestContent || !senderConnectionId) && (
+                <span className="ml-2 text-xs text-muted-foreground">(Fill subject & body or import a data file)</span>
+              )}
+            </span>
           </Button>
-          
-          <div className="flex gap-3">
+
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-nowrap sm:gap-3 sm:justify-end">
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={sending}
+              className="min-h-11 w-full sm:min-h-10 sm:w-auto"
             >
               Cancel
             </Button>
@@ -4693,6 +4698,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
               variant="outline"
               onClick={handleSaveDraft}
               disabled={savingDraft || sending || !campaignName.trim()}
+              className="min-h-11 w-full sm:min-h-10 sm:w-auto"
             >
               {savingDraft ? (
                 <>
@@ -4709,6 +4715,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             <Button
               onClick={handleSend}
               disabled={sending || !campaignName.trim() || !canSendOrTestContent || !senderConnectionId}
+              className="min-h-11 w-full sm:min-h-10 sm:w-auto"
             >
               {sending ? (
                 <>
@@ -4724,7 +4731,8 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             </Button>
           </div>
         </div>
-        
+      </div>
+
         {/* Test Email Dialog */}
         <AlertDialog open={testEmailDialogOpen}         onOpenChange={(open) => {
           setTestEmailDialogOpen(open);
@@ -4737,7 +4745,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             testEmailVariantRef.current = 'A';
           }
         }}>
-          <AlertDialogContent className="sm:max-w-[500px]">
+          <AlertDialogContent className="max-h-[min(90dvh,100dvh)] w-[calc(100vw-2rem)] max-w-[500px] overflow-y-auto sm:max-w-[500px]">
             <AlertDialogHeader>
               <AlertDialogTitle>Send Test Email</AlertDialogTitle>
               <AlertDialogDescription>
@@ -4882,7 +4890,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         
         {/* Load Draft Dialog */}
         <AlertDialog open={loadDraftOpen} onOpenChange={setLoadDraftOpen}>
-          <AlertDialogContent className="sm:max-w-[600px]">
+          <AlertDialogContent className="max-h-[min(90dvh,100dvh)] w-[calc(100vw-2rem)] max-w-[600px] overflow-y-auto sm:max-w-[600px]">
             <AlertDialogHeader>
               <AlertDialogTitle>Load Draft Campaign</AlertDialogTitle>
               <AlertDialogDescription>
@@ -4948,8 +4956,15 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     <>
     {!isPage ? (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col overflow-hidden">
-          <DialogHeader>
+        <DialogContent
+          className={cn(
+            "flex w-[calc(100vw-1rem)] max-w-[700px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[700px]",
+            "min-h-0 max-h-[calc(100dvh-1rem)]",
+            "left-[50%] top-[max(0.75rem,env(safe-area-inset-top))] -translate-x-1/2 translate-y-0",
+            "sm:top-[50%] sm:max-h-[min(90vh,100dvh)] sm:-translate-y-1/2",
+          )}
+        >
+          <DialogHeader className="shrink-0 space-y-1.5 px-4 pb-2 pt-6 text-left sm:px-6">
             <DialogTitle>Send Bulk Email</DialogTitle>
             <DialogDescription className="space-y-1">{recipientSummaryBlock}</DialogDescription>
           </DialogHeader>
@@ -4957,8 +4972,8 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         </DialogContent>
       </Dialog>
     ) : (
-      <div className="flex w-full max-w-3xl flex-1 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm min-h-0 max-h-[min(90vh,calc(100vh-10rem))]">
-        <DialogHeader className="px-6 pt-6 shrink-0">
+      <div className="flex w-full max-w-3xl flex-1 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm min-h-0 max-h-[min(90dvh,calc(100dvh-10rem))]">
+        <DialogHeader className="shrink-0 px-4 pt-6 sm:px-6">
           <h1 className="text-lg font-semibold leading-none tracking-tight">Per-recipient email campaign</h1>
           <div className="space-y-2 text-sm text-muted-foreground pt-1.5">
             <p>
