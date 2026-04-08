@@ -12,7 +12,7 @@ export default function PersonalizedEmailCampaign() {
   const navigate = useNavigate();
 
   return (
-    <div className="flex flex-col min-h-0 -mx-4 -mt-2 lg:-mx-6 lg:-mt-2 xl:-mx-8">
+    <div className="flex w-full min-w-0 flex-col min-h-[calc(100dvh-5.5rem)] sm:min-h-[calc(100dvh-4rem)] -mx-4 -mt-2 lg:-mx-6 lg:-mt-2 xl:-mx-8">
       <header className="shrink-0 border-b bg-muted/40 px-4 py-3 sm:px-6">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-3">
           <Button type="button" variant="ghost" size="sm" className="gap-2 -ml-2" onClick={() => navigate("/campaigns")}>
@@ -26,7 +26,7 @@ export default function PersonalizedEmailCampaign() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col min-h-0 px-4 py-6 sm:px-6 bg-background/80">
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col min-h-0 px-4 py-4 sm:px-6 sm:py-6 bg-background/80">
         <div className="mb-4 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-4 py-3 text-sm text-foreground">
           <p className="font-medium text-primary">Per-recipient campaign</p>
           <p className="mt-1 text-muted-foreground">

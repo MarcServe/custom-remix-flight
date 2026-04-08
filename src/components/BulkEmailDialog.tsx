@@ -3161,8 +3161,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     </>
   );
 
-  const mainInner = (
-    <>
+  const bulkEmailMainColumn = (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Load Draft Button */}
         {draftCampaigns && draftCampaigns.length > 0 && (
@@ -3179,7 +3178,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-pan-y px-4 py-4 sm:px-6">
           <div className="space-y-6">
           {/* Campaign Exclusion Section - More Prominent */}
           {previousCampaigns && previousCampaigns.length > 0 && (
@@ -4732,7 +4731,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           </div>
         </div>
       </div>
+  );
 
+  const bulkEmailNestedDialogs = (
+        <>
         {/* Test Email Dialog */}
         <AlertDialog open={testEmailDialogOpen}         onOpenChange={(open) => {
           setTestEmailDialogOpen(open);
@@ -4949,7 +4951,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-    </>
+        </>
   );
 
   return (
@@ -4958,9 +4960,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           className={cn(
-            "flex w-[calc(100vw-1rem)] max-w-[700px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[700px]",
-            "min-h-0 max-h-[calc(100dvh-1rem)]",
-            "left-[50%] top-[max(0.75rem,env(safe-area-inset-top))] -translate-x-1/2 translate-y-0",
+            "flex w-[calc(100vw-0.5rem)] max-w-[700px] flex-col gap-0 overflow-hidden p-0 sm:w-[calc(100vw-1rem)] sm:max-w-[700px]",
+            "min-h-0 max-h-[calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-0.5rem)]",
+            "left-[50%] top-[max(0.25rem,env(safe-area-inset-top))] -translate-x-1/2 translate-y-0",
             "sm:top-[50%] sm:max-h-[min(90vh,100dvh)] sm:-translate-y-1/2",
           )}
         >
@@ -4968,11 +4970,11 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             <DialogTitle>Send Bulk Email</DialogTitle>
             <DialogDescription className="space-y-1">{recipientSummaryBlock}</DialogDescription>
           </DialogHeader>
-          {mainInner}
+          {bulkEmailMainColumn}
         </DialogContent>
       </Dialog>
     ) : (
-      <div className="flex w-full max-w-3xl flex-1 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm min-h-0 max-h-[min(90dvh,calc(100dvh-10rem))]">
+      <div className="flex w-full max-w-3xl flex-1 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm min-h-0 min-h-[min(480px,85dvh)] max-h-[min(88dvh,calc(100dvh-7.5rem))] sm:max-h-[min(90dvh,calc(100dvh-6rem))]">
         <DialogHeader className="shrink-0 px-4 pt-6 sm:px-6">
           <h1 className="text-lg font-semibold leading-none tracking-tight">Per-recipient email campaign</h1>
           <div className="space-y-2 text-sm text-muted-foreground pt-1.5">
@@ -4984,9 +4986,11 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             <div className="space-y-1 text-sm text-muted-foreground">{recipientSummaryBlock}</div>
           </div>
         </DialogHeader>
-        {mainInner}
+        {bulkEmailMainColumn}
       </div>
     )}
+
+    {bulkEmailNestedDialogs}
 
     <Dialog
       open={editBodyImageOpen}
