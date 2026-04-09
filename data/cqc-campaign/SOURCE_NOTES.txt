@@ -9,3 +9,18 @@ This spreadsheet does NOT include an email column.
 campaign_import_recovered_emails_only.csv — verified recovery from typos.
 campaign_import_info_at_domain_inferred.csv — generic inbox; validate first.
 companies_unique_domains_summary.csv — domains by Provider name.
+
+Public email crawl (websites)
+-----------------------------
+Script: scripts/crawl_public_emails.py
+
+This is automated HTTP fetch + HTML parsing (not a real human in a browser).
+It extracts mailto: and visible email-like strings, validates syntax, and
+checks whether the email’s domain has MX/DNS (can receive mail). It does
+NOT SMTP-verify that a specific mailbox exists.
+
+Sample output: crawled_public_emails.csv (run with --limit for tests).
+Full list: omit --limit and run locally (long run; uses delays between sites).
+
+  pip install -r scripts/requirements-crawl.txt
+  python scripts/crawl_public_emails.py --delay 2

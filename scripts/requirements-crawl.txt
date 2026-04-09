@@ -1,0 +1,2 @@
+# Optional: MX verification (recommended)
+dnspython>=2.4.0

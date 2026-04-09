@@ -1,0 +1,36 @@
+company,domain,email,syntax_valid,domain_mx_or_dns,verified_mailbox,source_url,pages_fetched,fetch_error
+Anchor Hanover Group,anchor.org.uk,,,,not_checked,https://www.anchor.org.uk/,3,no_emails_found_in_html
+The Children's Trust,thechildrenstrust.org.uk,childrenstrust.tctplacements@nhs.net,yes,yes,not_checked,https://thechildrenstrust.org.uk/,3,
+The Children's Trust,thechildrenstrust.org.uk,dsl@thechildrenstrust.org.uk,yes,yes,not_checked,https://thechildrenstrust.org.uk/,3,
+The Children's Trust,thechildrenstrust.org.uk,enquiries@thechildrenstrust.org.uk,yes,yes,not_checked,https://thechildrenstrust.org.uk/,3,
+The Children's Trust,thechildrenstrust.org.uk,placements@thechildrenstrust.org.uk,yes,yes,not_checked,https://thechildrenstrust.org.uk/,3,
+The Children's Trust,thechildrenstrust.org.uk,pressoffice@thechildrenstrust.org.uk,yes,yes,not_checked,https://thechildrenstrust.org.uk/,3,
+The Children's Trust,thechildrenstrust.org.uk,recruitment@thechildrenstrust.org.uk,yes,yes,not_checked,https://thechildrenstrust.org.uk/,3,
+The Children's Trust,thechildrenstrust.org.uk,taddies@thechildrenstrust.org.uk,yes,yes,not_checked,https://thechildrenstrust.org.uk/,3,
+Wychwood Surgery,wychwoodsurgery.co.uk,wychwood.reception@nhs.net,yes,yes,not_checked,https://wychwoodsurgery.co.uk/,2,
+South London and Maudsley NHS Foundation Trust,slam.nhs.uk,governors@slam.nhs.uk,yes,yes,not_checked,https://slam.nhs.uk/,2,
+South London and Maudsley NHS Foundation Trust,slam.nhs.uk,pals@slam.nhs.uk,yes,yes,not_checked,https://slam.nhs.uk/,2,
+Brampton View Limited,barchester.com,,,,not_checked,,0,page too large
+Westcliff Lodge Limited,westclifflodge.co.uk,nicky@westclifflodge.co.uk,yes,yes,not_checked,https://westclifflodge.co.uk/,1,
+Bevan Community Benefit Society,bevanhealthcare.co.uk,,,,not_checked,,0,HTTP 418
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,complaints.penninecare@nhs.net,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,complaints@gmmh.nhs.uk,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,healthrecords.access@nca.nhs.uk,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,library@nca.nhs.uk,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,library@pat.nhs.uk,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,library@srft.nhs.uk,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,nhsgm.patientservices@nhs.net,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,office.complaints@nca.nhs.uk,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,pals.penninecare@nhs.net,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,pals@gmmh.nhs.uk,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,referrals@cloverleaf-advocacy.co.uk,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,sar@nca.nhs.uk,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Northern Care Alliance NHS Foundation Trust,northerncarealliance.nhs.uk,service.interpretation@nca.nhs.uk,yes,yes,not_checked,https://northerncarealliance.nhs.uk/,4,
+Arck Living Solutions Ltd,arcklivingsolutions.com,,,,not_checked,,0,"URL gaierror(8, 'nodename nor servname provided, or not known')"
+Smile 360 Ltd,smile360.co.uk,,,,not_checked,https://smile360.co.uk/,1,no_emails_found_in_html
+Everyturn,mentalhealthconcern.org,comms@everyturn.org,yes,yes,not_checked,http://mentalhealthconcern.org/,2,
+Everyturn,mentalhealthconcern.org,enquiries@everyturn.org,yes,yes,not_checked,http://mentalhealthconcern.org/,2,
+Everyturn,mentalhealthconcern.org,recruitment@everyturn.org,yes,yes,not_checked,http://mentalhealthconcern.org/,2,
+Teasdale Healthcare Ltd,teasdalehealth.com,enquiries@teasdalehealth.com,yes,yes,not_checked,https://www.teasdalehealth.com/,2,
+Teasdale Healthcare Ltd,teasdalehealth.com,hello@teasdalehealth.com,yes,yes,not_checked,https://www.teasdalehealth.com/,2,
+Teasdale Healthcare Ltd,teasdalehealth.com,user@domain.com,yes,yes,not_checked,https://www.teasdalehealth.com/,2,
