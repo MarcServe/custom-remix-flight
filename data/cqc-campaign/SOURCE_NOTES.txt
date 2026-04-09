@@ -24,3 +24,21 @@ Full list: omit --limit and run locally (long run; uses delays between sites).
 
   pip install -r scripts/requirements-crawl.txt
   python scripts/crawl_public_emails.py --delay 2
+
+IMPORTANT — What to expect (common confusion)
+---------------------------------------------
+- 5,654 is the number of WEBSITES (domains) to visit, NOT the number of emails.
+  Most sites do not put addresses in plain HTML (many use contact forms only),
+  so the total number of extracted emails is usually far below 5,654.
+- crawled_public_emails.csv grows as the crawl runs; if it stops early, use:
+    python scripts/crawl_public_emails.py --delay 2 --resume
+- EXPORT_all_unique_emails.csv — one row per unique email (deduped) for easy copy
+  into spreadsheets or your app import.
+
+Where the files are (for “download”)
+------------------------------------
+Files live on your Mac under the project folder and on Desktop if you copied them:
+  …/custom-remix-flight/data/cqc-campaign/
+  ~/Desktop/cqc-campaign/
+There is no separate “download” from the LeadGenie web app unless you upload these
+files yourself — they are generated locally by the crawl script.
