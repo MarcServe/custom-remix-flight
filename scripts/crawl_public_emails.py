@@ -11,13 +11,15 @@ Usage:
   pip install -r scripts/requirements-crawl.txt
   python scripts/crawl_public_emails.py --input data/cqc-campaign/campaign_import_info_at_domain_inferred.csv --limit 25
 
-Full crawl (hours): omit --limit and run locally overnight; uses --delay between requests.
+Full crawl (hours): omit --limit; uses --delay between requests. Progress is flushed to the
+CSV after each domain. Use --resume to continue after an interruption.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import os
 import random
 import re
 import socket
@@ -212,6 +214,26 @@ def iter_domains_from_inferred_csv(path: str) -> Iterable[tuple[str, str]]:
                 yield company, dom
 
 
+def unique_domain_list(path: str) -> list[tuple[str, str]]:
+    """Deduplicated ordered list of (company, domain)."""
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for company, domain in iter_domains_from_inferred_csv(path):
+        if domain in seen:
+            continue
+        seen.add(domain)
+        out.append((company, domain))
+    return out
+
+
+def domains_already_in_output(path: str) -> set[str]:
+    if not os.path.isfile(path) or os.path.getsize(path) == 0:
+        return set()
+    with open(path, newline="", encoding="utf-8") as f:
+        r = csv.DictReader(f)
+        return {row.get("domain", "").strip() for row in r if row.get("domain")}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Extract public emails from websites (polite crawl).")
     ap.add_argument(
@@ -223,21 +245,53 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0, help="Max domains (0 = no limit)")
     ap.add_argument("--delay", type=float, default=1.8, help="Seconds between requests (jitter added)")
     ap.add_argument("--skip-mx", action="store_true", help="Do not check MX/DNS for domain")
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="Skip domains already listed in --output; append rows (for interrupted full runs)",
+    )
     args = ap.parse_args()
 
     if dns is None and not args.skip_mx:
         print("Warning: dnspython not installed; pip install dnspython or use --skip-mx", file=sys.stderr)
 
-    rows_out: list[dict[str, str]] = []
-    seen_domain: set[str] = set()
-    n = 0
-    for company, domain in iter_domains_from_inferred_csv(args.input):
-        if domain in seen_domain:
+    fieldnames = [
+        "company",
+        "domain",
+        "email",
+        "syntax_valid",
+        "domain_mx_or_dns",
+        "verified_mailbox",
+        "source_url",
+        "pages_fetched",
+        "fetch_error",
+    ]
+
+    all_rows = unique_domain_list(args.input)
+    total = len(all_rows)
+    done_set = domains_already_in_output(args.output) if args.resume else set()
+
+    if args.resume and done_set:
+        print(f"Resume: skipping {len(done_set)} domain(s) already in {args.output}", flush=True)
+
+    append_mode = args.resume and os.path.isfile(args.output) and os.path.getsize(args.output) > 0
+    out_f = open(
+        args.output,
+        "a" if append_mode else "w",
+        newline="",
+        encoding="utf-8",
+    )
+    writer = csv.DictWriter(out_f, fieldnames=fieldnames)
+    if not append_mode:
+        writer.writeheader()
+        out_f.flush()
+
+    processed = 0
+    for company, domain in all_rows:
+        if domain in done_set:
             continue
-        seen_domain.add(domain)
-        if args.limit and n >= args.limit:
+        if args.limit and processed >= args.limit:
             break
-        n += 1
 
         urls_try = [
             f"https://{domain}/",
@@ -268,7 +322,7 @@ def main() -> int:
             for addr in sorted(collected):
                 dom = addr.rsplit("@", 1)[-1]
                 mx = True if args.skip_mx else has_mx(dom)
-                rows_out.append(
+                writer.writerow(
                     {
                         "company": company,
                         "domain": domain,
@@ -282,7 +336,7 @@ def main() -> int:
                     }
                 )
         else:
-            rows_out.append(
+            writer.writerow(
                 {
                     "company": company,
                     "domain": domain,
@@ -296,25 +350,19 @@ def main() -> int:
                 }
             )
 
+        out_f.flush()
+        processed += 1
+        cumulative = len(done_set) + processed
+        if processed % 25 == 0 or processed == 1:
+            print(
+                f"Progress: {cumulative}/{total} — {domain} ({processed} domains this run)",
+                flush=True,
+            )
+
         time.sleep(args.delay + random.uniform(0.4, 1.2))
 
-    fieldnames = [
-        "company",
-        "domain",
-        "email",
-        "syntax_valid",
-        "domain_mx_or_dns",
-        "verified_mailbox",
-        "source_url",
-        "pages_fetched",
-        "fetch_error",
-    ]
-    with open(args.output, "w", newline="", encoding="utf-8") as out:
-        w = csv.DictWriter(out, fieldnames=fieldnames)
-        w.writeheader()
-        w.writerows(rows_out)
-
-    print(f"Wrote {len(rows_out)} email row(s) from {n} domain(s) to {args.output}")
+    out_f.close()
+    print(f"Finished this run: {processed} domain(s) written to {args.output}", flush=True)
     return 0
 
 
