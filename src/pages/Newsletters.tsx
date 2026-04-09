@@ -14,7 +14,7 @@ import {
   Loader2, Plus, Pencil, Trash2, Send, Eye, Sparkles, Users, Tag,
   MailOpen, MousePointerClick, ArrowLeft, Link2, FileText, Copy,
   UserPlus, Upload, ChevronDown, ImagePlus, FolderInput, FlaskConical,
-  Clock, CalendarClock, RefreshCw,
+  Clock, CalendarClock, RefreshCw, FileSpreadsheet,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -29,6 +29,9 @@ import { EmailTemplatePreview, type EmailTemplatePreviewStyle } from "@/componen
 import { TemplateStyleSelector, type EmailTemplateStyle } from "@/components/email/TemplateStyleSelector";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/email/RichTextEditor";
 import { replaceNthImage } from "@/lib/replace-nth-image-html";
+import { parseRecipientRowsFromCSVText } from "@/lib/recipient-group-csv";
+import { createRecipientGroupWithMembers } from "@/lib/recipient-group-mutations";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 type Newsletter = {
   id: string;
@@ -227,6 +230,15 @@ export default function Newsletters() {
   const [splittingMulti, setSplittingMulti] = useState(false);
   const [importFromGroupCategoryIds, setImportFromGroupCategoryIds] = useState<string[]>([]);
   const [importingFromGroup, setImportingFromGroup] = useState(false);
+  const [showImportCsvSubscribersDialog, setShowImportCsvSubscribersDialog] = useState(false);
+  const [showImportCsvGroupDialog, setShowImportCsvGroupDialog] = useState(false);
+  const [csvImportGroupName, setCsvImportGroupName] = useState("");
+  const [csvSubscriberPreview, setCsvSubscriberPreview] = useState(0);
+  const [csvGroupPreview, setCsvGroupPreview] = useState(0);
+  const [csvSubscriberRows, setCsvSubscriberRows] = useState<ReturnType<typeof parseRecipientRowsFromCSVText>>([]);
+  const [csvGroupRows, setCsvGroupRows] = useState<ReturnType<typeof parseRecipientRowsFromCSVText>>([]);
+  const [importingCsvSubscribers, setImportingCsvSubscribers] = useState(false);
+  const [importingCsvGroup, setImportingCsvGroup] = useState(false);
 
   // Send dialog
   const [showSendDialog, setShowSendDialog] = useState(false);
@@ -569,6 +581,124 @@ export default function Newsletters() {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setImportingFromGroup(false);
+    }
+  };
+
+  const handleCsvFileForSubscribers = async (file: File | null) => {
+    if (!file) return;
+    const text = await file.text();
+    const rows = parseRecipientRowsFromCSVText(text);
+    setCsvSubscriberRows(rows);
+    setCsvSubscriberPreview(rows.length);
+    if (rows.length === 0) {
+      toast({
+        title: "No emails found",
+        description: "Use a CSV with an Email column or one email per row in the first column.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCsvFileForGroup = async (file: File | null) => {
+    if (!file) return;
+    const text = await file.text();
+    const rows = parseRecipientRowsFromCSVText(text);
+    setCsvGroupRows(rows);
+    setCsvGroupPreview(rows.length);
+    if (rows.length === 0) {
+      toast({
+        title: "No emails found",
+        description: "Use a CSV with an Email column or one email per row in the first column.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleConfirmImportCsvSubscribers = async () => {
+    if (!user || csvSubscriberRows.length === 0) return;
+    setImportingCsvSubscribers(true);
+    try {
+      let imported = 0;
+      const seen = new Set<string>();
+      for (const row of csvSubscriberRows) {
+        if (!isValidNewsletterEmail(row.email)) continue;
+        const email = row.email.toLowerCase();
+        if (seen.has(email)) continue;
+        seen.add(email);
+        const { error } = await supabase.from("newsletter_subscribers").upsert(
+          {
+            user_id: user.id,
+            email,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            company: row.company,
+            source: "csv_import",
+          },
+          { onConflict: "user_id,email" }
+        );
+        if (!error) imported++;
+      }
+      queryClient.invalidateQueries({ queryKey: ["newsletter-subscribers"] });
+      queryClient.invalidateQueries({ queryKey: ["subscriber-categories-map"] });
+      setShowImportCsvSubscribersDialog(false);
+      setCsvSubscriberRows([]);
+      setCsvSubscriberPreview(0);
+      toast({ title: "Import complete", description: `${imported} subscriber(s) added or updated (valid emails only).` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Import failed", variant: "destructive" });
+    } finally {
+      setImportingCsvSubscribers(false);
+    }
+  };
+
+  const handleConfirmImportCsvGroup = async () => {
+    if (!user || !csvImportGroupName.trim() || csvGroupRows.length === 0) {
+      if (!csvImportGroupName.trim()) toast({ title: "Enter a group name", variant: "destructive" });
+      return;
+    }
+    setImportingCsvGroup(true);
+    try {
+      const seen = new Set<string>();
+      const members = csvGroupRows
+        .filter((r) => {
+          const k = r.email.toLowerCase();
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+        .map((r) => ({
+          email: r.email.toLowerCase(),
+          first_name: r.first_name,
+          last_name: r.last_name,
+          company: r.company,
+          person_id: null as string | null,
+        }));
+      if (members.length === 0) {
+        toast({ title: "No valid rows", variant: "destructive" });
+        setImportingCsvGroup(false);
+        return;
+      }
+      await createRecipientGroupWithMembers(supabase, {
+        userId: user.id,
+        name: csvImportGroupName.trim(),
+        description: "Created from Newsletters → Import CSV as group",
+        members,
+      });
+      queryClient.invalidateQueries({ queryKey: ["recipient-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["recipient-groups-page"] });
+      const groupLabel = csvImportGroupName.trim();
+      setShowImportCsvGroupDialog(false);
+      setCsvImportGroupName("");
+      setCsvGroupRows([]);
+      setCsvGroupPreview(0);
+      toast({
+        title: "Group created",
+        description: `"${groupLabel}" has ${members.length} member(s). Choose it when sending (recipient group) or Import from group.`,
+      });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Failed to create group", variant: "destructive" });
+    } finally {
+      setImportingCsvGroup(false);
     }
   };
 
@@ -1741,6 +1871,17 @@ Return ONLY the HTML body content.`,
             <Button variant="outline" onClick={() => setShowImportFromGroupDialog(true)} disabled={recipientGroups.length === 0}>
               <FolderInput className="h-4 w-4 mr-1.5" />Import from group
             </Button>
+            <Button variant="outline" onClick={() => setShowImportCsvSubscribersDialog(true)}>
+              <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+              Import CSV (subscribers)
+            </Button>
+            <Button variant="outline" onClick={() => { setCsvImportGroupName(""); setCsvGroupRows([]); setCsvGroupPreview(0); setShowImportCsvGroupDialog(true); }}>
+              <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+              CSV → new group
+            </Button>
+            <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
+              <Link to="/recipient-groups">Manage groups</Link>
+            </Button>
             {invalidSubscribers.length > 0 && (
               <Button variant="outline" onClick={() => setShowConfirmCleanInvalid(true)} className="text-amber-600 border-amber-300 hover:bg-amber-50">
                 Remove invalid ({invalidSubscribers.length})
@@ -2055,7 +2196,13 @@ Return ONLY the HTML body content.`,
               <div className="space-y-2">
                 <Label>Select a group</Label>
                 {recipientGroups.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-2">No recipient groups yet. Save recipients from a campaign (Campaigns → Manage Recipients → Save as group) first.</p>
+                  <p className="text-xs text-muted-foreground py-2">
+                    No recipient groups yet.{" "}
+                    <Link to="/recipient-groups" className="text-primary hover:underline">
+                      Create one
+                    </Link>{" "}
+                    (CSV, People, or Companies) or save from a campaign.
+                  </p>
                 ) : (
                   <div className="space-y-1 max-h-48 overflow-y-auto rounded-md border p-2">
                     {recipientGroups.map((g: { id: string; name: string }) => (
@@ -2068,6 +2215,75 @@ Return ONLY the HTML body content.`,
                 )}
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import CSV as subscribers */}
+        <Dialog open={showImportCsvSubscribersDialog} onOpenChange={(open) => { setShowImportCsvSubscribersDialog(open); if (!open) { setCsvSubscriberRows([]); setCsvSubscriberPreview(0); } }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Import CSV (subscribers)</DialogTitle>
+              <DialogDescription>
+                Comma-separated file with a header row. Use an <strong>email</strong> column (or emails in the first column). Optional: first name, last name, company.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <Input
+                type="file"
+                accept=".csv,.txt,text/csv,text/plain"
+                onChange={(e) => handleCsvFileForSubscribers(e.target.files?.[0] ?? null)}
+              />
+              {csvSubscriberPreview > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  <strong>{csvSubscriberPreview}</strong> row(s) parsed. Only valid-looking emails are imported.
+                </p>
+              )}
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setShowImportCsvSubscribersDialog(false)}>Cancel</Button>
+              <Button onClick={handleConfirmImportCsvSubscribers} disabled={importingCsvSubscribers || csvSubscriberRows.length === 0}>
+                {importingCsvSubscribers ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Import
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* CSV → recipient group */}
+        <Dialog open={showImportCsvGroupDialog} onOpenChange={(open) => { setShowImportCsvGroupDialog(open); if (!open) { setCsvImportGroupName(""); setCsvGroupRows([]); setCsvGroupPreview(0); } }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>CSV → new recipient group</DialogTitle>
+              <DialogDescription>
+                Creates a saved group you can target in <strong>Send</strong> (recipient groups) or Campaigns. Same CSV format as subscriber import.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="space-y-1.5">
+                <Label>Group name *</Label>
+                <Input value={csvImportGroupName} onChange={(e) => setCsvImportGroupName(e.target.value)} placeholder="e.g. April upload" />
+              </div>
+              <Input
+                type="file"
+                accept=".csv,.txt,text/csv,text/plain"
+                onChange={(e) => handleCsvFileForGroup(e.target.files?.[0] ?? null)}
+              />
+              {csvGroupPreview > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  <strong>{csvGroupPreview}</strong> unique email(s) will be added to the group.
+                </p>
+              )}
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setShowImportCsvGroupDialog(false)}>Cancel</Button>
+              <Button
+                onClick={handleConfirmImportCsvGroup}
+                disabled={importingCsvGroup || !csvImportGroupName.trim() || csvGroupRows.length === 0}
+              >
+                {importingCsvGroup ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Create group
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
@@ -3005,6 +3221,18 @@ Return ONLY the HTML body content.`,
             </CardContent>
           </Card>
         </div>
+
+        {newsletters.some((n) => n.status === "sending") && (
+          <Alert>
+            <AlertTitle>Batch sending tips (Resend / SendGrid)</AlertTitle>
+            <AlertDescription className="text-sm space-y-1">
+              <p>
+                If the sent count stops moving, the next batch may be outside your cron window, or individual sends failed (domain verification, invalid addresses). Use{" "}
+                <strong>Send next batch now</strong> on the newsletter card to bypass the schedule. Check Supabase Edge Function logs for <code className="text-xs">send-newsletter</code> if errors persist.
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Sending window: when cron may send (local time or UTC) */}
         <Card className="border-muted">

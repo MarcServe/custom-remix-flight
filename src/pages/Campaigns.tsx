@@ -1887,7 +1887,23 @@ export default function Campaigns() {
                   return (
                     <TableRow key={campaign.id}>
                       <TableCell className="font-medium">{campaign.name}</TableCell>
-                      <TableCell>{getStatusBadge(campaign.status)}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {getStatusBadge(campaign.status)}
+                          {campaign.status?.toLowerCase() === "draft" && (campaign.sent_count ?? 0) > 0 && (
+                            <Badge variant="outline" className="text-amber-800 border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+                              Partially sent
+                            </Badge>
+                          )}
+                          {campaign.status?.toLowerCase() === "completed" &&
+                            (campaign.total_recipients ?? 0) > 0 &&
+                            (campaign.sent_count ?? 0) < (campaign.total_recipients ?? 0) && (
+                              <Badge variant="outline" className="text-muted-foreground font-normal">
+                                List not fully sent
+                              </Badge>
+                            )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                         {isScheduled ? format(new Date(campaign.scheduled_at!), 'PPp') : '—'}
                       </TableCell>
@@ -1912,6 +1928,13 @@ export default function Campaigns() {
                               {campaign.failed_count} failed
                             </p>
                           )}
+                          {campaign.status?.toLowerCase() === "completed" &&
+                            (campaign.total_recipients ?? 0) > 0 &&
+                            (campaign.sent_count ?? 0) < (campaign.total_recipients ?? 0) && (
+                              <p className="text-xs text-muted-foreground">
+                                “Completed” means no pending recipients left; the bar compares sent to total on the campaign.
+                              </p>
+                            )}
                         </div>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">

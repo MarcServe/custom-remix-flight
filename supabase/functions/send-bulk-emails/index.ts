@@ -105,6 +105,15 @@ serve(async (req) => {
       throw new Error('Unauthorized: Campaign does not belong to user');
     }
 
+    // After auth, use service role for all DB operations. User JWT + RLS can block recipient/campaign updates and
+    // email_activities inserts (e.g. campaign rows have no company_sequence_id) while Resend still sends — CRM shows 0 sent.
+    if (!isServiceRole && !triggeredByCron) {
+      supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+    }
+
     // Update campaign status to sending
     await supabaseClient
       .from('email_campaigns')

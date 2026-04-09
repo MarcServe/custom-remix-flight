@@ -116,7 +116,9 @@ serve(async (req) => {
     const dailySendLimitRaw = body.dailySendLimit ?? body.daily_send_limit;
     const dailySendLimitFromBody = dailySendLimitRaw != null ? Math.min(2000, Math.max(1, Number(dailySendLimitRaw) | 0)) : null;
 
-    const db = triggeredByCron ? supabaseAdmin : supabaseAnon;
+    // Always use service role for DB writes after auth above. User JWT + RLS can block updates (e.g. newsletter row
+    // counters) even when Resend returns 200, leaving the CRM at 0 sent while emails appear in Resend.
+    const db = supabaseAdmin;
 
     // Never block test sends: if request has test email (any key) or isTest, allow regardless of newsletter status
     const hasTestEmailInBody = !!(String(body.testEmail ?? body.test_email ?? body.body?.testEmail ?? body.body?.test_email ?? '').trim())
