@@ -1,0 +1,11 @@
+UK CQC provider export — email extraction notes
+================================================
+
+This spreadsheet does NOT include an email column.
+- Emails recovered from broken Website fields: 2
+- Unique clean website domains (optional info@ outreach rows): 5654
+- Provider names with at least one clean website URL: 6026
+
+campaign_import_recovered_emails_only.csv — verified recovery from typos.
+campaign_import_info_at_domain_inferred.csv — generic inbox; validate first.
+companies_unique_domains_summary.csv — domains by Provider name.
