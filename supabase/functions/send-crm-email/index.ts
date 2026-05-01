@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderEmailTemplate } from "../_shared/professional-template.ts";
 import { encodeRfc2047 } from "../_shared/gmail-utils.ts";
+import { stripTrailingDuplicateSignoffHtml } from "../_shared/strip-trailing-signoff.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -194,34 +195,9 @@ serve(async (req) => {
       emailBodyContent = '';
     }
     
-    // Remove signature if already included (to avoid duplicates when renderEmailTemplate adds it)
-    // Only process if emailBodyContent is a string
+    // Remove trailing duplicate sign-off if present (template adds signature). Only match near end of HTML so mid-body "Best regards" does not truncate.
     if (typeof emailBodyContent === 'string' && emailBodyContent.length > 0) {
-      // Look for common signature patterns - more comprehensive removal
-      const signaturePatterns = [
-        /<br><br><p>Best regards,.*$/is,
-        /<br><br>Best regards,.*$/is,
-        /<p>Best regards,.*$/is,
-        /\n\nBest regards,.*$/is,
-        /Best regards,.*$/is,
-        /<div class="signature".*$/is,
-        /<div class="email-signature".*$/is,
-        /<div[^>]*class="[^"]*signature[^"]*".*$/is,
-        /michael orji.*$/is,
-        /Michael Orji.*$/is,
-        /AI Founding Engineer.*$/is,
-        /AI innovation Studio.*$/is,
-        /AI Innovation Studio.*$/is,
-        /Biz Boosters Ltd.*$/is,
-        /biz boosters.*$/is,
-      ];
-      
-      for (const pattern of signaturePatterns) {
-        emailBodyContent = emailBodyContent.replace(pattern, '').trim();
-      }
-      
-      // Also remove any trailing signature-like content (multiple newlines/breaks followed by name/email patterns)
-      emailBodyContent = emailBodyContent.replace(/(<br\s*\/?>|\n){2,}.*?(michael|orji|biz boosters|founding engineer|AI innovation|innovation studio|@bizboosters).*$/is, '').trim();
+      emailBodyContent = stripTrailingDuplicateSignoffHtml(emailBodyContent);
     }
 
     // If invoice is attached, append it to the email body

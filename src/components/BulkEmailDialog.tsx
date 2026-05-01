@@ -37,6 +37,10 @@ import { parseCampaignJson } from "@/lib/json-campaign-import";
 import { parseCampaignXlsxToRows } from "@/lib/xlsx-campaign-import";
 import { extractCampaignMessagesFromPdf, pdfMessageToCsvRow } from "@/lib/pdf-campaign-import";
 import { replaceNthImage } from "@/lib/replace-nth-image-html";
+import {
+  stripTrailingDuplicateSignoffHtml,
+  stripTrailingDuplicateSignoffPlain,
+} from "@/lib/strip-trailing-signoff";
 import { cn } from "@/lib/utils";
 
 export interface BulkEmailDialogHandle {
@@ -2118,42 +2122,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setCampaignName(draft.name || '');
       setSubject(draft.subject_template || '');
       
-      // Strip signature from body content when loading
-      let loadedBodyHtml = draft.body_html_template || '';
-      let loadedBodyText = draft.body_text_template || '';
-      
-      // Remove common signature patterns (including "AI innovation Studio" and other company info)
-      const signaturePatterns = [
-        /<br><br><p>Best regards,.*$/is,
-        /<br><br>Best regards,.*$/is,
-        /<p>Best regards,.*$/is,
-        /\n\nBest regards,.*$/is,
-        /Best regards,.*$/is,
-        /<div class="signature".*$/is,
-        /<div class="email-signature".*$/is,
-        // Remove company/sender info that might appear before signature
-        /AI innovation Studio.*$/is,
-        /AI Innovation Studio.*$/is,
-        /michael orji.*$/is,
-        /Michael Orji.*$/is,
-        /AI Founding Engineer.*$/is,
-        /Biz Boosters Ltd.*$/is,
-        /biz boosters.*$/is,
-        // Remove any trailing content after "Best regards" that looks like signature
-        /(Best regards,?\s*[\n\r]*.*?michael.*?orji.*?)/is,
-        /(Best regards,?\s*[\n\r]*.*?AI.*?Engineer.*?)/is,
-        /(Best regards,?\s*[\n\r]*.*?Biz.*?Boosters.*?)/is,
-      ];
-      
-      for (const pattern of signaturePatterns) {
-        loadedBodyHtml = loadedBodyHtml.replace(pattern, '').trim();
-        loadedBodyText = loadedBodyText.replace(pattern, '').trim();
-      }
-      
-      // Additional cleanup: Remove any trailing signature-like content
-      // Remove multiple newlines/breaks followed by name/company patterns
-      loadedBodyHtml = loadedBodyHtml.replace(/(<br\s*\/?>|\n){2,}.*?(michael|orji|biz boosters|founding engineer|AI innovation|innovation studio).*$/is, '').trim();
-      loadedBodyText = loadedBodyText.replace(/(\n|\r){2,}.*?(michael|orji|biz boosters|founding engineer|AI innovation|innovation studio).*$/is, '').trim();
+      // Strip trailing duplicate sign-off when loading (template adds signature again). Avoid greedy regex on first "Best regards" in body.
+      let loadedBodyHtml = stripTrailingDuplicateSignoffHtml(draft.body_html_template || '');
+      let loadedBodyText = stripTrailingDuplicateSignoffPlain(draft.body_text_template || '');
       
       setBodyHtml(loadedBodyHtml);
       setBodyText(loadedBodyText);

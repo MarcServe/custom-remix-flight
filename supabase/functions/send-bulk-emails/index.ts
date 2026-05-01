@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { renderEmailTemplate } from "../_shared/professional-template.ts";
+import { stripTrailingDuplicateSignoffHtml } from "../_shared/strip-trailing-signoff.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -363,34 +364,13 @@ serve(async (req) => {
           const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'Your Business';
           const fromEmail = branding.senderEmail || optimalConnection.from_email || userProfile?.email || 'noreply@yourdomain.com';
           
-          // Extract body HTML (remove signature if already included to avoid duplicates)
+          // Extract body HTML (remove trailing duplicate sign-off only — avoid greedy regex on first "Best regards" in body)
           let bodyHtml = recipient.personalized_body_html || '';
           // Fallback: when no HTML stored (e.g. legacy B or edge case), use plain text so template bodyTextToHtml can convert
           if (!bodyHtml.trim() && (recipient.personalized_body_text || '').trim()) {
             bodyHtml = recipient.personalized_body_text;
           }
-          // More comprehensive signature removal patterns
-          const signaturePatterns = [
-            /<br><br><p>Best regards,.*$/is,
-            /<br><br>Best regards,.*$/is,
-            /<p>Best regards,.*$/is,
-            /Best regards,.*$/is,
-            /<div class="signature".*$/is,
-            /<div class="email-signature".*$/is,
-            /<div[^>]*class="[^"]*signature[^"]*".*$/is,
-            /michael orji.*$/is,  // Remove if signature contains name
-            /Michael Orji.*$/is,
-            /AI Founding Engineer.*$/is,
-            /AI innovation Studio.*$/is,
-            /AI Innovation Studio.*$/is,
-            /Biz Boosters Ltd.*$/is,
-            /biz boosters.*$/is,
-          ];
-          for (const pattern of signaturePatterns) {
-            bodyHtml = bodyHtml.replace(pattern, '').trim();
-          }
-          // Also remove any trailing signature-like content (multiple newlines followed by name/email patterns)
-          bodyHtml = bodyHtml.replace(/(<br\s*\/?>|\n){2,}.*?(michael|orji|biz boosters|founding engineer|AI innovation|innovation studio).*$/is, '').trim();
+          bodyHtml = stripTrailingDuplicateSignoffHtml(bodyHtml);
           
           // Render with branded template
           let wrappedHtml: string;
@@ -491,34 +471,13 @@ serve(async (req) => {
             throw new Error('Business Email not configured. Please set your business email in Settings > Profile and verify it in SendGrid.');
           }
           
-          // Extract body HTML (remove signature if already included to avoid duplicates)
+          // Extract body HTML (remove trailing duplicate sign-off only — avoid greedy regex on first "Best regards" in body)
           let bodyHtml = recipient.personalized_body_html || '';
           // Fallback: when no HTML stored (e.g. legacy B or edge case), use plain text so template bodyTextToHtml can convert
           if (!bodyHtml.trim() && (recipient.personalized_body_text || '').trim()) {
             bodyHtml = recipient.personalized_body_text;
           }
-          // More comprehensive signature removal patterns
-          const signaturePatterns = [
-            /<br><br><p>Best regards,.*$/is,
-            /<br><br>Best regards,.*$/is,
-            /<p>Best regards,.*$/is,
-            /Best regards,.*$/is,
-            /<div class="signature".*$/is,
-            /<div class="email-signature".*$/is,
-            /<div[^>]*class="[^"]*signature[^"]*".*$/is,
-            /michael orji.*$/is,  // Remove if signature contains name
-            /Michael Orji.*$/is,
-            /AI Founding Engineer.*$/is,
-            /AI innovation Studio.*$/is,
-            /AI Innovation Studio.*$/is,
-            /Biz Boosters Ltd.*$/is,
-            /biz boosters.*$/is,
-          ];
-          for (const pattern of signaturePatterns) {
-            bodyHtml = bodyHtml.replace(pattern, '').trim();
-          }
-          // Also remove any trailing signature-like content (multiple newlines followed by name/email patterns)
-          bodyHtml = bodyHtml.replace(/(<br\s*\/?>|\n){2,}.*?(michael|orji|biz boosters|founding engineer|AI innovation|innovation studio).*$/is, '').trim();
+          bodyHtml = stripTrailingDuplicateSignoffHtml(bodyHtml);
           
           // Render with branded template
           let wrappedHtml: string;
@@ -592,25 +551,13 @@ serve(async (req) => {
           const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'CRM';
           const fromEmail = branding.senderEmail || effectiveConnection.from_email || userProfile?.email || 'onboarding@resend.dev';
           
-          // Extract body HTML (remove signature if already included to avoid duplicates)
+          // Extract body HTML (remove trailing duplicate sign-off only — avoid greedy regex on first "Best regards" in body)
           let bodyHtml = recipient.personalized_body_html || '';
           // Fallback: when no HTML stored (e.g. legacy B or edge case), use plain text so template bodyTextToHtml can convert
           if (!bodyHtml.trim() && (recipient.personalized_body_text || '').trim()) {
             bodyHtml = recipient.personalized_body_text;
           }
-          // More comprehensive signature removal patterns
-          const signaturePatterns = [
-            /<br><br><p>Best regards,.*$/is,
-            /<br><br>Best regards,.*$/is,
-            /<p>Best regards,.*$/is,
-            /Best regards,.*$/is,
-            /<div class="signature".*$/is,
-            /<div class="email-signature".*$/is,
-            /<div[^>]*class="[^"]*signature[^"]*".*$/is,
-          ];
-          for (const pattern of signaturePatterns) {
-            bodyHtml = bodyHtml.replace(pattern, '').trim();
-          }
+          bodyHtml = stripTrailingDuplicateSignoffHtml(bodyHtml);
           
           // Render with branded template
           let wrappedHtml: string;
