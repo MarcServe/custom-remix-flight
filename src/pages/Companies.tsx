@@ -1111,7 +1111,7 @@ export default function Companies() {
     if (!companies?.length || hasRestoredCompanySelection.current) return;
     hasRestoredCompanySelection.current = true;
     try {
-      const raw = localStorage.getItem(SELECTED_COMPANY_IDS_KEY);
+      const raw = sessionStorage.getItem(SELECTED_COMPANY_IDS_KEY);
       if (!raw) return;
       const ids = JSON.parse(raw) as string[];
       if (Array.isArray(ids) && ids.length > 0) {
@@ -1128,7 +1128,7 @@ export default function Companies() {
   // Persist selected company IDs to localStorage when selection changes
   useEffect(() => {
     try {
-      localStorage.setItem(SELECTED_COMPANY_IDS_KEY, JSON.stringify(Array.from(selectedCompanyIds)));
+      sessionStorage.setItem(SELECTED_COMPANY_IDS_KEY, JSON.stringify(Array.from(selectedCompanyIds)));
     } catch {
       // ignore
     }
@@ -2923,7 +2923,7 @@ export default function Companies() {
                                 const companyIds = companiesWithEmail.map(c => c.id);
                                 localStorage.removeItem('leadgenie_draft_recipients');
                                 localStorage.removeItem('leadgenie_selected_people_ids');
-                                localStorage.setItem('leadgenie_selected_company_ids', JSON.stringify(companyIds));
+                                sessionStorage.setItem('leadgenie_selected_company_ids', JSON.stringify(companyIds));
                                 window.opener?.postMessage?.(
                                   { type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" },
                                   window.location.origin
@@ -2947,7 +2947,7 @@ export default function Companies() {
                                 const companyIds = companiesWithEmail.map(c => c.id);
                                 localStorage.removeItem('leadgenie_draft_recipients');
                                 localStorage.removeItem('leadgenie_selected_people_ids');
-                                localStorage.setItem('leadgenie_selected_company_ids', JSON.stringify(companyIds));
+                                sessionStorage.setItem('leadgenie_selected_company_ids', JSON.stringify(companyIds));
                                 window.opener?.postMessage?.(
                                   { type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" },
                                   window.location.origin

@@ -39,7 +39,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      sourcemap: true,
+      sourcemap: mode !== "production",
     },
   };
 });

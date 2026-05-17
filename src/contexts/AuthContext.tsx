@@ -91,9 +91,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
         // Check subscription when user signs in
         if (session?.user) {
-          setTimeout(() => {
-            checkSubscription();
-          }, 0);
+          checkSubscription();
         } else {
           setSubscribed(false);
           setProductId(null);
@@ -124,11 +122,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       // Check subscription for existing session
       if (session?.user) {
-        setTimeout(() => {
-          checkSubscription();
-        }, 0);
+        checkSubscription();
       }
-      
+
       // Mark initial load as complete after session check
       initialLoadRef.current = false;
     });

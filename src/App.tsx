@@ -7,6 +7,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ResearchChatProvider } from "./contexts/ResearchChatContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PageErrorBoundary } from "./components/PageErrorBoundary";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
 import { ResearchChatSlideOut } from "./components/ResearchChatSlideOut";
 import { useAllRealtime } from "./hooks/use-realtime";
@@ -63,6 +64,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <RealtimeProvider>
+            <ErrorBoundary>
             <Routes>
               <Route path="/auth" element={<Auth />} />
               <Route
@@ -119,6 +121,7 @@ const App = () => (
                 }
               />
             </Routes>
+            </ErrorBoundary>
           </RealtimeProvider>
         </AuthProvider>
       </BrowserRouter>

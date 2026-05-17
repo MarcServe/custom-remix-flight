@@ -1088,14 +1088,22 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     setFilteredRecipients(filtered);
   }, [selectedTags, companiesWithTags]);
 
+  const escapeHtml = (str: string): string =>
+    str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+
   // Personalize text with variables (case-insensitive to match {{firstName}}, {{FirstName}}, etc.)
   const personalizeText = (template: string, person: typeof selectedPeople[0]) => {
-    const full = `${person.first_name} ${person.last_name}`.trim();
+    const full = escapeHtml(`${person.first_name} ${person.last_name}`.trim());
     return template
-      .replace(/\{\{firstName\}\}/gi, person.first_name || '')
-      .replace(/\{\{lastName\}\}/gi, person.last_name || '')
+      .replace(/\{\{firstName\}\}/gi, escapeHtml(person.first_name || ''))
+      .replace(/\{\{lastName\}\}/gi, escapeHtml(person.last_name || ''))
       .replace(/\{\{fullName\}\}/gi, full || '')
-      .replace(/\{\{email\}\}/gi, person.email || '');
+      .replace(/\{\{email\}\}/gi, escapeHtml(person.email || ''));
   };
 
   /** Build one DB row; when `usePersonalizedEmails` is set, per-recipient content wins and A/B is skipped. */
@@ -1600,7 +1608,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
       if (data?.subject && data?.body) {
         setSubject(data.subject);
-        setBodyHtml(`<p>${data.body.replace(/\n/g, '</p><p>')}</p>`);
+        setBodyHtml(`<p>${escapeHtml(data.body).replace(/\n/g, '</p><p>')}</p>`);
         setBodyText(data.body);
         if (abTestEnabled) {
           setAbSubjectB(data.subject);

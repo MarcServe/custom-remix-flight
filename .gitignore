@@ -23,6 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 
+# Environment variables — never commit real credentials
+.env
+.env.local
+.env.*.local
+
 # Supabase local/generated
 supabase/.temp
 .vercel

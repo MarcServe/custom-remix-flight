@@ -23,6 +23,7 @@ Sentry.init({
     import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE ?? "1.0"
   ),
   tracePropagationTargets: ["localhost", /^https:\/\/yourserver\.io\/api/],
+  sendDefaultPii: false,
 });
 
 export {}; // ensure this module is treated as a side-effect module
