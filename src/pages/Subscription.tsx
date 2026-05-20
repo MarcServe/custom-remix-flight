@@ -9,16 +9,16 @@ import { format } from "date-fns";
 
 const LEADGENIE_PRODUCT_ID = "prod_TUNeoAZWiDngEH";
 
-// Price mapping by currency
+// Price mapping by currency — £29/month
 const LEADGENIE_PRICES = {
-  usd: { 
+  usd: {
     price_id: "price_1SXOt7P8zypO5fiCd7FkOQCp",
-    amount: "9.99",
+    amount: "29.99",
     symbol: "$"
   },
-  gbp: { 
-    price_id: "price_1SXXe4P8zypO5fiC4dDpEHBz",
-    amount: "9.99",
+  gbp: {
+    price_id: "price_1TZECTP8zypO5fiCk3voBln5",
+    amount: "29",
     symbol: "£"
   }
 };
@@ -217,10 +217,10 @@ export default function Subscription() {
         <CardContent>
             <div className="space-y-4">
             <div className="text-3xl font-bold">
-              £9.99<span className="text-lg font-normal text-muted-foreground">/month</span>
+              £29<span className="text-lg font-normal text-muted-foreground">/month</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              or $9.99/month (depending on your region)
+              or $29.99/month (depending on your region)
             </p>
             
             <ul className="space-y-2">

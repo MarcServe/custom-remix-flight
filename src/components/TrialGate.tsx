@@ -57,7 +57,7 @@ export function TrialGate({ children, feature = 'this feature' }: TrialGateProps
             size="lg"
           >
             <Sparkles className="mr-2 h-4 w-4" />
-            Subscribe Now - $9.99/month
+            Subscribe Now - £29/month
           </Button>
         </CardContent>
       </Card>

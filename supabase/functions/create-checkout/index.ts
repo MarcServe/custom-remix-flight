@@ -2,15 +2,17 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
+const APP_URL = Deno.env.get("APP_URL") || "https://leadboosters.app";
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": APP_URL,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// LeadBoosters product prices by currency
+// LeadBoosters product prices by currency — £29/month
 const LEADGENIE_PRICES = {
   usd: "price_1SXOt7P8zypO5fiCd7FkOQCp",
-  gbp: "price_1SXXe4P8zypO5fiC4dDpEHBz"
+  gbp: "price_1TZECTP8zypO5fiCk3voBln5",
 };
 
 const logStep = (step: string, details?: any) => {
@@ -98,7 +100,7 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in create-checkout", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: "Failed to create checkout session" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

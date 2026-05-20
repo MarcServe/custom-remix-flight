@@ -1,8 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
+const APP_URL = Deno.env.get("APP_URL") || "https://leadboosters.app";
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': APP_URL,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -14,34 +16,39 @@ serve(async (req: Request) => {
   try {
     const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!GOOGLE_CLIENT_ID) {
       throw new Error('GOOGLE_CLIENT_ID not configured');
     }
 
-    // Get user from request by decoding JWT
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('No authorization header present');
-      throw new Error('No authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
     }
 
-    // Extract and decode JWT token
+    // Verify JWT using service-role client — never trust unverified JWT payload
+    const supabaseAdmin = createClient(SUPABASE_URL ?? '', SUPABASE_SERVICE_ROLE_KEY ?? '', {
+      auth: { persistSession: false },
+    });
+
     const token = authHeader.replace('Bearer ', '');
-    const parts = token.split('.');
-    if (parts.length !== 3) {
-      throw new Error('Invalid JWT token format');
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user?.id) {
+      console.error('Auth verification failed:', authError?.message);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
     }
 
-    // Decode JWT payload (middle part)
-    const payload = JSON.parse(atob(parts[1]));
-    const userId = payload.sub;
-    
-    if (!userId) {
-      throw new Error('No user ID found in token');
-    }
-    
-    console.log('User authenticated successfully:', userId);
+    const userId = user.id;
+    console.log('User verified:', userId);
 
     // Build OAuth URL
     const redirectUri = `${SUPABASE_URL}/functions/v1/gmail-oauth-callback`;
@@ -73,13 +80,14 @@ serve(async (req: Request) => {
       }
     );
 
-  } catch (error: any) {
-    console.error('Error in gmail-oauth-init:', error);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error in gmail-oauth-init:', msg);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
+      JSON.stringify({ error: 'Failed to initialize Google OAuth' }),
+      {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500 
+        status: 500
       }
     );
   }
