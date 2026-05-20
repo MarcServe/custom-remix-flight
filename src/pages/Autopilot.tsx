@@ -8,12 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Brain, 
-  Rocket, 
-  Play, 
-  Loader2, 
-  Zap, 
+import {
+  Brain,
+  Rocket,
+  Play,
+  Loader2,
+  Zap,
   Clock,
   Target,
   Mail,
@@ -23,7 +23,9 @@ import {
   AlertCircle,
   ArrowRight,
   Sparkles,
-  History
+  History,
+  Send,
+  Trash2
 } from "lucide-react";
 import { AutopilotStatusCards } from "@/components/autopilot/AutopilotStatusCards";
 import { AutopilotSettingsPanel } from "@/components/autopilot/AutopilotSettingsPanel";
@@ -78,6 +80,64 @@ export default function Autopilot() {
           ? 'Automatic lead discovery has been paused.' 
           : 'The system will now find leads automatically.',
       });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Fetch draft campaigns created by auto-discovery
+  const { data: pendingCampaigns, isLoading: pendingLoading, refetch: refetchPending } = useQuery({
+    queryKey: ['autopilot-pending-campaigns', user?.id],
+    queryFn: async () => {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from('email_campaigns')
+        .select('id, name, total_recipients, created_at, source')
+        .eq('user_id', user?.id)
+        .eq('status', 'draft')
+        .or(`source.eq.auto_discovery,created_at.gte.${sevenDaysAgo}`)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  // Approve & schedule a draft campaign
+  const approveCampaignMutation = useMutation({
+    mutationFn: async (campaignId: string) => {
+      const { error } = await supabase
+        .from('email_campaigns')
+        .update({ status: 'scheduled', scheduled_at: new Date().toISOString() })
+        .eq('id', campaignId)
+        .eq('user_id', user?.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refetchPending();
+      queryClient.invalidateQueries({ queryKey: ['autopilot-pending-campaigns'] });
+      toast({ title: 'Campaign scheduled for sending' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Dismiss (delete) a draft campaign
+  const dismissCampaignMutation = useMutation({
+    mutationFn: async (campaignId: string) => {
+      const { error } = await supabase
+        .from('email_campaigns')
+        .delete()
+        .eq('id', campaignId)
+        .eq('user_id', user?.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refetchPending();
+      queryClient.invalidateQueries({ queryKey: ['autopilot-pending-campaigns'] });
+      toast({ title: 'Campaign dismissed' });
     },
     onError: (error: any) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -206,6 +266,59 @@ export default function Autopilot() {
                 </Badge>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pending Campaigns — draft campaigns created by auto-discovery awaiting approval */}
+      {!pendingLoading && pendingCampaigns && pendingCampaigns.length > 0 && (
+        <Card className="border-amber-200/60 bg-amber-500/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Mail className="h-5 w-5 text-amber-600" />
+              Pending Campaigns
+              <Badge className="ml-1 bg-amber-500/10 text-amber-700 border-amber-300">
+                {pendingCampaigns.length}
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Auto-discovered campaigns awaiting your approval. Approve to schedule immediately or dismiss to delete.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {pendingCampaigns.map((campaign) => (
+              <div
+                key={campaign.id}
+                className="flex items-center justify-between gap-4 rounded-lg border bg-background p-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-sm">{campaign.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {campaign.total_recipients != null ? `${campaign.total_recipients} recipients` : 'recipients pending'} ·{' '}
+                    {new Date(campaign.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => dismissCampaignMutation.mutate(campaign.id)}
+                    disabled={dismissCampaignMutation.isPending || approveCampaignMutation.isPending}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    Dismiss
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => approveCampaignMutation.mutate(campaign.id)}
+                    disabled={approveCampaignMutation.isPending || dismissCampaignMutation.isPending}
+                  >
+                    <Send className="h-3.5 w-3.5 mr-1" />
+                    Approve & Send
+                  </Button>
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}

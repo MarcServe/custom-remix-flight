@@ -206,7 +206,32 @@ serve(async (req) => {
           .maybeSingle();
 
         if (!lastActivity?.sent_at) {
-          console.log(`Sequence ${sequence.id}: No activity found for current step`);
+          // If stuck at step 0 with no activity, the initial email was never sent or never recorded.
+          // Attempt to send step 0 now so the sequence can progress.
+          if (sequence.current_step === 0) {
+            const firstStep = sequence.personalized_emails?.[0];
+            if (firstStep) {
+              console.log(`Sequence ${sequence.id}: No activity at step 0, sending initial email`);
+              try {
+                const sendResponse = await supabase.functions.invoke('send-sequence-email', {
+                  body: { companySequenceId: sequence.id, stepNumber: 0 },
+                });
+                if (sendResponse.error) {
+                  console.error(`Sequence ${sequence.id}: Failed to send initial email:`, sendResponse.error.message);
+                } else {
+                  processed.push({ sequenceId: sequence.id, stepNumber: 0, trigger: 'initial_send_recovery', result: sendResponse.data });
+                }
+              } catch (e) {
+                console.error(`Sequence ${sequence.id}: Error sending initial email:`, e);
+              }
+            } else {
+              console.log(`Sequence ${sequence.id}: No step 0 defined, marking completed`);
+              await supabase.from('company_sequences').update({ status: 'completed' }).eq('id', sequence.id);
+            }
+          } else {
+            // Mid-sequence with no activity — sequence data is inconsistent, log and skip
+            console.warn(`Sequence ${sequence.id}: No activity at step ${sequence.current_step} but current_step > 0 — skipping`);
+          }
           continue;
         }
 

@@ -174,8 +174,19 @@ serve(async (req) => {
         const templateStyle = pickTemplateStyle(seriesStyles, dayIndex0, senderTemplateStyle);
         const contentAngle = CONTENT_ANGLES[dayIndex0 % CONTENT_ANGLES.length];
 
-        const topicTemplate = series.ai_topic_template || "Daily newsletter content for our subscribers.";
-        const promptText = topicTemplate
+        // If series has a topics array, rotate through topics by edition number instead of using the same template each day
+        let promptText = series.ai_topic_template || "Daily newsletter content for our subscribers.";
+        if (Array.isArray(series.topics) && series.topics.length > 0) {
+          // Count existing editions to pick the right topic
+          const { count: editionCount } = await supabase
+            .from('newsletter_series_editions')
+            .select('id', { count: 'exact', head: true })
+            .eq('series_id', series.id);
+          const topicIndex = (editionCount || 0) % series.topics.length;
+          promptText = series.topics[topicIndex] as string;
+        }
+        const topicTemplate = promptText;
+        promptText = promptText
           .replace(/\{day\}/g, String(dayNum))
           .replace(/\{total\}/g, String(total));
         const prompt = `Write a marketing newsletter email about: ${promptText}
@@ -216,7 +227,24 @@ Return ONLY the HTML body content.`;
 
         const subject = `${series.name} – Day ${dayNum}`;
         const headerUrls = Array.isArray(series.header_image_urls) ? series.header_image_urls.filter((u: unknown) => u && String(u).trim()) : [];
-        const headerImageUrl = headerUrls.length ? String(headerUrls[(dayNum - 1) % headerUrls.length]).trim() : null;
+
+        // Try to generate a relevant header image
+        // Use Unsplash Source for topic-based images (free, no API key needed)
+        let headerImageUrl: string | null = null;
+        if (headerUrls.length > 0) {
+          headerImageUrl = headerUrls[Math.floor(Math.random() * headerUrls.length)];
+        } else {
+          // Extract a keyword from the topic for image search
+          const topicWords = (series.ai_topic_template || topicTemplate || 'business')
+            .split(' ')
+            .filter((w: string) => w.length > 4)
+            .slice(0, 2)
+            .join(',');
+          const keyword = encodeURIComponent(topicWords || 'business technology');
+          // Unsplash Source gives a random relevant image — deterministic per topic+date
+          const seed = `${series.id}-${new Date().toISOString().slice(0, 10)}`;
+          headerImageUrl = `https://source.unsplash.com/featured/1200x400/?${keyword}&sig=${encodeURIComponent(seed)}`;
+        }
         const { data: nl, error: insertErr } = await supabase
           .from("newsletters")
           .insert({

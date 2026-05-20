@@ -21,6 +21,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
  * - POST { action: "send-newsletters" } - Sends newsletters with status=scheduled and scheduled_at <= now
  * - POST { action: "process-sequences" } - Triggers process-sequence-steps
  * - POST { action: "sync-inbound-from-resend" } - Pulls received emails from Resend into CRM (backup to webhook)
+ * - POST { action: "sync-gmail-replies" } - Syncs Gmail replies for all connected users (runs hourly via pg_cron)
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -393,6 +394,25 @@ Deno.serve(async (req) => {
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      }
+
+      case 'sync-gmail-replies': {
+        console.log('[cron-trigger] Syncing Gmail replies for all connected users');
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/gmail-sync-replies`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ triggered_by: 'cron' }),
+        });
+        const result = await response.json().catch(() => ({}));
+        console.log('[cron-trigger] Gmail sync result:', result);
+        return new Response(JSON.stringify({
+          success: response.ok,
+          action: 'sync-gmail-replies',
+          result,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       default:
