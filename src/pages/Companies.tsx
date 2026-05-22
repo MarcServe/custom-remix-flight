@@ -1099,7 +1099,7 @@ export default function Companies() {
     },
   });
 
-  const SELECTED_COMPANY_IDS_KEY = 'leadgenie_selected_company_ids';
+  const SELECTED_COMPANY_IDS_KEY = 'leadboosters_selected_company_ids';
   const hasRestoredCompanySelection = useRef(false);
   const [openedFromDraft, setOpenedFromDraft] = useState(false);
   useEffect(() => {
@@ -2921,9 +2921,9 @@ export default function Companies() {
                               try {
                                 if (companiesWithEmail.length === 0) return;
                                 const companyIds = companiesWithEmail.map(c => c.id);
-                                localStorage.removeItem('leadgenie_draft_recipients');
-                                localStorage.removeItem('leadgenie_selected_people_ids');
-                                sessionStorage.setItem('leadgenie_selected_company_ids', JSON.stringify(companyIds));
+                                localStorage.removeItem('leadboosters_draft_recipients');
+                                localStorage.removeItem('leadboosters_selected_people_ids');
+                                sessionStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
                                 window.opener?.postMessage?.(
                                   { type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" },
                                   window.location.origin
@@ -2945,9 +2945,9 @@ export default function Companies() {
                               try {
                                 if (companiesWithEmail.length === 0) return;
                                 const companyIds = companiesWithEmail.map(c => c.id);
-                                localStorage.removeItem('leadgenie_draft_recipients');
-                                localStorage.removeItem('leadgenie_selected_people_ids');
-                                sessionStorage.setItem('leadgenie_selected_company_ids', JSON.stringify(companyIds));
+                                localStorage.removeItem('leadboosters_draft_recipients');
+                                localStorage.removeItem('leadboosters_selected_people_ids');
+                                sessionStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
                                 window.opener?.postMessage?.(
                                   { type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" },
                                   window.location.origin
@@ -3026,7 +3026,7 @@ export default function Companies() {
                                     }
                                   }
                                 }
-                                localStorage.setItem('leadgenie_draft_recipients', JSON.stringify(prepared));
+                                localStorage.setItem('leadboosters_draft_recipients', JSON.stringify(prepared));
                                 navigate("/campaigns?tab=drafts", { state: { addToDraft: true } });
                               } catch (e: any) {
                                 toast({ title: "Error preparing recipients", description: e?.message ?? "Please try again", variant: "destructive" });

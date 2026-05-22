@@ -610,15 +610,15 @@ export default function Campaigns() {
     setAddingRecipients(true);
     try {
       // Resolve recipients from localStorage (prepared or ID-based)
-      const preparedRaw = localStorage.getItem('leadgenie_draft_recipients');
+      const preparedRaw = localStorage.getItem('leadboosters_draft_recipients');
       let resolved: Array<{ id: string; first_name: string; last_name: string; email: string; company_id?: string }> = [];
       if (preparedRaw) {
         try { resolved = JSON.parse(preparedRaw); } catch { resolved = []; }
-        localStorage.removeItem('leadgenie_draft_recipients');
+        localStorage.removeItem('leadboosters_draft_recipients');
       }
       if (resolved.length === 0) {
-        const personIdsRaw = localStorage.getItem('leadgenie_selected_people_ids');
-        const companyIdsRaw = localStorage.getItem('leadgenie_selected_company_ids');
+        const personIdsRaw = localStorage.getItem('leadboosters_selected_people_ids');
+        const companyIdsRaw = localStorage.getItem('leadboosters_selected_company_ids');
         const personIds: string[] = personIdsRaw ? JSON.parse(personIdsRaw) : [];
         const companyIds: string[] = companyIdsRaw ? JSON.parse(companyIdsRaw) : [];
         if (personIds.length > 0) {
@@ -2456,9 +2456,9 @@ export default function Campaigns() {
               <DialogTitle>Add recipients</DialogTitle>
               <DialogDescription>Add recipients from groups, People, Companies, or paste a list of emails. Duplicates are skipped.</DialogDescription>
               {(() => {
-                const hasPrepared = !!localStorage.getItem('leadgenie_draft_recipients');
-                const hasPeople = !!localStorage.getItem('leadgenie_selected_people_ids');
-                const hasCompanies = !!localStorage.getItem('leadgenie_selected_company_ids');
+                const hasPrepared = !!localStorage.getItem('leadboosters_draft_recipients');
+                const hasPeople = !!localStorage.getItem('leadboosters_selected_people_ids');
+                const hasCompanies = !!localStorage.getItem('leadboosters_selected_company_ids');
                 if (!hasPrepared && !hasPeople && !hasCompanies) return null;
                 return (
                   <Button variant="secondary" size="sm" className="mt-2 w-fit" disabled={addingRecipients} onClick={() => { handleAddRecipientsToCampaign(); setAddRecipientsDialogOpen(false); }}>
@@ -3532,7 +3532,7 @@ export default function Campaigns() {
       <Dialog open={draftPickerOpen} onOpenChange={(open) => {
         setDraftPickerOpen(open);
         if (!open) {
-          localStorage.removeItem('leadgenie_draft_recipients');
+          localStorage.removeItem('leadboosters_draft_recipients');
         }
       }}>
         <DialogContent className="sm:max-w-md">

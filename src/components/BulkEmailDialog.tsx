@@ -152,7 +152,7 @@ type BulkRecipientRow = {
   companies?: { id?: string; name?: string; tags?: string[] };
 };
 
-const BULK_EMAIL_DRAFT_KEY = "leadgenie_bulk_email_draft";
+const BULK_EMAIL_DRAFT_KEY = "leadboosters_bulk_email_draft";
 
 /** Strip BOM / unicode quirks so CRM exports match People emails. */
 function normalizeEmailForMatch(email: string | undefined | null): string {
@@ -749,7 +749,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       hasAutoLoadedDraft.current = false;
       hasRestoredLocalDraft.current = false;
       contentOnlyEditRef.current = false;
-      localStorage.removeItem('leadgenie_draft_recipients');
+      localStorage.removeItem('leadboosters_draft_recipients');
       if (!skipPersistOnCloseOnceRef.current) {
         persistBulkLocalDraft();
       } else {
@@ -889,7 +889,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       hasAutoLoadedDraft.current = false;
       // Clear recipients immediately so we don't show the previous campaign's list while loading
       setFilteredRecipients([]);
-      localStorage.removeItem('leadgenie_draft_recipients');
+      localStorage.removeItem('leadboosters_draft_recipients');
     }
   }, [open, initialDraftId]);
 
@@ -2343,15 +2343,15 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   type Recipient = { id: string; first_name: string; last_name: string; email: string; company_id?: string; companies?: { id?: string; name?: string; tags?: string[] } };
 
   const resolveRecipientsFromLocalStorage = async (): Promise<Recipient[] | null> => {
-    const preparedRaw = localStorage.getItem('leadgenie_draft_recipients');
+    const preparedRaw = localStorage.getItem('leadboosters_draft_recipients');
     if (preparedRaw) {
       let list: Recipient[] = [];
       try { list = JSON.parse(preparedRaw); } catch { list = []; }
       if (list.length > 0) return list;
     }
 
-    const personIdsRaw = localStorage.getItem('leadgenie_selected_people_ids');
-    const companyIdsRaw = localStorage.getItem('leadgenie_selected_company_ids');
+    const personIdsRaw = localStorage.getItem('leadboosters_selected_people_ids');
+    const companyIdsRaw = localStorage.getItem('leadboosters_selected_company_ids');
     const personIds: string[] = personIdsRaw ? JSON.parse(personIdsRaw) : [];
     const companyIds: string[] = companyIdsRaw ? JSON.parse(companyIdsRaw) : [];
 

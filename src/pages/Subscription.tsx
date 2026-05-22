@@ -7,10 +7,10 @@ import { Loader2, Sparkles, Check } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
 
-const LEADGENIE_PRODUCT_ID = "prod_TUNeoAZWiDngEH";
+const LEADBOOSTERS_PRODUCT_ID = "prod_TUNeoAZWiDngEH";
 
 // Price mapping by currency — £29/month
-const LEADGENIE_PRICES = {
+const LEADBOOSTERS_PRICES = {
   usd: {
     price_id: "price_1SXOt7P8zypO5fiCd7FkOQCp",
     amount: "29.99",
@@ -94,7 +94,7 @@ export default function Subscription() {
     }
   };
 
-  const isLeadGenieActive = subscribed && productId === LEADGENIE_PRODUCT_ID;
+  const isLeadBoostersActive = subscribed && productId === LEADBOOSTERS_PRODUCT_ID;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -204,7 +204,7 @@ export default function Subscription() {
         </Card>
       )}
 
-      <Card className={isLeadGenieActive ? 'border-primary' : ''}>
+      <Card className={isLeadBoostersActive ? 'border-primary' : ''}>
         <CardHeader>
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
@@ -238,7 +238,7 @@ export default function Subscription() {
               ))}
             </ul>
 
-            {!isLeadGenieActive && (
+            {!isLeadBoostersActive && (
               <Button
                 onClick={handleSubscribe}
                 className="w-full"

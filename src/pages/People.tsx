@@ -87,7 +87,7 @@ export default function People() {
     },
   });
 
-  const SELECTED_PEOPLE_IDS_KEY = 'leadgenie_selected_people_ids';
+  const SELECTED_PEOPLE_IDS_KEY = 'leadboosters_selected_people_ids';
   const hasRestoredPeopleSelection = useRef(false);
 
   // Restore selected people IDs from localStorage when people first load
@@ -1061,7 +1061,7 @@ export default function People() {
                           company_id: p.company_id,
                           companies: p.companies ? { id: p.companies.id, name: p.companies.name, tags: p.companies.tags || [] } : undefined,
                         }));
-                        localStorage.setItem('leadgenie_draft_recipients', JSON.stringify(prepared));
+                        localStorage.setItem('leadboosters_draft_recipients', JSON.stringify(prepared));
                         window.opener?.postMessage?.(
                           { type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" },
                           window.location.origin
@@ -1094,7 +1094,7 @@ export default function People() {
                           company_id: p.company_id,
                           companies: p.companies ? { id: p.companies.id, name: p.companies.name, tags: p.companies.tags || [] } : undefined,
                         }));
-                        localStorage.setItem('leadgenie_draft_recipients', JSON.stringify(prepared));
+                        localStorage.setItem('leadboosters_draft_recipients', JSON.stringify(prepared));
                         window.opener?.postMessage?.(
                           { type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" },
                           window.location.origin
@@ -1148,7 +1148,7 @@ export default function People() {
                           company_id: p.company_id,
                           companies: p.companies ? { id: p.companies.id, name: p.companies.name, tags: p.companies.tags || [] } : undefined,
                         }));
-                        localStorage.setItem('leadgenie_draft_recipients', JSON.stringify(prepared));
+                        localStorage.setItem('leadboosters_draft_recipients', JSON.stringify(prepared));
                         navigate("/campaigns?tab=drafts", { state: { addToDraft: true } });
                         toast({ title: "Continue with draft", description: `${prepared.length} recipient(s) will be added to a draft.` });
                       }}
