@@ -230,14 +230,29 @@ Return the data in the following JSON format:
     const fileName = `${invoiceNumber}_${companyData?.name || 'Company'}.json`;
     const fileContent = JSON.stringify(invoice, null, 2);
     
+    const storagePath = `invoices/${invoice.id}/${fileName}`;
+    const fileBytes = new TextEncoder().encode(fileContent);
+
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabaseClient.storage
+      .from('crm-files')
+      .upload(storagePath, fileBytes, {
+        contentType: 'application/json',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('Failed to upload invoice to storage:', uploadError);
+    }
+
     const { error: fileError } = await supabaseClient
       .from('crm_files')
       .insert({
         user_id: user.id,
         file_name: fileName,
         file_type: 'application/json',
-        file_size: new TextEncoder().encode(fileContent).length,
-        storage_path: `invoices/${invoice.id}/${fileName}`,
+        file_size: fileBytes.length,
+        storage_path: storagePath,
         entity_type: 'invoice',
         entity_id: invoice.id,
         description: `AI-generated ${type} for ${companyData?.name || 'company'}`,

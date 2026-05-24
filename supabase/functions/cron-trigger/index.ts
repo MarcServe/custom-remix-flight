@@ -22,6 +22,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
  * - POST { action: "process-sequences" } - Triggers process-sequence-steps
  * - POST { action: "sync-inbound-from-resend" } - Pulls received emails from Resend into CRM (backup to webhook)
  * - POST { action: "sync-gmail-replies" } - Syncs Gmail replies for all connected users (runs hourly via pg_cron)
+ * - POST { action: "update-deliverability" } - Updates email deliverability metrics for all users
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -411,6 +412,25 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({
           success: response.ok,
           action: 'sync-gmail-replies',
+          result,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      case 'update-deliverability': {
+        console.log('[cron-trigger] Updating email deliverability metrics');
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/update-deliverability-metrics`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        });
+        const result = await response.json().catch(() => ({}));
+        console.log('[cron-trigger] Deliverability update result:', result);
+        return new Response(JSON.stringify({
+          success: response.ok,
+          action: 'update-deliverability',
           result,
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }

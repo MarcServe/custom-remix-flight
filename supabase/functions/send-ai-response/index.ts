@@ -224,40 +224,68 @@ serve(async (req) => {
         console.log('AI response sent via SMTP (Resend relay):', messageId);
       }
 
-    } else if (emailConnection?.provider === 'gmail') {
-      // Send via Gmail/Nango
-      const nangoSecretKey = Deno.env.get('NANGO_SECRET_KEY');
-      if (!nangoSecretKey) {
-        throw new Error('Gmail integration not configured');
+    } else if (emailConnection?.provider === 'gmail' || emailConnection?.provider === 'gmail_direct') {
+      // Send via Gmail direct OAuth (access token stored in crm_connections metadata)
+      const meta = emailConnection.metadata as any;
+      let accessToken = meta?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Gmail not properly connected — missing access token. Please reconnect Gmail in Settings.');
       }
 
-      console.log(`Sending AI response via Gmail: ${emailConnection.connection_id}`);
+      // Refresh token if needed
+      try {
+        const refreshRes = await fetch(`${SUPABASE_URL}/functions/v1/gmail-oauth-refresh`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ connectionId: emailConnection.id }),
+        });
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json().catch(() => ({}));
+          if (refreshData.access_token) accessToken = refreshData.access_token;
+        }
+      } catch (refreshErr) {
+        console.warn('Token refresh failed, proceeding with existing token:', refreshErr);
+      }
 
-      const nangoResponse = await fetch('https://api.nango.dev/v1/gmail/messages', {
+      console.log(`Sending AI response via Gmail direct OAuth for user: ${userId}`);
+
+      // Build RFC 2822 email message
+      const fromAddress = emailConnection.from_email
+        ? `${senderName} <${emailConnection.from_email}>`
+        : senderName;
+      const rawMessage = [
+        `From: ${fromAddress}`,
+        `To: ${recipientEmailAddress}`,
+        `Subject: ${subject}`,
+        `Content-Type: text/html; charset=utf-8`,
+        `MIME-Version: 1.0`,
+        ``,
+        wrappedHtml,
+      ].join('\r\n');
+
+      const encodedMessage = btoa(unescape(encodeURIComponent(rawMessage)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+      const gmailRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${nangoSecretKey}`,
-          'Connection-Id': emailConnection.connection_id,
-          'Provider-Config-Key': 'google-mail',
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          to: [{ email: recipientEmailAddress, name: contactName || '' }],
-          subject,
-          body: {
-            content: body,
-            type: 'text/plain',
-          },
-        }),
+        body: JSON.stringify({ raw: encodedMessage }),
       });
 
-      if (!nangoResponse.ok) {
-        const errorText = await nangoResponse.text();
-        throw new Error(`Failed to send via Gmail: ${errorText}`);
+      if (!gmailRes.ok) {
+        const errText = await gmailRes.text();
+        throw new Error(`Failed to send via Gmail: ${errText}`);
       }
 
-      const nangoData = await nangoResponse.json();
-      messageId = nangoData.id;
+      const gmailData = await gmailRes.json();
+      messageId = gmailData.id;
       provider = 'gmail';
       console.log('AI response sent via Gmail:', messageId);
 

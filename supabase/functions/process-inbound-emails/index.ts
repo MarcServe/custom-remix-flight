@@ -114,7 +114,7 @@ serve(async (req) => {
       const emailId = payload?.data?.email_id ?? payload?.email_id;
       if (webhookSource === 'resend' && emailId && RESEND_API_KEY && (!bodyText || !bodyHtml)) {
         try {
-          const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
+          const res = await fetch(`https://api.resend.com/emails/${emailId}`, {
             headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
           });
           if (res.ok) {

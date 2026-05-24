@@ -188,10 +188,20 @@ Return ONLY valid JSON in this exact format:
       throw new Error('Invalid JSON in AI response');
     }
 
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // filter to valid UUIDs only before DB query
+    const validIds = (opportunitiesData.opportunities || [])
+      .map((o: any) => o.companyId)
+      .filter((id: any) => typeof id === 'string' && UUID_REGEX.test(id));
+
+    const filteredOpportunities = (opportunitiesData.opportunities || []).filter(
+      (o: any) => typeof o.companyId === 'string' && UUID_REGEX.test(o.companyId)
+    );
+
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        opportunities: opportunitiesData.opportunities || [],
+      JSON.stringify({
+        success: true,
+        opportunities: filteredOpportunities,
         analyzedCompanies: companies.length,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
