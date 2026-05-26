@@ -23,7 +23,10 @@ import {
   CheckCircle2,
   ChevronDown,
   Pencil,
+  Eye,
+  UserPlus,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -97,6 +100,13 @@ export default function NewsletterSeries() {
   const [senderProfileId, setSenderProfileId] = useState<string>("");
   const [pausingId, setPausingId] = useState<string | null>(null);
   const [runningCronCheck, setRunningCronCheck] = useState(false);
+  const [reviewBeforeSend, setReviewBeforeSend] = useState(false);
+  // Quick-add subscriber state
+  const [quickAddEmail, setQuickAddEmail] = useState("");
+  const [quickAddName, setQuickAddName] = useState("");
+  const [addingSubscriber, setAddingSubscriber] = useState(false);
+  // Per-edition send state
+  const [sendingEditionId, setSendingEditionId] = useState<string | null>(null);
 
   const { data: seriesList = [], isLoading, isError: seriesQueryError, refetch: refetchSeries } = useQuery({
     queryKey: ["newsletter-series", user?.id],
@@ -198,19 +208,21 @@ export default function NewsletterSeries() {
   const industryList = Object.keys(industryCounts).sort();
 
   const buildScheduledSendOptions = () => {
-    if (sendTargets.length === 0 || sendTargets.includes("all")) return null;
-    const categoryFilters: string[] = [];
-    const recipientGroupIds: string[] = [];
-    const industryFilter: string[] = [];
-    for (const t of sendTargets) {
-      if (t.startsWith("cat:")) categoryFilters.push(t.slice(5));
-      else if (t.startsWith("group:")) recipientGroupIds.push(t.slice(6));
-      else if (t.startsWith("industry:")) industryFilter.push(decodeURIComponent(t.slice(9)));
-    }
     const opts: Record<string, unknown> = {};
-    if (categoryFilters.length) opts.categoryFilters = categoryFilters;
-    if (recipientGroupIds.length) opts.recipientGroupIds = recipientGroupIds;
-    if (industryFilter.length) opts.industryFilter = industryFilter;
+    if (reviewBeforeSend) opts.reviewBeforeSend = true;
+    if (!(sendTargets.length === 0 || sendTargets.includes("all"))) {
+      const categoryFilters: string[] = [];
+      const recipientGroupIds: string[] = [];
+      const industryFilter: string[] = [];
+      for (const t of sendTargets) {
+        if (t.startsWith("cat:")) categoryFilters.push(t.slice(5));
+        else if (t.startsWith("group:")) recipientGroupIds.push(t.slice(6));
+        else if (t.startsWith("industry:")) industryFilter.push(decodeURIComponent(t.slice(9)));
+      }
+      if (categoryFilters.length) opts.categoryFilters = categoryFilters;
+      if (recipientGroupIds.length) opts.recipientGroupIds = recipientGroupIds;
+      if (industryFilter.length) opts.industryFilter = industryFilter;
+    }
     return Object.keys(opts).length ? opts : null;
   };
 
@@ -260,6 +272,10 @@ export default function NewsletterSeries() {
       setName("");
       setStartDate("");
       setSenderProfileId("");
+      setReviewBeforeSend(false);
+      setQuickAddEmail("");
+      setQuickAddName("");
+      setSendTargets([]);
       toast({
         title: "Series created",
         description: `"${name}" will run daily at ${sendTime} (${timezone}) for ${durationDays} days. Each edition uses a rotating template style and fresh AI content. Server cron (every 15 min) creates and sends after your send time.`,
@@ -279,15 +295,21 @@ export default function NewsletterSeries() {
       if (error) throw error;
       const results = (data as { results?: { name: string; action: string; error?: string }[] })?.results ?? [];
       const sent = results.filter((r) => r.action === "sent").length;
+      const drafted = results.filter((r) => r.action === "drafted_for_review").length;
       const errs = results.filter((r) => r.action === "error");
       queryClient.invalidateQueries({ queryKey: ["newsletter-series"] });
       queryClient.invalidateQueries({ queryKey: ["newsletter-series-editions"] });
       queryClient.invalidateQueries({ queryKey: ["newsletters"] });
       if (errs.length > 0) {
         toast({
-          title: sent > 0 ? "Partial run" : "Series check finished",
+          title: sent > 0 || drafted > 0 ? "Partial run" : "Series check finished",
           description: errs.map((e) => `${e.name}: ${e.error || "error"}`).slice(0, 3).join(" · "),
-          variant: sent > 0 ? "default" : "destructive",
+          variant: sent > 0 || drafted > 0 ? "default" : "destructive",
+        });
+      } else if (drafted > 0) {
+        toast({
+          title: drafted === 1 ? "Edition ready for review" : `${drafted} editions ready for review`,
+          description: "Editions are saved as drafts — click Approve & Send next to each one when you’re happy with it.",
         });
       } else if (sent > 0) {
         toast({
@@ -329,6 +351,56 @@ export default function NewsletterSeries() {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setPausingId(null);
+    }
+  };
+
+  const handleSendEditionNow = async (newsletterId: string) => {
+    setSendingEditionId(newsletterId);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-newsletter", {
+        body: { newsletterId },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      queryClient.invalidateQueries({ queryKey: ["newsletter-series-editions"] });
+      queryClient.invalidateQueries({ queryKey: ["newsletters"] });
+      toast({ title: "Edition sent!", description: "The newsletter was sent to your subscribers." });
+    } catch (err: any) {
+      toast({ title: "Send failed", description: err?.message ?? "Could not send edition.", variant: "destructive" });
+    } finally {
+      setSendingEditionId(null);
+    }
+  };
+
+  const handleQuickAddSubscriber = async () => {
+    if (!user || !quickAddEmail.trim()) return;
+    const email = quickAddEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast({ title: "Invalid email", description: "Enter a valid email address.", variant: "destructive" });
+      return;
+    }
+    setAddingSubscriber(true);
+    try {
+      const nameParts = quickAddName.trim().split(" ");
+      const { error } = await supabase.from("newsletter_subscribers").upsert(
+        {
+          user_id: user.id,
+          email,
+          first_name: nameParts[0] || null,
+          last_name: nameParts.slice(1).join(" ") || null,
+          status: "active",
+        },
+        { onConflict: "user_id,email" }
+      );
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["newsletter-subscribers-series"] });
+      setQuickAddEmail("");
+      setQuickAddName("");
+      toast({ title: "Subscriber added", description: `${email} added to your active subscribers.` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Could not add subscriber.", variant: "destructive" });
+    } finally {
+      setAddingSubscriber(false);
     }
   };
 
@@ -470,12 +542,38 @@ export default function NewsletterSeries() {
                                     )}
                                   </div>
                                 </div>
-                                <Link to={`/newsletters?edit=${e.newsletter_id}`} className="shrink-0">
-                                  <Button variant="secondary" size="sm" className="w-full sm:w-auto">
-                                    <Pencil className="h-3.5 w-3.5 mr-1" />
-                                    Edit in Newsletters
-                                  </Button>
-                                </Link>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {e.newsletters?.status === "draft" ? (
+                                    <>
+                                      <Link to={`/newsletters?edit=${e.newsletter_id}`}>
+                                        <Button variant="outline" size="sm">
+                                          <Pencil className="h-3.5 w-3.5 mr-1" />
+                                          Edit
+                                        </Button>
+                                      </Link>
+                                      <Button
+                                        size="sm"
+                                        onClick={() => void handleSendEditionNow(e.newsletter_id)}
+                                        disabled={sendingEditionId === e.newsletter_id}
+                                        className="bg-green-600 hover:bg-green-700 text-white"
+                                      >
+                                        {sendingEditionId === e.newsletter_id ? (
+                                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                        ) : (
+                                          <Send className="h-3.5 w-3.5 mr-1" />
+                                        )}
+                                        Approve & Send
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <Link to={`/newsletters?edit=${e.newsletter_id}`} className="shrink-0">
+                                      <Button variant="secondary" size="sm" className="w-full sm:w-auto">
+                                        <Eye className="h-3.5 w-3.5 mr-1" />
+                                        View / Edit
+                                      </Button>
+                                    </Link>
+                                  )}
+                                </div>
                               </li>
                             ))}
                           </ul>
@@ -557,7 +655,10 @@ export default function NewsletterSeries() {
                       checked={sendTargets.length === 0 || sendTargets.includes("all")}
                       onCheckedChange={c => { if (c) setSendTargets(["all"]); else setSendTargets([]); }}
                     />
-                    All active subscribers
+                    <span>All active subscribers</span>
+                    {subscribers.length > 0 && (
+                      <span className="ml-auto text-xs text-muted-foreground font-medium">{subscribers.length}</span>
+                    )}
                   </label>
                   {categories.length > 0 && (
                     <>
@@ -613,6 +714,62 @@ export default function NewsletterSeries() {
                 </PopoverContent>
               </Popover>
             </div>
+            {/* Review before send toggle */}
+            <div className="flex items-start justify-between gap-4 rounded-lg border px-4 py-3 bg-muted/30">
+              <div className="space-y-0.5">
+                <Label className="font-semibold">Review each edition before sending</Label>
+                <p className="text-xs text-muted-foreground">
+                  When on, daily editions are saved as drafts — you approve and send each one manually from this page. When off, editions are sent automatically at your scheduled time.
+                </p>
+              </div>
+              <Switch
+                checked={reviewBeforeSend}
+                onCheckedChange={setReviewBeforeSend}
+                aria-label="Review before send"
+              />
+            </div>
+
+            {/* Quick-add subscriber */}
+            <div className="space-y-2 rounded-lg border px-4 py-3 bg-muted/20">
+              <div className="flex items-center justify-between">
+                <Label className="font-semibold flex items-center gap-1.5">
+                  <UserPlus className="h-3.5 w-3.5" /> Add external subscriber
+                </Label>
+                <span className="text-xs text-muted-foreground">{subscribers.length} active</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Add someone outside your CRM. They&apos;ll receive this series' newsletters.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Email address"
+                  type="email"
+                  value={quickAddEmail}
+                  onChange={e => setQuickAddEmail(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") void handleQuickAddSubscriber(); }}
+                  className="flex-1 text-sm"
+                />
+                <Input
+                  placeholder="Name (optional)"
+                  value={quickAddName}
+                  onChange={e => setQuickAddName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") void handleQuickAddSubscriber(); }}
+                  className="flex-1 text-sm"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleQuickAddSubscriber()}
+                disabled={addingSubscriber || !quickAddEmail.trim()}
+                className="w-full"
+              >
+                {addingSubscriber ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5 mr-1.5" />}
+                Add subscriber
+              </Button>
+            </div>
+
             <div className="space-y-1.5">
               <Label>Sender profile (optional)</Label>
               <p className="text-xs text-muted-foreground">Branding and from-address for each edition. If you do not set template rotation below, we use this profile&apos;s default template style.</p>

@@ -245,6 +245,21 @@ Return ONLY the HTML body content.`;
           const seed = `${series.id}-${new Date().toISOString().slice(0, 10)}`;
           headerImageUrl = `https://source.unsplash.com/featured/1200x400/?${keyword}&sig=${encodeURIComponent(seed)}`;
         }
+        // When the series owner wants to review each edition before it goes out,
+        // create the newsletter as a draft and skip the send step entirely.
+        const reviewBeforeSend =
+          series.scheduled_send_options &&
+          typeof series.scheduled_send_options === "object" &&
+          (series.scheduled_send_options as Record<string, unknown>).reviewBeforeSend === true;
+
+        // Strip the reviewBeforeSend flag from the options we persist on the newsletter
+        // so that the send-newsletter function doesn't see an unexpected field.
+        let newsletterSendOptions: Record<string, unknown> | null = null;
+        if (series.scheduled_send_options && typeof series.scheduled_send_options === "object") {
+          const { reviewBeforeSend: _drop, ...rest } = series.scheduled_send_options as Record<string, unknown>;
+          newsletterSendOptions = Object.keys(rest).length ? rest : null;
+        }
+
         const { data: nl, error: insertErr } = await supabase
           .from("newsletters")
           .insert({
@@ -254,9 +269,9 @@ Return ONLY the HTML body content.`;
             body_html: bodyHtml,
             sender_profile_id: series.sender_profile_id || null,
             template_style: templateStyle,
-            status: "scheduled",
+            status: reviewBeforeSend ? "draft" : "scheduled",
             scheduled_at: new Date().toISOString(),
-            scheduled_send_options: series.scheduled_send_options || null,
+            scheduled_send_options: newsletterSendOptions,
             ...(headerImageUrl && { header_image_url: headerImageUrl }),
           })
           .select("id")
@@ -264,19 +279,21 @@ Return ONLY the HTML body content.`;
 
         if (insertErr || !nl) throw new Error(insertErr?.message || "Failed to create newsletter");
 
-        const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-newsletter`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${supabaseServiceKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            newsletterId: nl.id,
-            triggeredByCron: true,
-          }),
-        });
-        const sendResult = await sendRes.json().catch(() => ({}));
-        if (sendResult.error) throw new Error(sendResult.error);
+        if (!reviewBeforeSend) {
+          const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-newsletter`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${supabaseServiceKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              newsletterId: nl.id,
+              triggeredByCron: true,
+            }),
+          });
+          const sendResult = await sendRes.json().catch(() => ({}));
+          if (sendResult.error) throw new Error(sendResult.error);
+        }
 
         await supabase.from("newsletter_series_editions").insert({
           series_id: series.id,
@@ -284,7 +301,11 @@ Return ONLY the HTML body content.`;
           newsletter_id: nl.id,
         });
 
-        results.push({ seriesId: series.id, name: series.name, action: "sent" });
+        results.push({
+          seriesId: series.id,
+          name: series.name,
+          action: reviewBeforeSend ? "drafted_for_review" : "sent",
+        });
       } catch (err) {
         console.error("[process-newsletter-series] Series error:", series.id, err);
         results.push({
