@@ -228,22 +228,52 @@ Return ONLY the HTML body content.`;
         const subject = `${series.name} – Day ${dayNum}`;
         const headerUrls = Array.isArray(series.header_image_urls) ? series.header_image_urls.filter((u: unknown) => u && String(u).trim()) : [];
 
-        // Try to generate a relevant header image
-        // Use Unsplash Source for topic-based images (free, no API key needed)
+        // Generate a topic-relevant header image.
+        // Priority: 1) user-supplied URLs → 2) DALL-E 3 → 3) Picsum fallback
         let headerImageUrl: string | null = null;
         if (headerUrls.length > 0) {
-          headerImageUrl = headerUrls[Math.floor(Math.random() * headerUrls.length)];
+          // Cycle through user-supplied images by day
+          headerImageUrl = headerUrls[dayIndex0 % headerUrls.length];
         } else {
-          // Extract a keyword from the topic for image search
-          const topicWords = (series.ai_topic_template || topicTemplate || 'business')
-            .split(' ')
-            .filter((w: string) => w.length > 4)
-            .slice(0, 2)
-            .join(',');
-          const keyword = encodeURIComponent(topicWords || 'business technology');
-          // Unsplash Source gives a random relevant image — deterministic per topic+date
-          const seed = `${series.id}-${new Date().toISOString().slice(0, 10)}`;
-          headerImageUrl = `https://source.unsplash.com/featured/1200x400/?${keyword}&sig=${encodeURIComponent(seed)}`;
+          // Try DALL-E 3 using the already-configured OPENAI_API_KEY
+          const openaiKey = Deno.env.get("OPENAI_API_KEY");
+          if (openaiKey) {
+            try {
+              const imagePrompt =
+                `A clean, professional email newsletter header image for a business email about: ${topicTemplate.replace(/\{day\}/g, String(dayNum)).replace(/\{total\}/g, String(total)).slice(0, 200)}. ` +
+                `Wide landscape format, minimal text, modern design, soft colours, suitable for a ${series.ai_tone || "professional"} ${series.ai_target_audience || "business"} audience. ` +
+                `No people's faces, no logos. High quality editorial style.`;
+              const imgRes = await fetch("https://api.openai.com/v1/images/generations", {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${openaiKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "dall-e-3",
+                  prompt: imagePrompt,
+                  n: 1,
+                  size: "1792x1024",
+                  quality: "standard",
+                }),
+              });
+              if (imgRes.ok) {
+                const imgData = await imgRes.json() as { data?: { url?: string }[] };
+                const url = imgData?.data?.[0]?.url;
+                if (url) headerImageUrl = url;
+              } else {
+                console.warn("[process-newsletter-series] DALL-E image generation failed:", imgRes.status, await imgRes.text().catch(() => ""));
+              }
+            } catch (imgErr) {
+              console.warn("[process-newsletter-series] DALL-E image generation error:", imgErr);
+            }
+          }
+
+          // Fallback: Picsum Photos — deterministic seed per series+date, always works
+          if (!headerImageUrl) {
+            const seed = `${series.id}-${new Date().toISOString().slice(0, 10)}`.replace(/[^a-z0-9]/gi, "").slice(0, 20);
+            headerImageUrl = `https://picsum.photos/seed/${seed}/1200/400`;
+          }
         }
         // When the series owner wants to review each edition before it goes out,
         // create the newsletter as a draft and skip the send step entirely.
