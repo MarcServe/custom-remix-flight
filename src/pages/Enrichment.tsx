@@ -32,6 +32,7 @@ import {
   AlertCircle,
   Upload,
   Users,
+  Zap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -557,6 +558,24 @@ export default function Enrichment() {
             Enrich leads with Perplexity/Exa and extract emails before moving to CRM
           </p>
         </div>
+        {pendingCount > 0 && (
+          <Button
+            onClick={() => {
+              const pendingIds = filteredItems
+                .filter(i => i.enrichment_status === 'pending' || i.enrichment_status === 'failed')
+                .map(i => i.id);
+              enrichMutation.mutate(pendingIds);
+            }}
+            disabled={enrichMutation.isPending}
+            className="bg-primary text-white"
+          >
+            {enrichMutation.isPending ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enriching…</>
+            ) : (
+              <><Zap className="h-4 w-4 mr-2" />Enrich All ({pendingCount})</>
+            )}
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setImportFromCompaniesOpen(true)}>
           <Upload className="h-4 w-4 mr-2" />
           Import from Companies

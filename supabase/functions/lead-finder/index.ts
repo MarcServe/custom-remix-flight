@@ -1275,7 +1275,16 @@ Deno.serve(async (req) => {
 
       const trace = createTrace('lead-finder', undefined, { size, geography, industry, customSearchText, searchId: currentSearchId });
       const EXA_API_KEY = Deno.env.get("EXA_API_KEY");
-      if (!EXA_API_KEY) throw new Error("Missing EXA_API_KEY");
+      if (!EXA_API_KEY) {
+        await sendEvent({
+          type: 'error',
+          message: 'EXA_API_KEY is not configured. Go to Supabase → Edge Functions → Secrets and add EXA_API_KEY. Get a key at exa.ai.',
+        });
+        return new Response(
+          JSON.stringify({ error: 'EXA_API_KEY secret is not set. Add it in Supabase Edge Function Secrets.' }),
+          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       // PHASE 1: Search with Exa AI and optionally SerpAPI/Apify in parallel
       const searchSourcesList = ['Exa AI'];

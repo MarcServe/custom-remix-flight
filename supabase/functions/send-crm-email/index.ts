@@ -9,8 +9,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Resend inbound email for receiving replies
-const RESEND_INBOUND_EMAIL = 'leadgenie@eldapgraaa.resend.app';
+// Resend inbound email for receiving replies — read from env, never hardcoded
+const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || '';
 
 function parseResendError(status: number, bodyText: string): string {
   try {
