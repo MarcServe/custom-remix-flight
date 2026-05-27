@@ -4,12 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 serve(async (req: Request) => {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
   
-  // Dynamically detect the app URL from request headers or environment
-  const origin = req.headers.get('origin') || 
-                 req.headers.get('referer')?.split('/').slice(0, 3).join('/') || 
-                 Deno.env.get('APP_URL');
-  
-  const appUrl = origin || SUPABASE_URL.replace('.supabase.co', '.lovableproject.com').replace('/functions/v1', '');
+  // Use APP_URL env var (set in Supabase secrets) with a safe default
+  const appUrl = Deno.env.get('APP_URL') || 'https://leadgenie.bizboosters.co.uk';
 
   try {
     const url = new URL(req.url);
