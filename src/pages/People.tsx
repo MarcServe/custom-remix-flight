@@ -10,9 +10,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Mail, Phone, Briefcase, Linkedin, Upload, Users, Send, Plus, UserPlus, Loader2, CheckCircle2, Filter, X, Clock, Tag, ChevronDown, Search, Trash2, RefreshCw, CalendarDays, Megaphone, FolderPlus } from "lucide-react";
 import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
 import { PersonDetailsDialog } from "@/components/PersonDetailsDialog";
-import BulkEmailDialog from "@/components/BulkEmailDialog";
 import { AddContactDialog } from "@/components/AddContactDialog";
 import { useToast } from "@/hooks/use-toast";
+import { useCampaignDialog } from "@/contexts/CampaignDialogContext";
 import { TagInput, TagBadges } from "@/components/ui/tag-input";
 import { useCompanyTags } from "@/hooks/use-company-tags";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -50,7 +50,7 @@ export default function People() {
   const [addContactDialogOpen, setAddContactDialogOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<any>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-  const [bulkEmailDialogOpen, setBulkEmailDialogOpen] = useState(false);
+  const { openWithPeople, open: bulkEmailDialogOpen } = useCampaignDialog();
   const [selectedPeopleIds, setSelectedPeopleIds] = useState<Set<string>>(new Set());
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
   const [selectedIndustryFilters, setSelectedIndustryFilters] = useState<string[]>([]);
@@ -1112,7 +1112,7 @@ export default function People() {
                     variant="outline"
                     size="lg"
                     className="w-full sm:w-auto"
-                    onClick={() => setBulkEmailDialogOpen(true)}
+                    onClick={() => openWithPeople(selectedPeople as any)}
                   >
                     <Send className="mr-2 h-4 w-4" />
                     {selectedPeopleIds.size > 0 ? `Send new campaign (${selectedPeopleIds.size})` : "Send new campaign"}
@@ -1120,8 +1120,8 @@ export default function People() {
                 </>
               ) : (
                 <>
-                  <Button 
-                    onClick={() => setBulkEmailDialogOpen(true)} 
+                  <Button
+                    onClick={() => openWithPeople(selectedPeople as any)}
                     size="lg"
                     variant={selectedPeopleIds.size > 0 ? "default" : "outline"}
                     className="w-full sm:w-auto"
@@ -1659,11 +1659,7 @@ export default function People() {
         />
       )}
 
-      <BulkEmailDialog
-        open={bulkEmailDialogOpen}
-        onOpenChange={setBulkEmailDialogOpen}
-        selectedPeople={selectedPeople}
-      />
+      {/* BulkEmailDialog is rendered globally in App.tsx via GlobalCampaignDialog */}
 
       <Dialog open={createGroupDialogOpen} onOpenChange={setCreateGroupDialogOpen}>
         <DialogContent className="sm:max-w-md">

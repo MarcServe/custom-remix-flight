@@ -10,6 +10,8 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PageErrorBoundary } from "./components/PageErrorBoundary";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TrialGate } from "./components/TrialGate";
+import { CampaignDialogProvider } from "./contexts/CampaignDialogContext";
+import { GlobalCampaignDialog } from "./components/GlobalCampaignDialog";
 import { Sidebar } from "./components/Sidebar";
 import { ResearchChatSlideOut } from "./components/ResearchChatSlideOut";
 import { useAllRealtime } from "./hooks/use-realtime";
@@ -73,9 +75,11 @@ const App = () => (
                 path="/*"
                 element={
                   <ProtectedRoute>
+                    <CampaignDialogProvider>
                     <ResearchChatProvider>
                       <div className="flex h-screen overflow-hidden">
                         <Sidebar />
+                        <GlobalCampaignDialog />
                         <main className="flex-1 overflow-auto overflow-x-hidden bg-gradient-to-br from-background to-muted/20 p-4 pt-16 lg:pt-6 lg:p-6 xl:p-8 min-w-0 pb-20 sm:pb-6 transition-[flex] duration-300">
                           <div className="max-w-full min-w-0">
                           <Routes>
@@ -119,6 +123,7 @@ const App = () => (
                       </div>
                       <ResearchChatSlideOut />
                     </ResearchChatProvider>
+                    </CampaignDialogProvider>
                   </ProtectedRoute>
                 }
               />

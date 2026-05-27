@@ -9,7 +9,6 @@ import { Progress } from "@/components/ui/progress";
 import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2, Search, Plus, RefreshCw, CalendarDays, Send, Megaphone, FolderPlus } from "lucide-react";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
-import BulkEmailDialog from "@/components/BulkEmailDialog";
 import { CampaignGroupingDialog, type CompanyForGrouping } from "@/components/CampaignGroupingDialog";
 import { AddContactDialog } from "@/components/AddContactDialog";
 import { ProspectAnalyzer, TemperatureBadge } from "@/components/ProspectAnalyzer";
@@ -47,6 +46,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useCampaignDialog } from "@/contexts/CampaignDialogContext";
 import type { Company } from "@/lib/api/companies";
 import { getCompanySource, SOURCE_TAG_LIST } from "@/lib/company-sources";
 import {
@@ -68,32 +68,10 @@ export default function Companies() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { openWithPeople, addPeople, open: bulkEmailDialogOpen } = useCampaignDialog();
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
-  const [bulkEmailDialogOpen, setBulkEmailDialogOpen] = useState(false);
-  const [bulkEmailPeople, setBulkEmailPeople] = useState<Array<{
-    id: string;
-    first_name: string;
-    last_name: string;
-    email: string;
-    company_id?: string;
-    companies?: {
-      id?: string;
-      name?: string;
-      tags?: string[];
-      description?: string;
-      industry?: string;
-      website?: string;
-      enrichment_data?: any;
-      recent_news?: any;
-      funding_stage?: string;
-      funding_total?: number;
-      employee_count?: number;
-      tech_stack?: string[];
-      key_executives?: any;
-    };
-  }>>([]);
   const [csvUploaderOpen, setCsvUploaderOpen] = useState(false);
   const [scraperDialogOpen, setScraperDialogOpen] = useState(false);
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
@@ -2000,8 +1978,7 @@ export default function Companies() {
           variant: "default",
         });
       }
-      setBulkEmailPeople(dedupedPeople);
-      setBulkEmailDialogOpen(true);
+      openWithPeople(dedupedPeople as any);
       if (loadingToast) loadingToast.dismiss();
     } catch (error: any) {
       if (loadingToast) loadingToast.dismiss();
@@ -3482,7 +3459,6 @@ export default function Companies() {
         onOpenChange={setCsvUploaderOpen}
         onComplete={(companyIds) => {
           setCsvUploaderOpen(false);
-          setBulkEmailDialogOpen(false); // close first so dialog opens fresh with imported list
           openBulkEmailForCompanyIds(companyIds);
         }}
       />
@@ -3492,20 +3468,8 @@ export default function Companies() {
         onOpenChange={setScraperDialogOpen}
         onComplete={(companyIds) => {
           setScraperDialogOpen(false);
-          setBulkEmailDialogOpen(false); // close first so dialog opens fresh with imported list
           openBulkEmailForCompanyIds(companyIds);
         }}
-      />
-
-      <BulkEmailDialog
-        open={bulkEmailDialogOpen}
-        onOpenChange={(open) => {
-          setBulkEmailDialogOpen(open);
-          if (!open) {
-            setBulkEmailPeople([]);
-          }
-        }}
-        selectedPeople={bulkEmailPeople}
       />
 
       <CampaignGroupingDialog
