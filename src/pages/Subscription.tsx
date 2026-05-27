@@ -46,9 +46,10 @@ export default function Subscription() {
       } else {
         throw new Error('No checkout URL returned');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[SUBSCRIPTION] Error:', error);
-      toast.error('Failed to start checkout process');
+      const msg = error instanceof Error ? error.message : String(error);
+      toast.error(`Checkout failed: ${msg}`);
     } finally {
       setLoading(false);
     }

@@ -98,7 +98,8 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in create-checkout", { message: errorMessage });
-    return new Response(JSON.stringify({ error: "Failed to create checkout session" }), {
+    // Return the real error so we can diagnose it in the browser network tab
+    return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });
