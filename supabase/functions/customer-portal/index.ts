@@ -2,10 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
-const APP_URL = Deno.env.get("APP_URL") || "https://leadboosters.app";
-
 const corsHeaders = {
-  "Access-Control-Allow-Origin": APP_URL,
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
@@ -51,7 +49,7 @@ serve(async (req) => {
     const customerId = customers.data[0].id;
     logStep("Found Stripe customer", { customerId });
 
-    const origin = req.headers.get("origin") || APP_URL;
+    const origin = req.headers.get("origin") || "https://leadgenie.bizboosters.co.uk";
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${origin}/subscription`,
