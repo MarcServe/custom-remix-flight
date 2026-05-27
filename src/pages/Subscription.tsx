@@ -48,7 +48,13 @@ export default function Subscription() {
       }
     } catch (error: unknown) {
       console.error('[SUBSCRIPTION] Error:', error);
-      const msg = error instanceof Error ? error.message : String(error);
+      const raw = error instanceof Error ? error.message : String(error);
+      // Provide actionable messages for common failures
+      const msg = raw.includes('No such price')
+        ? 'Stripe price not found. Contact support.'
+        : raw.includes('Invalid API Key') || raw.includes('No API key')
+        ? 'Stripe is misconfigured. Contact support.'
+        : raw;
       toast.error(`Checkout failed: ${msg}`);
     } finally {
       setLoading(false);

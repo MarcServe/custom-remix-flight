@@ -9,6 +9,7 @@ import { ResearchChatProvider } from "./contexts/ResearchChatContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PageErrorBoundary } from "./components/PageErrorBoundary";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { TrialGate } from "./components/TrialGate";
 import { Sidebar } from "./components/Sidebar";
 import { ResearchChatSlideOut } from "./components/ResearchChatSlideOut";
 import { useAllRealtime } from "./hooks/use-realtime";
@@ -82,23 +83,23 @@ const App = () => (
                           <Route path="/companies" element={<Companies />} />
                           <Route path="/deals" element={<Deals />} />
                           <Route path="/people" element={<People />} />
-                          <Route path="/lead-finder" element={<LeadFinder />} />
-                          <Route path="/lead-inbox" element={<LeadInbox />} />
-                          <Route path="/enrichment" element={<Enrichment />} />
-                          <Route path="/autopilot" element={<Autopilot />} />
+                          <Route path="/lead-finder" element={<TrialGate feature="Lead Finder"><LeadFinder /></TrialGate>} />
+                          <Route path="/lead-inbox" element={<TrialGate feature="Lead Inbox"><LeadInbox /></TrialGate>} />
+                          <Route path="/enrichment" element={<TrialGate feature="Company Enrichment"><Enrichment /></TrialGate>} />
+                          <Route path="/autopilot" element={<TrialGate feature="Autopilot"><Autopilot /></TrialGate>} />
                           <Route path="/business-profile" element={<BusinessProfile />} />
                           <Route path="/profile" element={<Profile />} />
                           <Route path="/pipeline" element={<Pipeline />} />
-                          <Route path="/sequences" element={<Sequences />} />
-                          <Route path="/company-sequences" element={<CompanySequences />} />
-          <Route path="/all-campaigns" element={<UnifiedCampaigns />} />
-          <Route path="/auto-responses" element={<AutoResponseHub />} />
+                          <Route path="/sequences" element={<TrialGate feature="Email Sequences"><Sequences /></TrialGate>} />
+                          <Route path="/company-sequences" element={<TrialGate feature="Company Sequences"><CompanySequences /></TrialGate>} />
+          <Route path="/all-campaigns" element={<TrialGate feature="Campaigns"><UnifiedCampaigns /></TrialGate>} />
+          <Route path="/auto-responses" element={<TrialGate feature="Auto-Responses"><AutoResponseHub /></TrialGate>} />
           {/* More specific path first — nested layout under /campaigns/* was not matching in descendant <Routes> */}
-          <Route path="/campaigns/import-email" element={<PersonalizedEmailCampaign />} />
-          <Route path="/campaigns" element={<Campaigns />} />
+          <Route path="/campaigns/import-email" element={<TrialGate feature="Email Campaigns"><PersonalizedEmailCampaign /></TrialGate>} />
+          <Route path="/campaigns" element={<TrialGate feature="Email Campaigns"><Campaigns /></TrialGate>} />
                           <Route path="/email-branding" element={<PageErrorBoundary fallbackTitle="Email Branding failed to load"><EmailBranding /></PageErrorBoundary>} />
-                          <Route path="/newsletters" element={<Newsletters />} />
-                          <Route path="/newsletter-series" element={<PageErrorBoundary fallbackTitle="Newsletter Series failed to load"><NewsletterSeries /></PageErrorBoundary>} />
+                          <Route path="/newsletters" element={<TrialGate feature="Newsletters"><Newsletters /></TrialGate>} />
+                          <Route path="/newsletter-series" element={<PageErrorBoundary fallbackTitle="Newsletter Series failed to load"><TrialGate feature="Newsletter Series"><NewsletterSeries /></TrialGate></PageErrorBoundary>} />
                           <Route path="/recipient-groups" element={<RecipientGroups />} />
                           <Route path="/notes" element={<Notes />} />
                           <Route path="/conversations" element={<PageErrorBoundary fallbackTitle="Conversations failed to load"><Conversations /></PageErrorBoundary>} />

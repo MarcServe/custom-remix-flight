@@ -7,11 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// LeadBoosters product prices by currency — £29/month
-const LEADGENIE_PRICES = {
-  usd: "price_1SXOt7P8zypO5fiCd7FkOQCp",
-  gbp: "price_1TZECTP8zypO5fiCk3voBln5",
-};
+// LeadBoosters Premium — £29/month GBP
+const PRICE_ID = "price_1TZECTP8zypO5fiCk3voBln5";
+const TRIAL_DAYS = 7;
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -37,7 +35,6 @@ serve(async (req) => {
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header provided");
-    logStep("Authorization header found");
 
     const token = authHeader.replace("Bearer ", "");
     const { data, error: userError } = await supabaseClient.auth.getUser(token);
@@ -47,49 +44,33 @@ serve(async (req) => {
     logStep("User authenticated", { userId: user.id, email: user.email });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-    
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    let customerId;
-    let customerCurrency = "usd"; // default to USD
 
+    // Reuse existing Stripe customer if one exists
+    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+    let customerId: string | undefined;
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
       logStep("Found existing customer", { customerId });
-      
-      // Check customer's existing subscriptions to determine currency
-      const existingSubscriptions = await stripe.subscriptions.list({
-        customer: customerId,
-        limit: 1,
-      });
-      
-      if (existingSubscriptions.data.length > 0) {
-        // Get currency from existing subscription
-        customerCurrency = existingSubscriptions.data[0].currency;
-        logStep("Customer has existing subscription", { currency: customerCurrency });
-      }
     } else {
-      logStep("No existing customer found");
+      logStep("No existing customer found — will create on checkout");
     }
 
-    // Select the appropriate price based on customer's currency
-    const priceId = LEADGENIE_PRICES[customerCurrency as keyof typeof LEADGENIE_PRICES] || LEADGENIE_PRICES.usd;
-    logStep("Selected price", { priceId, currency: customerCurrency });
+    const origin = req.headers.get("origin") || "https://leadgenie.bizboosters.co.uk";
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : user.email,
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: PRICE_ID, quantity: 1 }],
       mode: "subscription",
-      success_url: `${req.headers.get("origin")}/subscription?success=true`,
-      cancel_url: `${req.headers.get("origin")}/subscription?canceled=true`,
+      subscription_data: {
+        trial_period_days: TRIAL_DAYS,
+        metadata: { user_id: user.id },
+      },
+      success_url: `${origin}/subscription?success=true`,
+      cancel_url: `${origin}/subscription?canceled=true`,
     });
 
-    logStep("Checkout session created", { sessionId: session.id, url: session.url });
+    logStep("Checkout session created", { sessionId: session.id });
 
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -98,7 +79,6 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep("ERROR in create-checkout", { message: errorMessage });
-    // Return the real error so we can diagnose it in the browser network tab
     return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,

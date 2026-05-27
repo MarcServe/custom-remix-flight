@@ -3161,19 +3161,31 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           <div className="space-y-6">
           {/* Campaign Exclusion Section - More Prominent */}
           {previousCampaigns && previousCampaigns.length > 0 && (
-            <Collapsible defaultOpen={true}>
-              <CollapsibleTrigger className="flex items-center justify-between w-full p-4 rounded-lg border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors">
-                <div className="flex items-center gap-2">
-                  <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  <span className="font-semibold text-sm text-blue-900 dark:text-blue-100">Prevent Double-Sending: Exclude Recipients from Previous Campaigns</span>
-                  {excludedCampaignIds.length > 0 && (
-                    <Badge variant="default" className="ml-2 bg-blue-600">
-                      {excludedCampaignIds.length} campaign{excludedCampaignIds.length > 1 ? 's' : ''} selected
-                    </Badge>
-                  )}
-                </div>
-                <ChevronDown className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              </CollapsibleTrigger>
+            <Collapsible defaultOpen={false}>
+              <div className="flex items-center gap-2">
+                <CollapsibleTrigger className="flex items-center justify-between flex-1 p-3 rounded-lg border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <span className="font-semibold text-sm text-blue-900 dark:text-blue-100">Prevent Double-Sending: Exclude Recipients from Previous Campaigns</span>
+                    {excludedCampaignIds.length > 0 && (
+                      <Badge variant="default" className="ml-2 bg-blue-600">
+                        {excludedCampaignIds.length} campaign{excludedCampaignIds.length > 1 ? 's' : ''} excluded
+                      </Badge>
+                    )}
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </CollapsibleTrigger>
+                {excludedCampaignIds.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 text-xs border-amber-400 text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-400"
+                    onClick={() => setExcludedCampaignIds([])}
+                  >
+                    Send to All (ignore exclusions)
+                  </Button>
+                )}
+              </div>
               <CollapsibleContent className="mt-3 space-y-3 p-4 bg-muted/30 rounded-lg border">
                 <p className="text-sm font-medium text-foreground mb-3">
                   💡 Smart Exclusion: Select campaigns to automatically exclude their recipients and prevent double-sending.
