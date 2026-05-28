@@ -5,8 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   Loader2, Sparkles, Check, RefreshCw,
-  Users, Building2, Target, Mail, Zap, Bot,
-  BarChart2, FileText, Layers, ShieldCheck, Inbox, Globe
+  Users, Building2, Target, Mail, Bot,
+  BarChart2, Layers, ShieldCheck, Inbox, Globe
 } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
@@ -32,7 +32,7 @@ const FEATURE_GROUPS = [
     features: [
       "AI-powered Lead Finder (search millions of contacts)",
       "Lead Inbox — capture & qualify inbound leads",
-      "Company Enrichment (auto-fill firmographic data)",
+      "Company Enrichment (auto-fill company data)",
       "Autonomous Lead Discovery (Autopilot)",
       "Contact discovery from company websites",
       "Export leads to CSV",
@@ -48,7 +48,7 @@ const FEATURE_GROUPS = [
       "Company Sequences",
       "Email branding & custom templates",
       "Double-send prevention & exclusion controls",
-      "Resend / SendGrid / Gmail / SMTP support",
+      "Send via Gmail, custom SMTP, or email providers",
     ],
   },
   {
@@ -70,8 +70,8 @@ const FEATURE_GROUPS = [
       "AI lead scoring & campaign-fit analysis",
       "AI conversation & deal opportunity analysis",
       "Auto-response hub (reply to inbound emails automatically)",
-      "AI-generated tags & CRM categorisation",
-      "Autonomous background lead discovery",
+      "AI-generated tags & contact categorisation",
+      "Autopilot — background lead discovery while you sleep",
     ],
   },
   {
@@ -80,17 +80,17 @@ const FEATURE_GROUPS = [
     features: [
       "Unified Conversations (full email threading)",
       "Shared Team Inbox",
-      "Gmail OAuth integration",
+      "Connect your Gmail account for direct sending",
       "Auto-response to leads & inbound enquiries",
-      "Lead reply detection & CRM sync",
+      "Lead reply detection & automatic CRM sync",
     ],
   },
   {
     icon: BarChart2,
     label: "Analytics & Deliverability",
     features: [
-      "Email deliverability monitoring & scoring",
-      "Campaign open / click / reply tracking",
+      "Email deliverability monitoring & health score",
+      "Campaign open, click & reply tracking",
       "Sequence performance analytics",
       "Bounce & spam complaint tracking",
     ],
@@ -107,14 +107,12 @@ const FEATURE_GROUPS = [
   },
   {
     icon: Globe,
-    label: "Integrations",
+    label: "Email & Account Connections",
     features: [
-      "Gmail (OAuth direct send)",
-      "SendGrid & Resend email providers",
-      "Custom SMTP",
-      "Nango OAuth integrations",
-      "Apify scraping integrations",
-      "Sentry error monitoring",
+      "Connect your Gmail account",
+      "SendGrid & Resend email delivery",
+      "Custom SMTP server support",
+      "Multiple sending accounts per workspace",
     ],
   },
 ];
