@@ -10,6 +10,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PageErrorBoundary } from "./components/PageErrorBoundary";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TrialGate } from "./components/TrialGate";
+import { PlanGate } from "./components/PlanGate";
 import { CampaignDialogProvider } from "./contexts/CampaignDialogContext";
 import { GlobalCampaignDialog } from "./components/GlobalCampaignDialog";
 import { Sidebar } from "./components/Sidebar";
@@ -87,23 +88,26 @@ const App = () => (
                           <Route path="/companies" element={<Companies />} />
                           <Route path="/deals" element={<Deals />} />
                           <Route path="/people" element={<People />} />
-                          <Route path="/lead-finder" element={<TrialGate feature="Lead Finder"><LeadFinder /></TrialGate>} />
-                          <Route path="/lead-inbox" element={<TrialGate feature="Lead Inbox"><LeadInbox /></TrialGate>} />
-                          <Route path="/enrichment" element={<TrialGate feature="Company Enrichment"><Enrichment /></TrialGate>} />
-                          <Route path="/autopilot" element={<TrialGate feature="Autopilot"><Autopilot /></TrialGate>} />
+                          {/* Pro tier routes */}
+                          <Route path="/lead-finder" element={<PlanGate requiredTier="pro" feature="Lead Finder"><LeadFinder /></PlanGate>} />
+                          <Route path="/lead-inbox" element={<PlanGate requiredTier="pro" feature="Lead Inbox"><LeadInbox /></PlanGate>} />
+                          <Route path="/sequences" element={<PlanGate requiredTier="pro" feature="Email Sequences"><Sequences /></PlanGate>} />
+                          <Route path="/company-sequences" element={<PlanGate requiredTier="pro" feature="Company Sequences"><CompanySequences /></PlanGate>} />
+                          <Route path="/newsletter-series" element={<PageErrorBoundary fallbackTitle="Newsletter Series failed to load"><PlanGate requiredTier="pro" feature="Newsletter Series"><NewsletterSeries /></PlanGate></PageErrorBoundary>} />
+                          {/* More specific path first */}
+                          <Route path="/campaigns/import-email" element={<PlanGate requiredTier="pro" feature="Per-recipient Personalised Email"><PersonalizedEmailCampaign /></PlanGate>} />
+                          <Route path="/all-campaigns" element={<PlanGate requiredTier="pro" feature="Unified Campaigns"><UnifiedCampaigns /></PlanGate>} />
+                          {/* LeadBoosters tier routes */}
+                          <Route path="/enrichment" element={<PlanGate requiredTier="leadboosters" feature="Company Enrichment"><Enrichment /></PlanGate>} />
+                          <Route path="/autopilot" element={<PlanGate requiredTier="leadboosters" feature="Autopilot"><Autopilot /></PlanGate>} />
+                          <Route path="/auto-responses" element={<PlanGate requiredTier="leadboosters" feature="Auto-Response Hub"><AutoResponseHub /></PlanGate>} />
+                          {/* Individual tier routes */}
+                          <Route path="/campaigns" element={<PlanGate requiredTier="individual" feature="Email Campaigns"><Campaigns /></PlanGate>} />
+                          <Route path="/newsletters" element={<PlanGate requiredTier="individual" feature="Newsletters"><Newsletters /></PlanGate>} />
                           <Route path="/business-profile" element={<BusinessProfile />} />
                           <Route path="/profile" element={<Profile />} />
                           <Route path="/pipeline" element={<Pipeline />} />
-                          <Route path="/sequences" element={<TrialGate feature="Email Sequences"><Sequences /></TrialGate>} />
-                          <Route path="/company-sequences" element={<TrialGate feature="Company Sequences"><CompanySequences /></TrialGate>} />
-          <Route path="/all-campaigns" element={<TrialGate feature="Campaigns"><UnifiedCampaigns /></TrialGate>} />
-          <Route path="/auto-responses" element={<TrialGate feature="Auto-Responses"><AutoResponseHub /></TrialGate>} />
-          {/* More specific path first — nested layout under /campaigns/* was not matching in descendant <Routes> */}
-          <Route path="/campaigns/import-email" element={<TrialGate feature="Email Campaigns"><PersonalizedEmailCampaign /></TrialGate>} />
-          <Route path="/campaigns" element={<TrialGate feature="Email Campaigns"><Campaigns /></TrialGate>} />
                           <Route path="/email-branding" element={<PageErrorBoundary fallbackTitle="Email Branding failed to load"><EmailBranding /></PageErrorBoundary>} />
-                          <Route path="/newsletters" element={<TrialGate feature="Newsletters"><Newsletters /></TrialGate>} />
-                          <Route path="/newsletter-series" element={<PageErrorBoundary fallbackTitle="Newsletter Series failed to load"><TrialGate feature="Newsletter Series"><NewsletterSeries /></TrialGate></PageErrorBoundary>} />
                           <Route path="/recipient-groups" element={<RecipientGroups />} />
                           <Route path="/notes" element={<Notes />} />
                           <Route path="/conversations" element={<PageErrorBoundary fallbackTitle="Conversations failed to load"><Conversations /></PageErrorBoundary>} />

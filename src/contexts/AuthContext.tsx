@@ -3,6 +3,64 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+// ─── Plan tier constants ─────────────────────────────────────────────────────
+export const INDIVIDUAL_PRODUCT_ID = 'prod_TUNeoAZWiDngEH'; // £9.99/month
+export const PRO_PRODUCT_ID        = 'prod_UbJKukbTXsTZ8Z'; // £19.99/month
+// LeadBoosters CRM (£29/month) = any other active subscription
+
+export type PlanTier = 'free' | 'trial' | 'individual' | 'pro' | 'leadboosters';
+
+export const TIER_RANK: Record<PlanTier, number> = {
+  free: 0,
+  trial: 3,          // trial = full access so users can see all features
+  individual: 1,
+  pro: 2,
+  leadboosters: 3,
+};
+
+export const PLAN_LABELS: Record<PlanTier, string> = {
+  free: 'Free',
+  trial: 'Free Trial',
+  individual: 'Individual',
+  pro: 'Pro',
+  leadboosters: 'LeadBoosters CRM',
+};
+
+export const PLAN_PRICES: Record<PlanTier, string> = {
+  free: '£0',
+  trial: '£0',
+  individual: '£9.99/mo',
+  pro: '£19.99/mo',
+  leadboosters: '£29/mo',
+};
+
+// Features unlocked at each tier (cumulative)
+export const TIER_FEATURES: Record<'individual' | 'pro' | 'leadboosters', string[]> = {
+  individual: [
+    'People, Companies & Deals CRM',
+    'Bulk email campaigns',
+    'Newsletters & broadcast sending',
+    'Notes, invoices & activity logs',
+    'Team conversations',
+  ],
+  pro: [
+    'Everything in Individual',
+    'Email Sequences & Company Sequences',
+    'Lead Finder & Lead Inbox',
+    'Newsletter Series (automated drip)',
+    'Per-recipient personalised email import',
+    'Unified campaign analytics',
+  ],
+  leadboosters: [
+    'Everything in Pro',
+    'AI Company Enrichment',
+    'Autopilot (autonomous lead discovery)',
+    'Auto-Response Hub (AI-powered replies)',
+    'AI email writer & lead scoring',
+    'Full AI feature suite',
+  ],
+};
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -14,6 +72,8 @@ interface AuthContextType {
   trialEndsAt: string | null;
   hasAccess: boolean;
   isInTrial: boolean;
+  planTier: PlanTier;
+  isAtLeast: (tier: PlanTier) => boolean;
   checkSubscription: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: any }>;
@@ -49,6 +109,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Calculate if user is in trial period
   const isInTrial = trialEndsAt ? new Date(trialEndsAt) > new Date() : false;
   const hasAccess = subscribed || isInTrial;
+
+  // Derive plan tier from subscription state
+  const planTier: PlanTier = (() => {
+    if (subscribed) {
+      if (productId === INDIVIDUAL_PRODUCT_ID) return 'individual';
+      if (productId === PRO_PRODUCT_ID) return 'pro';
+      return 'leadboosters'; // any other active subscription = full plan
+    }
+    if (isInTrial) return 'trial';
+    return 'free';
+  })();
+
+  const isAtLeast = (tier: PlanTier) => TIER_RANK[planTier] >= TIER_RANK[tier];
 
   // Fetch user role and trial info when user changes
   useEffect(() => {
@@ -260,6 +333,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     trialEndsAt,
     hasAccess,
     isInTrial,
+    planTier,
+    isAtLeast,
     checkSubscription,
     signIn,
     signUp,

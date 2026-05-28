@@ -1,17 +1,15 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, INDIVIDUAL_PRODUCT_ID, PRO_PRODUCT_ID, PLAN_LABELS, TIER_FEATURES } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   Loader2, Sparkles, Check, RefreshCw,
   Users, Building2, Target, Mail, Bot,
-  BarChart2, Layers, ShieldCheck, Inbox, Globe
+  BarChart2, Layers, ShieldCheck, Inbox, Globe, Star
 } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
-
-const LEADBOOSTERS_PRODUCT_ID = "prod_TUNeoAZWiDngEH";
 
 const FEATURE_GROUPS = [
   {
@@ -183,15 +181,57 @@ export default function Subscription() {
     }
   };
 
-  const isLeadBoostersActive = subscribed && productId === LEADBOOSTERS_PRODUCT_ID;
+  const isIndividualActive   = subscribed && productId === INDIVIDUAL_PRODUCT_ID;
+  const isProActive          = subscribed && productId === PRO_PRODUCT_ID;
+  const isLeadBoostersActive = subscribed && !isIndividualActive && !isProActive;
+
+  // 3-tier plan cards config
+  const plans = [
+    {
+      id: 'individual',
+      name: 'Individual',
+      price: '£9.99',
+      description: 'Core CRM for solo users and small teams',
+      features: TIER_FEATURES.individual,
+      isCurrent: isIndividualActive,
+      highlight: false,
+      btnLabel: 'Get Individual',
+      color: 'border-sky-500',
+      badgeCls: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400',
+    },
+    {
+      id: 'pro',
+      name: 'Pro',
+      price: '£19.99',
+      description: 'Lead generation + outreach automation',
+      features: TIER_FEATURES.pro,
+      isCurrent: isProActive,
+      highlight: true,
+      btnLabel: 'Get Pro',
+      color: 'border-violet-500',
+      badgeCls: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400',
+    },
+    {
+      id: 'leadboosters',
+      name: 'LeadBoosters CRM',
+      price: '£29',
+      description: 'Full AI-powered suite — unlimited everything',
+      features: TIER_FEATURES.leadboosters,
+      isCurrent: isLeadBoostersActive,
+      highlight: false,
+      btnLabel: 'Get LeadBoosters',
+      color: 'border-primary',
+      badgeCls: 'bg-primary/10 text-primary',
+    },
+  ] as const;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
       {/* Header */}
       <div className="mb-8 flex items-start justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold mb-1">LeadBoosters Premium</h1>
-          <p className="text-muted-foreground">Everything you need to find, engage, and close more deals</p>
+          <h1 className="text-3xl font-bold mb-1">Plans &amp; Billing</h1>
+          <p className="text-muted-foreground">Choose the plan that fits your team. Upgrade or downgrade anytime.</p>
         </div>
         <Button onClick={handleRefreshStatus} variant="outline" disabled={refreshing} size="sm">
           {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
@@ -207,10 +247,10 @@ export default function Subscription() {
               <div className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-blue-500 shrink-0" />
                 <div>
-                  <p className="font-semibold text-blue-700 dark:text-blue-400">Free Trial Active</p>
+                  <p className="font-semibold text-blue-700 dark:text-blue-400">Free Trial Active — full LeadBoosters access</p>
                   {trialEndsAt && (
                     <p className="text-sm text-muted-foreground">
-                      Ends {format(new Date(trialEndsAt), 'MMMM d, yyyy')} — subscribe to keep full access
+                      Trial ends {format(new Date(trialEndsAt), 'MMMM d, yyyy')} — subscribe to keep your access
                     </p>
                   )}
                 </div>
@@ -232,7 +272,9 @@ export default function Subscription() {
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-primary shrink-0" />
                 <div>
-                  <p className="font-semibold text-primary">Active Subscription</p>
+                  <p className="font-semibold text-primary">
+                    Active — {isIndividualActive ? 'Individual' : isProActive ? 'Pro' : 'LeadBoosters CRM'} plan
+                  </p>
                   {subscriptionEnd && (
                     <p className="text-sm text-muted-foreground">
                       Renews {format(new Date(subscriptionEnd), 'MMMM d, yyyy')}
@@ -242,40 +284,77 @@ export default function Subscription() {
               </div>
               <Button onClick={handleManageSubscription} variant="outline" disabled={loading} size="sm">
                 {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Manage Billing
+                Manage Billing / Upgrade
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Pricing hero card */}
-      <Card className={`mb-8 ${isLeadBoostersActive ? 'border-primary' : ''}`}>
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6">
-            <div>
-              <div className="flex items-baseline gap-1 mb-1">
-                <span className="text-5xl font-extrabold">£29</span>
-                <span className="text-xl text-muted-foreground">/month</span>
+      {/* 3-column plan grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+        {plans.map((plan) => (
+          <Card
+            key={plan.id}
+            className={`relative flex flex-col border-2 ${plan.isCurrent ? plan.color : 'border-border'} ${plan.highlight && !plan.isCurrent ? 'shadow-md' : ''}`}
+          >
+            {plan.highlight && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                <span className="inline-flex items-center gap-1 rounded-full bg-violet-600 px-3 py-0.5 text-xs font-semibold text-white shadow">
+                  <Star className="h-3 w-3" /> Most popular
+                </span>
               </div>
-              <p className="text-sm text-muted-foreground">or $29.99/month · billed monthly · cancel any time</p>
-              <p className="text-sm text-muted-foreground mt-1">New accounts get a <span className="font-medium text-foreground">7-day free trial</span></p>
-            </div>
-            {!isLeadBoostersActive && (
-              <Button onClick={handleSubscribe} size="lg" className="sm:w-52" disabled={loading}>
-                {loading
-                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</>
-                  : <><Sparkles className="mr-2 h-4 w-4" />Subscribe Now</>}
-              </Button>
             )}
-          </div>
-        </CardContent>
-      </Card>
+            {plan.isCurrent && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                <span className={`inline-flex items-center gap-1 rounded-full px-3 py-0.5 text-xs font-semibold shadow ${plan.badgeCls}`}>
+                  <Check className="h-3 w-3" /> Current plan
+                </span>
+              </div>
+            )}
+            <CardHeader className="pb-2 pt-6">
+              <CardTitle className="text-base">{plan.name}</CardTitle>
+              <CardDescription className="text-xs">{plan.description}</CardDescription>
+              <div className="flex items-baseline gap-1 mt-2">
+                <span className="text-3xl font-extrabold">{plan.price}</span>
+                <span className="text-muted-foreground text-sm">/mo</span>
+              </div>
+            </CardHeader>
+            <CardContent className="flex flex-col flex-1 gap-4 pt-0">
+              <ul className="space-y-1.5 flex-1">
+                {plan.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <Check className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              {!plan.isCurrent && (
+                <Button
+                  size="sm"
+                  variant={plan.highlight ? 'default' : 'outline'}
+                  disabled={loading}
+                  onClick={subscribed ? handleManageSubscription : handleSubscribe}
+                  className="w-full"
+                >
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                  {subscribed ? `Switch to ${plan.name}` : plan.btnLabel}
+                </Button>
+              )}
+              {plan.isCurrent && (
+                <Button size="sm" variant="outline" disabled={loading} onClick={handleManageSubscription} className="w-full">
+                  Manage billing
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-      {/* Feature grid */}
+      {/* Full feature grid */}
       <div className="mb-4">
         <h2 className="text-lg font-semibold mb-1">Everything included</h2>
-        <p className="text-sm text-muted-foreground">One plan. All features. No hidden limits.</p>
+        <p className="text-sm text-muted-foreground">All plans include core CRM — higher tiers unlock AI and automation.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -303,13 +382,13 @@ export default function Subscription() {
         ))}
       </div>
 
-      {/* Bottom CTA */}
-      {!isLeadBoostersActive && (
+      {/* Bottom CTA — only show when not subscribed */}
+      {!subscribed && (
         <div className="mt-8 text-center">
           <Button onClick={handleSubscribe} size="lg" disabled={loading} className="px-10">
             {loading
               ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</>
-              : <><Sparkles className="mr-2 h-4 w-4" />Get LeadBoosters Premium — £29/mo</>}
+              : <><Sparkles className="mr-2 h-4 w-4" />Start with LeadBoosters — £29/mo</>}
           </Button>
           <p className="text-xs text-muted-foreground mt-2">New accounts start with a 7-day free trial. Cancel any time.</p>
         </div>

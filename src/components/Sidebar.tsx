@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, CalendarClock, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FileSpreadsheet, FolderOpen, CreditCard, Inbox, Brain, Wand2, StickyNote, Palette, Newspaper, UsersRound } from "lucide-react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, CalendarClock, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FileSpreadsheet, FolderOpen, CreditCard, Inbox, Brain, Wand2, StickyNote, Palette, Newspaper, UsersRound, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, PlanTier, TIER_RANK, PLAN_LABELS } from "@/contexts/AuthContext";
 import { useResearchChat } from "@/contexts/ResearchChatContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -112,6 +112,37 @@ const navigation: NavigationItem[] = [
   },
 ];
 
+// Minimum plan tier required for each nav route
+const ROUTE_TIER: Record<string, PlanTier> = {
+  // Individual tier
+  '/campaigns':             'individual',
+  '/newsletters':           'individual',
+  // Pro tier
+  '/lead-finder':           'pro',
+  '/lead-inbox':            'pro',
+  '/sequences':             'pro',
+  '/company-sequences':     'pro',
+  '/newsletter-series':     'pro',
+  '/campaigns/import-email':'pro',
+  '/all-campaigns':         'pro',
+  // LeadBoosters tier
+  '/enrichment':            'leadboosters',
+  '/autopilot':             'leadboosters',
+  '/auto-responses':        'leadboosters',
+};
+
+const TIER_BADGE_CLASS: Record<'individual' | 'pro' | 'leadboosters', string> = {
+  individual:   'bg-sky-100 text-sky-700 border-sky-300 dark:bg-sky-950 dark:text-sky-400',
+  pro:          'bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-950 dark:text-violet-400',
+  leadboosters: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-400',
+};
+
+const TIER_SHORT: Record<'individual' | 'pro' | 'leadboosters', string> = {
+  individual:   'IND',
+  pro:          'PRO',
+  leadboosters: 'LB',
+};
+
 // Helper function to get pending count for a menu item
 const getPendingCount = (href: string, pendingCounts: any, pendingReviewsCount?: number) => {
   if (!pendingCounts) return 0;
@@ -126,7 +157,14 @@ const getPendingCount = (href: string, pendingCounts: any, pendingReviewsCount?:
 export const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, signOut, planTier } = useAuth();
+
+  // Returns true if the user's current plan can access the given route
+  const canAccess = (href: string) => {
+    const required = ROUTE_TIER[href];
+    if (!required) return true; // no restriction
+    return TIER_RANK[planTier] >= TIER_RANK[required];
+  };
   const { setOpen: openResearchPanel } = useResearchChat();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -459,15 +497,26 @@ export const Sidebar = () => {
                         );
                       }
 
+                      const requiredTier = ROUTE_TIER[child.href] as ('individual' | 'pro' | 'leadboosters') | undefined;
+                      const locked = requiredTier && !canAccess(child.href);
+
                       return (
                         <Link
                           key={child.name}
                           to={child.href}
-                          className={childClassName}
+                          className={cn(childClassName, locked && "opacity-60")}
+                          title={locked ? `Requires ${PLAN_LABELS[requiredTier!]} plan` : undefined}
                         >
-                          <child.icon className="h-3.5 w-3.5 shrink-0" />
+                          {locked
+                            ? <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            : <child.icon className="h-3.5 w-3.5 shrink-0" />}
                           <span className="flex-1">{child.name}</span>
-                          {pendingCount > 0 && (
+                          {locked && requiredTier && (
+                            <span className={`inline-flex items-center rounded border px-1 py-0.5 text-[9px] font-bold leading-none ${TIER_BADGE_CLASS[requiredTier]}`}>
+                              {TIER_SHORT[requiredTier]}
+                            </span>
+                          )}
+                          {!locked && pendingCount > 0 && (
                             <Badge
                               variant="secondary"
                               className="h-4 min-w-4 px-1 text-[10px] font-semibold bg-destructive text-destructive-foreground animate-pulse"
@@ -487,30 +536,41 @@ export const Sidebar = () => {
           
           // Render regular navigation item
           const pendingCount = getPendingCount(item.href, pendingCounts, pendingReviewsCount);
-          
+          const topLevelRequiredTier = ROUTE_TIER[item.href] as ('individual' | 'pro' | 'leadboosters') | undefined;
+          const topLevelLocked = topLevelRequiredTier && !canAccess(item.href);
+
           const linkContent = (
             <Link
               key={item.name}
               to={item.href}
+              title={topLevelLocked ? `Requires ${PLAN_LABELS[topLevelRequiredTier!]} plan` : undefined}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors relative",
                 isActive
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                isCollapsed && "justify-center"
+                isCollapsed && "justify-center",
+                topLevelLocked && "opacity-60"
               )}
             >
-              <item.icon className="h-5 w-5 shrink-0" />
+              {topLevelLocked
+                ? <Lock className="h-5 w-5 shrink-0" />
+                : <item.icon className="h-5 w-5 shrink-0" />}
               {!isCollapsed && <span className="flex-1">{item.name}</span>}
-              {pendingCount > 0 && !isCollapsed && (
-                <Badge 
-                  variant="secondary" 
+              {!isCollapsed && topLevelLocked && topLevelRequiredTier && (
+                <span className={`inline-flex items-center rounded border px-1 py-0.5 text-[9px] font-bold leading-none ${TIER_BADGE_CLASS[topLevelRequiredTier]}`}>
+                  {TIER_SHORT[topLevelRequiredTier]}
+                </span>
+              )}
+              {!topLevelLocked && pendingCount > 0 && !isCollapsed && (
+                <Badge
+                  variant="secondary"
                   className="h-5 min-w-5 px-1 text-xs font-semibold bg-destructive text-destructive-foreground animate-pulse"
                 >
                   {pendingCount > 99 ? '99+' : pendingCount}
                 </Badge>
               )}
-              {pendingCount > 0 && isCollapsed && (
+              {!topLevelLocked && pendingCount > 0 && isCollapsed && (
                 <span className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full border-2 border-sidebar animate-pulse" />
               )}
             </Link>
