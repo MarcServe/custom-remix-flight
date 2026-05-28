@@ -89,7 +89,7 @@ const App = () => (
                           <Route path="/deals" element={<Deals />} />
                           <Route path="/people" element={<People />} />
                           {/* Pro tier routes */}
-                          <Route path="/lead-finder" element={<PlanGate requiredTier="pro" feature="Lead Finder"><LeadFinder /></PlanGate>} />
+                          <Route path="/lead-finder" element={<PageErrorBoundary fallbackTitle="Lead Finder failed to load"><PlanGate requiredTier="pro" feature="Lead Finder"><LeadFinder /></PlanGate></PageErrorBoundary>} />
                           <Route path="/lead-inbox" element={<PlanGate requiredTier="pro" feature="Lead Inbox"><LeadInbox /></PlanGate>} />
                           <Route path="/sequences" element={<PlanGate requiredTier="pro" feature="Email Sequences"><Sequences /></PlanGate>} />
                           <Route path="/company-sequences" element={<PlanGate requiredTier="pro" feature="Company Sequences"><CompanySequences /></PlanGate>} />
