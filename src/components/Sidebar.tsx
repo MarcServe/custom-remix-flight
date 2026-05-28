@@ -404,27 +404,31 @@ export const Sidebar = () => {
                 <CollapsibleTrigger asChild>
                   <button
                     className={cn(
-                      "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                      "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
                       isGroupActive
-                        ? "bg-muted text-foreground"
+                        ? "bg-primary/10 text-primary"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground",
                       isCollapsed && "justify-center"
                     )}
                   >
-                    <item.icon className="h-5 w-5 shrink-0" />
+                    <item.icon className={cn("h-4 w-4 shrink-0", isGroupActive && "text-primary")} />
                     {!isCollapsed && (
                       <>
-                        <span className="flex-1 text-left">{item.name}</span>
-                        <ChevronDown className="h-4 w-4 transition-transform duration-200" />
+                        <span className="flex-1 text-left tracking-wide uppercase text-[10px] font-bold">{item.name}</span>
+                        <ChevronDown className={cn(
+                          "h-3.5 w-3.5 transition-transform duration-200",
+                          isGroupActive && "rotate-180 text-primary"
+                        )} />
                       </>
                     )}
                   </button>
                 </CollapsibleTrigger>
                 {!isCollapsed && (
-                  <CollapsibleContent className="space-y-1 mt-1 ml-4">
+                  <CollapsibleContent>
+                    <div className="mt-0.5 ml-3 pl-3 border-l-2 border-primary/20 space-y-0.5 pb-1">
                     {item.children.map((child) => {
                       const isChildActive = matchesHref(child.href);
-                      
+
                       // Get pending count for child items
                       let pendingCount = 0;
                       if (pendingCounts) {
@@ -435,9 +439,9 @@ export const Sidebar = () => {
                       }
 
                       const childClassName = cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors relative w-full",
+                        "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors relative w-full",
                         isChildActive
-                          ? "bg-primary text-primary-foreground font-medium"
+                          ? "bg-primary text-primary-foreground font-medium shadow-sm"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground"
                       );
 
@@ -449,24 +453,24 @@ export const Sidebar = () => {
                             onClick={() => openResearchPanel(true)}
                             className={childClassName}
                           >
-                            <child.icon className="h-4 w-4 shrink-0" />
+                            <child.icon className="h-3.5 w-3.5 shrink-0" />
                             <span className="flex-1 text-left">{child.name}</span>
                           </button>
                         );
                       }
-                      
+
                       return (
                         <Link
                           key={child.name}
                           to={child.href}
                           className={childClassName}
                         >
-                          <child.icon className="h-4 w-4 shrink-0" />
+                          <child.icon className="h-3.5 w-3.5 shrink-0" />
                           <span className="flex-1">{child.name}</span>
                           {pendingCount > 0 && (
-                            <Badge 
-                              variant="secondary" 
-                              className="h-5 min-w-5 px-1 text-xs font-semibold bg-destructive text-destructive-foreground animate-pulse"
+                            <Badge
+                              variant="secondary"
+                              className="h-4 min-w-4 px-1 text-[10px] font-semibold bg-destructive text-destructive-foreground animate-pulse"
                             >
                               {pendingCount > 99 ? '99+' : pendingCount}
                             </Badge>
@@ -474,6 +478,7 @@ export const Sidebar = () => {
                         </Link>
                       );
                     })}
+                    </div>
                   </CollapsibleContent>
                 )}
               </Collapsible>

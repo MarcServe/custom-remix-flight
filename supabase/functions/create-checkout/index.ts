@@ -82,6 +82,7 @@ serve(async (req) => {
         ...(trialDays ? { trial_period_days: trialDays } : {}),
         metadata: { user_id: user.id },
       },
+      allow_promotion_codes: true,
       success_url: `${origin}/subscription?success=true`,
       cancel_url: `${origin}/subscription?canceled=true`,
     });
