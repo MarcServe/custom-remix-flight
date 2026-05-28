@@ -4,9 +4,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2 } from 'lucide-react';
+import {
+  Loader2, Check, Star, Zap, Search, Mail, BarChart2, Users,
+  Brain, Inbox, MessageSquare, Phone, Sparkles, ArrowRight,
+  Shield, Building2, TrendingUp, Target, Bot, Layers, ChevronDown,
+  ChevronUp, CheckCircle2,
+} from 'lucide-react';
 import { z } from 'zod';
 import leadBoostersLogo from '@/assets/leadboosters-logo.png';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,6 +20,170 @@ const emailSchema = z.string().email('Invalid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
 const nameSchema = z.string().min(2, 'Name must be at least 2 characters');
 
+// ─── Data ─────────────────────────────────────────────────────────────────────
+
+const FEATURES = [
+  {
+    icon: Search,
+    title: 'AI Lead Finder',
+    desc: 'Search millions of companies and contacts. Filter by industry, size, location, tech stack, and more.',
+    tier: 'Pro',
+  },
+  {
+    icon: Brain,
+    title: 'Autopilot',
+    desc: 'Set your ideal customer profile once. Autopilot discovers new leads in the background, 24/7.',
+    tier: 'LeadBoosters',
+  },
+  {
+    icon: Zap,
+    title: 'AI Enrichment',
+    desc: 'Auto-fill company details, find decision-maker contacts, and score leads for campaign fit.',
+    tier: 'LeadBoosters',
+  },
+  {
+    icon: Mail,
+    title: 'Email Campaigns',
+    desc: 'Send bulk personalised emails with A/B testing, scheduling, open tracking, and reply detection.',
+    tier: 'Individual',
+  },
+  {
+    icon: Target,
+    title: 'Sequences',
+    desc: 'Multi-step automated follow-ups with behavioral triggers, delays, and per-recipient personalisation.',
+    tier: 'Pro',
+  },
+  {
+    icon: Layers,
+    title: 'Newsletters & Series',
+    desc: 'Broadcast newsletters and automated drip campaigns to subscriber lists with full unsubscribe handling.',
+    tier: 'Individual',
+  },
+  {
+    icon: Building2,
+    title: 'CRM & Pipeline',
+    desc: 'Companies, people, deals, and a visual drag-and-drop sales pipeline with activity logs.',
+    tier: 'Individual',
+  },
+  {
+    icon: Bot,
+    title: 'Auto-Responses',
+    desc: 'AI reads inbound emails and replies automatically. Capture leads from your inbox without lifting a finger.',
+    tier: 'LeadBoosters',
+  },
+  {
+    icon: Inbox,
+    title: 'Lead Inbox',
+    desc: 'Centralised inbox for all inbound leads. Score, qualify, and route them to your CRM pipeline.',
+    tier: 'Pro',
+  },
+  {
+    icon: MessageSquare,
+    title: 'Unified Conversations',
+    desc: 'Full email threading with your contacts. Shared team inbox and reply-to-lead auto-sync.',
+    tier: 'Individual',
+  },
+  {
+    icon: Phone,
+    title: 'Phone Campaigns',
+    desc: 'Run outbound phone campaigns alongside your email outreach from the same dashboard.',
+    tier: 'Individual',
+  },
+  {
+    icon: BarChart2,
+    title: 'Analytics & Deliverability',
+    desc: 'Open rates, click rates, bounce tracking, spam complaint monitoring, and email health scoring.',
+    tier: 'Individual',
+  },
+];
+
+const PLANS = [
+  {
+    name: 'Individual',
+    price: '9.99',
+    desc: 'Core CRM, campaigns, and newsletters for solo users.',
+    features: [
+      'People, Companies & Deals CRM',
+      'Bulk email campaigns + A/B testing',
+      'Newsletters & broadcast sending',
+      'Phone campaigns',
+      'Notes, invoices & activity logs',
+      'Team conversations',
+    ],
+    highlight: false,
+    cta: 'Start free trial',
+    badge: null,
+  },
+  {
+    name: 'Pro',
+    price: '19.99',
+    desc: 'Everything in Individual plus lead generation and automation.',
+    features: [
+      'Everything in Individual',
+      'AI Lead Finder (millions of contacts)',
+      'Lead Inbox & qualification',
+      'Email Sequences & Company Sequences',
+      'Newsletter Series (drip campaigns)',
+      'Per-recipient personalised email import',
+    ],
+    highlight: true,
+    cta: 'Start free trial',
+    badge: 'Most popular',
+  },
+  {
+    name: 'LeadBoosters CRM',
+    price: '29',
+    desc: 'Full AI suite: enrichment, autopilot, and auto-responses.',
+    features: [
+      'Everything in Pro',
+      'AI Company Enrichment',
+      'Autopilot (autonomous lead discovery)',
+      'Auto-Response Hub (AI-powered replies)',
+      'AI email writer & lead scoring',
+      'Priority support',
+    ],
+    highlight: false,
+    cta: 'Start free trial',
+    badge: null,
+  },
+];
+
+const FAQS = [
+  {
+    q: 'Is there a free trial?',
+    a: 'Yes — every new account gets 7 days of full LeadBoosters access for free. No credit card required to start.',
+  },
+  {
+    q: 'Can I upgrade or downgrade later?',
+    a: 'Absolutely. Plans are billed monthly and you can switch tiers at any time via the billing portal. Changes take effect immediately.',
+  },
+  {
+    q: 'Do I need to import my own contacts?',
+    a: 'No. The Lead Finder and Autopilot (Pro/LeadBoosters) discover contacts for you. You can also import CSVs or add contacts manually.',
+  },
+  {
+    q: 'Which email providers are supported?',
+    a: 'We support Gmail, custom SMTP, SendGrid, Resend, and multiple sending accounts per workspace.',
+  },
+];
+
+const TIER_COLOR: Record<string, string> = {
+  Individual: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800',
+  Pro: 'text-violet-600 bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800',
+  LeadBoosters: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800',
+};
+
+// ─── Google SVG ───────────────────────────────────────────────────────────────
+const GoogleIcon = () => (
+  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+    <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+    <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+    <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+  </svg>
+);
+
+// ─── Component ────────────────────────────────────────────────────────────────
 export default function Auth() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -23,11 +191,11 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showReset, setShowReset] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const mode = searchParams.get('mode') || 'signin';
   const invitationToken = searchParams.get('invitation');
 
-  // Redirect if already logged in
   if (user) {
     navigate('/');
     return (
@@ -39,18 +207,13 @@ export default function Auth() {
 
   const validateField = (name: string, value: string) => {
     try {
-      if (name === 'email') {
-        emailSchema.parse(value);
-      } else if (name === 'password') {
-        passwordSchema.parse(value);
-      } else if (name === 'fullName') {
-        nameSchema.parse(value);
-      }
+      if (name === 'email') emailSchema.parse(value);
+      else if (name === 'password') passwordSchema.parse(value);
+      else if (name === 'fullName') nameSchema.parse(value);
       setErrors(prev => ({ ...prev, [name]: '' }));
       return true;
     } catch (error: any) {
-      const message = error.issues?.[0]?.message || 'Invalid input';
-      setErrors(prev => ({ ...prev, [name]: message }));
+      setErrors(prev => ({ ...prev, [name]: error.issues?.[0]?.message || 'Invalid input' }));
       return false;
     }
   };
@@ -60,436 +223,443 @@ export default function Auth() {
     const formData = new FormData(e.currentTarget);
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
-
-    const emailValid = validateField('email', email);
-    const passwordValid = validateField('password', password);
-
-    if (!emailValid || !passwordValid) return;
-
+    if (!validateField('email', email) || !validateField('password', password)) return;
     setLoading(true);
     const { error } = await signIn(email, password);
-
     if (!error && invitationToken) {
-      // If signing in with an invitation, accept it
       try {
         await new Promise(resolve => setTimeout(resolve, 500));
-        
-        const { data, error: inviteError } = await supabase.rpc('accept_team_invitation', {
-          invitation_token: invitationToken
-        });
-
-        if (inviteError) {
-          console.error('Error accepting invitation:', inviteError);
-          toast.error('Failed to accept invitation. Please try from Teams page.');
-        } else if (data && typeof data === 'object' && 'success' in data && data.success) {
-          toast.success('Successfully joined the team!');
-          setLoading(false);
-          navigate('/teams');
-          return;
-        }
-      } catch (err) {
-        console.error('Error processing invitation:', err);
-        toast.error('Failed to process invitation');
-      }
+        await supabase.rpc('accept_team_invitation', { invitation_token: invitationToken });
+      } catch {}
     }
-
     setLoading(false);
-    if (!error) {
-      navigate('/');
-    }
   };
 
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    const fullName = formData.get('fullName') as string;
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
-    const fullName = formData.get('fullName') as string;
-
-    const emailValid = validateField('email', email);
-    const passwordValid = validateField('password', password);
-    const nameValid = validateField('fullName', fullName);
-
-    if (!emailValid || !passwordValid || !nameValid) return;
-
+    if (!validateField('fullName', fullName) || !validateField('email', email) || !validateField('password', password)) return;
     setLoading(true);
-    const { error } = await signUp(email, password, fullName);
-
-    if (!error && invitationToken) {
-      // Wait for profile creation, then accept invitation with retry logic
-      try {
-        let success = false;
-        let lastError = null;
-        
-        // Retry up to 3 times with increasing delays
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          await new Promise(resolve => setTimeout(resolve, attempt * 500));
-          
-          const { data, error: inviteError } = await supabase.rpc('accept_team_invitation', {
-            invitation_token: invitationToken
-          });
-
-          if (inviteError) {
-            console.error(`Invitation acceptance attempt ${attempt} failed:`, inviteError);
-            lastError = inviteError;
-          } else if (data && typeof data === 'object' && 'success' in data) {
-            if (data.success) {
-              success = true;
-              toast.success('Successfully joined the team!');
-              setLoading(false);
-              navigate('/teams');
-              return;
-            } else if (data.error) {
-              lastError = new Error(data.error as string);
-            }
-          }
-        }
-        
-        // All retries failed
-        if (!success) {
-          console.error('Failed to accept invitation after retries:', lastError);
-          toast.error('Joined successfully but could not accept invitation. Please check Teams page.');
-        }
-      } catch (err) {
-        console.error('Error processing invitation:', err);
-        toast.error('Joined successfully but could not accept invitation');
-      }
-    }
-
+    await signUp(email, password, fullName);
     setLoading(false);
-    if (!error) {
-      navigate('/');
-    }
   };
 
   const handleResetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const email = formData.get('email') as string;
-
-    const emailValid = validateField('email', email);
-    if (!emailValid) return;
-
+    if (!validateField('email', email)) return;
     setLoading(true);
     await resetPassword(email);
     setLoading(false);
+    setShowReset(false);
   };
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/`,
-      },
+      options: { redirectTo: `${window.location.origin}/` },
     });
-
     if (error) {
-      console.error('Google sign-in error:', error);
       toast.error('Failed to sign in with Google');
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen w-screen flex items-center justify-center relative overflow-hidden p-4">
-      {/* Full-page logo with gradient overlays */}
-      <div className="absolute inset-0 pointer-events-none">
-        <img
-          src={leadBoostersLogo}
-          alt="LeadBoosters CRM"
-          className="w-full h-full object-cover object-center opacity-15 animate-fade-in"
-          style={{
-            animationDelay: '0.2s',
-            filter: 'blur(0.5px)'
-          }}
-        />
-        {/* Gradient overlays for better contrast */}
-        <div className="absolute inset-0 bg-gradient-to-br from-background/80 via-background/60 to-background/80" />
-        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-background/70" />
+  // ── Auth panel (shared by mobile + desktop) ──────────────────────────────
+  const AuthPanel = () => (
+    <div className="w-full max-w-sm mx-auto">
+      <div className="flex justify-center mb-6">
+        <img src={leadBoostersLogo} alt="LeadBoosters" className="h-14 w-auto drop-shadow" />
       </div>
 
-      {/* Floating elements for additional flair */}
-      <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl animate-pulse" />
-      <div className="absolute bottom-20 right-10 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-      
-      <Card className="w-full max-w-md relative z-10 animate-fade-in shadow-[0_15px_45px_-20px_rgba(72,50,250,0.6)] backdrop-blur-md bg-card/98 border-2 border-primary/40 ring-2 ring-primary/20" style={{ animationDelay: '0.3s' }}>
-        <CardHeader className="text-center space-y-3 pb-2">
-          <div className="flex justify-center animate-fade-in" style={{ animationDelay: '0.3s' }}>
-            <img src={leadBoostersLogo} alt="LeadBoosters CRM" className="h-20 w-auto drop-shadow" />
-          </div>
+      <div className="text-center mb-6">
+        <h2 className="text-xl font-bold">LeadBoosters CRM</h2>
+        <p className="text-sm text-muted-foreground mt-1">7-day free trial. No credit card required.</p>
+      </div>
 
-          <div className="space-y-1 animate-fade-in" style={{ animationDelay: '0.4s' }}>
-            <CardTitle className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-              LeadBoosters
-            </CardTitle>
-            <CardDescription className="text-sm text-muted-foreground">
-              Find leads, enrich them, and run email &amp; phone outreach that converts
-            </CardDescription>
-          </div>
+      {/* Trial badge */}
+      <div className="flex items-center justify-center gap-2 rounded-xl bg-primary/10 border border-primary/20 px-4 py-2.5 mb-6">
+        <Sparkles className="h-4 w-4 text-primary shrink-0" />
+        <span className="text-xs font-semibold text-primary">Full LeadBoosters access free for 7 days</span>
+      </div>
 
-          <div className="rounded-xl border-2 border-primary/40 bg-card/95/80 px-4 py-4 text-center shadow-[0_10px_30px_-18px_rgba(72,50,250,0.7)] animate-fade-in">
-            <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-              One platform to discover ideal accounts, enrich companies &amp; contacts with AI, run bulk email and A/B campaigns, sequences, and track everything in your pipeline.
-            </p>
-            <div className="grid gap-2 text-center">
-              <div className="border-2 border-primary/50 rounded-lg px-3 py-3 bg-card/90 shadow-[0_8px_18px_-12px_rgba(72,50,250,0.65)]">
-                <p className="text-[11px] font-semibold text-foreground tracking-wide uppercase">
-                  AI discovery &amp; enrichment
-                </p>
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  Autopilot and Lead Finder surface best-fit accounts; enrichment fills in firmographics and contact details.
-                </p>
+      <Tabs defaultValue={mode} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsTrigger value="signin">Sign In</TabsTrigger>
+          <TabsTrigger value="signup">Sign Up</TabsTrigger>
+        </TabsList>
+
+        {/* ── Sign In ── */}
+        <TabsContent value="signin">
+          {!showReset ? (
+            <div className="space-y-4">
+              <Button type="button" variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={loading}>
+                <GoogleIcon />
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continue with Google'}
+              </Button>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">Or email</span>
+                </div>
               </div>
-              <div className="border-2 border-primary/50 rounded-lg px-3 py-3 bg-card/90 shadow-[0_8px_18px_-12px_rgba(72,50,250,0.65)]">
-                <p className="text-[11px] font-semibold text-foreground tracking-wide uppercase">
-                  Email &amp; phone outreach
-                </p>
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  Bulk campaigns with A/B tests, sequences, newsletters, and phone campaigns—all from one place.
-                </p>
+              <form onSubmit={handleSignIn} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="si-email">Email</Label>
+                  <Input id="si-email" name="email" type="email" placeholder="you@example.com" required onChange={e => validateField('email', e.target.value)} />
+                  {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="si-password">Password</Label>
+                  <Input id="si-password" name="password" type="password" placeholder="••••••••" required onChange={e => validateField('password', e.target.value)} />
+                  {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
+                </div>
+                <div className="flex justify-end">
+                  <button type="button" onClick={() => setShowReset(true)} className="text-xs text-muted-foreground hover:text-primary transition-colors">
+                    Forgot password?
+                  </button>
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Sign In
+                </Button>
+              </form>
+            </div>
+          ) : (
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="reset-email">Email</Label>
+                <Input id="reset-email" name="email" type="email" placeholder="you@example.com" required onChange={e => validateField('email', e.target.value)} />
+                {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
               </div>
-              <div className="border-2 border-primary/50 rounded-lg px-3 py-3 bg-card/90 shadow-[0_8px_18px_-12px_rgba(72,50,250,0.65)]">
-                <p className="text-[11px] font-semibold text-foreground tracking-wide uppercase">
-                  CRM, inbox &amp; pipeline
-                </p>
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  Companies, people, deals, lead inbox, auto-responses, and pipeline analytics so nothing slips through.
-                </p>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Send Reset Link
+              </Button>
+              <div className="text-center">
+                <button type="button" onClick={() => setShowReset(false)} className="text-xs text-muted-foreground hover:text-primary">
+                  Back to Sign In
+                </button>
+              </div>
+            </form>
+          )}
+        </TabsContent>
+
+        {/* ── Sign Up ── */}
+        <TabsContent value="signup">
+          {invitationToken && (
+            <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+              <p className="text-sm text-primary font-medium">You have been invited to join a team!</p>
+              <p className="text-xs text-muted-foreground mt-1">Complete sign up to accept the invitation.</p>
+            </div>
+          )}
+          <div className="space-y-4">
+            <Button type="button" variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={loading}>
+              <GoogleIcon />
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continue with Google'}
+            </Button>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">Or email</span>
               </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="animate-fade-in" style={{ animationDelay: '0.6s' }}>
-          <Tabs defaultValue={mode} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="signin">
-              {!showReset ? (
-                <div className="space-y-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={handleGoogleSignIn}
-                    disabled={loading}
-                  >
-                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="currentColor"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="currentColor"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                      />
-                      <path
-                        fill="currentColor"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      />
-                    </svg>
-                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Continue with Google
-                  </Button>
-
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
-                    </div>
-                  </div>
-
-                  <form onSubmit={handleSignIn} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="signin-email">Email</Label>
-                      <Input
-                        id="signin-email"
-                        name="email"
-                        type="email"
-                        placeholder="you@example.com"
-                        required
-                        onChange={(e) => validateField('email', e.target.value)}
-                      />
-                      {errors.email && (
-                        <p className="text-sm text-destructive">{errors.email}</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="signin-password">Password</Label>
-                      <Input
-                        id="signin-password"
-                        name="password"
-                        type="password"
-                        placeholder="••••••••"
-                        required
-                        onChange={(e) => validateField('password', e.target.value)}
-                      />
-                      {errors.password && (
-                        <p className="text-sm text-destructive">{errors.password}</p>
-                      )}
-                    </div>
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => setShowReset(true)}
-                        className="text-sm text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        Forgot Password?
-                      </button>
-                    </div>
-                    <Button type="submit" className="w-full" disabled={loading}>
-                      {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Sign In
-                    </Button>
-                  </form>
-                </div>
-              ) : (
-                <form onSubmit={handleResetPassword} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="reset-email">Email</Label>
-                    <Input
-                      id="reset-email"
-                      name="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      required
-                      onChange={(e) => validateField('email', e.target.value)}
-                    />
-                    {errors.email && (
-                      <p className="text-sm text-destructive">{errors.email}</p>
-                    )}
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Send Reset Link
-                  </Button>
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={() => setShowReset(false)}
-                      className="text-sm text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      Back to Sign In
-                    </button>
-                  </div>
-                </form>
-              )}
-            </TabsContent>
-
-            <TabsContent value="signup">
-              {invitationToken && (
-                <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
-                  <p className="text-sm text-primary font-medium">
-                    🎉 You've been invited to join a team!
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Complete sign up to accept the invitation.
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleGoogleSignIn}
-                  disabled={loading}
-                >
-                  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-                    <path
-                      fill="currentColor"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                    />
-                    <path
-                      fill="currentColor"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                    />
-                  </svg>
-                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Continue with Google
-                </Button>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
-                  </div>
-                </div>
-
-                <form onSubmit={handleSignUp} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-name">Full Name</Label>
-                    <Input
-                      id="signup-name"
-                      name="fullName"
-                      type="text"
-                      placeholder="John Doe"
-                      required
-                      onChange={(e) => validateField('fullName', e.target.value)}
-                    />
-                    {errors.fullName && (
-                      <p className="text-sm text-destructive">{errors.fullName}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      name="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      required
-                      onChange={(e) => validateField('email', e.target.value)}
-                    />
-                    {errors.email && (
-                      <p className="text-sm text-destructive">{errors.email}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <Input
-                      id="signup-password"
-                      name="password"
-                      type="password"
-                      placeholder="••••••••"
-                      required
-                      onChange={(e) => validateField('password', e.target.value)}
-                    />
-                    {errors.password && (
-                      <p className="text-sm text-destructive">{errors.password}</p>
-                    )}
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Sign Up
-                  </Button>
-                </form>
+            <form onSubmit={handleSignUp} className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="su-name">Full Name</Label>
+                <Input id="su-name" name="fullName" type="text" placeholder="Jane Smith" required onChange={e => validateField('fullName', e.target.value)} />
+                {errors.fullName && <p className="text-xs text-destructive">{errors.fullName}</p>}
               </div>
-            </TabsContent>
+              <div className="space-y-1.5">
+                <Label htmlFor="su-email">Email</Label>
+                <Input id="su-email" name="email" type="email" placeholder="you@example.com" required onChange={e => validateField('email', e.target.value)} />
+                {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="su-password">Password</Label>
+                <Input id="su-password" name="password" type="password" placeholder="Min. 6 characters" required onChange={e => validateField('password', e.target.value)} />
+                {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create free account
+              </Button>
+            </form>
+            <p className="text-center text-[11px] text-muted-foreground">
+              By signing up you agree to our{' '}
+              <span className="underline cursor-pointer hover:text-foreground">Terms</span> and{' '}
+              <span className="underline cursor-pointer hover:text-foreground">Privacy Policy</span>.
+            </p>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 
-          </Tabs>
-        </CardContent>
-      </Card>
+  // ── Marketing content ─────────────────────────────────────────────────────
+  const MarketingContent = () => (
+    <>
+      {/* ── Nav ── */}
+      <nav className="flex items-center justify-between px-6 py-4 border-b sticky top-0 z-10 bg-background/80 backdrop-blur-md">
+        <div className="flex items-center gap-2.5">
+          <img src={leadBoostersLogo} alt="LeadBoosters" className="h-8 w-auto" />
+          <span className="font-bold text-base hidden sm:block">LeadBoosters</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block">Pricing</a>
+          <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block mr-2">Features</a>
+          <span className="text-sm text-muted-foreground hidden sm:block">|</span>
+          <a href="#auth" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors sm:block hidden ml-2">Sign in</a>
+          <a href="#auth">
+            <Button size="sm" className="gap-1.5">
+              Get started free <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </a>
+        </div>
+      </nav>
+
+      {/* ── Hero ── */}
+      <section className="px-6 py-16 lg:py-24 text-center max-w-3xl mx-auto">
+        <div className="inline-flex items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground mb-6">
+          <Sparkles className="h-3 w-3 text-primary" />
+          AI-powered lead generation and outreach
+        </div>
+
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight mb-6">
+          Find leads, enrich them,{' '}
+          <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+            close more deals
+          </span>
+        </h1>
+
+        <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto leading-relaxed">
+          LeadBoosters combines AI lead discovery, company enrichment, bulk email campaigns,
+          sequences, and a full CRM pipeline in one platform.
+        </p>
+
+        <div className="flex flex-col sm:flex-row gap-3 justify-center mb-12">
+          <a href="#auth">
+            <Button size="lg" className="gap-2 px-8 shadow-lg">
+              <Sparkles className="h-4 w-4" />
+              Start free 7-day trial
+            </Button>
+          </a>
+          <a href="#features">
+            <Button size="lg" variant="outline" className="gap-2 px-8">
+              See all features <ArrowRight className="h-4 w-4" />
+            </Button>
+          </a>
+        </div>
+
+        {/* Trust badges */}
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+          {[
+            { icon: Shield, text: 'No credit card required' },
+            { icon: CheckCircle2, text: '7-day free trial' },
+            { icon: Zap, text: 'Cancel anytime' },
+            { icon: Users, text: 'Unlimited contacts' },
+          ].map(({ icon: Icon, text }) => (
+            <span key={text} className="flex items-center gap-1.5">
+              <Icon className="h-3.5 w-3.5 text-primary" />
+              {text}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Stats bar ── */}
+      <section className="border-y bg-muted/30 px-6 py-6">
+        <div className="max-w-3xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+          {[
+            { value: '10M+', label: 'Contacts in database' },
+            { value: '50K+', label: 'Emails sent per day' },
+            { value: '99.9%', label: 'Uptime guarantee' },
+            { value: '7 days', label: 'Free trial, no card' },
+          ].map(({ value, label }) => (
+            <div key={label}>
+              <p className="text-2xl font-extrabold text-foreground">{value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Features ── */}
+      <section id="features" className="px-6 py-16">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-10">
+            <h2 className="text-2xl sm:text-3xl font-bold mb-2">Everything you need to scale outreach</h2>
+            <p className="text-muted-foreground text-sm max-w-lg mx-auto">
+              From lead discovery to closed deal — one platform, no switching tabs.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {FEATURES.map(({ icon: Icon, title, desc, tier }) => (
+              <div key={title} className="rounded-xl border bg-card p-4 hover:shadow-sm transition-shadow flex gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <Icon className="h-4 w-4 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold">{title}</p>
+                    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold leading-none ${TIER_COLOR[tier] || TIER_COLOR['Individual']}`}>
+                      {tier}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 leading-snug">{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Pricing ── */}
+      <section id="pricing" className="px-6 py-16 bg-muted/20 border-t">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-10">
+            <h2 className="text-2xl sm:text-3xl font-bold mb-2">Simple, transparent pricing</h2>
+            <p className="text-muted-foreground text-sm">
+              Start free for 7 days. No credit card. Cancel any time.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {PLANS.map((plan) => (
+              <div
+                key={plan.name}
+                className={`relative rounded-2xl border-2 bg-card p-6 flex flex-col ${plan.highlight ? 'border-primary shadow-lg shadow-primary/10' : 'border-border'}`}
+              >
+                {plan.badge && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-0.5 text-[11px] font-bold text-primary-foreground shadow-sm">
+                      <Star className="h-3 w-3" /> {plan.badge}
+                    </span>
+                  </div>
+                )}
+                <div className="mb-4">
+                  <h3 className="font-bold text-base">{plan.name}</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">{plan.desc}</p>
+                  <div className="flex items-baseline gap-1 mt-3">
+                    <span className="text-3xl font-extrabold">&#163;{plan.price}</span>
+                    <span className="text-sm text-muted-foreground">/mo</span>
+                  </div>
+                </div>
+                <ul className="space-y-2 flex-1 mb-6">
+                  {plan.features.map(f => (
+                    <li key={f} className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <Check className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+                <a href="#auth">
+                  <Button
+                    className="w-full"
+                    variant={plan.highlight ? 'default' : 'outline'}
+                    size="sm"
+                  >
+                    {plan.cta}
+                  </Button>
+                </a>
+                <p className="text-center text-[10px] text-muted-foreground mt-2">
+                  7-day free trial included
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── FAQ ── */}
+      <section className="px-6 py-16 border-t">
+        <div className="max-w-2xl mx-auto">
+          <h2 className="text-2xl font-bold text-center mb-8">Frequently asked questions</h2>
+          <div className="space-y-2">
+            {FAQS.map((faq, i) => (
+              <div key={i} className="rounded-xl border overflow-hidden">
+                <button
+                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-sm font-medium text-left hover:bg-muted/50 transition-colors"
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                >
+                  <span>{faq.q}</span>
+                  {openFaq === i
+                    ? <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    : <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                </button>
+                {openFaq === i && (
+                  <div className="px-5 pb-4 text-sm text-muted-foreground border-t bg-muted/20">
+                    <p className="pt-3 leading-relaxed">{faq.a}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Bottom CTA ── */}
+      <section className="px-6 py-16 text-center border-t bg-gradient-to-br from-primary/5 via-background to-primary/5">
+        <div className="max-w-xl mx-auto">
+          <h2 className="text-2xl sm:text-3xl font-bold mb-3">Ready to fill your pipeline?</h2>
+          <p className="text-muted-foreground text-sm mb-6">
+            Join teams using LeadBoosters to find, enrich, and close leads at scale.
+          </p>
+          <a href="#auth">
+            <Button size="lg" className="gap-2 px-10 shadow-lg">
+              <Sparkles className="h-4 w-4" />
+              Start free trial
+            </Button>
+          </a>
+          <p className="text-xs text-muted-foreground mt-3">7 days free. No credit card. Cancel any time.</p>
+        </div>
+      </section>
+
+      {/* ── Footer ── */}
+      <footer className="border-t px-6 py-8">
+        <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <img src={leadBoostersLogo} alt="LeadBoosters" className="h-6 w-auto opacity-70" />
+            <span>LeadBoosters CRM &copy; {new Date().getFullYear()} Biz Boosters Ltd</span>
+          </div>
+          <div className="flex gap-4">
+            <span className="hover:text-foreground cursor-pointer transition-colors">Terms</span>
+            <span className="hover:text-foreground cursor-pointer transition-colors">Privacy</span>
+            <span className="hover:text-foreground cursor-pointer transition-colors">Support</span>
+          </div>
+        </div>
+      </footer>
+    </>
+  );
+
+  // ── Page shell ─────────────────────────────────────────────────────────────
+  return (
+    <div className="bg-background text-foreground">
+      {/* Desktop: split layout */}
+      <div className="hidden lg:flex h-screen">
+        {/* Left: scrollable marketing */}
+        <div className="flex-1 overflow-y-auto">
+          <MarketingContent />
+        </div>
+        {/* Right: sticky auth panel */}
+        <div className="w-[420px] shrink-0 border-l h-screen overflow-y-auto flex items-center justify-center px-8 py-12 bg-card/40 backdrop-blur-sm">
+          <AuthPanel />
+        </div>
+      </div>
+
+      {/* Mobile: stacked layout */}
+      <div className="lg:hidden flex flex-col">
+        {/* Auth first on mobile */}
+        <div id="auth" className="px-6 py-10 border-b bg-card/40">
+          <AuthPanel />
+        </div>
+        {/* Marketing below */}
+        <MarketingContent />
+      </div>
     </div>
   );
 }
