@@ -1856,13 +1856,13 @@ export default function Campaigns() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className=”p-0”>
+          <CardContent className="p-0">
             {overviewCampaigns.length === 0 ? (
-              <div className=”text-center py-10 text-muted-foreground text-sm”>
-                {overviewStatusFilter === “all” ? “No campaigns yet.” : `No “${overviewStatusFilter}” campaigns. Try changing the filter.`}
+              <div className="text-center py-10 text-muted-foreground text-sm">
+                {overviewStatusFilter === "all" ? "No campaigns yet." : `No "${overviewStatusFilter}" campaigns. Try changing the filter.`}
               </div>
             ) : (
-              <div className=”divide-y”>
+              <div className="divide-y">
                 {overviewCampaigns.map((campaign) => {
                   const progress = campaign.total_recipients > 0
                     ? Math.min(100, (campaign.sent_count / campaign.total_recipients) * 100)
@@ -1876,10 +1876,10 @@ export default function Campaigns() {
                   return (
                     <div
                       key={campaign.id}
-                      className=”group flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors”
+                      className="group flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors"
                     >
                       {/* Left: name + status + tags */}
-                      <div className=”flex items-start gap-3 flex-1 min-w-0”>
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
                         {/* Status dot accent */}
                         <div className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
                           status === 'sending' ? 'bg-blue-500 animate-pulse' :
@@ -1889,118 +1889,118 @@ export default function Campaigns() {
                           status === 'failed' ? 'bg-red-500' :
                           'bg-zinc-400'
                         }`} />
-                        <div className=”min-w-0 flex-1”>
-                          <div className=”flex flex-wrap items-center gap-2”>
-                            <span className=”font-medium text-sm truncate”>{campaign.name}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-sm truncate">{campaign.name}</span>
                             {getStatusBadge(campaign.status)}
                             {status === 'draft' && (campaign.sent_count ?? 0) > 0 && (
-                              <span className=”text-[10px] px-1.5 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300”>Partial</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300">Partial</span>
                             )}
                             {campaign.ab_test_enabled && (
-                              <span className=”text-[10px] px-1.5 py-0.5 rounded-full border bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-950/30 dark:text-purple-300”>A/B</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-950/30 dark:text-purple-300">A/B</span>
                             )}
                           </div>
-                          <div className=”flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1”>
-                            <span className=”text-xs text-muted-foreground flex items-center gap-1”>
-                              <Users className=”h-3 w-3” />
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Users className="h-3 w-3" />
                               {campaign.total_recipients ?? 0} recipients
                             </span>
                             {campaign.sent_count > 0 && (
-                              <span className=”text-xs text-muted-foreground”>
+                              <span className="text-xs text-muted-foreground">
                                 {campaign.sent_count} sent
                               </span>
                             )}
                             {openRate > 0 && (
-                              <span className=”text-xs text-emerald-600 dark:text-emerald-400 font-medium”>
+                              <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                                 {openRate}% open
                               </span>
                             )}
                             {campaign.failed_count > 0 && (
-                              <span className=”text-xs text-red-500”>
+                              <span className="text-xs text-red-500">
                                 {campaign.failed_count} failed
                               </span>
                             )}
                             {isScheduled && (
-                              <span className=”text-xs text-violet-600 dark:text-violet-400 flex items-center gap-1”>
-                                <CalendarClock className=”h-3 w-3” />
+                              <span className="text-xs text-violet-600 dark:text-violet-400 flex items-center gap-1">
+                                <CalendarClock className="h-3 w-3" />
                                 {format(new Date(campaign.scheduled_at!), 'MMM d, HH:mm')}
                               </span>
                             )}
-                            <span className=”text-xs text-muted-foreground/70”>
+                            <span className="text-xs text-muted-foreground/70">
                               {format(new Date(campaign.created_at), 'MMM d, yyyy')}
                             </span>
                           </div>
                           {/* Progress bar */}
                           {campaign.total_recipients > 0 && (status === 'sending' || status === 'paused' || status === 'completed' || progress > 0) && (
-                            <div className=”mt-2 flex items-center gap-2”>
-                              <div className=”h-1.5 flex-1 rounded-full bg-muted overflow-hidden max-w-[200px]”>
+                            <div className="mt-2 flex items-center gap-2">
+                              <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden max-w-[200px]">
                                 <div
                                   className={`h-full rounded-full transition-all ${status === 'completed' ? 'bg-emerald-500' : status === 'sending' ? 'bg-blue-500' : 'bg-amber-500'}`}
                                   style={{ width: `${progress}%` }}
                                 />
                               </div>
-                              <span className=”text-[10px] text-muted-foreground tabular-nums”>{Math.round(progress)}%</span>
+                              <span className="text-[10px] text-muted-foreground tabular-nums">{Math.round(progress)}%</span>
                             </div>
                           )}
                         </div>
                       </div>
                       {/* Right: actions */}
-                      <div className=”flex items-center gap-1.5 shrink-0 ml-5 sm:ml-0”>
+                      <div className="flex items-center gap-1.5 shrink-0 ml-5 sm:ml-0">
                         <Button
-                          variant=”ghost”
-                          size=”sm”
-                          className=”h-8 px-2 text-xs gap-1.5 hover:bg-primary/10 hover:text-primary”
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs gap-1.5 hover:bg-primary/10 hover:text-primary"
                           onClick={() => setSelectedCampaign(campaign.id)}
                         >
-                          <Eye className=”h-3.5 w-3.5” />
-                          <span className=”hidden sm:inline”>Details</span>
+                          <Eye className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">Details</span>
                         </Button>
                         <Button
-                          variant=”ghost”
-                          size=”sm”
-                          className=”h-8 px-2 text-xs gap-1.5 hover:bg-muted”
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs gap-1.5 hover:bg-muted"
                           onClick={() => { setDraftToEdit(campaign.id); setBulkEmailDialogOpen(true); }}
                         >
-                          <Edit className=”h-3.5 w-3.5” />
-                          <span className=”hidden sm:inline”>Edit</span>
+                          <Edit className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">Edit</span>
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant=”ghost” size=”sm” className=”h-8 w-8 p-0 hover:bg-muted”>
-                              <svg xmlns=”http://www.w3.org/2000/svg” width=”14” height=”14” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” strokeWidth=”2” strokeLinecap=”round” strokeLinejoin=”round”><circle cx=”12” cy=”5” r=”1”/><circle cx=”12” cy=”12” r=”1”/><circle cx=”12” cy=”19” r=”1”/></svg>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-muted">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align=”end” className=”w-48”>
+                          <DropdownMenuContent align="end" className="w-48">
                             <DropdownMenuItem onClick={() => setSelectedCampaign(campaign.id)}>
-                              <Eye className=”h-4 w-4 mr-2” /> View details
+                              <Eye className="h-4 w-4 mr-2" /> View details
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => { setDraftToEdit(campaign.id); setBulkEmailDialogOpen(true); }}>
-                              <Edit className=”h-4 w-4 mr-2” /> Edit campaign
+                              <Edit className="h-4 w-4 mr-2" /> Edit campaign
                             </DropdownMenuItem>
                             {(campaign.failed_count > 0 || status === 'failed') && (
                               <DropdownMenuItem disabled={listActionCampaignId === campaign.id} onClick={() => handleRetryFailedByCampaignId(campaign.id)}>
-                                {listActionCampaignId === campaign.id ? <Loader2 className=”h-4 w-4 mr-2 animate-spin” /> : <RotateCcw className=”h-4 w-4 mr-2” />}
+                                {listActionCampaignId === campaign.id ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
                                 Retry failed
                               </DropdownMenuItem>
                             )}
                             {status === 'paused' && (
                               <DropdownMenuItem disabled={listActionCampaignId === campaign.id} onClick={() => handleResumeCampaignById(campaign.id)}>
-                                {listActionCampaignId === campaign.id ? <Loader2 className=”h-4 w-4 mr-2 animate-spin” /> : <Play className=”h-4 w-4 mr-2” />}
+                                {listActionCampaignId === campaign.id ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
                                 Resume
                               </DropdownMenuItem>
                             )}
                             {status === 'sending' && (
                               <DropdownMenuItem disabled={listActionCampaignId === campaign.id} onClick={() => handleSendPendingNowByCampaignId(campaign.id)}>
-                                {listActionCampaignId === campaign.id ? <Loader2 className=”h-4 w-4 mr-2 animate-spin” /> : <Send className=”h-4 w-4 mr-2” />}
+                                {listActionCampaignId === campaign.id ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
                                 Send pending now
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem disabled={cloningFromTemplate} onClick={() => handleDuplicateCampaign(campaign)}>
-                              {cloningFromTemplate ? <Loader2 className=”h-4 w-4 mr-2 animate-spin” /> : <Copy className=”h-4 w-4 mr-2” />}
+                              {cloningFromTemplate ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Copy className="h-4 w-4 mr-2" />}
                               Duplicate
                             </DropdownMenuItem>
-                            <DropdownMenuItem className=”text-destructive focus:text-destructive” onClick={() => setCampaignToDelete(campaign.id)}>
-                              <Trash2 className=”h-4 w-4 mr-2” /> Delete
+                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setCampaignToDelete(campaign.id)}>
+                              <Trash2 className="h-4 w-4 mr-2" /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -2875,13 +2875,13 @@ export default function Campaigns() {
                 {selectedCampaignData.auto_follow_up_enabled && selectedCampaignData.follow_up_sequence_id && (
                   <p className="text-sm text-muted-foreground">
                     Follow-up sequence: <strong>{followUpSequences.find(s => s.id === selectedCampaignData.follow_up_sequence_id)?.name ?? 'Selected sequence'}</strong>
-                    — Recipients are (or will be) enrolled for reminder steps when they don’t reply.
+                    — Recipients are (or will be) enrolled for reminder steps when they don't reply.
                   </p>
                 )}
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     {selectedCampaignData.auto_follow_up_enabled && selectedCampaignData.follow_up_sequence_id
-                      ? 'Add any sent recipients who weren’t enrolled yet (e.g. sent before follow-up was enabled).'
+                      ? 'Add any sent recipients who weren't enrolled yet (e.g. sent before follow-up was enabled).'
                       : 'Enroll this campaign\'s sent recipients in a follow-up sequence so they get reminder emails (no-reply rules). One enrollment per company.'}
                   </p>
                   <p className="text-xs text-muted-foreground">
