@@ -2881,8 +2881,8 @@ export default function Campaigns() {
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
                     {selectedCampaignData.auto_follow_up_enabled && selectedCampaignData.follow_up_sequence_id
-                      ? 'Add any sent recipients who weren't enrolled yet (e.g. sent before follow-up was enabled).'
-                      : 'Enroll this campaign\'s sent recipients in a follow-up sequence so they get reminder emails (no-reply rules). One enrollment per company.'}
+                      ? "Add any sent recipients who weren't enrolled yet (e.g. sent before follow-up was enabled)."
+                      : "Enroll this campaign's sent recipients in a follow-up sequence so they get reminder emails (no-reply rules). One enrollment per company."}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     To automatically resend to those who opened but didn't click: choose segment <strong>Opened, no click</strong> when enrolling. The sequence's behavioral automation runs hourly and sends the next step after the wait period.
