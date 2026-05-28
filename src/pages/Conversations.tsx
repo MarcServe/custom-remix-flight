@@ -170,24 +170,37 @@ export default function Conversations() {
       const rows = Array.isArray(data) ? data : [];
       // Normalize emails for consistent grouping (DB may store mixed case)
       const norm = (e: string) => (e || '').trim().toLowerCase();
-      // Group by thread_id or (from_email, to_email) pair
+      // Build a canonical pair key that is the same regardless of send direction,
+      // so the outbound campaign email and the inbound reply group together.
+      const pairKey = (a: string, b: string) => [norm(a), norm(b)].sort().join('|');
+
       const grouped = rows.reduce((acc: any[], thread: any) => {
         const tFrom = norm(thread?.from_email);
         const tTo = norm(thread?.to_email);
+        const threadPairKey = pairKey(tFrom, tTo);
+
         const existingConv = acc.find((c: any) =>
-          (thread?.thread_id && c.thread_id === thread.thread_id) ||
-          (norm(c.to_email) === tTo && norm(c.from_email) === tFrom)
+          // 1. Match by thread_id (most reliable — email headers set this)
+          (thread?.thread_id && c.thread_id && c.thread_id === thread.thread_id) ||
+          // 2. Match by bidirectional email pair (outbound A→B groups with inbound B→A)
+          (c._pairKey && c._pairKey === threadPairKey)
         );
 
         if (existingConv) {
           existingConv.threads.push(thread);
+          // Keep the most recent activity timestamp
+          if (new Date(thread.received_at) > new Date(existingConv.lastActivity)) {
+            existingConv.lastActivity = thread.received_at;
+          }
         } else {
           const isToResend = tTo.includes('resend.app');
-          const title = isToResend ? (thread?.from_email || thread?.to_email) : (thread?.to_email || thread?.from_email);
+          // Show the external party's email as the title (not your own sending address)
+          const externalEmail = isToResend ? tFrom : (thread.direction === 'outbound' ? tTo : tFrom);
           acc.push({
             id: thread?.thread_id || thread?.id,
             thread_id: thread?.thread_id,
-            title: title || 'Unknown',
+            _pairKey: threadPairKey,
+            title: externalEmail || 'Unknown',
             subject: thread?.subject,
             to_email: thread?.to_email,
             from_email: thread?.from_email,
