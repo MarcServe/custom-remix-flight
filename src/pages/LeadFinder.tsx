@@ -1363,29 +1363,7 @@ export default function LeadFinder() {
               setSelectedCompany(company);
               setDialogOpen(true);
             }}>
-                    {/* Hover Quick Actions */}
-                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
-                      <Button variant="secondary" size="sm" className="h-7 px-2 text-xs shadow-sm" onClick={e => {
-                  e.stopPropagation();
-                  setCurrentCompanyIndex(idx);
-                  setSelectedCompany(company);
-                  setDialogOpen(true);
-                }}>
-                        <Eye className="h-3 w-3 mr-1" />
-                        View
-                      </Button>
-                      {company.primaryContact?.email && <Button variant="secondary" size="sm" className="h-7 px-2 text-xs shadow-sm" onClick={e => handleCopyEmail(company.primaryContact.email, e)}>
-                          <Copy className="h-3 w-3 mr-1" />
-                          Email
-                        </Button>}
-                      {filteredAndSortedResults.dryRun && <Button variant="secondary" size="sm" className="h-7 px-2 text-xs shadow-sm" onClick={e => {
-                  e.stopPropagation();
-                  toggleCompanySelection(idx);
-                }}>
-                          <Database className="h-3 w-3 mr-1" />
-                          Add
-                        </Button>}
-                    </div>
+{/* Hover Quick Actions — moved into flex layout; no longer absolute to avoid overlapping email/phone row */}
 
                     <div className="flex flex-col h-full gap-3">
                       {/* Header with checkbox and icon */}
@@ -1452,21 +1430,61 @@ export default function LeadFinder() {
                                 </div>
                               )}
                             </div>
-                            {/* Enrichment/Contact completion badges */}
-                            {company.wasEnriched && <Badge variant="outline" className="shrink-0 h-5 text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-                                ✓ Enriched
-                              </Badge>}
-                            {company.contactCount > 0 && <Badge variant="outline" className="shrink-0 h-5 text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
-                                {company.contactCount} contact{company.contactCount > 1 ? 's' : ''}
-                              </Badge>}
-                            {company.generalEmail && <Badge variant="outline" className="shrink-0 h-5 text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-                                <Mail className="h-3 w-3 mr-1" />
-                                Email
-                              </Badge>}
-                            {company.companyPhone && <Badge variant="outline" className="shrink-0 h-5 text-xs bg-blue-500/10 text-blue-600 border-blue-500/20">
-                                <Phone className="h-3 w-3 mr-1" />
-                                Phone
-                              </Badge>}
+                            {/* Right column — action buttons (hover) stacked above status badges */}
+                            <div className="shrink-0 flex flex-col items-end gap-1.5">
+                              {/* Action buttons — visible on card hover, no absolute overlap */}
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button variant="secondary" size="sm" className="h-7 px-2 text-xs shadow-sm" onClick={e => {
+                                  e.stopPropagation();
+                                  setCurrentCompanyIndex(idx);
+                                  setSelectedCompany(company);
+                                  setDialogOpen(true);
+                                }}>
+                                  <Eye className="h-3 w-3 mr-1" />
+                                  View
+                                </Button>
+                                {company.primaryContact?.email && (
+                                  <Button variant="secondary" size="sm" className="h-7 px-2 text-xs shadow-sm" onClick={e => handleCopyEmail(company.primaryContact.email, e)}>
+                                    <Copy className="h-3 w-3 mr-1" />
+                                    Email
+                                  </Button>
+                                )}
+                                {filteredAndSortedResults.dryRun && (
+                                  <Button variant="secondary" size="sm" className="h-7 px-2 text-xs shadow-sm" onClick={e => {
+                                    e.stopPropagation();
+                                    toggleCompanySelection(idx);
+                                  }}>
+                                    <Database className="h-3 w-3 mr-1" />
+                                    Add
+                                  </Button>
+                                )}
+                              </div>
+                              {/* Status badges — always visible */}
+                              <div className="flex flex-wrap justify-end gap-1">
+                                {company.wasEnriched && (
+                                  <Badge variant="outline" className="h-5 text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                                    ✓ Enriched
+                                  </Badge>
+                                )}
+                                {company.contactCount > 0 && (
+                                  <Badge variant="outline" className="h-5 text-xs bg-cyan-500/10 text-cyan-600 border-cyan-500/20">
+                                    {company.contactCount} contact{company.contactCount > 1 ? 's' : ''}
+                                  </Badge>
+                                )}
+                                {company.generalEmail && (
+                                  <Badge variant="outline" className="h-5 text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                                    <Mail className="h-3 w-3 mr-1" />
+                                    Email
+                                  </Badge>
+                                )}
+                                {company.companyPhone && (
+                                  <Badge variant="outline" className="h-5 text-xs bg-blue-500/10 text-blue-600 border-blue-500/20">
+                                    <Phone className="h-3 w-3 mr-1" />
+                                    Phone
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
