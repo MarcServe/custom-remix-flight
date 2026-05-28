@@ -1485,15 +1485,24 @@ export default function LeadFinder() {
                         {(company.products || company.recentNews || company.fundingInfo) && <div className="space-y-1 pt-1">
                             {company.products && <div className="text-xs">
                                 <span className="font-medium text-foreground">Products:</span>{" "}
-                                <span className="text-muted-foreground line-clamp-1">{company.products}</span>
+                                <span className="text-muted-foreground line-clamp-1">{typeof company.products === 'object' ? JSON.stringify(company.products) : String(company.products)}</span>
                               </div>}
                             {company.recentNews && <div className="text-xs">
                                 <span className="font-medium text-foreground">News:</span>{" "}
-                                <span className="text-muted-foreground line-clamp-1">{company.recentNews}</span>
+                                <span className="text-muted-foreground line-clamp-1">{typeof company.recentNews === 'object' ? JSON.stringify(company.recentNews) : String(company.recentNews)}</span>
                               </div>}
                             {company.fundingInfo && <div className="text-xs">
                                 <span className="font-medium text-foreground">Funding:</span>{" "}
-                                <span className="text-muted-foreground line-clamp-1">{company.fundingInfo}</span>
+                                <span className="text-muted-foreground line-clamp-1">
+                                  {typeof company.fundingInfo === 'object'
+                                    ? [
+                                        company.fundingInfo.totalFunding && `Total: ${company.fundingInfo.totalFunding}`,
+                                        company.fundingInfo.valuation && `Val: ${company.fundingInfo.valuation}`,
+                                        company.fundingInfo.recentRounds && `Rounds: ${company.fundingInfo.recentRounds}`,
+                                        company.fundingInfo.investors && `Investors: ${Array.isArray(company.fundingInfo.investors) ? company.fundingInfo.investors.join(', ') : company.fundingInfo.investors}`,
+                                      ].filter(Boolean).join(' · ') || JSON.stringify(company.fundingInfo)
+                                    : String(company.fundingInfo)}
+                                </span>
                               </div>}
                           </div>}
 
