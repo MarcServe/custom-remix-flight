@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, User, Info, Sparkles, Mail, ChevronDown, ChevronLeft, ChevronRight, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical, ExternalLink, Edit2, Upload, ImagePlus, Trash2, FileType } from "lucide-react";
+import { Loader2, Send, User, Users, Info, Sparkles, Mail, ChevronDown, ChevronLeft, ChevronRight, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical, ExternalLink, Edit2, Upload, ImagePlus, Trash2, FileType } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUpdateSequence } from "@/hooks/use-sequences";
@@ -4685,64 +4685,55 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-col gap-3 border-t bg-muted/30 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6 sm:pb-6">
+        <div className="flex shrink-0 flex-col gap-2.5 border-t bg-background/95 backdrop-blur-sm px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:pb-4">
+          {/* Left: test email */}
           <Button
-            variant="outline"
+            variant="ghost"
+            size="sm"
             onClick={() => setTestEmailDialogOpen(true)}
             disabled={sending || !canSendOrTestContent || !senderConnectionId}
-            className="min-h-11 w-full shrink-0 border-primary/50 hover:bg-primary/10 sm:min-h-10 sm:w-auto"
+            className="w-full sm:w-auto justify-start sm:justify-center text-muted-foreground hover:text-foreground border border-dashed hover:border-solid hover:bg-muted/50"
           >
-            <Mail className="h-4 w-4 mr-2 shrink-0" />
-            <span className="text-left">
-              Send Test Email
+            <Mail className="h-3.5 w-3.5 mr-1.5 shrink-0" />
+            <span className="text-xs">
+              Send Test
               {(!canSendOrTestContent || !senderConnectionId) && (
-                <span className="ml-2 text-xs text-muted-foreground">(Fill subject & body or import a data file)</span>
+                <span className="ml-1 opacity-60">(fill fields first)</span>
               )}
             </span>
           </Button>
 
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-nowrap sm:gap-3 sm:justify-end">
+          {/* Right: cancel + save draft + send */}
+          <div className="flex w-full gap-2 sm:w-auto sm:flex-nowrap sm:gap-2 sm:justify-end">
             <Button
-              variant="outline"
+              variant="ghost"
+              size="sm"
               onClick={() => onOpenChange(false)}
               disabled={sending}
-              className="min-h-11 w-full sm:min-h-10 sm:w-auto"
+              className="flex-1 sm:flex-none text-xs"
             >
               Cancel
             </Button>
             <Button
               variant="outline"
+              size="sm"
               onClick={handleSaveDraft}
               disabled={savingDraft || sending || !campaignName.trim()}
-              className="min-h-11 w-full sm:min-h-10 sm:w-auto"
+              className="flex-1 sm:flex-none text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
             >
-              {savingDraft ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Draft
-                </>
-              )}
+              {savingDraft ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              {savingDraft ? "Saving…" : "Save Draft"}
             </Button>
             <Button
+              size="sm"
               onClick={handleSend}
               disabled={sending || !campaignName.trim() || !canSendOrTestContent || !senderConnectionId}
-              className="min-h-11 w-full sm:min-h-10 sm:w-auto"
+              className="flex-1 sm:flex-none gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm font-semibold"
             >
               {sending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Sending...
-                </>
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" />Sending…</>
               ) : (
-                <>
-                  <Send className="h-4 w-4 mr-2" />
-                  Send Campaign
-                </>
+                <><Send className="h-3.5 w-3.5" />{scheduleEnabled ? "Schedule" : "Send Campaign"}</>
               )}
             </Button>
           </div>
@@ -4983,10 +4974,28 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             "sm:top-[50%] sm:max-h-[min(90vh,100dvh)] sm:-translate-y-1/2",
           )}
         >
-          <DialogHeader className="shrink-0 space-y-1.5 px-4 pb-2 pt-6 text-left sm:px-6">
-            <DialogTitle>Send Bulk Email</DialogTitle>
-            <DialogDescription className="space-y-1">{recipientSummaryBlock}</DialogDescription>
-          </DialogHeader>
+          {/* Modern gradient header */}
+          <div className="shrink-0 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-4 pt-5 pb-4 sm:px-6 border-b">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary shadow">
+                  <Mail className="h-4 w-4 text-primary-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <DialogTitle className="text-base font-semibold leading-tight">
+                    {draftId ? "Edit Campaign" : "New Email Campaign"}
+                  </DialogTitle>
+                  <div className="text-xs text-muted-foreground mt-0.5">{recipientSummaryBlock}</div>
+                </div>
+              </div>
+              {recipientsToUse.length > 0 && (
+                <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary">
+                  <Users className="h-3 w-3" />
+                  {recipientsToUse.length}
+                </span>
+              )}
+            </div>
+          </div>
           {bulkEmailMainColumn}
         </DialogContent>
       </Dialog>

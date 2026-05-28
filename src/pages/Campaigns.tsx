@@ -384,31 +384,20 @@ export default function Campaigns() {
   }, [campaignSendHistory]);
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-      draft: "secondary",
-      scheduled: "outline",
-      sending: "default",
-      paused: "outline",
-      completed: "default",
-      failed: "destructive",
+    const cfg: Record<string, { icon: React.ElementType; cls: string; label: string }> = {
+      draft:     { icon: Clock,        cls: "bg-zinc-100 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-600",         label: "Draft" },
+      scheduled: { icon: CalendarClock,cls: "bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-700", label: "Scheduled" },
+      sending:   { icon: Send,         cls: "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-700 animate-pulse", label: "Sending" },
+      paused:    { icon: Pause,        cls: "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700",       label: "Paused" },
+      completed: { icon: CheckCircle,  cls: "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700", label: "Completed" },
+      failed:    { icon: XCircle,      cls: "bg-red-100 text-red-700 border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-700",                  label: "Failed" },
     };
-
-    const icons = {
-      draft: Clock,
-      scheduled: Clock,
-      sending: Send,
-      paused: Pause,
-      completed: CheckCircle,
-      failed: XCircle,
-    };
-
-    const Icon = icons[status as keyof typeof icons] || Mail;
-
+    const { icon: Icon, cls, label } = cfg[status?.toLowerCase()] ?? { icon: Mail, cls: "bg-muted text-muted-foreground border-border", label: status };
     return (
-      <Badge variant={variants[status] || "secondary"}>
-        <Icon className="h-3 w-3 mr-1" />
-        {status}
-      </Badge>
+      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${cls}`}>
+        <Icon className="h-3 w-3 shrink-0" />
+        {label}
+      </span>
     );
   };
 
@@ -1712,57 +1701,43 @@ export default function Campaigns() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 max-w-7xl min-w-0">
-      <div className="mb-6">
+      {/* Page header */}
+      <div className="mb-6 rounded-2xl border bg-gradient-to-br from-background via-muted/30 to-primary/5 px-5 py-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3 min-w-0">
-            <div className="w-12 h-12 shrink-0 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
-              <Mail className="h-6 w-6 text-white" />
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary shadow-md">
+              <Mail className="h-6 w-6 text-primary-foreground" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold truncate">Campaigns Hub</h1>
-              <p className="text-sm text-muted-foreground">
-                Manage your email and phone campaigns, monitor health, and optimize performance.
-              </p>
-              <p className="mt-2 text-sm">
-                <Link
-                  to="/campaigns/import-email"
-                  className="font-medium text-primary underline-offset-2 hover:underline"
-                >
-                  Personalized emails (import / per-recipient)
-                </Link>
-                <span className="text-muted-foreground">
-                  {" "}
-                  — import a file or generate a different subject and body for each person (not the same as &quot;New email
-                  campaign&quot;).
-                </span>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Campaign Hub</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Email &amp; phone campaigns · health monitoring · A/B testing
               </p>
             </div>
           </div>
-          <div className="flex w-full max-w-full flex-wrap gap-2 sm:w-auto sm:max-w-none sm:justify-end">
-            <Button onClick={openNewEmailCampaign} className="gap-2">
-              <Mail className="h-4 w-4 shrink-0" />
+          <div className="flex flex-wrap gap-2 sm:justify-end">
+            <Button onClick={openNewEmailCampaign} className="gap-2 shadow-sm">
               <Plus className="h-4 w-4 shrink-0" />
-              <span className="truncate">New email campaign</span>
+              <Mail className="h-4 w-4 shrink-0" />
+              <span className="truncate">New Campaign</span>
             </Button>
             <Button variant="secondary" onClick={() => navigate("/campaigns/import-email")} className="gap-2 shrink-0">
               <FileText className="h-4 w-4 shrink-0" />
-              <span className="truncate">Per-recipient import</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              onClick={() => setPhoneServiceDialogOpen(true)} 
-              className="gap-2"
-            >
-              <Settings className="h-4 w-4 shrink-0" />
-              <span className="truncate">Phone Services</span>
+              <span className="truncate">Per-recipient</span>
             </Button>
             <Button variant="outline" onClick={() => setPhoneCampaignDialogOpen(true)} className="gap-2">
               <Phone className="h-4 w-4 shrink-0" />
-              <Plus className="h-4 w-4 shrink-0" />
               <span className="truncate">Phone Campaign</span>
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setPhoneServiceDialogOpen(true)} title="Phone Services">
+              <Settings className="h-4 w-4" />
             </Button>
           </div>
         </div>
+        <p className="mt-3 text-xs text-muted-foreground border-t pt-3">
+          <Link to="/campaigns/import-email" className="font-medium text-primary hover:underline underline-offset-2">Per-recipient import</Link>
+          {" "}— different subject and body per person. Import CSV, Excel, JSON, or PDF, or use AI to generate personalized content.
+        </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setSearchParams({ tab: value })}>
@@ -1808,15 +1783,40 @@ export default function Campaigns() {
 
         <TabsContent value="overview" className="space-y-6">
 
+      {/* KPI stats strip */}
+      {campaigns && campaigns.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Total", value: campaigns.length, icon: Mail, color: "text-primary", bg: "bg-primary/10" },
+            { label: "Active", value: campaigns.filter(c => ['sending','paused','scheduled'].includes(c.status?.toLowerCase())).length, icon: Send, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-950/30" },
+            { label: "Completed", value: campaigns.filter(c => c.status?.toLowerCase() === 'completed').length, icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/30" },
+            { label: "Drafts", value: campaigns.filter(c => c.status?.toLowerCase() === 'draft').length, icon: FileText, color: "text-zinc-500", bg: "bg-zinc-50 dark:bg-zinc-800/50" },
+          ].map(({ label, value, icon: Icon, color, bg }) => (
+            <div key={label} className={`flex items-center gap-3 rounded-xl border p-3 sm:p-4 ${bg}`}>
+              <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-background shadow-sm shrink-0`}>
+                <Icon className={`h-4 w-4 ${color}`} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className="text-xl font-bold tabular-nums">{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {!campaigns || campaigns.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Mail className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No campaigns yet</h3>
-            <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
-              Start here with a data file or PDF (per-recipient subject and body), or add contacts from the People or Companies
-              pages. You do not need CRM contacts to compose.
-            </p>
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+              <Mail className="h-8 w-8 text-primary" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-lg font-semibold">No campaigns yet</h3>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                Start with a data file or add contacts from People or Companies. No CRM contacts needed.
+              </p>
+            </div>
             <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2">
               <Button onClick={openNewEmailCampaign} className="gap-2">
                 <Mail className="h-4 w-4" />
@@ -1825,27 +1825,26 @@ export default function Campaigns() {
               </Button>
               <Button variant="secondary" onClick={() => navigate("/campaigns/import-email")} className="gap-2">
                 <FileText className="h-4 w-4" />
-                Per-recipient import (full page)
+                Per-recipient import
               </Button>
             </div>
           </CardContent>
         </Card>
       ) : (
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-3">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <CardTitle>All Campaigns</CardTitle>
-                <CardDescription>View performance and manage your campaigns. Paused and sending campaigns appear first.</CardDescription>
+                <CardTitle className="text-base">All Campaigns</CardTitle>
+                <CardDescription className="text-xs mt-0.5">Active and paused appear first. Click View Details for full analytics.</CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                <Label htmlFor="overview-status-filter" className="text-sm text-muted-foreground whitespace-nowrap">Status</Label>
                 <Select value={overviewStatusFilter} onValueChange={setOverviewStatusFilter}>
-                  <SelectTrigger id="overview-status-filter" className="w-[140px]">
+                  <SelectTrigger id="overview-status-filter" className="w-[140px] h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="all">All statuses</SelectItem>
                     <SelectItem value="paused">Paused</SelectItem>
                     <SelectItem value="sending">Sending</SelectItem>
                     <SelectItem value="scheduled">Scheduled</SelectItem>
@@ -1857,177 +1856,160 @@ export default function Campaigns() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="p-0 sm:p-6">
-            <div className="overflow-x-auto">
-            <Table className="min-w-[700px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Campaign Name</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Scheduled</TableHead>
-                  <TableHead>Recipients</TableHead>
-                  <TableHead>Progress</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {overviewCampaigns.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      {overviewStatusFilter === "all" ? "No campaigns yet." : `No campaigns with status "${overviewStatusFilter}". Try "All" or another status.`}
-                    </TableCell>
-                  </TableRow>
-                ) : overviewCampaigns.map((campaign) => {
+          <CardContent className=”p-0”>
+            {overviewCampaigns.length === 0 ? (
+              <div className=”text-center py-10 text-muted-foreground text-sm”>
+                {overviewStatusFilter === “all” ? “No campaigns yet.” : `No “${overviewStatusFilter}” campaigns. Try changing the filter.`}
+              </div>
+            ) : (
+              <div className=”divide-y”>
+                {overviewCampaigns.map((campaign) => {
                   const progress = campaign.total_recipients > 0
-                    ? (campaign.sent_count / campaign.total_recipients) * 100
+                    ? Math.min(100, (campaign.sent_count / campaign.total_recipients) * 100)
+                    : 0;
+                  const openRate = campaign.sent_count > 0
+                    ? Math.round((campaign.opened_count / campaign.sent_count) * 100)
                     : 0;
                   const isScheduled = campaign.status?.toLowerCase() === 'scheduled' && campaign.scheduled_at;
+                  const status = campaign.status?.toLowerCase() ?? '';
 
                   return (
-                    <TableRow key={campaign.id}>
-                      <TableCell className="font-medium">{campaign.name}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {getStatusBadge(campaign.status)}
-                          {campaign.status?.toLowerCase() === "draft" && (campaign.sent_count ?? 0) > 0 && (
-                            <Badge variant="outline" className="text-amber-800 border-amber-300 bg-amber-50 dark:bg-amber-950/30">
-                              Partially sent
-                            </Badge>
-                          )}
-                          {campaign.status?.toLowerCase() === "completed" &&
-                            (campaign.total_recipients ?? 0) > 0 &&
-                            (campaign.sent_count ?? 0) < (campaign.total_recipients ?? 0) && (
-                              <Badge variant="outline" className="text-muted-foreground font-normal">
-                                List not fully sent
-                              </Badge>
+                    <div
+                      key={campaign.id}
+                      className=”group flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors”
+                    >
+                      {/* Left: name + status + tags */}
+                      <div className=”flex items-start gap-3 flex-1 min-w-0”>
+                        {/* Status dot accent */}
+                        <div className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                          status === 'sending' ? 'bg-blue-500 animate-pulse' :
+                          status === 'paused' ? 'bg-amber-500' :
+                          status === 'scheduled' ? 'bg-violet-500' :
+                          status === 'completed' ? 'bg-emerald-500' :
+                          status === 'failed' ? 'bg-red-500' :
+                          'bg-zinc-400'
+                        }`} />
+                        <div className=”min-w-0 flex-1”>
+                          <div className=”flex flex-wrap items-center gap-2”>
+                            <span className=”font-medium text-sm truncate”>{campaign.name}</span>
+                            {getStatusBadge(campaign.status)}
+                            {status === 'draft' && (campaign.sent_count ?? 0) > 0 && (
+                              <span className=”text-[10px] px-1.5 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300”>Partial</span>
                             )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                        {isScheduled ? format(new Date(campaign.scheduled_at!), 'PPp') : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                          {campaign.total_recipients}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-2 min-w-[200px]">
-                          <div className="flex justify-between text-xs">
-                            <span>
-                              {campaign.sent_count} sent
-                              {campaign.opened_count > 0 && `, ${campaign.opened_count} opened`}
-                            </span>
-                            <span>{Math.round(progress)}%</span>
+                            {campaign.ab_test_enabled && (
+                              <span className=”text-[10px] px-1.5 py-0.5 rounded-full border bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-950/30 dark:text-purple-300”>A/B</span>
+                            )}
                           </div>
-                          <Progress value={progress} className="h-2" />
-                          {campaign.failed_count > 0 && (
-                            <p className="text-xs text-destructive">
-                              {campaign.failed_count} failed
-                            </p>
-                          )}
-                          {campaign.status?.toLowerCase() === "completed" &&
-                            (campaign.total_recipients ?? 0) > 0 &&
-                            (campaign.sent_count ?? 0) < (campaign.total_recipients ?? 0) && (
-                              <p className="text-xs text-muted-foreground">
-                                “Completed” means no pending recipients left; the bar compares sent to total on the campaign.
-                              </p>
+                          <div className=”flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1”>
+                            <span className=”text-xs text-muted-foreground flex items-center gap-1”>
+                              <Users className=”h-3 w-3” />
+                              {campaign.total_recipients ?? 0} recipients
+                            </span>
+                            {campaign.sent_count > 0 && (
+                              <span className=”text-xs text-muted-foreground”>
+                                {campaign.sent_count} sent
+                              </span>
                             )}
+                            {openRate > 0 && (
+                              <span className=”text-xs text-emerald-600 dark:text-emerald-400 font-medium”>
+                                {openRate}% open
+                              </span>
+                            )}
+                            {campaign.failed_count > 0 && (
+                              <span className=”text-xs text-red-500”>
+                                {campaign.failed_count} failed
+                              </span>
+                            )}
+                            {isScheduled && (
+                              <span className=”text-xs text-violet-600 dark:text-violet-400 flex items-center gap-1”>
+                                <CalendarClock className=”h-3 w-3” />
+                                {format(new Date(campaign.scheduled_at!), 'MMM d, HH:mm')}
+                              </span>
+                            )}
+                            <span className=”text-xs text-muted-foreground/70”>
+                              {format(new Date(campaign.created_at), 'MMM d, yyyy')}
+                            </span>
+                          </div>
+                          {/* Progress bar */}
+                          {campaign.total_recipients > 0 && (status === 'sending' || status === 'paused' || status === 'completed' || progress > 0) && (
+                            <div className=”mt-2 flex items-center gap-2”>
+                              <div className=”h-1.5 flex-1 rounded-full bg-muted overflow-hidden max-w-[200px]”>
+                                <div
+                                  className={`h-full rounded-full transition-all ${status === 'completed' ? 'bg-emerald-500' : status === 'sending' ? 'bg-blue-500' : 'bg-amber-500'}`}
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+                              <span className=”text-[10px] text-muted-foreground tabular-nums”>{Math.round(progress)}%</span>
+                            </div>
+                          )}
                         </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {format(new Date(campaign.created_at), 'MMM d, yyyy')}
-                      </TableCell>
-                      <TableCell>
+                      </div>
+                      {/* Right: actions */}
+                      <div className=”flex items-center gap-1.5 shrink-0 ml-5 sm:ml-0”>
+                        <Button
+                          variant=”ghost”
+                          size=”sm”
+                          className=”h-8 px-2 text-xs gap-1.5 hover:bg-primary/10 hover:text-primary”
+                          onClick={() => setSelectedCampaign(campaign.id)}
+                        >
+                          <Eye className=”h-3.5 w-3.5” />
+                          <span className=”hidden sm:inline”>Details</span>
+                        </Button>
+                        <Button
+                          variant=”ghost”
+                          size=”sm”
+                          className=”h-8 px-2 text-xs gap-1.5 hover:bg-muted”
+                          onClick={() => { setDraftToEdit(campaign.id); setBulkEmailDialogOpen(true); }}
+                        >
+                          <Edit className=”h-3.5 w-3.5” />
+                          <span className=”hidden sm:inline”>Edit</span>
+                        </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
+                            <Button variant=”ghost” size=”sm” className=”h-8 w-8 p-0 hover:bg-muted”>
+                              <svg xmlns=”http://www.w3.org/2000/svg” width=”14” height=”14” viewBox=”0 0 24 24” fill=”none” stroke=”currentColor” strokeWidth=”2” strokeLinecap=”round” strokeLinejoin=”round”><circle cx=”12” cy=”5” r=”1”/><circle cx=”12” cy=”12” r=”1”/><circle cx=”12” cy=”19” r=”1”/></svg>
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align=”end” className=”w-48”>
                             <DropdownMenuItem onClick={() => setSelectedCampaign(campaign.id)}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
+                              <Eye className=”h-4 w-4 mr-2” /> View details
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setDraftToEdit(campaign.id);
-                                setBulkEmailDialogOpen(true);
-                              }}
-                            >
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit campaign
+                            <DropdownMenuItem onClick={() => { setDraftToEdit(campaign.id); setBulkEmailDialogOpen(true); }}>
+                              <Edit className=”h-4 w-4 mr-2” /> Edit campaign
                             </DropdownMenuItem>
-                            {(campaign.failed_count > 0 || (campaign.status?.toLowerCase?.() ?? '') === 'failed') && (
-                              <DropdownMenuItem
-                                disabled={listActionCampaignId === campaign.id}
-                                onClick={() => handleRetryFailedByCampaignId(campaign.id)}
-                              >
-                                {listActionCampaignId === campaign.id ? (
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                  <RotateCcw className="h-4 w-4 mr-2" />
-                                )}
+                            {(campaign.failed_count > 0 || status === 'failed') && (
+                              <DropdownMenuItem disabled={listActionCampaignId === campaign.id} onClick={() => handleRetryFailedByCampaignId(campaign.id)}>
+                                {listActionCampaignId === campaign.id ? <Loader2 className=”h-4 w-4 mr-2 animate-spin” /> : <RotateCcw className=”h-4 w-4 mr-2” />}
                                 Retry failed
                               </DropdownMenuItem>
                             )}
-                            {(campaign.status?.toLowerCase?.() ?? '') === 'paused' && (
-                              <DropdownMenuItem
-                                disabled={listActionCampaignId === campaign.id}
-                                onClick={() => handleResumeCampaignById(campaign.id)}
-                              >
-                                {listActionCampaignId === campaign.id ? (
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                  <Play className="h-4 w-4 mr-2" />
-                                )}
+                            {status === 'paused' && (
+                              <DropdownMenuItem disabled={listActionCampaignId === campaign.id} onClick={() => handleResumeCampaignById(campaign.id)}>
+                                {listActionCampaignId === campaign.id ? <Loader2 className=”h-4 w-4 mr-2 animate-spin” /> : <Play className=”h-4 w-4 mr-2” />}
                                 Resume
                               </DropdownMenuItem>
                             )}
-                            {(campaign.status?.toLowerCase?.() ?? '') === 'sending' && (
-                              <DropdownMenuItem
-                                disabled={listActionCampaignId === campaign.id}
-                                onClick={() => handleSendPendingNowByCampaignId(campaign.id)}
-                              >
-                                {listActionCampaignId === campaign.id ? (
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                  <Send className="h-4 w-4 mr-2" />
-                                )}
+                            {status === 'sending' && (
+                              <DropdownMenuItem disabled={listActionCampaignId === campaign.id} onClick={() => handleSendPendingNowByCampaignId(campaign.id)}>
+                                {listActionCampaignId === campaign.id ? <Loader2 className=”h-4 w-4 mr-2 animate-spin” /> : <Send className=”h-4 w-4 mr-2” />}
                                 Send pending now
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem
-                              disabled={cloningFromTemplate}
-                              onClick={() => handleDuplicateCampaign(campaign)}
-                            >
-                              {cloningFromTemplate ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              ) : (
-                                <Copy className="h-4 w-4 mr-2" />
-                              )}
+                            <DropdownMenuItem disabled={cloningFromTemplate} onClick={() => handleDuplicateCampaign(campaign)}>
+                              {cloningFromTemplate ? <Loader2 className=”h-4 w-4 mr-2 animate-spin” /> : <Copy className=”h-4 w-4 mr-2” />}
                               Duplicate
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => setCampaignToDelete(campaign.id)}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete campaign
+                            <DropdownMenuItem className=”text-destructive focus:text-destructive” onClick={() => setCampaignToDelete(campaign.id)}>
+                              <Trash2 className=”h-4 w-4 mr-2” /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                    </div>
                   );
                 })}
-              </TableBody>
-            </Table>
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
