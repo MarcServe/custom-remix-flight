@@ -1772,7 +1772,7 @@ export default function Companies() {
 
   const BULK_EMAIL_QUERY_BATCH = 200;
 
-  const openBulkEmailForCompanyIds = async (companyIds: string[]) => {
+  const openBulkEmailForCompanyIds = async (companyIds: string[], mode: 'open' | 'add' | 'replace' = 'open') => {
     if (companyIds.length === 0) return;
     const loadingToast =
       companyIds.length > BULK_EMAIL_QUERY_BATCH
@@ -1978,7 +1978,11 @@ export default function Companies() {
           variant: "default",
         });
       }
-      openWithPeople(dedupedPeople as any);
+      if (mode === 'add') {
+        addPeople(dedupedPeople as any);
+      } else {
+        openWithPeople(dedupedPeople as any);
+      }
       if (loadingToast) loadingToast.dismiss();
     } catch (error: any) {
       if (loadingToast) loadingToast.dismiss();
@@ -2888,50 +2892,60 @@ export default function Companies() {
                           Create group ({companiesWithEmail.length})
                         </Button>
                       )}
-                      {/* When opened from draft/campaign: prioritize Add/Replace to campaign */}
-                      {openedFromDraft ? (
+                      {/* When campaign dialog is open (context) or opened as popup: prioritize Add/Replace */}
+                      {(bulkEmailDialogOpen || openedFromDraft) ? (
                         <>
                           <Button
                             variant="default"
                             size="sm"
                             onClick={() => {
-                              try {
-                                if (companiesWithEmail.length === 0) return;
-                                const companyIds = companiesWithEmail.map(c => c.id);
-                                localStorage.removeItem('leadboosters_draft_recipients');
-                                localStorage.removeItem('leadboosters_selected_people_ids');
-                                sessionStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
-                                window.opener?.postMessage?.(
-                                  { type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" },
-                                  window.location.origin
-                                );
-                                toast({ title: "Added to campaign", description: "Return to the campaign tab to see the updated recipient list." });
-                              } catch {
-                                toast({ title: "Could not reach campaign tab", variant: "destructive" });
+                              if (companiesWithEmail.length === 0) return;
+                              const companyIds = companiesWithEmail.map(c => c.id);
+                              if (bulkEmailDialogOpen) {
+                                // Direct context integration — no popup/postMessage needed
+                                openBulkEmailForCompanyIds(companyIds, 'add');
+                              } else {
+                                try {
+                                  localStorage.removeItem('leadboosters_draft_recipients');
+                                  localStorage.removeItem('leadboosters_selected_people_ids');
+                                  sessionStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
+                                  window.opener?.postMessage?.(
+                                    { type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" },
+                                    window.location.origin
+                                  );
+                                  toast({ title: "Added to campaign", description: "Return to the campaign tab to see the updated recipient list." });
+                                } catch {
+                                  toast({ title: "Could not reach campaign tab", variant: "destructive" });
+                                }
                               }
                             }}
                             disabled={companiesWithEmail.length === 0}
                           >
                             <Plus className="h-4 w-4 mr-1" />
-                            Add to campaign
+                            Add to campaign ({companiesWithEmail.length})
                           </Button>
                           <Button
                             variant="default"
                             size="sm"
                             onClick={() => {
-                              try {
-                                if (companiesWithEmail.length === 0) return;
-                                const companyIds = companiesWithEmail.map(c => c.id);
-                                localStorage.removeItem('leadboosters_draft_recipients');
-                                localStorage.removeItem('leadboosters_selected_people_ids');
-                                sessionStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
-                                window.opener?.postMessage?.(
-                                  { type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" },
-                                  window.location.origin
-                                );
-                                toast({ title: "Campaign list replaced", description: "Return to the campaign tab to see the updated recipient list." });
-                              } catch {
-                                toast({ title: "Could not reach campaign tab", variant: "destructive" });
+                              if (companiesWithEmail.length === 0) return;
+                              const companyIds = companiesWithEmail.map(c => c.id);
+                              if (bulkEmailDialogOpen) {
+                                // Direct context integration — replaces recipient list
+                                openBulkEmailForCompanyIds(companyIds, 'replace');
+                              } else {
+                                try {
+                                  localStorage.removeItem('leadboosters_draft_recipients');
+                                  localStorage.removeItem('leadboosters_selected_people_ids');
+                                  sessionStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
+                                  window.opener?.postMessage?.(
+                                    { type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" },
+                                    window.location.origin
+                                  );
+                                  toast({ title: "Campaign list replaced", description: "Return to the campaign tab to see the updated recipient list." });
+                                } catch {
+                                  toast({ title: "Could not reach campaign tab", variant: "destructive" });
+                                }
                               }
                             }}
                             disabled={companiesWithEmail.length === 0}

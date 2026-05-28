@@ -872,12 +872,13 @@ export default function People() {
   const selectableOnPage = paginatedPeople?.filter(p => p.email) || [];
 
   const toggleSelectAll = () => {
-    const onPage = selectableOnPage.map(p => p.id);
-    const allOnPageSelected = onPage.length > 0 && onPage.every(id => selectedPeopleIds.has(id));
-    if (allOnPageSelected) {
-      setSelectedPeopleIds(prev => { const next = new Set(prev); onPage.forEach(id => next.delete(id)); return next; });
+    // Select/deselect ALL filtered people (not just the current page)
+    const allIds = selectablePeople.map(p => p.id);
+    const allSelected = allIds.length > 0 && allIds.every(id => selectedPeopleIds.has(id));
+    if (allSelected) {
+      setSelectedPeopleIds(prev => { const next = new Set(prev); allIds.forEach(id => next.delete(id)); return next; });
     } else {
-      setSelectedPeopleIds(prev => { const next = new Set(prev); selectableOnPage.forEach(p => next.add(p.id)); return next; });
+      setSelectedPeopleIds(prev => { const next = new Set(prev); selectablePeople.forEach(p => next.add(p.id)); return next; });
     }
   };
 
@@ -1239,11 +1240,13 @@ export default function People() {
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="select-all"
-                    checked={selectedPeopleIds.size === selectablePeople.length && selectablePeople.length > 0}
+                    checked={selectablePeople.length > 0 && selectablePeople.every(p => selectedPeopleIds.has(p.id))}
                     onCheckedChange={toggleSelectAll}
                   />
                   <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                    Select all
+                    {selectablePeople.length > 0 && selectablePeople.every(p => selectedPeopleIds.has(p.id))
+                      ? `Deselect all (${selectablePeople.length})`
+                      : `Select all (${selectablePeople.length})`}
                   </label>
                 </div>
                 <div className="flex items-center gap-2">

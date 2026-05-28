@@ -115,15 +115,24 @@ export default function RecipientGroups() {
     queryFn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return [];
-      const { data, error } = await supabase
-        .from("people")
-        .select("id, first_name, last_name, email, companies(name)")
-        .eq("user_id", u.user.id)
-        .not("email", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(10000);
-      if (error) throw error;
-      return (data || []) as PeopleRow[];
+      // Paginate to bypass Supabase's 1000-row default limit
+      const all: PeopleRow[] = [];
+      const PAGE = 1000;
+      let page = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("people")
+          .select("id, first_name, last_name, email, companies(name)")
+          .eq("user_id", u.user.id)
+          .not("email", "is", null)
+          .order("created_at", { ascending: false })
+          .range(page * PAGE, (page + 1) * PAGE - 1);
+        if (error) throw error;
+        if (data?.length) all.push(...(data as PeopleRow[]));
+        if (!data || data.length < PAGE) break;
+        page++;
+      }
+      return all;
     },
   });
 
@@ -133,14 +142,23 @@ export default function RecipientGroups() {
     queryFn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return [];
-      const { data, error } = await supabase
-        .from("companies")
-        .select("id, name, general_email, contacts(email, name)")
-        .eq("user_id", u.user.id)
-        .order("created_at", { ascending: false })
-        .limit(10000);
-      if (error) throw error;
-      return (data || []) as CompanyRow[];
+      // Paginate to bypass Supabase's 1000-row default limit
+      const all: CompanyRow[] = [];
+      const PAGE = 1000;
+      let page = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("companies")
+          .select("id, name, general_email, contacts(email, name)")
+          .eq("user_id", u.user.id)
+          .order("created_at", { ascending: false })
+          .range(page * PAGE, (page + 1) * PAGE - 1);
+        if (error) throw error;
+        if (data?.length) all.push(...(data as CompanyRow[]));
+        if (!data || data.length < PAGE) break;
+        page++;
+      }
+      return all;
     },
   });
 
@@ -558,14 +576,28 @@ export default function RecipientGroups() {
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>
                     {filteredPeople.length} shown · {selectedPeopleIds.size} selected
+                    {selectedPeopleIds.size > 0 && filteredPeople.length !== peoplePickList.length && (
+                      <> · {peoplePickList.length} total</>
+                    )}
                   </span>
-                  <button
-                    type="button"
-                    className="text-primary hover:underline"
-                    onClick={() => setSelectedPeopleIds(new Set(filteredPeople.map((p) => p.id)))}
-                  >
-                    Select visible
-                  </button>
+                  <div className="flex gap-3">
+                    {selectedPeopleIds.size > 0 && (
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:underline"
+                        onClick={() => setSelectedPeopleIds(new Set())}
+                      >
+                        Deselect all
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="text-primary hover:underline font-medium"
+                      onClick={() => setSelectedPeopleIds(new Set(peoplePickList.map((p) => p.id)))}
+                    >
+                      Select all ({peoplePickList.length})
+                    </button>
+                  </div>
                 </div>
                 <div className="max-h-52 overflow-y-auto rounded-md border p-2 space-y-1">
                   {loadingPeoplePick ? (
@@ -611,15 +643,29 @@ export default function RecipientGroups() {
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>
-                    {filteredCompanies.length} with email · {selectedCompanyIds.size} selected
+                    {filteredCompanies.length} shown · {selectedCompanyIds.size} selected
+                    {selectedCompanyIds.size > 0 && filteredCompanies.length !== companiesWithEmail.length && (
+                      <> · {companiesWithEmail.length} total</>
+                    )}
                   </span>
-                  <button
-                    type="button"
-                    className="text-primary hover:underline"
-                    onClick={() => setSelectedCompanyIds(new Set(filteredCompanies.map((c) => c.id)))}
-                  >
-                    Select visible
-                  </button>
+                  <div className="flex gap-3">
+                    {selectedCompanyIds.size > 0 && (
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:underline"
+                        onClick={() => setSelectedCompanyIds(new Set())}
+                      >
+                        Deselect all
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="text-primary hover:underline font-medium"
+                      onClick={() => setSelectedCompanyIds(new Set(companiesWithEmail.map((c) => c.id)))}
+                    >
+                      Select all ({companiesWithEmail.length})
+                    </button>
+                  </div>
                 </div>
                 <div className="max-h-52 overflow-y-auto rounded-md border p-2 space-y-1">
                   {loadingCompaniesPick ? (

@@ -99,6 +99,7 @@ export default function NewsletterSeries() {
   );
   const [senderProfileId, setSenderProfileId] = useState<string>("");
   const [pausingId, setPausingId] = useState<string | null>(null);
+  const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
   const [runningCronCheck, setRunningCronCheck] = useState(false);
   const [reviewBeforeSend, setReviewBeforeSend] = useState(false);
   // Quick-add subscriber state
@@ -226,6 +227,30 @@ export default function NewsletterSeries() {
     return Object.keys(opts).length ? opts : null;
   };
 
+  const openEditSeries = (series: Series) => {
+    setEditingSeriesId(series.id);
+    setName(series.name);
+    setDurationDays(series.duration_days);
+    setSendTime(series.send_time);
+    setTimezone(series.timezone);
+    setStartDate(series.start_date);
+    setAiTopicTemplate(series.ai_topic_template || "Daily tip for our subscribers. Day {day} of {total}. Share something valuable and actionable.");
+    setAiTone(series.ai_tone || "professional");
+    setAiTargetAudience(series.ai_target_audience || "subscribers and leads");
+    setHeaderImageUrlsText(Array.isArray(series.header_image_urls) ? series.header_image_urls.join("\n") : "");
+    setTemplateStylesText(Array.isArray(series.template_styles) ? series.template_styles.join("\n") : "professional\nmodern\nminimal\ncreative");
+    setSenderProfileId(series.sender_profile_id || "");
+    const opts = series.scheduled_send_options as any;
+    setReviewBeforeSend(!!(opts?.reviewBeforeSend));
+    // Restore send targets from opts
+    const targets: string[] = [];
+    if (opts?.categoryFilters?.length) opts.categoryFilters.forEach((c: string) => targets.push(`cat:${c}`));
+    if (opts?.recipientGroupIds?.length) opts.recipientGroupIds.forEach((g: string) => targets.push(`group:${g}`));
+    if (opts?.industryFilter?.length) opts.industryFilter.forEach((i: string) => targets.push(`industry:${encodeURIComponent(i)}`));
+    setSendTargets(targets.length ? targets : []);
+    setShowCreate(true);
+  };
+
   const handleCreate = async () => {
     if (!user || !name.trim() || !startDate.trim()) {
       toast({ title: "Required", description: "Name and start date are required.", variant: "destructive" });
@@ -236,7 +261,8 @@ export default function NewsletterSeries() {
       return;
     }
     const todayStr = new Date().toISOString().slice(0, 10);
-    if (startDate < todayStr) {
+    // Allow past start dates when editing (the series already started)
+    if (!editingSeriesId && startDate < todayStr) {
       toast({ title: "Invalid date", description: "Start date must be today or in the future.", variant: "destructive" });
       return;
     }
@@ -250,25 +276,32 @@ export default function NewsletterSeries() {
         .split(/[\n,]+/)
         .map((s) => s.trim().toLowerCase())
         .filter((s) => VALID_TEMPLATE_STYLE_KEYS.has(s as EmailTemplateStyle));
-      const { error } = await supabase.from("newsletter_series").insert({
-        user_id: user.id,
+      const seriesPayload = {
         name: name.trim(),
         duration_days: durationDays,
         send_time: sendTime.trim() || "09:00",
         timezone: timezone.trim() || "Europe/London",
         scheduled_send_options: buildScheduledSendOptions(),
         start_date: startDate,
-        status: "active",
         ai_topic_template: aiTopicTemplate.trim() || null,
         ai_tone: aiTone || "professional",
         ai_target_audience: aiTargetAudience.trim() || "",
         header_image_urls: headerImageUrls.length ? headerImageUrls : null,
         template_styles: templateStyles.length ? templateStyles : null,
         sender_profile_id: senderProfileId.trim() || null,
-      });
-      if (error) throw error;
+      };
+      if (editingSeriesId) {
+        // Update existing series
+        const { error } = await supabase.from("newsletter_series").update({ ...seriesPayload, updated_at: new Date().toISOString() }).eq("id", editingSeriesId);
+        if (error) throw error;
+      } else {
+        // Insert new series
+        const { error } = await supabase.from("newsletter_series").insert({ user_id: user.id, ...seriesPayload, status: "active" });
+        if (error) throw error;
+      }
       queryClient.invalidateQueries({ queryKey: ["newsletter-series"] });
       setShowCreate(false);
+      setEditingSeriesId(null);
       setName("");
       setStartDate("");
       setSenderProfileId("");
@@ -277,8 +310,10 @@ export default function NewsletterSeries() {
       setQuickAddName("");
       setSendTargets([]);
       toast({
-        title: "Series created",
-        description: `"${name}" will run daily at ${sendTime} (${timezone}) for ${durationDays} days. Each edition uses a rotating template style and fresh AI content. Server cron (every 15 min) creates and sends after your send time.`,
+        title: editingSeriesId ? "Series updated" : "Series created",
+        description: editingSeriesId
+          ? `"${name}" settings saved. Changes will apply to the next edition.`
+          : `"${name}" will run daily at ${sendTime} (${timezone}) for ${durationDays} days. Each edition uses a rotating template style and fresh AI content. Server cron (every 15 min) creates and sends after your send time.`,
       });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -502,7 +537,10 @@ export default function NewsletterSeries() {
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                          <Button variant="outline" size="sm" onClick={() => openEditSeries(s)}>
+                            <Pencil className="h-3.5 w-3.5 mr-1" />Edit series
+                          </Button>
                           {s.status === "active" && (
                             <Button variant="outline" size="sm" onClick={() => handlePauseResume(s)} disabled={pausingId === s.id}>
                               {pausingId === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pause className="h-3.5 w-3.5" />} Pause
@@ -588,12 +626,14 @@ export default function NewsletterSeries() {
         </Card>
       </div>
 
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+      <Dialog open={showCreate} onOpenChange={(v) => { setShowCreate(v); if (!v) setEditingSeriesId(null); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
           <DialogHeader>
-            <DialogTitle>Create newsletter series</DialogTitle>
+            <DialogTitle>{editingSeriesId ? "Edit newsletter series" : "Create newsletter series"}</DialogTitle>
             <DialogDescription>
-              The app cron runs every 15 minutes. When it is past your send time and no edition exists for that calendar day, we generate HTML with AI (varied content + design hints), create a newsletter row, and trigger send immediately—no People/Companies step.
+              {editingSeriesId
+                ? "Update this series's settings. Changes apply to the next edition — existing sent editions are not affected."
+                : "The app cron runs every 15 minutes. When it is past your send time and no edition exists for that calendar day, we generate HTML with AI (varied content + design hints), create a newsletter row, and trigger send immediately—no People/Companies step."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -839,9 +879,11 @@ export default function NewsletterSeries() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowCreate(false); setEditingSeriesId(null); }}>Cancel</Button>
             <Button onClick={handleCreate} disabled={creating || !name.trim() || !startDate}>
-              {creating ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Creating...</> : <><CheckCircle2 className="h-4 w-4 mr-1.5" />Create series</>}
+              {creating
+                ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />{editingSeriesId ? "Saving..." : "Creating..."}</>
+                : <><CheckCircle2 className="h-4 w-4 mr-1.5" />{editingSeriesId ? "Save changes" : "Create series"}</>}
             </Button>
           </DialogFooter>
         </DialogContent>

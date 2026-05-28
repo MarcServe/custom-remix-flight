@@ -1889,11 +1889,15 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
               )
             );
 
-          const { error: recipientsError } = await supabase
-            .from('email_campaign_recipients')
-            .insert(recipients);
-
-          if (recipientsError) throw recipientsError;
+          // Batch inserts in chunks of 500 to avoid payload limits
+          const INSERT_CHUNK = 500;
+          for (let i = 0; i < recipients.length; i += INSERT_CHUNK) {
+            const chunk = recipients.slice(i, i + INSERT_CHUNK);
+            const { error: recipientsError } = await supabase
+              .from('email_campaign_recipients')
+              .insert(chunk);
+            if (recipientsError) throw recipientsError;
+          }
 
           toast({
             title: "Draft updated",
@@ -1962,11 +1966,15 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             )
           );
 
-        const { error: recipientsError } = await supabase
-          .from('email_campaign_recipients')
-          .insert(recipients);
-
-        if (recipientsError) throw recipientsError;
+        // Batch inserts in chunks of 500 to avoid payload limits
+        const INSERT_CHUNK_NEW = 500;
+        for (let i = 0; i < recipients.length; i += INSERT_CHUNK_NEW) {
+          const chunk = recipients.slice(i, i + INSERT_CHUNK_NEW);
+          const { error: recipientsError } = await supabase
+            .from('email_campaign_recipients')
+            .insert(chunk);
+          if (recipientsError) throw recipientsError;
+        }
 
         toast({
           title: "Draft saved",
@@ -2175,15 +2183,28 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       let newRecipients: Array<{ id: string; first_name: string; last_name: string; email: string; company_id?: string; companies?: any }> = [];
 
       // Load ALL recipient rows for this campaign (no status filter) so we never show 0 when rows exist.
-      // Some rows may have been stored with null/different status or added from Campaign Details.
-      const { data: recipientRows, error: recError } = await supabase
-        .from('email_campaign_recipients')
-        .select('id, person_id, email, name, personalized_subject, personalized_body_html, personalized_body_text')
-        .eq('campaign_id', draft.id);
+      // Supabase returns at most 1000 rows per request, so we paginate to get all recipients.
+      let recipientRows: any[] = [];
+      let recError: any = null;
+      {
+        const PAGE = 1000;
+        let page = 0;
+        while (true) {
+          const { data, error } = await supabase
+            .from('email_campaign_recipients')
+            .select('id, person_id, email, name, personalized_subject, personalized_body_html, personalized_body_text')
+            .eq('campaign_id', draft.id)
+            .range(page * PAGE, (page + 1) * PAGE - 1);
+          if (error) { recError = error; break; }
+          if (data && data.length > 0) recipientRows.push(...data);
+          if (!data || data.length < PAGE) break; // last page
+          page++;
+        }
+      }
 
       if (recError) {
         console.error('Error loading recipients:', recError);
-      } else if ((draft.total_recipients ?? 0) > 0 && (!recipientRows || recipientRows.length === 0)) {
+      } else if ((draft.total_recipients ?? 0) > 0 && recipientRows.length === 0) {
         console.warn('[BulkEmailDialog] Campaign has total_recipients =', draft.total_recipients, 'but email_campaign_recipients returned 0 rows for campaign_id', draft.id, '- possible RLS or data mismatch');
       }
       const emailsFromDb: Record<string, { subject: string; bodyHtml: string; bodyText: string }> = {};
@@ -2191,11 +2212,16 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         const personIds = [...new Set((recipientRows as any[]).map((r: any) => r.person_id).filter(Boolean))];
         let peopleMap: Record<string, any> = {};
         if (personIds.length > 0) {
-          const { data: peopleData } = await supabase
-            .from('people')
-            .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
-            .in('id', personIds);
-          if (peopleData) peopleData.forEach((p: any) => { peopleMap[p.id] = p; });
+          // Batch the people lookup to handle >1000 person IDs
+          const PEOPLE_BATCH = 500;
+          for (let i = 0; i < personIds.length; i += PEOPLE_BATCH) {
+            const batch = personIds.slice(i, i + PEOPLE_BATCH);
+            const { data: peopleData } = await supabase
+              .from('people')
+              .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
+              .in('id', batch);
+            if (peopleData) peopleData.forEach((p: any) => { peopleMap[p.id] = p; });
+          }
         }
         const seenKeys = new Set<string>();
         for (const r of recipientRows as any[]) {
