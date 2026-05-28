@@ -531,10 +531,8 @@ export default function Enrichment() {
   const enrichedCount = filteredItems.filter(i => i.enrichment_status === 'enriched' || i.enrichment_status === 'ready_for_crm').length;
   const readyForCRMCount = filteredItems.filter(i => i.enrichment_status === 'ready_for_crm').length;
 
-  const canEnrich = selectedItems.size > 0 && Array.from(selectedItems).some(id => {
-    const item = filteredItems.find(i => i.id === id);
-    return item?.enrichment_status === 'pending' || item?.enrichment_status === 'failed';
-  });
+  // Allow enriching any selected item (pending, failed, or force re-enrich enriched)
+  const canEnrich = selectedItems.size > 0;
 
   const canExtractEmails = selectedItems.size > 0 && Array.from(selectedItems).some(id => {
     const item = filteredItems.find(i => i.id === id);
@@ -558,24 +556,44 @@ export default function Enrichment() {
             Enrich leads with Perplexity/Exa and extract emails before moving to CRM
           </p>
         </div>
-        {pendingCount > 0 && (
-          <Button
-            onClick={() => {
-              const pendingIds = filteredItems
-                .filter(i => i.enrichment_status === 'pending' || i.enrichment_status === 'failed')
-                .map(i => i.id);
-              enrichMutation.mutate(pendingIds);
-            }}
-            disabled={enrichMutation.isPending}
-            className="bg-primary text-white"
-          >
-            {enrichMutation.isPending ? (
-              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enriching…</>
-            ) : (
-              <><Zap className="h-4 w-4 mr-2" />Enrich All ({pendingCount})</>
-            )}
-          </Button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {pendingCount > 0 && (
+            <Button
+              onClick={() => {
+                const pendingIds = filteredItems
+                  .filter(i => i.enrichment_status === 'pending' || i.enrichment_status === 'failed')
+                  .map(i => i.id);
+                enrichMutation.mutate(pendingIds);
+              }}
+              disabled={enrichMutation.isPending}
+              className="bg-primary text-white"
+            >
+              {enrichMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enriching…</>
+              ) : (
+                <><Zap className="h-4 w-4 mr-2" />Enrich All ({pendingCount})</>
+              )}
+            </Button>
+          )}
+          {enrichedCount > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                const enrichedIds = filteredItems
+                  .filter(i => i.enrichment_status === 'enriched' || i.enrichment_status === 'ready_for_crm')
+                  .map(i => i.id);
+                moveToCRMMutation.mutate(enrichedIds);
+              }}
+              disabled={moveToCRMMutation.isPending}
+            >
+              {moveToCRMMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Moving…</>
+              ) : (
+                <><ArrowRight className="h-4 w-4 mr-2" />Move All Enriched to CRM ({enrichedCount})</>
+              )}
+            </Button>
+          )}
+        </div>
         <Button variant="outline" onClick={() => setImportFromCompaniesOpen(true)}>
           <Upload className="h-4 w-4 mr-2" />
           Import from Companies
@@ -1001,12 +1019,34 @@ export default function Enrichment() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Select All row */}
+          {filteredItems.length > 0 && (
+            <div className="mb-3 flex items-center gap-3">
+              <Checkbox
+                id="select-all-enrichment"
+                checked={selectedItems.size === filteredItems.length && filteredItems.length > 0}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    setSelectedItems(new Set(filteredItems.map(i => i.id)));
+                  } else {
+                    setSelectedItems(new Set());
+                  }
+                }}
+              />
+              <Label htmlFor="select-all-enrichment" className="text-sm cursor-pointer select-none">
+                {selectedItems.size === filteredItems.length && filteredItems.length > 0
+                  ? "Deselect all"
+                  : `Select all ${filteredItems.length}`}
+              </Label>
+            </div>
+          )}
+
           {selectedItems.size > 0 && (
-            <div className="mb-4 p-3 bg-muted rounded-lg flex items-center justify-between">
+            <div className="mb-4 p-3 bg-muted rounded-lg flex items-center justify-between flex-wrap gap-2">
               <span className="text-sm font-medium">
                 {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   size="sm"
                   variant="outline"
