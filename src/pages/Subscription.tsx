@@ -32,28 +32,41 @@ export default function Subscription() {
     try {
       setLoading(true);
       console.log('[SUBSCRIPTION] Creating checkout session...');
-      
-      const { data, error } = await supabase.functions.invoke('create-checkout');
-      
-      if (error) {
-        console.error('[SUBSCRIPTION] Error creating checkout:', error);
-        throw error;
+
+      // Use fetch directly so we can read the actual error body from the edge function
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        'https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/create-checkout',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtnbmRwd3pxb2hlcG90YWhuZmVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE4NDU1MzMsImV4cCI6MjA3NzQyMTUzM30.2bCLyRArq4uFd4eg9TjB2PYq3ewxKCQMcW6C-ZX_nf0',
+          },
+        }
+      );
+
+      const body = await res.json();
+      console.log('[SUBSCRIPTION] Response:', res.status, body);
+
+      if (!res.ok) {
+        throw new Error(body?.error || `HTTP ${res.status}`);
       }
-      
-      if (data?.url) {
-        console.log('[SUBSCRIPTION] Redirecting to checkout:', data.url);
-        window.open(data.url, '_blank');
+
+      if (body?.url) {
+        console.log('[SUBSCRIPTION] Redirecting to checkout:', body.url);
+        window.open(body.url, '_blank');
       } else {
         throw new Error('No checkout URL returned');
       }
     } catch (error: unknown) {
       console.error('[SUBSCRIPTION] Error:', error);
       const raw = error instanceof Error ? error.message : String(error);
-      // Provide actionable messages for common failures
       const msg = raw.includes('No such price')
-        ? 'Stripe price not found. Contact support.'
+        ? 'Stripe price not found — contact support.'
         : raw.includes('Invalid API Key') || raw.includes('No API key')
-        ? 'Stripe is misconfigured. Contact support.'
+        ? 'Stripe is misconfigured — contact support.'
         : raw;
       toast.error(`Checkout failed: ${msg}`);
     } finally {
