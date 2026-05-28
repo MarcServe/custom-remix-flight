@@ -55,6 +55,22 @@ serve(async (req) => {
       logStep("No existing customer found — will create on checkout");
     }
 
+    // Only offer trial to brand-new customers who have never had a subscription
+    let trialDays: number | undefined = TRIAL_DAYS;
+    if (customerId) {
+      const existingSubs = await stripe.subscriptions.list({
+        customer: customerId,
+        limit: 1,
+        status: "all", // includes canceled, past_due, etc.
+      });
+      if (existingSubs.data.length > 0) {
+        trialDays = undefined;
+        logStep("Returning subscriber — skipping trial", { customerId });
+      } else {
+        logStep("New customer — applying trial", { trialDays });
+      }
+    }
+
     const origin = req.headers.get("origin") || "https://leadgenie.bizboosters.co.uk";
 
     const session = await stripe.checkout.sessions.create({
@@ -63,7 +79,7 @@ serve(async (req) => {
       line_items: [{ price: PRICE_ID, quantity: 1 }],
       mode: "subscription",
       subscription_data: {
-        trial_period_days: TRIAL_DAYS,
+        ...(trialDays ? { trial_period_days: trialDays } : {}),
         metadata: { user_id: user.id },
       },
       success_url: `${origin}/subscription?success=true`,
