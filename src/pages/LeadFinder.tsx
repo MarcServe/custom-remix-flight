@@ -98,7 +98,7 @@ export default function LeadFinder() {
     defaultModels
   } = useProviderStore();
   const [providerConfig, setProviderConfig] = useState<{
-    provider: 'lovable' | 'openai' | 'perplexity';
+    provider: 'openai' | 'perplexity';
     model: string | undefined;
   }>({
     provider: 'openai',
@@ -940,13 +940,12 @@ export default function LeadFinder() {
                   <Label className="text-xs font-medium">Provider</Label>
                   <Select value={providerConfig.provider} onValueChange={(value: any) => setProviderConfig({
                   provider: value,
-                  model: value === 'lovable' ? 'google/gemini-2.5-flash' : value === 'perplexity' ? 'sonar' : 'gpt-4o-mini'
+                  model: value === 'perplexity' ? 'sonar' : 'gpt-4o-mini'
                 })}>
                     <SelectTrigger className="h-9 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="lovable">Lovable AI</SelectItem>
                       <SelectItem value="openai">OpenAI</SelectItem>
                       <SelectItem value="perplexity">Perplexity</SelectItem>
                     </SelectContent>
@@ -963,11 +962,6 @@ export default function LeadFinder() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {providerConfig.provider === 'lovable' && <>
-                          <SelectItem value="google/gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
-                          <SelectItem value="google/gemini-2.5-pro">Gemini 2.5 Pro</SelectItem>
-                          <SelectItem value="google/gemini-2.5-flash-lite">Gemini Flash Lite</SelectItem>
-                        </>}
                       {providerConfig.provider === 'openai' && <>
                           <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
                           <SelectItem value="gpt-4o">GPT-4o</SelectItem>

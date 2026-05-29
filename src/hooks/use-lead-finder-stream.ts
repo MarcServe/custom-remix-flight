@@ -77,7 +77,7 @@ interface SearchParams {
   industry: string;
   customSearchText?: string;
   dryRun?: boolean;
-  provider?: 'lovable' | 'openai' | 'perplexity';
+  provider?: 'openai' | 'perplexity';
   model?: string;
   enrichWithPerplexity?: boolean;
   useSerpApi?: boolean;
