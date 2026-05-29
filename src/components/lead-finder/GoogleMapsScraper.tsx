@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,19 +10,21 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { 
-  Search, 
-  MapPin, 
-  Building2, 
-  Loader2, 
-  CheckCircle, 
+import {
+  Search,
+  MapPin,
+  Building2,
+  Loader2,
+  CheckCircle,
   Mail,
   Phone,
   Globe,
   Inbox,
   Database,
   AlertCircle,
-  ArrowRightCircle
+  ArrowRightCircle,
+  Filter,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -44,6 +46,7 @@ interface ScrapedLead {
 }
 
 type ScraperStep = 'config' | 'scraping' | 'review';
+type ResultFilter = 'all' | 'has_email' | 'has_phone' | 'has_website';
 
 interface GoogleMapsScraperProps {
   onLeadsScraped?: (leads: ScrapedLead[]) => void;
@@ -66,6 +69,9 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
   const [scrapedLeads, setScrapedLeads] = useState<ScrapedLead[]>([]);
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
   
+  // Filter state
+  const [resultFilter, setResultFilter] = useState<ResultFilter>('all');
+
   // Import state
   const [isImporting, setIsImporting] = useState(false);
   const [isSendingToInbox, setIsSendingToInbox] = useState(false);
@@ -165,6 +171,26 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
 
   const deselectAll = () => {
     setSelectedLeads(new Set());
+  };
+
+  // Derived filtered list (indices into scrapedLeads)
+  const filteredIndices: number[] = scrapedLeads.reduce<number[]>((acc, lead, i) => {
+    if (resultFilter === 'has_email' && !lead.email) return acc;
+    if (resultFilter === 'has_phone' && !lead.phone) return acc;
+    if (resultFilter === 'has_website' && !lead.website) return acc;
+    acc.push(i);
+    return acc;
+  }, []);
+
+  const selectFiltered = () => {
+    setSelectedLeads(new Set(filteredIndices));
+  };
+
+  const filterCounts = {
+    all: scrapedLeads.length,
+    has_email: scrapedLeads.filter(l => l.email).length,
+    has_phone: scrapedLeads.filter(l => l.phone).length,
+    has_website: scrapedLeads.filter(l => l.website).length,
   };
 
   const handleAddToCRM = async () => {
@@ -506,11 +532,13 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
 
       {step === 'review' && (
         <div className="space-y-4">
+          {/* Header row */}
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-medium">Review Scraped Leads</h3>
               <p className="text-sm text-muted-foreground">
                 {selectedLeads.size} of {scrapedLeads.length} selected
+                {resultFilter !== 'all' && ` · showing ${filteredIndices.length} filtered`}
               </p>
             </div>
             <div className="flex gap-2">
@@ -523,9 +551,52 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
             </div>
           </div>
 
-          <ScrollArea className="h-[350px] pr-4">
+          {/* Filter chips */}
+          <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/40 rounded-lg border border-border/50">
+            <span className="flex items-center gap-1 text-xs text-muted-foreground font-medium mr-1">
+              <Filter className="h-3 w-3" /> Filter:
+            </span>
+            {([
+              { key: 'all', label: 'All' },
+              { key: 'has_email', label: 'Has Email', icon: <Mail className="h-3 w-3" /> },
+              { key: 'has_phone', label: 'Has Phone', icon: <Phone className="h-3 w-3" /> },
+              { key: 'has_website', label: 'Has Website', icon: <Globe className="h-3 w-3" /> },
+            ] as { key: ResultFilter; label: string; icon?: React.ReactNode }[]).map(f => (
+              <button
+                key={f.key}
+                onClick={() => setResultFilter(f.key)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
+                  resultFilter === f.key
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+                }`}
+              >
+                {f.icon}
+                {f.label}
+                <span className={`ml-0.5 px-1 rounded-full text-[10px] ${
+                  resultFilter === f.key ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted'
+                }`}>
+                  {filterCounts[f.key]}
+                </span>
+              </button>
+            ))}
+            {resultFilter !== 'all' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs ml-auto text-primary"
+                onClick={selectFiltered}
+              >
+                Select filtered ({filteredIndices.length})
+              </Button>
+            )}
+          </div>
+
+          <ScrollArea className="h-[320px] pr-4">
             <div className="space-y-2">
-              {scrapedLeads.map((lead, index) => (
+              {filteredIndices.map(index => {
+                const lead = scrapedLeads[index];
+                return (
                 <Card
                   key={index}
                   className={`p-3 cursor-pointer transition-colors ${
@@ -575,7 +646,14 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
                     </div>
                   </div>
                 </Card>
-              ))}
+                );
+              })}
+              {filteredIndices.length === 0 && (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  <X className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                  No results match this filter
+                </div>
+              )}
             </div>
           </ScrollArea>
 
