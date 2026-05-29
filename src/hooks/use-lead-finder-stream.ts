@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { leadFinderStorage } from '@/lib/utils/lead-finder-storage';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, SUPABASE_URL } from '@/integrations/supabase/client';
 
 interface Lead {
   name: string;
@@ -483,7 +483,7 @@ export const useLeadFinderStream = () => {
     });
 
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseUrl = SUPABASE_URL;
       
       // Get the current session token
       const { supabase } = await import('@/integrations/supabase/client');
