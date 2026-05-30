@@ -1352,7 +1352,7 @@ Deno.serve(async (req) => {
       }
       const exaIncludeDomains = isPublicSectorSearch
         ? undefined
-        : ["linkedin.com", "crunchbase.com"];
+        : undefined; // Search all domains for broader coverage; LinkedIn/Crunchbase restriction was causing 0 results
 
       // Target this many leads total; we have 4 Exa queries (6 for public sector) so request numResults per query to reach target (capped at 50 per query)
       const targetLeads = typeof maxResults === 'number' && maxResults > 0 ? Math.min(200, Math.max(10, maxResults)) : 50;
