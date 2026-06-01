@@ -388,7 +388,6 @@ serve(async (req) => {
               status: 'sent',
               sent_at: sentAt,
               external_message_id: messageIds[idx] ?? null,
-              email_period: 'new',
             })),
             { onConflict: 'id' }
           );
@@ -416,7 +415,6 @@ serve(async (req) => {
               status: 'sent',
               sent_at: sentAt,
               external_message_id: messageIds[j] ?? null,
-              email_period: 'new',
               metadata: {
                 campaign_id: campaignId,
                 provider: 'resend',
@@ -514,7 +512,7 @@ serve(async (req) => {
           const sentAt = new Date().toISOString();
 
           await supabaseClient.from('email_campaign_recipients').update({
-            status: 'sent', sent_at: sentAt, external_message_id: messageId, email_period: 'new',
+            status: 'sent', sent_at: sentAt, external_message_id: messageId,
           }).eq('id', recipient.id);
 
           const variantSent = recipient.ab_variant === 'A' || recipient.ab_variant === 'B' ? recipient.ab_variant : null;
@@ -527,7 +525,7 @@ serve(async (req) => {
           await supabaseClient.from('email_activities').insert({
             contact_id: recipient.person_id, step_number: 0,
             subject: recipient.personalized_subject, body: recipient.personalized_body_text,
-            status: 'sent', sent_at: sentAt, external_message_id: messageId, email_period: 'new',
+            status: 'sent', sent_at: sentAt, external_message_id: messageId,
             metadata: {
               campaign_id: campaignId, provider: 'gmail',
               sending_method: optimalConnection.sending_method,
@@ -668,7 +666,7 @@ serve(async (req) => {
 
           const sentAt = new Date().toISOString();
           await supabaseClient.from('email_campaign_recipients').update({
-            status: 'sent', sent_at: sentAt, external_message_id: messageId, email_period: 'new',
+            status: 'sent', sent_at: sentAt, external_message_id: messageId,
           }).eq('id', recipient.id);
 
           const variantSent = recipient.ab_variant === 'A' || recipient.ab_variant === 'B' ? recipient.ab_variant : null;
@@ -681,7 +679,7 @@ serve(async (req) => {
           await supabaseClient.from('email_activities').insert({
             contact_id: recipient.person_id, step_number: 0,
             subject: recipient.personalized_subject, body: recipient.personalized_body_text,
-            status: 'sent', sent_at: sentAt, external_message_id: messageId, email_period: 'new',
+            status: 'sent', sent_at: sentAt, external_message_id: messageId,
             metadata: {
               campaign_id: campaignId, provider: emailProvider,
               sending_method: optimalConnection.sending_method,
