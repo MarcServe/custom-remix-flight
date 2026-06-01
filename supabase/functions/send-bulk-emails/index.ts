@@ -352,53 +352,61 @@ serve(async (req) => {
         });
       }
 
-      console.log(`[Resend] Sending ${payloads.length} emails in batches of ${RESEND_BATCH_SIZE}`);
+      // Split into chunks of 100 (Resend batch API limit per call)
+      const chunks: typeof payloads[] = [];
+      for (let i = 0; i < payloads.length; i += RESEND_BATCH_SIZE) {
+        chunks.push(payloads.slice(i, i + RESEND_BATCH_SIZE));
+      }
+      console.log(`[Resend] Sending ${payloads.length} emails across ${chunks.length} parallel batch call(s)`);
       const sentAt = new Date().toISOString();
 
-      for (let i = 0; i < payloads.length; i += RESEND_BATCH_SIZE) {
-        const chunk = payloads.slice(i, i + RESEND_BATCH_SIZE);
-        const chunkNum = Math.floor(i / RESEND_BATCH_SIZE) + 1;
-        try {
-          const batchRes = await fetch('https://api.resend.com/emails/batch', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(chunk.map(c => c.email)),
-          });
-
-          if (!batchRes.ok) {
-            const errText = await batchRes.text();
-            const errMsg = parseResendError(batchRes.status, errText);
-            console.error(`[Resend] Chunk ${chunkNum} failed:`, errMsg);
-            const failUpdates = chunk.map(c => ({ id: c.recipientId, status: 'failed', error_message: errMsg }));
-            for (const u of failUpdates) {
-              await supabaseClient.from('email_campaign_recipients').update({ status: 'failed', error_message: u.error_message }).eq('id', u.id);
+      // ── Fire ALL chunks to Resend in parallel ──────────────────────────────
+      // Resend handles thousands/second; we're doing at most ~50 calls for 5000 emails.
+      const chunkResults = await Promise.all(
+        chunks.map(async (chunk, chunkIdx) => {
+          try {
+            const batchRes = await fetch('https://api.resend.com/emails/batch', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(chunk.map(c => c.email)),
+            });
+            if (!batchRes.ok) {
+              const errText = await batchRes.text();
+              const errMsg = parseResendError(batchRes.status, errText);
+              console.error(`[Resend] Chunk ${chunkIdx + 1} failed (${batchRes.status}):`, errMsg);
+              return { chunk, success: false as const, errMsg, messageIds: [] as (string | null)[] };
             }
-            failedCount += chunk.length;
-            continue;
+            const batchResult = await batchRes.json();
+            const messageIds: (string | null)[] = (batchResult.data || []).map((d: any) => d?.id ?? null);
+            console.log(`[Resend] Chunk ${chunkIdx + 1}: accepted ${chunk.length} email(s)`);
+            return { chunk, success: true as const, errMsg: null, messageIds };
+          } catch (err: any) {
+            console.error(`[Resend] Chunk ${chunkIdx + 1} exception:`, err);
+            return { chunk, success: false as const, errMsg: err.message ?? 'Send error', messageIds: [] as (string | null)[] };
           }
+        })
+      );
 
-          const batchResult = await batchRes.json();
-          // batchResult.data: Array<{ id: string }>
-          const messageIds: (string | null)[] = (batchResult.data || []).map((d: any) => d?.id ?? null);
+      // ── Consolidate results ────────────────────────────────────────────────
+      const successUpsertRows: any[] = [];
+      const activityRows: any[] = [];
+      const failedUpsertRows: any[] = [];
+      const recipientLookup = new Map(allPendingRecipients.map((r: any) => [r.id, r]));
 
-          // Bulk-update recipients (upsert on primary key)
-          await supabaseClient.from('email_campaign_recipients').upsert(
-            chunk.map((c, idx) => ({
-              id: c.recipientId,
-              status: 'sent',
-              sent_at: sentAt,
-              external_message_id: messageIds[idx] ?? null,
-            })),
-            { onConflict: 'id' }
-          );
-
-          // Record A/B history + bulk-insert activities
-          const activityRows = [];
-          for (let j = 0; j < chunk.length; j++) {
-            const item = chunk[j];
-            const rec = allPendingRecipients.find((r: any) => r.id === item.recipientId);
-            if (!rec) continue;
-
+      for (const result of chunkResults) {
+        if (!result.success) {
+          for (const c of result.chunk) {
+            failedUpsertRows.push({ id: c.recipientId, status: 'failed', error_message: result.errMsg });
+          }
+          failedCount += result.chunk.length;
+          continue;
+        }
+        for (let j = 0; j < result.chunk.length; j++) {
+          const item = result.chunk[j];
+          const msgId = result.messageIds[j] ?? null;
+          successUpsertRows.push({ id: item.recipientId, status: 'sent', sent_at: sentAt, external_message_id: msgId });
+          const rec = recipientLookup.get(item.recipientId);
+          if (rec) {
             // A/B history
             const variantSent = rec.ab_variant === 'A' || rec.ab_variant === 'B' ? rec.ab_variant : null;
             if (variantSent && campaign.ab_test_enabled) {
@@ -406,46 +414,49 @@ serve(async (req) => {
                 campaign_id: campaignId, recipient_id: rec.id, variant_sent: variantSent, sent_at: sentAt,
               });
             }
-
             activityRows.push({
-              contact_id: item.personId,
-              step_number: 0,
-              subject: rec.personalized_subject,
-              body: rec.personalized_body_text,
-              status: 'sent',
-              sent_at: sentAt,
-              external_message_id: messageIds[j] ?? null,
+              contact_id: item.personId, step_number: 0,
+              subject: rec.personalized_subject, body: rec.personalized_body_text,
+              status: 'sent', sent_at: sentAt, external_message_id: msgId,
               metadata: {
-                campaign_id: campaignId,
-                provider: 'resend',
+                campaign_id: campaignId, provider: 'resend',
                 sending_method: optimalConnection.sending_method,
                 tracking_enabled: optimalConnection.tracking_enabled,
                 can_track_opens: optimalConnection.capabilities?.opens || false,
                 can_track_clicks: optimalConnection.capabilities?.clicks || false,
                 can_track_replies: optimalConnection.capabilities?.replies || false,
-                recipient_email: rec.email,
-                recipient_name: rec.name,
+                recipient_email: rec.email, recipient_name: rec.name,
               },
             });
-
-            // Auto follow-up (fire and forget per recipient)
-            await enrollFollowUp(supabaseClient, rec, campaign, campaignId, sentAt, messageIds[j] ?? null);
           }
-
-          if (activityRows.length > 0) {
-            await supabaseClient.from('email_activities').insert(activityRows);
-          }
-
-          sentCount += chunk.length;
-          console.log(`[Resend] Chunk ${chunkNum}: sent ${chunk.length}  |  total so far: ${sentCount}`);
-        } catch (chunkErr: any) {
-          console.error(`[Resend] Chunk ${chunkNum} exception:`, chunkErr);
-          for (const c of chunk) {
-            await supabaseClient.from('email_campaign_recipients').update({ status: 'failed', error_message: chunkErr.message }).eq('id', c.recipientId);
-          }
-          failedCount += chunk.length;
         }
+        sentCount += result.chunk.length;
       }
+
+      // ── Single bulk DB write for all sent recipients (chunked at 500 rows) ─
+      const DB_CHUNK = 500;
+      for (let i = 0; i < successUpsertRows.length; i += DB_CHUNK) {
+        await supabaseClient.from('email_campaign_recipients')
+          .upsert(successUpsertRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
+      }
+      for (let i = 0; i < failedUpsertRows.length; i += DB_CHUNK) {
+        await supabaseClient.from('email_campaign_recipients')
+          .upsert(failedUpsertRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
+      }
+      // Bulk-insert activities
+      for (let i = 0; i < activityRows.length; i += DB_CHUNK) {
+        await supabaseClient.from('email_activities').insert(activityRows.slice(i, i + DB_CHUNK));
+      }
+
+      // Auto follow-up enrollments in parallel (non-fatal)
+      await Promise.allSettled(
+        successUpsertRows.map(row => {
+          const rec = recipientLookup.get(row.id);
+          return rec ? enrollFollowUp(supabaseClient, rec, campaign, campaignId, sentAt, row.external_message_id) : Promise.resolve();
+        })
+      );
+
+      console.log(`[Resend] Complete: ${sentCount} sent, ${failedCount} failed`);
 
     } else if (emailProvider === 'gmail') {
       // ═══════════════════════════════════════════════════════════════
