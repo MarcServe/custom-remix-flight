@@ -74,7 +74,7 @@ serve(async (req) => {
     const end = endDate ? new Date(endDate).getTime() : null;
     const allEmails: ResendEmail[] = [];
     let cursor: string | undefined;
-    const maxPages = 50;
+    const maxPages = 10; // 10 × 100 = 1 000 emails max — avoids rate-limiting the list endpoint
     let pages = 0;
 
     while (pages < maxPages) {
@@ -87,9 +87,16 @@ serve(async (req) => {
       if (!res.ok) {
         const text = await res.text();
         console.error('Resend list error:', res.status, text);
-        // Return 200 with a descriptive message so client can show it clearly
+        let userMessage: string;
+        if (res.status === 429) {
+          userMessage = 'Resend rate limit hit — please wait 30 seconds and try again.';
+        } else if (res.status === 401 || res.status === 403) {
+          userMessage = 'Resend API key invalid or expired. Re-add your RESEND_API_KEY in Supabase secrets.';
+        } else {
+          userMessage = `Resend API returned ${res.status}. Please try again shortly.`;
+        }
         return new Response(
-          JSON.stringify({ success: false, skipped: true, message: `Resend API returned ${res.status}. Check that your RESEND_API_KEY is valid.`, details: text }),
+          JSON.stringify({ success: false, skipped: true, message: userMessage }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
