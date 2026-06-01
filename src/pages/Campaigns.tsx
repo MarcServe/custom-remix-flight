@@ -1214,7 +1214,7 @@ export default function Campaigns() {
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
         queryClient.invalidateQueries({ queryKey: ['campaign-send-history'] }),
       ]);
-      toast.success('Next batch sent. Click again for more or open campaign for details.');
+      toast.success('Sending all pending now. Open the campaign for live status.');
     } catch (e: any) {
       toast.error(e?.message ?? 'Failed to send');
     } finally {
@@ -1346,7 +1346,7 @@ export default function Campaigns() {
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
         queryClient.invalidateQueries({ queryKey: ['campaign-send-history'] }),
       ]);
-      toast.success('Next batch sent (up to 50). Click again for more, or wait for the cron.');
+      toast.success('Sending all pending now. Resend/SendGrid sends everything at once; Gmail respects the 450/day limit.');
     } catch (e: any) {
       toast.error(e?.message ?? 'Failed to send');
     } finally {
