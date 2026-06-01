@@ -20,48 +20,131 @@ import { NangoSetupInstructions } from "./NangoSetupInstructions";
 import { EMAIL_PROVIDER_CONFIG } from "@/config/email-providers";
 
 // ── SMTP auto-detect lookup ───────────────────────────────────────────────────
-interface SmtpPreset { label: string; host: string; port: number; secure: boolean; note?: string }
+interface SmtpPreset { label: string; host: string; port: number; secure: boolean; note?: string; viaDetection?: string }
 
-const SMTP_PRESETS: Record<string, SmtpPreset> = {
-  // Google
-  'gmail.com':        { label: 'Gmail',                  host: 'smtp.gmail.com',        port: 587, secure: true,  note: 'Use an App Password (not your regular password).' },
-  'googlemail.com':   { label: 'Gmail',                  host: 'smtp.gmail.com',        port: 587, secure: true,  note: 'Use an App Password (not your regular password).' },
-  // Microsoft
-  'outlook.com':      { label: 'Outlook.com',            host: 'smtp.office365.com',    port: 587, secure: true  },
-  'hotmail.com':      { label: 'Hotmail',                host: 'smtp.office365.com',    port: 587, secure: true  },
-  'live.com':         { label: 'Microsoft Live',         host: 'smtp.office365.com',    port: 587, secure: true  },
-  'msn.com':          { label: 'MSN Mail',               host: 'smtp.office365.com',    port: 587, secure: true  },
+/** Known domain → SMTP preset (for consumer webmail) */
+const SMTP_DOMAIN_PRESETS: Record<string, SmtpPreset> = {
+  // Google consumer
+  'gmail.com':           { label: 'Gmail',                host: 'smtp.gmail.com',              port: 587, secure: true,  note: 'Use an App Password, not your regular password.' },
+  'googlemail.com':      { label: 'Gmail',                host: 'smtp.gmail.com',              port: 587, secure: true,  note: 'Use an App Password, not your regular password.' },
+  // Microsoft consumer
+  'outlook.com':         { label: 'Outlook.com',          host: 'smtp.office365.com',          port: 587, secure: true  },
+  'hotmail.com':         { label: 'Hotmail',              host: 'smtp.office365.com',          port: 587, secure: true  },
+  'live.com':            { label: 'Microsoft Live',       host: 'smtp.office365.com',          port: 587, secure: true  },
+  'live.co.uk':          { label: 'Microsoft Live',       host: 'smtp.office365.com',          port: 587, secure: true  },
+  'msn.com':             { label: 'MSN Mail',             host: 'smtp.office365.com',          port: 587, secure: true  },
   // Yahoo
-  'yahoo.com':        { label: 'Yahoo Mail',             host: 'smtp.mail.yahoo.com',   port: 587, secure: true,  note: 'Use an App Password from Yahoo account security.' },
-  'yahoo.co.uk':      { label: 'Yahoo Mail UK',          host: 'smtp.mail.yahoo.com',   port: 587, secure: true,  note: 'Use an App Password from Yahoo account security.' },
-  'ymail.com':        { label: 'Yahoo Mail',             host: 'smtp.mail.yahoo.com',   port: 587, secure: true  },
-  // Zoho
-  'zoho.com':         { label: 'Zoho Mail',              host: 'smtp.zoho.com',         port: 587, secure: true  },
-  'zohomail.com':     { label: 'Zoho Mail',              host: 'smtp.zoho.com',         port: 587, secure: true  },
+  'yahoo.com':           { label: 'Yahoo Mail',           host: 'smtp.mail.yahoo.com',         port: 587, secure: true,  note: 'Use an App Password from Yahoo account security.' },
+  'yahoo.co.uk':         { label: 'Yahoo Mail UK',        host: 'smtp.mail.yahoo.com',         port: 587, secure: true,  note: 'Use an App Password from Yahoo account security.' },
+  'yahoo.com.au':        { label: 'Yahoo Mail AU',        host: 'smtp.mail.yahoo.com',         port: 587, secure: true  },
+  'ymail.com':           { label: 'Yahoo Mail',           host: 'smtp.mail.yahoo.com',         port: 587, secure: true  },
+  // Zoho (consumer addresses)
+  'zoho.com':            { label: 'Zoho Mail',            host: 'smtp.zoho.com',               port: 587, secure: true  },
+  'zohomail.com':        { label: 'Zoho Mail',            host: 'smtp.zoho.com',               port: 587, secure: true  },
   // Apple
-  'icloud.com':       { label: 'iCloud Mail',            host: 'smtp.mail.me.com',      port: 587, secure: true,  note: 'Use an App-Specific Password from Apple ID settings.' },
-  'me.com':           { label: 'iCloud Mail',            host: 'smtp.mail.me.com',      port: 587, secure: true,  note: 'Use an App-Specific Password from Apple ID settings.' },
-  'mac.com':          { label: 'iCloud Mail',            host: 'smtp.mail.me.com',      port: 587, secure: true  },
+  'icloud.com':          { label: 'iCloud Mail',          host: 'smtp.mail.me.com',            port: 587, secure: true,  note: 'Use an App-Specific Password from Apple ID settings.' },
+  'me.com':              { label: 'iCloud Mail',          host: 'smtp.mail.me.com',            port: 587, secure: true,  note: 'Use an App-Specific Password from Apple ID settings.' },
+  'mac.com':             { label: 'iCloud Mail',          host: 'smtp.mail.me.com',            port: 587, secure: true  },
   // ProtonMail (Bridge required)
-  'proton.me':        { label: 'ProtonMail',             host: '127.0.0.1',             port: 1025, secure: false, note: 'Requires Proton Bridge running locally.' },
-  'protonmail.com':   { label: 'ProtonMail',             host: '127.0.0.1',             port: 1025, secure: false, note: 'Requires Proton Bridge running locally.' },
-  // FastMail
-  'fastmail.com':     { label: 'Fastmail',               host: 'smtp.fastmail.com',     port: 587, secure: true  },
-  'fastmail.fm':      { label: 'Fastmail',               host: 'smtp.fastmail.com',     port: 587, secure: true  },
+  'proton.me':           { label: 'ProtonMail',           host: '127.0.0.1',                   port: 1025, secure: false, note: 'Requires Proton Bridge running locally.' },
+  'protonmail.com':      { label: 'ProtonMail',           host: '127.0.0.1',                   port: 1025, secure: false, note: 'Requires Proton Bridge running locally.' },
+  'pm.me':               { label: 'ProtonMail',           host: '127.0.0.1',                   port: 1025, secure: false, note: 'Requires Proton Bridge running locally.' },
+  // Fastmail
+  'fastmail.com':        { label: 'Fastmail',             host: 'smtp.fastmail.com',           port: 587, secure: true  },
+  'fastmail.fm':         { label: 'Fastmail',             host: 'smtp.fastmail.com',           port: 587, secure: true  },
+  // AOL
+  'aol.com':             { label: 'AOL Mail',             host: 'smtp.aol.com',                port: 587, secure: true  },
+  // GMX
+  'gmx.com':             { label: 'GMX Mail',             host: 'mail.gmx.com',                port: 587, secure: true  },
+  'gmx.net':             { label: 'GMX Mail',             host: 'mail.gmx.net',                port: 587, secure: true  },
+  // Web.de
+  'web.de':              { label: 'Web.de',               host: 'smtp.web.de',                 port: 587, secure: true  },
 };
 
-/** Detect SMTP settings from an email address domain. Returns a preset or null. */
-function detectSmtpFromEmail(email: string): SmtpPreset | null {
+/**
+ * MX record substring → SMTP preset (for custom business domains).
+ * Ordered from most-specific to least-specific. First match wins.
+ */
+const MX_PRESETS: Array<{ match: string; preset: SmtpPreset }> = [
+  // Google Workspace
+  { match: 'google.com',         preset: { label: 'Google Workspace',   host: 'smtp.gmail.com',          port: 587, secure: true,  note: 'Use an App Password from your Google account.' } },
+  { match: 'googlemail.com',     preset: { label: 'Google Workspace',   host: 'smtp.gmail.com',          port: 587, secure: true,  note: 'Use an App Password from your Google account.' } },
+  // Microsoft 365 / Exchange Online
+  { match: 'outlook.com',        preset: { label: 'Microsoft 365',      host: 'smtp.office365.com',      port: 587, secure: true  } },
+  { match: 'protection.outlook', preset: { label: 'Microsoft 365',      host: 'smtp.office365.com',      port: 587, secure: true  } },
+  // Zoho Business
+  { match: 'zoho.com',           preset: { label: 'Zoho Mail Business', host: 'smtp.zoho.com',           port: 587, secure: true  } },
+  // ProtonMail Business
+  { match: 'protonmail.ch',      preset: { label: 'ProtonMail Business',host: '127.0.0.1',               port: 1025, secure: false, note: 'Requires Proton Bridge running locally.' } },
+  // Fastmail Business
+  { match: 'fastmail.com',       preset: { label: 'Fastmail Business',  host: 'smtp.fastmail.com',       port: 587, secure: true  } },
+  // Hostinger
+  { match: 'hostinger.com',      preset: { label: 'Hostinger',          host: 'smtp.hostinger.com',      port: 587, secure: true,  note: 'Use your full email and webmail password.' } },
+  // Namecheap Private Email
+  { match: 'privateemail.com',   preset: { label: 'Namecheap Private Email', host: 'mail.privateemail.com', port: 587, secure: true, note: 'Use your full email address as username.' } },
+  // Rackspace
+  { match: 'rackspace.com',      preset: { label: 'Rackspace Email',    host: 'secure.emailsrvr.com',    port: 587, secure: true  } },
+  // MXroute
+  { match: 'mxroute.com',        preset: { label: 'MXroute',            host: 'smtp.mxrouting.net',      port: 587, secure: true  } },
+  // Titan Email (Namecheap / Hostinger bundle)
+  { match: 'titan.email',        preset: { label: 'Titan Email',        host: 'smtp.titan.email',        port: 587, secure: true  } },
+  { match: 'enom.com',           preset: { label: 'eNom/Namecheap',     host: 'smtp.emailsrvr.com',      port: 587, secure: true  } },
+  // Ionos / 1&1
+  { match: 'ionos.com',          preset: { label: 'IONOS',              host: 'smtp.ionos.com',          port: 587, secure: true  } },
+  { match: '1and1.com',          preset: { label: '1&1 Mail',           host: 'smtp.1and1.com',          port: 587, secure: true  } },
+  // GoDaddy
+  { match: 'godaddy.com',        preset: { label: 'GoDaddy Email',      host: 'smtpout.secureserver.net',port: 587, secure: true  } },
+  { match: 'secureserver.net',   preset: { label: 'GoDaddy Email',      host: 'smtpout.secureserver.net',port: 587, secure: true  } },
+  // Bluehost / HostGator / SiteGround (cPanel)
+  { match: 'bluehost.com',       preset: { label: 'Bluehost',           host: 'mail.yourdomain.com',     port: 587, secure: true,  note: 'Replace "yourdomain.com" with your actual domain.' } },
+  { match: 'hostgator.com',      preset: { label: 'HostGator',          host: 'mail.yourdomain.com',     port: 587, secure: true,  note: 'Replace "yourdomain.com" with your actual domain.' } },
+  { match: 'siteground.com',     preset: { label: 'SiteGround',        host: 'mail.yourdomain.com',     port: 587, secure: true,  note: 'Use your cPanel email credentials.' } },
+  // Dreamhost
+  { match: 'dreamhost.com',      preset: { label: 'DreamHost',          host: 'smtp.dreamhost.com',      port: 587, secure: true  } },
+  // Yahoo Business
+  { match: 'yahoodns.net',       preset: { label: 'Yahoo Business Mail',host: 'smtp.mail.yahoo.com',     port: 587, secure: true  } },
+];
+
+/** Fetch MX records for a domain using Google DNS-over-HTTPS (no CORS issues) */
+async function getMxRecords(domain: string): Promise<string[]> {
+  try {
+    const res = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`, {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return (json.Answer ?? []).map((a: { data: string }) => (a.data ?? '').toLowerCase());
+  } catch {
+    return [];
+  }
+}
+
+/** Match a list of MX records against the presets table */
+function matchMxToPreset(mxRecords: string[]): SmtpPreset | null {
+  for (const { match, preset } of MX_PRESETS) {
+    if (mxRecords.some(mx => mx.includes(match))) {
+      return { ...preset, viaDetection: 'MX record' };
+    }
+  }
+  return null;
+}
+
+/**
+ * Detect SMTP settings from an email address.
+ * 1. Check known consumer domain presets (instant).
+ * 2. If no match, do a DNS MX lookup to detect business providers.
+ * Returns a preset or null.
+ */
+async function detectSmtpFromEmail(email: string): Promise<SmtpPreset | null> {
   const at = email.indexOf('@');
   if (at < 0) return null;
   const domain = email.slice(at + 1).toLowerCase().trim();
-  if (!domain) return null;
-  // Exact match first
-  if (SMTP_PRESETS[domain]) return SMTP_PRESETS[domain];
-  // Google Workspace / Microsoft 365: suggest common SMTP settings by guessing
-  // (custom domains served by Google/Microsoft can't be reliably detected without DNS)
-  // Suggest the domain's own mail server as a fallback
-  return null;
+  if (!domain || !domain.includes('.')) return null;
+  // 1. Exact domain match
+  if (SMTP_DOMAIN_PRESETS[domain]) return SMTP_DOMAIN_PRESETS[domain];
+  // 2. DNS MX lookup for custom business domains
+  const mxRecords = await getMxRecords(domain);
+  return matchMxToPreset(mxRecords);
 }
 
 interface ConnectEmailDialogProps {
@@ -88,20 +171,29 @@ export function ConnectEmailDialog({
   });
   const [detectedPreset, setDetectedPreset] = useState<SmtpPreset | null>(null);
   const [autoFilled, setAutoFilled] = useState(false);
+  const [detecting, setDetecting] = useState(false);
 
-  const handleEmailBlur = (email: string) => {
-    const preset = detectSmtpFromEmail(email);
-    setDetectedPreset(preset);
-    if (preset && !smtpConfig.host) {
-      // Auto-fill only when host hasn't been manually set yet
-      setSMTPConfig(prev => ({
-        ...prev,
-        host: preset.host,
-        port: preset.port,
-        secure: preset.secure,
-        username: email,
-      }));
-      setAutoFilled(true);
+  const handleEmailBlur = async (email: string) => {
+    if (!email || !email.includes('@')) return;
+    setDetecting(true);
+    setDetectedPreset(null);
+    setAutoFilled(false);
+    try {
+      const preset = await detectSmtpFromEmail(email);
+      setDetectedPreset(preset);
+      if (preset && !smtpConfig.host) {
+        // Auto-fill only when host hasn't been manually set yet
+        setSMTPConfig(prev => ({
+          ...prev,
+          host: preset.host,
+          port: preset.port,
+          secure: preset.secure,
+          username: email,
+        }));
+        setAutoFilled(true);
+      }
+    } finally {
+      setDetecting(false);
     }
   };
 
@@ -271,27 +363,45 @@ export function ConnectEmailDialog({
               {/* ── Email address first — triggers auto-detect on blur ── */}
               <div className="space-y-2">
                 <Label htmlFor="smtp-username">Your Email Address</Label>
-                <Input
-                  id="smtp-username"
-                  type="email"
-                  placeholder="you@yourdomain.com"
-                  value={smtpConfig.username}
-                  onChange={(e) => {
-                    setSMTPConfig({ ...smtpConfig, username: e.target.value });
-                    setAutoFilled(false);
-                    setDetectedPreset(null);
-                  }}
-                  onBlur={(e) => handleEmailBlur(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Enter your email — we'll try to detect your server settings automatically.</p>
+                <div className="relative">
+                  <Input
+                    id="smtp-username"
+                    type="email"
+                    placeholder="you@yourdomain.com"
+                    value={smtpConfig.username}
+                    onChange={(e) => {
+                      setSMTPConfig({ ...smtpConfig, username: e.target.value });
+                      setAutoFilled(false);
+                      setDetectedPreset(null);
+                    }}
+                    onBlur={(e) => handleEmailBlur(e.target.value)}
+                    className={detecting ? 'pr-8' : ''}
+                  />
+                  {detecting && <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {detecting ? 'Detecting your email provider via DNS…' : 'Enter your email — we\'ll auto-detect your server settings.'}
+                </p>
               </div>
 
               {/* ── Auto-detected settings banner ── */}
-              {detectedPreset && (
+              {smtpConfig.username.includes('@') && !detecting && !detectedPreset && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-300/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-400">
+                  <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-medium">Provider not detected — fill in manually</p>
+                    <p className="text-xs mt-0.5 opacity-80">Your email host isn't recognised. Check with your provider for SMTP settings (usually on their help page).</p>
+                  </div>
+                </div>
+              )}
+              {detectedPreset && !detecting && (
                 <div className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm ${autoFilled ? 'border-emerald-400/50 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400' : 'border-primary/30 bg-primary/5 text-primary'}`}>
                   {autoFilled ? <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" /> : <Sparkles className="h-4 w-4 mt-0.5 shrink-0" />}
                   <div>
-                    <p className="font-medium">{autoFilled ? `${detectedPreset.label} settings auto-filled` : `${detectedPreset.label} detected`}</p>
+                    <p className="font-medium">
+                      {autoFilled ? `${detectedPreset.label} settings auto-filled` : `${detectedPreset.label} detected`}
+                      {detectedPreset.viaDetection && <span className="ml-1.5 text-xs font-normal opacity-60">via {detectedPreset.viaDetection}</span>}
+                    </p>
                     {detectedPreset.note && <p className="text-xs mt-0.5 opacity-80">{detectedPreset.note}</p>}
                   </div>
                 </div>

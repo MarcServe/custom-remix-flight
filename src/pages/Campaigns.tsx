@@ -180,9 +180,10 @@ export default function Campaigns() {
     refetchInterval: 5000,
   });
 
-  // Reset status filter when switching campaign
+  // Reset status filter and selection when switching campaign
   useEffect(() => {
     setRecipientStatusFilter('all');
+    setSelectedRecipientIds(new Set());
   }, [selectedCampaign]);
 
   const addToDraftFromState = (location.state as { addToDraft?: boolean })?.addToDraft === true;
@@ -516,10 +517,11 @@ export default function Campaigns() {
   }, [deliveryReportCampaign, deliveryReportRecipients]);
 
   const handleSelectAllRecipients = () => {
-    if (selectedRecipientIds.size === pendingRecipients.length) {
+    // Select/deselect all currently visible (filtered) recipients
+    if (selectedRecipientIds.size === filteredRecipients.length && filteredRecipients.length > 0) {
       setSelectedRecipientIds(new Set());
     } else {
-      setSelectedRecipientIds(new Set(pendingRecipients.map((r) => r.id)));
+      setSelectedRecipientIds(new Set(filteredRecipients.map((r) => r.id)));
     }
   };
 
@@ -3064,10 +3066,10 @@ export default function Campaigns() {
                     </Button>
                   )}
                 </div>
-                {pendingRecipients.length > 0 && (
+                {(recipients?.length ?? 0) > 0 && canEditRecipients && (
                   <div className="flex flex-wrap items-center gap-2">
                     <Button variant="outline" size="sm" onClick={handleSelectAllRecipients}>
-                      {selectedRecipientIds.size === pendingRecipients.length ? "Deselect all" : "Select all"}
+                      {selectedRecipientIds.size === filteredRecipients.length && filteredRecipients.length > 0 ? "Deselect all" : `Select all${recipientStatusFilter !== 'all' ? ' visible' : ''}`}
                     </Button>
                     <Button
                       variant="outline"
@@ -3082,20 +3084,23 @@ export default function Campaigns() {
                       size="sm"
                       onClick={handleBulkRemoveRecipients}
                       disabled={selectedRecipientIds.size === 0 || bulkRemoving}
+                      className={selectedRecipientIds.size > 0 ? "text-destructive border-destructive/40 hover:text-destructive hover:bg-destructive/5" : ""}
                     >
                       {bulkRemoving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
-                      Remove selected ({selectedRecipientIds.size})
+                      {selectedRecipientIds.size > 0 ? `Delete selected (${selectedRecipientIds.size})` : "Delete selected"}
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setClearListConfirmOpen(true)}
-                      disabled={clearingList}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      {clearingList ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                      Clear list
-                    </Button>
+                    {pendingRecipients.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setClearListConfirmOpen(true)}
+                        disabled={clearingList}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        {clearingList ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                        Clear pending
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -3107,7 +3112,7 @@ export default function Campaigns() {
                 <Label className="text-sm font-medium shrink-0">Status</Label>
                 <Select
                   value={recipientStatusFilter}
-                  onValueChange={(v) => setRecipientStatusFilter(v as RecipientStatusFilter)}
+                  onValueChange={(v) => { setRecipientStatusFilter(v as RecipientStatusFilter); setSelectedRecipientIds(new Set()); }}
                 >
                   <SelectTrigger className="w-[220px]">
                     <SelectValue placeholder="All statuses" />
@@ -3156,12 +3161,12 @@ export default function Campaigns() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {canEditRecipients && pendingRecipients.length > 0 && (
+                    {canEditRecipients && (recipients?.length ?? 0) > 0 && (
                       <TableHead className="w-10">
                         <Checkbox
-                          checked={pendingRecipients.length > 0 && selectedRecipientIds.size === pendingRecipients.length}
+                          checked={filteredRecipients.length > 0 && selectedRecipientIds.size === filteredRecipients.length}
                           onCheckedChange={handleSelectAllRecipients}
-                          aria-label="Select all pending"
+                          aria-label="Select all visible"
                         />
                       </TableHead>
                     )}
@@ -3177,22 +3182,20 @@ export default function Campaigns() {
                 <TableBody>
                   {filteredRecipients.map((recipient) => (
                     <TableRow key={recipient.id}>
-                      {canEditRecipients && pendingRecipients.length > 0 && (
+                      {canEditRecipients && (recipients?.length ?? 0) > 0 && (
                         <TableCell className="w-10">
-                          {recipient.status === "pending" ? (
-                            <Checkbox
-                              checked={selectedRecipientIds.has(recipient.id)}
-                              onCheckedChange={(checked) => {
-                                setSelectedRecipientIds((prev) => {
-                                  const next = new Set(prev);
-                                  if (checked) next.add(recipient.id);
-                                  else next.delete(recipient.id);
-                                  return next;
-                                });
-                              }}
-                              aria-label={`Select ${recipient.name}`}
-                            />
-                          ) : null}
+                          <Checkbox
+                            checked={selectedRecipientIds.has(recipient.id)}
+                            onCheckedChange={(checked) => {
+                              setSelectedRecipientIds((prev) => {
+                                const next = new Set(prev);
+                                if (checked) next.add(recipient.id);
+                                else next.delete(recipient.id);
+                                return next;
+                              });
+                            }}
+                            aria-label={`Select ${recipient.name}`}
+                          />
                         </TableCell>
                       )}
                       <TableCell>{recipient.name}</TableCell>
