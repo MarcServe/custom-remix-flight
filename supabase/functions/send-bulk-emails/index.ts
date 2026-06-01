@@ -169,7 +169,7 @@ serve(async (req) => {
   }
 
   try {
-    const { campaignId, triggeredByCron } = await req.json();
+    const { campaignId, triggeredByCron, _retryCount = 0 } = await req.json();
 
     if (!campaignId) {
       throw new Error('Campaign ID is required');
@@ -509,6 +509,35 @@ serve(async (req) => {
       );
 
       console.log(`[Resend] Complete: ${sentCount} sent, ${failedCount} failed`);
+
+      // ── Immediate self-retry if pending recipients remain (avoids 15-min cron wait) ──
+      // Only retry if we made progress (sentCount > 0) to avoid infinite loops on hard failures.
+      // Cap at 10 retries as a safety net.
+      const { count: remainingAfterSend } = await supabaseClient
+        .from('email_campaign_recipients')
+        .select('*', { count: 'exact', head: true })
+        .eq('campaign_id', campaignId)
+        .eq('status', 'pending');
+
+      if ((remainingAfterSend ?? 0) > 0 && sentCount > 0 && _retryCount < 10) {
+        console.log(`[Resend] ${remainingAfterSend} still pending — firing immediate self-retry #${_retryCount + 1}`);
+        const selfUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-bulk-emails`;
+        const retryPromise = fetch(selfUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ campaignId, triggeredByCron: true, _retryCount: _retryCount + 1 }),
+        });
+        // Use EdgeRuntime.waitUntil if available (keeps the fetch alive after response is sent)
+        try {
+          (globalThis as any).EdgeRuntime?.waitUntil?.(retryPromise);
+        } catch {
+          // fallback: fire but don't block
+          retryPromise.catch(() => {});
+        }
+      }
 
     } else if (emailProvider === 'gmail') {
       // ═══════════════════════════════════════════════════════════════

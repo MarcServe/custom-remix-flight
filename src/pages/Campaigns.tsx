@@ -150,6 +150,8 @@ export default function Campaigns() {
   const [enrollSegment, setEnrollSegment] = useState<EnrollSegment>('all_sent');
   const [recipientSearchQuery, setRecipientSearchQuery] = useState('');
   const [syncingFromResend, setSyncingFromResend] = useState(false);
+  // Polling ref for live "sending" progress — cleared when pending hits 0
+  const sendPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [createFollowUpOpen, setCreateFollowUpOpen] = useState(false);
   const [createFollowUpSegment, setCreateFollowUpSegment] = useState<'delivered_not_opened' | 'not_opened' | 'opened_no_click'>('not_opened');
   const [creatingFollowUp, setCreatingFollowUp] = useState(false);
@@ -1242,6 +1244,35 @@ export default function Campaigns() {
     };
   }, [recipients]);
 
+  // Stop polling when pending drops to 0 while a send is in progress
+  useEffect(() => {
+    if (sendingPendingNow && pendingRecipientsCount === 0) {
+      if (sendPollRef.current) {
+        clearInterval(sendPollRef.current);
+        sendPollRef.current = null;
+      }
+      setSendingPendingNow(false);
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
+        queryClient.invalidateQueries({ queryKey: ['campaign-send-history'] }),
+      ]);
+      toast.success('All emails sent!');
+    }
+  }, [pendingRecipientsCount, sendingPendingNow]);
+
+  // Clean up polling when campaign changes or on unmount
+  useEffect(() => {
+    return () => {
+      if (sendPollRef.current) {
+        clearInterval(sendPollRef.current);
+        sendPollRef.current = null;
+      }
+      setSendingPendingNow(false);
+    };
+  }, [selectedCampaign]);
+
   const handleResendVariant = async (mode: 'A' | 'B' | 'all') => {
     if (!selectedCampaign) return;
     const list = mode === 'A' ? sentRecipientsByVariant.A : mode === 'B' ? sentRecipientsByVariant.B : sentRecipientsByVariant.all;
@@ -1341,26 +1372,24 @@ export default function Campaigns() {
     }
   };
 
-  const handleSendPendingNow = async () => {
+  const handleSendPendingNow = () => {
     if (!selectedCampaign || pendingRecipientsCount === 0) return;
     setSendingPendingNow(true);
-    try {
-      const { error } = await supabase.functions.invoke('send-bulk-emails', {
-        body: { campaignId: selectedCampaign },
-      });
-      if (error) throw error;
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
-        queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
-        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
-        queryClient.invalidateQueries({ queryKey: ['campaign-send-history'] }),
-      ]);
-      toast.success('Sending all pending now. Resend/SendGrid sends everything at once; Gmail respects the 450/day limit.');
-    } catch (e: any) {
-      toast.error(e?.message ?? 'Failed to send');
-    } finally {
-      setSendingPendingNow(false);
-    }
+
+    // Fire-and-forget — don't await so UI stays responsive during the entire send
+    supabase.functions
+      .invoke('send-bulk-emails', { body: { campaignId: selectedCampaign } })
+      .catch((e: any) => console.error('Send bulk emails error:', e));
+
+    toast.info('Sending started — watching for completion automatically.');
+
+    // Poll every 3 s so the UI updates in real time without any manual refresh
+    if (sendPollRef.current) clearInterval(sendPollRef.current);
+    sendPollRef.current = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] });
+      queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] });
+      queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+    }, 3000);
   };
 
   const handleEnrollSentCampaignInFollowUp = async () => {
@@ -2741,10 +2770,14 @@ export default function Campaigns() {
                       Resume
                     </Button>
                   )}
-                  {pendingRecipientsCount > 0 && (selectedCampaignData?.status?.toLowerCase() === 'sending' || selectedCampaignData?.status?.toLowerCase() === 'paused') && (
+                  {(pendingRecipientsCount > 0 || sendingPendingNow) && (selectedCampaignData?.status?.toLowerCase() === 'sending' || selectedCampaignData?.status?.toLowerCase() === 'paused') && (
                     <Button variant="default" size="sm" onClick={handleSendPendingNow} disabled={sendingPendingNow}>
                       {sendingPendingNow ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
-                      Send pending now
+                      {sendingPendingNow
+                        ? pendingRecipientsCount > 0
+                          ? `Sending… ${pendingRecipientsCount} remaining`
+                          : 'Finishing…'
+                        : 'Send pending now'}
                     </Button>
                   )}
                   <Button
