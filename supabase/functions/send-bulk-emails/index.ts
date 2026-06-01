@@ -18,6 +18,45 @@ const GMAIL_DAILY_LIMIT = 450;
 // Resend batch API limit per call
 const RESEND_BATCH_SIZE = 100;
 
+/** Personalize a template string with recipient tokens */
+function personalizeText(template: string, recipient: any): string {
+  if (!template) return '';
+  const fullName = recipient.name || recipient.email || '';
+  const nameParts = fullName.split(' ');
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.slice(1).join(' ') || '';
+  return template
+    .replace(/\{\{firstName\}\}/gi, firstName)
+    .replace(/\{\{lastName\}\}/gi, lastName)
+    .replace(/\{\{fullName\}\}/gi, fullName)
+    .replace(/\{\{name\}\}/gi, fullName)
+    .replace(/\{\{email\}\}/gi, recipient.email || '');
+}
+
+/** Resolve subject/body for a recipient, falling back to campaign templates */
+function resolveRecipientContent(recipient: any, campaign: any): {
+  subject: string;
+  bodyText: string;
+  bodyHtml: string;
+} {
+  const subject =
+    recipient.personalized_subject ||
+    (campaign.subject_template ? personalizeText(campaign.subject_template, recipient) : '') ||
+    '(No subject)';
+
+  const bodyText =
+    recipient.personalized_body_text ||
+    (campaign.body_text_template ? personalizeText(campaign.body_text_template, recipient) : '') ||
+    '';
+
+  const bodyHtml =
+    recipient.personalized_body_html ||
+    (campaign.body_html_template ? personalizeText(campaign.body_html_template, recipient) : '') ||
+    bodyText;
+
+  return { subject, bodyText, bodyHtml };
+}
+
 function parseResendError(status: number, bodyText: string): string {
   try {
     const j = JSON.parse(bodyText);
@@ -312,12 +351,8 @@ serve(async (req) => {
       console.log(`[Resend] Building ${allPendingRecipients.length} email payloads…`);
 
       // Build all payloads (template render is CPU-only, no I/O)
-      const payloads: Array<{ recipientId: string; personId: string | null; email: any }> = [];
+      const payloads: Array<{ recipientId: string; personId: string | null; resolvedSubject: string; resolvedBodyText: string; email: any }> = [];
       for (const recipient of allPendingRecipients) {
-        if (!recipient.personalized_subject) {
-          console.warn(`Skipping recipient ${recipient.id}: missing subject`);
-          continue;
-        }
         // Guard: skip recipients whose email field is multi-address (comma-separated) — those should have been split at import time
         const emailStr = (recipient.email || '').trim();
         const isValidSingleEmail = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(emailStr);
@@ -330,21 +365,38 @@ serve(async (req) => {
           failedCount++;
           continue;
         }
+
+        // Resolve subject/body — fall back to campaign templates if personalization is missing
+        const { subject, bodyText, bodyHtml } = resolveRecipientContent(recipient, campaign);
+        if (!subject || subject === '(No subject)') {
+          console.warn(`Recipient ${recipient.id} has no subject and campaign has no subject_template — skipping`);
+          await supabaseClient.from('email_campaign_recipients').update({
+            status: 'failed',
+            error_message: 'Missing email subject — please set a subject template on the campaign.',
+          }).eq('id', recipient.id);
+          failedCount++;
+          continue;
+        }
+
+        // Build a scratch recipient with resolved content for template rendering
+        const resolvedRecipient = { ...recipient, personalized_body_html: bodyHtml, personalized_body_text: bodyText };
         let wrappedHtml: string;
         try {
-          wrappedHtml = buildWrappedHtml(recipient, branding, userProfile, senderName, fromEmail);
+          wrappedHtml = buildWrappedHtml(resolvedRecipient, branding, userProfile, senderName, fromEmail);
         } catch (err: any) {
           console.error(`Template render error for ${recipient.email}:`, err);
-          wrappedHtml = `<p>${(recipient.personalized_body_html || recipient.personalized_body_text || '').replace(/\n/g, '<br>')}</p>`;
+          wrappedHtml = `<p>${bodyHtml.replace(/\n/g, '<br>')}</p>`;
         }
         payloads.push({
           recipientId: recipient.id,
           personId: recipient.person_id ?? null,
+          resolvedSubject: subject,
+          resolvedBodyText: bodyText,
           email: {
             from: `${senderName} <${fromEmail}>`,
             to: [recipient.email],
-            subject: recipient.personalized_subject,
-            text: recipient.personalized_body_text || '',
+            subject,
+            text: bodyText,
             html: wrappedHtml,
             reply_to: RESEND_INBOUND_EMAIL,
             headers: { 'X-Priority': '3', Importance: 'normal' },
@@ -416,7 +468,7 @@ serve(async (req) => {
             }
             activityRows.push({
               contact_id: item.personId, step_number: 0,
-              subject: rec.personalized_subject, body: rec.personalized_body_text,
+              subject: item.resolvedSubject, body: item.resolvedBodyText,
               status: 'sent', sent_at: sentAt, external_message_id: msgId,
               metadata: {
                 campaign_id: campaignId, provider: 'resend',
@@ -484,15 +536,23 @@ serve(async (req) => {
 
       for (const recipient of recipients) {
         try {
-          if (!recipient.personalized_subject) {
-            throw new Error(`Missing subject for recipient ${recipient.id}`);
-          }
           const gmailEmailStr = (recipient.email || '').trim();
           const isValidGmailEmail = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(gmailEmailStr);
           if (!gmailEmailStr || !isValidGmailEmail) {
             await supabaseClient.from('email_campaign_recipients').update({
               status: 'failed',
               error_message: gmailEmailStr.includes(',') ? 'Multiple email addresses — re-add this company to split into separate recipients.' : 'Invalid email address',
+            }).eq('id', recipient.id);
+            failedCount++;
+            continue;
+          }
+
+          // Resolve subject/body — fall back to campaign templates if personalization is missing
+          const { subject: gmailSubject, bodyText: gmailBodyText } = resolveRecipientContent(recipient, campaign);
+          if (!gmailSubject || gmailSubject === '(No subject)') {
+            await supabaseClient.from('email_campaign_recipients').update({
+              status: 'failed',
+              error_message: 'Missing email subject — please set a subject template on the campaign.',
             }).eq('id', recipient.id);
             failedCount++;
             continue;
@@ -511,8 +571,8 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               to: [{ email: recipient.email, name: recipient.name }],
-              subject: recipient.personalized_subject,
-              body: { content: recipient.personalized_body_text, type: 'text/plain' },
+              subject: gmailSubject,
+              body: { content: gmailBodyText, type: 'text/plain' },
             }),
           });
 
@@ -535,7 +595,7 @@ serve(async (req) => {
 
           await supabaseClient.from('email_activities').insert({
             contact_id: recipient.person_id, step_number: 0,
-            subject: recipient.personalized_subject, body: recipient.personalized_body_text,
+            subject: gmailSubject, body: gmailBodyText,
             status: 'sent', sent_at: sentAt, external_message_id: messageId,
             metadata: {
               campaign_id: campaignId, provider: 'gmail',
@@ -570,9 +630,6 @@ serve(async (req) => {
       // ═══════════════════════════════════════════════════════════════
       for (const recipient of allPendingRecipients) {
         try {
-          if (!recipient.personalized_subject) {
-            throw new Error(`Missing subject for recipient ${recipient.id}`);
-          }
           const sgEmailStr = (recipient.email || '').trim();
           const isValidSgEmail = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(sgEmailStr);
           if (!sgEmailStr || !isValidSgEmail) {
@@ -583,20 +640,26 @@ serve(async (req) => {
             failedCount++;
             continue;
           }
-          const bodyText = recipient.personalized_body_text || '';
-          const bodyHtmlRaw = recipient.personalized_body_html || '';
-          if (!bodyText.trim() && !bodyHtmlRaw.trim()) {
-            throw new Error(`No body content for recipient ${sgEmailStr}`);
-          }
 
+          // Resolve subject/body — fall back to campaign templates if personalization is missing
+          const { subject: sgSubject, bodyText, bodyHtml: bodyHtmlRaw } = resolveRecipientContent(recipient, campaign);
+          if (!sgSubject || sgSubject === '(No subject)') {
+            await supabaseClient.from('email_campaign_recipients').update({
+              status: 'failed',
+              error_message: 'Missing email subject — please set a subject template on the campaign.',
+            }).eq('id', recipient.id);
+            failedCount++;
+            continue;
+          }
           let messageId: string | null = null;
 
           if (emailProvider === 'smtp') {
             const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'Your Business';
             const fromEmail = branding.senderEmail || optimalConnection.from_email || userProfile?.email || 'noreply@yourdomain.com';
+            const resolvedRecipientForSmtp = { ...recipient, personalized_body_html: bodyHtmlRaw, personalized_body_text: bodyText };
             let wrappedHtml: string;
             try {
-              wrappedHtml = buildWrappedHtml(recipient, branding, userProfile, senderName, fromEmail);
+              wrappedHtml = buildWrappedHtml(resolvedRecipientForSmtp, branding, userProfile, senderName, fromEmail);
             } catch (templateError: any) {
               throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
             }
@@ -615,8 +678,8 @@ serve(async (req) => {
               await client.send({
                 from: `${senderName} <${optimalConnection.from_email}>`,
                 to: recipient.email,
-                subject: recipient.personalized_subject,
-                content: recipient.personalized_body_text,
+                subject: sgSubject,
+                content: bodyText,
                 html: wrappedHtml,
               });
               await client.close();
@@ -633,8 +696,8 @@ serve(async (req) => {
                 body: JSON.stringify({
                   from: `${senderName} <${effectiveFromEmail}>`,
                   to: [recipient.email],
-                  subject: recipient.personalized_subject,
-                  text: recipient.personalized_body_text,
+                  subject: sgSubject,
+                  text: bodyText,
                   html: wrappedHtml,
                 }),
               });
@@ -650,9 +713,10 @@ serve(async (req) => {
             const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'Your Business';
             const fromEmail = branding.senderEmail || effectiveConnection.from_email || userProfile?.email;
             if (!fromEmail) throw new Error('Business Email not configured.');
+            const resolvedRecipientForSg = { ...recipient, personalized_body_html: bodyHtmlRaw, personalized_body_text: bodyText };
             let wrappedHtml: string;
             try {
-              wrappedHtml = buildWrappedHtml(recipient, branding, userProfile, senderName, fromEmail);
+              wrappedHtml = buildWrappedHtml(resolvedRecipientForSg, branding, userProfile, senderName, fromEmail);
             } catch (templateError: any) {
               throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
             }
@@ -660,11 +724,11 @@ serve(async (req) => {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${sendgridApiKey}`, 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                personalizations: [{ to: [{ email: recipient.email, name: recipient.name }], subject: recipient.personalized_subject }],
+                personalizations: [{ to: [{ email: recipient.email, name: recipient.name }], subject: sgSubject }],
                 from: { email: fromEmail, name: senderName },
                 reply_to: { email: fromEmail, name: senderName },
                 content: [
-                  { type: 'text/plain', value: recipient.personalized_body_text },
+                  { type: 'text/plain', value: bodyText },
                   { type: 'text/html', value: wrappedHtml },
                 ],
               }),
@@ -689,7 +753,7 @@ serve(async (req) => {
 
           await supabaseClient.from('email_activities').insert({
             contact_id: recipient.person_id, step_number: 0,
-            subject: recipient.personalized_subject, body: recipient.personalized_body_text,
+            subject: sgSubject, body: bodyText,
             status: 'sent', sent_at: sentAt, external_message_id: messageId,
             metadata: {
               campaign_id: campaignId, provider: emailProvider,
