@@ -12,12 +12,57 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Info } from "lucide-react";
+import { Loader2, Info, Sparkles, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { nangoClient } from "@/lib/integrations/nango";
 import { gmailDirectClient } from "@/lib/integrations/gmail-direct";
 import { NangoSetupInstructions } from "./NangoSetupInstructions";
 import { EMAIL_PROVIDER_CONFIG } from "@/config/email-providers";
+
+// ── SMTP auto-detect lookup ───────────────────────────────────────────────────
+interface SmtpPreset { label: string; host: string; port: number; secure: boolean; note?: string }
+
+const SMTP_PRESETS: Record<string, SmtpPreset> = {
+  // Google
+  'gmail.com':        { label: 'Gmail',                  host: 'smtp.gmail.com',        port: 587, secure: true,  note: 'Use an App Password (not your regular password).' },
+  'googlemail.com':   { label: 'Gmail',                  host: 'smtp.gmail.com',        port: 587, secure: true,  note: 'Use an App Password (not your regular password).' },
+  // Microsoft
+  'outlook.com':      { label: 'Outlook.com',            host: 'smtp.office365.com',    port: 587, secure: true  },
+  'hotmail.com':      { label: 'Hotmail',                host: 'smtp.office365.com',    port: 587, secure: true  },
+  'live.com':         { label: 'Microsoft Live',         host: 'smtp.office365.com',    port: 587, secure: true  },
+  'msn.com':          { label: 'MSN Mail',               host: 'smtp.office365.com',    port: 587, secure: true  },
+  // Yahoo
+  'yahoo.com':        { label: 'Yahoo Mail',             host: 'smtp.mail.yahoo.com',   port: 587, secure: true,  note: 'Use an App Password from Yahoo account security.' },
+  'yahoo.co.uk':      { label: 'Yahoo Mail UK',          host: 'smtp.mail.yahoo.com',   port: 587, secure: true,  note: 'Use an App Password from Yahoo account security.' },
+  'ymail.com':        { label: 'Yahoo Mail',             host: 'smtp.mail.yahoo.com',   port: 587, secure: true  },
+  // Zoho
+  'zoho.com':         { label: 'Zoho Mail',              host: 'smtp.zoho.com',         port: 587, secure: true  },
+  'zohomail.com':     { label: 'Zoho Mail',              host: 'smtp.zoho.com',         port: 587, secure: true  },
+  // Apple
+  'icloud.com':       { label: 'iCloud Mail',            host: 'smtp.mail.me.com',      port: 587, secure: true,  note: 'Use an App-Specific Password from Apple ID settings.' },
+  'me.com':           { label: 'iCloud Mail',            host: 'smtp.mail.me.com',      port: 587, secure: true,  note: 'Use an App-Specific Password from Apple ID settings.' },
+  'mac.com':          { label: 'iCloud Mail',            host: 'smtp.mail.me.com',      port: 587, secure: true  },
+  // ProtonMail (Bridge required)
+  'proton.me':        { label: 'ProtonMail',             host: '127.0.0.1',             port: 1025, secure: false, note: 'Requires Proton Bridge running locally.' },
+  'protonmail.com':   { label: 'ProtonMail',             host: '127.0.0.1',             port: 1025, secure: false, note: 'Requires Proton Bridge running locally.' },
+  // FastMail
+  'fastmail.com':     { label: 'Fastmail',               host: 'smtp.fastmail.com',     port: 587, secure: true  },
+  'fastmail.fm':      { label: 'Fastmail',               host: 'smtp.fastmail.com',     port: 587, secure: true  },
+};
+
+/** Detect SMTP settings from an email address domain. Returns a preset or null. */
+function detectSmtpFromEmail(email: string): SmtpPreset | null {
+  const at = email.indexOf('@');
+  if (at < 0) return null;
+  const domain = email.slice(at + 1).toLowerCase().trim();
+  if (!domain) return null;
+  // Exact match first
+  if (SMTP_PRESETS[domain]) return SMTP_PRESETS[domain];
+  // Google Workspace / Microsoft 365: suggest common SMTP settings by guessing
+  // (custom domains served by Google/Microsoft can't be reliably detected without DNS)
+  // Suggest the domain's own mail server as a fallback
+  return null;
+}
 
 interface ConnectEmailDialogProps {
   open: boolean;
@@ -41,6 +86,24 @@ export function ConnectEmailDialog({
     password: "",
     secure: true,
   });
+  const [detectedPreset, setDetectedPreset] = useState<SmtpPreset | null>(null);
+  const [autoFilled, setAutoFilled] = useState(false);
+
+  const handleEmailBlur = (email: string) => {
+    const preset = detectSmtpFromEmail(email);
+    setDetectedPreset(preset);
+    if (preset && !smtpConfig.host) {
+      // Auto-fill only when host hasn't been manually set yet
+      setSMTPConfig(prev => ({
+        ...prev,
+        host: preset.host,
+        port: preset.port,
+        secure: preset.secure,
+        username: email,
+      }));
+      setAutoFilled(true);
+    }
+  };
 
   const handleDirectGmailConnect = async () => {
     setLoading(true);
@@ -205,43 +268,76 @@ export function ConnectEmailDialog({
                 </AlertDescription>
               </Alert>
 
+              {/* ── Email address first — triggers auto-detect on blur ── */}
+              <div className="space-y-2">
+                <Label htmlFor="smtp-username">Your Email Address</Label>
+                <Input
+                  id="smtp-username"
+                  type="email"
+                  placeholder="you@yourdomain.com"
+                  value={smtpConfig.username}
+                  onChange={(e) => {
+                    setSMTPConfig({ ...smtpConfig, username: e.target.value });
+                    setAutoFilled(false);
+                    setDetectedPreset(null);
+                  }}
+                  onBlur={(e) => handleEmailBlur(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Enter your email — we'll try to detect your server settings automatically.</p>
+              </div>
+
+              {/* ── Auto-detected settings banner ── */}
+              {detectedPreset && (
+                <div className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm ${autoFilled ? 'border-emerald-400/50 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400' : 'border-primary/30 bg-primary/5 text-primary'}`}>
+                  {autoFilled ? <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" /> : <Sparkles className="h-4 w-4 mt-0.5 shrink-0" />}
+                  <div>
+                    <p className="font-medium">{autoFilled ? `${detectedPreset.label} settings auto-filled` : `${detectedPreset.label} detected`}</p>
+                    {detectedPreset.note && <p className="text-xs mt-0.5 opacity-80">{detectedPreset.note}</p>}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="smtp-host">Email Server Address</Label>
                 <Input
                   id="smtp-host"
                   placeholder="mail.yourdomain.com"
                   value={smtpConfig.host}
-                  onChange={(e) =>
-                    setSMTPConfig({ ...smtpConfig, host: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setSMTPConfig({ ...smtpConfig, host: e.target.value });
+                    setAutoFilled(false);
+                  }}
                 />
                 <p className="text-xs text-muted-foreground">Usually starts with "smtp" or "mail"</p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="smtp-port">Port Number</Label>
-                <Input
-                  id="smtp-port"
-                  type="number"
-                  placeholder="587"
-                  value={smtpConfig.port}
-                  onChange={(e) =>
-                    setSMTPConfig({ ...smtpConfig, port: parseInt(e.target.value) })
-                  }
-                />
-                <p className="text-xs text-muted-foreground">Common ports: 587 or 465</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="smtp-username">Your Email Address</Label>
-                <Input
-                  id="smtp-username"
-                  placeholder="you@yourdomain.com"
-                  value={smtpConfig.username}
-                  onChange={(e) =>
-                    setSMTPConfig({ ...smtpConfig, username: e.target.value })
-                  }
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="smtp-port">Port</Label>
+                  <Input
+                    id="smtp-port"
+                    type="number"
+                    placeholder="587"
+                    value={smtpConfig.port}
+                    onChange={(e) =>
+                      setSMTPConfig({ ...smtpConfig, port: parseInt(e.target.value) || 587 })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">Usually 587 or 465</p>
+                </div>
+                <div className="flex flex-col justify-between space-y-2">
+                  <Label htmlFor="smtp-secure" className="cursor-pointer">Secure (TLS)</Label>
+                  <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg h-10">
+                    <Switch
+                      id="smtp-secure"
+                      checked={smtpConfig.secure}
+                      onCheckedChange={(checked) =>
+                        setSMTPConfig({ ...smtpConfig, secure: checked })
+                      }
+                    />
+                    <span className="text-xs text-muted-foreground">{smtpConfig.secure ? 'On' : 'Off'}</span>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -255,21 +351,11 @@ export function ConnectEmailDialog({
                     setSMTPConfig({ ...smtpConfig, password: e.target.value })
                   }
                 />
-                <p className="text-xs text-muted-foreground">Your email account password</p>
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                <div>
-                  <Label htmlFor="smtp-secure" className="cursor-pointer">Secure Connection</Label>
-                  <p className="text-xs text-muted-foreground">Recommended for security</p>
-                </div>
-                <Switch
-                  id="smtp-secure"
-                  checked={smtpConfig.secure}
-                  onCheckedChange={(checked) =>
-                    setSMTPConfig({ ...smtpConfig, secure: checked })
-                  }
-                />
+                <p className="text-xs text-muted-foreground">
+                  {detectedPreset?.label === 'Gmail' || detectedPreset?.label === 'Yahoo Mail' || detectedPreset?.label === 'iCloud Mail'
+                    ? '⚠️ Use an App Password, not your regular login password.'
+                    : 'Your email account password or app password.'}
+                </p>
               </div>
 
               <Button

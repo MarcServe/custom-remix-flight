@@ -314,8 +314,20 @@ serve(async (req) => {
       // Build all payloads (template render is CPU-only, no I/O)
       const payloads: Array<{ recipientId: string; personId: string | null; email: any }> = [];
       for (const recipient of allPendingRecipients) {
-        if (!recipient.email || !recipient.personalized_subject) {
-          console.warn(`Skipping recipient ${recipient.id}: missing email or subject`);
+        if (!recipient.personalized_subject) {
+          console.warn(`Skipping recipient ${recipient.id}: missing subject`);
+          continue;
+        }
+        // Guard: skip recipients whose email field is multi-address (comma-separated) — those should have been split at import time
+        const emailStr = (recipient.email || '').trim();
+        const isValidSingleEmail = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(emailStr);
+        if (!emailStr || !isValidSingleEmail) {
+          console.warn(`Skipping recipient ${recipient.id}: invalid or multi-address email "${emailStr}"`);
+          await supabaseClient.from('email_campaign_recipients').update({
+            status: 'failed',
+            error_message: emailStr.includes(',') ? 'Multiple email addresses in one recipient — re-add this company to split into separate recipients.' : 'Invalid email address',
+          }).eq('id', recipient.id);
+          failedCount++;
           continue;
         }
         let wrappedHtml: string;
@@ -463,8 +475,18 @@ serve(async (req) => {
 
       for (const recipient of recipients) {
         try {
-          if (!recipient.email || !recipient.personalized_subject) {
-            throw new Error(`Missing required fields for recipient ${recipient.id}`);
+          if (!recipient.personalized_subject) {
+            throw new Error(`Missing subject for recipient ${recipient.id}`);
+          }
+          const gmailEmailStr = (recipient.email || '').trim();
+          const isValidGmailEmail = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(gmailEmailStr);
+          if (!gmailEmailStr || !isValidGmailEmail) {
+            await supabaseClient.from('email_campaign_recipients').update({
+              status: 'failed',
+              error_message: gmailEmailStr.includes(',') ? 'Multiple email addresses — re-add this company to split into separate recipients.' : 'Invalid email address',
+            }).eq('id', recipient.id);
+            failedCount++;
+            continue;
           }
 
           const nangoSecretKey = Deno.env.get('NANGO_SECRET_KEY');
@@ -539,13 +561,23 @@ serve(async (req) => {
       // ═══════════════════════════════════════════════════════════════
       for (const recipient of allPendingRecipients) {
         try {
-          if (!recipient.email || !recipient.personalized_subject) {
-            throw new Error(`Missing required fields for recipient ${recipient.id}: email or subject`);
+          if (!recipient.personalized_subject) {
+            throw new Error(`Missing subject for recipient ${recipient.id}`);
+          }
+          const sgEmailStr = (recipient.email || '').trim();
+          const isValidSgEmail = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(sgEmailStr);
+          if (!sgEmailStr || !isValidSgEmail) {
+            await supabaseClient.from('email_campaign_recipients').update({
+              status: 'failed',
+              error_message: sgEmailStr.includes(',') ? 'Multiple email addresses — re-add this company to split into separate recipients.' : 'Invalid email address',
+            }).eq('id', recipient.id);
+            failedCount++;
+            continue;
           }
           const bodyText = recipient.personalized_body_text || '';
           const bodyHtmlRaw = recipient.personalized_body_html || '';
           if (!bodyText.trim() && !bodyHtmlRaw.trim()) {
-            throw new Error(`No body content for recipient ${recipient.email}`);
+            throw new Error(`No body content for recipient ${sgEmailStr}`);
           }
 
           let messageId: string | null = null;

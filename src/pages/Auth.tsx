@@ -288,7 +288,7 @@ export default function Auth() {
         <span className="text-xs font-semibold text-primary">Full LeadBoosters access free for 7 days</span>
       </div>
 
-      <Tabs defaultValue={mode} className="w-full">
+      <Tabs value={mode} onValueChange={(v) => navigate(`?mode=${v}`, { replace: true })} className="w-full">
         <TabsList className="grid w-full grid-cols-2 mb-4">
           <TabsTrigger value="signin">Sign In</TabsTrigger>
           <TabsTrigger value="signup">Sign Up</TabsTrigger>
@@ -414,8 +414,8 @@ export default function Auth() {
           <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block">Pricing</a>
           <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block mr-2">Features</a>
           <span className="text-sm text-muted-foreground hidden sm:block">|</span>
-          <a href="#auth" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors sm:block hidden ml-2">Sign in</a>
-          <a href="#auth">
+          <a href="?mode=signin#auth" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors sm:block hidden ml-2">Sign in</a>
+          <a href="?mode=signup#auth">
             <Button size="sm" className="gap-1.5">
               Get started free <ArrowRight className="h-3.5 w-3.5" />
             </Button>
@@ -443,7 +443,7 @@ export default function Auth() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center mb-12">
-          <a href="#auth">
+          <a href="?mode=signup#auth">
             <Button size="lg" className="gap-2 px-8 shadow-lg">
               <Sparkles className="h-4 w-4" />
               Start free 7-day trial
@@ -557,7 +557,7 @@ export default function Auth() {
                     </li>
                   ))}
                 </ul>
-                <a href="#auth">
+                <a href="?mode=signup#auth">
                   <Button
                     className="w-full"
                     variant={plan.highlight ? 'default' : 'outline'}
@@ -609,7 +609,7 @@ export default function Auth() {
           <p className="text-muted-foreground text-sm mb-6">
             Join teams using LeadBoosters to find, enrich, and close leads at scale.
           </p>
-          <a href="#auth">
+          <a href="?mode=signup#auth">
             <Button size="lg" className="gap-2 px-10 shadow-lg">
               <Sparkles className="h-4 w-4" />
               Start free trial
@@ -646,7 +646,7 @@ export default function Auth() {
           <MarketingContent />
         </div>
         {/* Right: sticky auth panel */}
-        <div className="w-[420px] shrink-0 border-l h-screen overflow-y-auto flex items-center justify-center px-8 py-12 bg-card/40 backdrop-blur-sm">
+        <div id="auth" className="w-[420px] shrink-0 border-l h-screen overflow-y-auto flex items-center justify-center px-8 py-12 bg-card/40 backdrop-blur-sm">
           <AuthPanel />
         </div>
       </div>

@@ -623,18 +623,25 @@ export default function Campaigns() {
           if (companiesData && user) {
             for (const company of companiesData as any[]) {
               const contactWithEmail = company.contacts?.find((c: any) => c.email);
-              const companyEmail = contactWithEmail?.email || company.general_email;
-              if (!companyEmail || seenEmails.has(companyEmail.toLowerCase().trim())) continue;
-              const { data: existP } = await supabase.from('people').select('id, first_name, last_name, email').ilike('email', companyEmail).maybeSingle();
-              if (existP) {
-                seenEmails.add(existP.email.toLowerCase().trim());
-                resolved.push({ id: existP.id, first_name: existP.first_name ?? '', last_name: existP.last_name ?? '', email: existP.email, company_id: company.id });
-              } else {
-                const nameParts = contactWithEmail?.name ? contactWithEmail.name.trim().split(' ') : company.name.trim().split(' ');
-                const { data: newP } = await supabase.from('people').insert({ first_name: nameParts[0] || company.name, last_name: nameParts.slice(1).join(' ') || '', email: companyEmail, company_id: company.id, user_id: user.id }).select('id, first_name, last_name, email, company_id').single();
-                if (newP) {
-                  seenEmails.add(newP.email.toLowerCase().trim());
-                  resolved.push({ id: newP.id, first_name: newP.first_name ?? '', last_name: newP.last_name ?? '', email: newP.email, company_id: newP.company_id });
+              // Split general_email by comma/semicolon to handle multiple addresses per company
+              const rawEmail = contactWithEmail?.email || company.general_email || '';
+              const companyEmails = rawEmail
+                .split(/[,;]+/)
+                .map((e: string) => e.trim().toLowerCase())
+                .filter((e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+              for (const companyEmail of companyEmails) {
+                if (!companyEmail || seenEmails.has(companyEmail)) continue;
+                const { data: existP } = await supabase.from('people').select('id, first_name, last_name, email').ilike('email', companyEmail).maybeSingle();
+                if (existP) {
+                  seenEmails.add(existP.email.toLowerCase().trim());
+                  resolved.push({ id: existP.id, first_name: existP.first_name ?? '', last_name: existP.last_name ?? '', email: existP.email, company_id: company.id });
+                } else {
+                  const nameParts = contactWithEmail?.name ? contactWithEmail.name.trim().split(' ') : company.name.trim().split(' ');
+                  const { data: newP } = await supabase.from('people').insert({ first_name: nameParts[0] || company.name, last_name: nameParts.slice(1).join(' ') || '', email: companyEmail, company_id: company.id, user_id: user.id }).select('id, first_name, last_name, email, company_id').single();
+                  if (newP) {
+                    seenEmails.add(newP.email.toLowerCase().trim());
+                    resolved.push({ id: newP.id, first_name: newP.first_name ?? '', last_name: newP.last_name ?? '', email: newP.email, company_id: newP.company_id });
+                  }
                 }
               }
             }
@@ -2558,13 +2565,17 @@ export default function Campaigns() {
                 </div>
                 <Button disabled={addRecipientsSelectedCompanies.size === 0 || addingRecipientsFromDialog} onClick={async () => {
                   const selected = addRecipientsCompaniesList.filter(c => addRecipientsSelectedCompanies.has(c.id));
-                  const items = selected.map(c => ({ email: c.email, name: c.name || c.email }));
+                  // Expand companies with multiple comma-separated emails into one item per email
+                  const items = selected.flatMap(c => {
+                    const emails = (c.email || '').split(/[,;]+/).map((e: string) => e.trim()).filter((e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+                    return emails.map((email: string) => ({ email, name: c.name || email }));
+                  });
                   const rows = buildRecipientRows(items);
                   if (rows.length === 0) { toast.info('Selected companies are already in this campaign.'); return; }
                   await addRecipientsFromDialog(rows);
                 }}>
                   {addingRecipientsFromDialog ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-                  Add {addRecipientsSelectedCompanies.size} selected ({buildRecipientRows(addRecipientsCompaniesList.filter(c => addRecipientsSelectedCompanies.has(c.id)).map(c => ({ email: c.email, name: c.name || c.email }))).length} new)
+                  Add {addRecipientsSelectedCompanies.size} selected ({buildRecipientRows(addRecipientsCompaniesList.filter(c => addRecipientsSelectedCompanies.has(c.id)).flatMap(c => { const es = (c.email||'').split(/[,;]+/).map((e: string)=>e.trim()).filter((e: string)=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)); return es.map((email: string)=>({email,name:c.name||email})); })).length} new)
                 </Button>
               </TabsContent>
               <TabsContent value="paste" className="flex-1 min-h-0 mt-3 space-y-3">
