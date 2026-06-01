@@ -50,9 +50,10 @@ serve(async (req) => {
 
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     if (!resendApiKey) {
+      // Return 200 so the client gets the actual message instead of a generic "non-2xx" error
       return new Response(
-        JSON.stringify({ error: 'Resend API not configured' }),
-        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, skipped: true, message: 'Resend API key not configured. Add RESEND_API_KEY in Supabase secrets to enable tracking sync.' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -64,8 +65,8 @@ serve(async (req) => {
       .single();
     if (campError || !campaign || campaign.user_id !== user.id) {
       return new Response(
-        JSON.stringify({ error: 'Campaign not found or access denied' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, message: 'Campaign not found or access denied' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -86,9 +87,10 @@ serve(async (req) => {
       if (!res.ok) {
         const text = await res.text();
         console.error('Resend list error:', res.status, text);
+        // Return 200 with a descriptive message so client can show it clearly
         return new Response(
-          JSON.stringify({ error: `Resend API error: ${res.status}`, details: text }),
-          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ success: false, skipped: true, message: `Resend API returned ${res.status}. Check that your RESEND_API_KEY is valid.`, details: text }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       const json = await res.json();

@@ -1497,16 +1497,22 @@ export default function Campaigns() {
       const { data, error } = await supabase.functions.invoke('sync-resend-campaign-status', {
         body: { campaignId: selectedCampaign },
       });
-      if (error) throw error;
-      const updated = (data as { updated?: number; message?: string })?.updated ?? 0;
+      // functions.invoke sets error for non-2xx; the function now always returns 200
+      // but handle both paths for safety
+      const result = data as { success?: boolean; skipped?: boolean; message?: string; updated?: number } | null;
+      if (error) throw new Error(result?.message ?? error?.message ?? 'Sync failed');
+      if (result?.success === false) {
+        toast.warning(result.message ?? 'Sync could not complete.');
+        return;
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
       ]);
-      toast.success((data as { message?: string })?.message ?? `Synced ${updated} recipient(s) from Resend.`);
+      toast.success(result?.message ?? `Synced ${result?.updated ?? 0} recipient(s) from Resend.`);
     } catch (e: any) {
-      toast.error(e?.message ?? 'Failed to sync from Resend');
+      toast.error(e?.message ?? 'Failed to sync tracking data');
     } finally {
       setSyncingFromResend(false);
     }
@@ -2808,7 +2814,7 @@ export default function Campaigns() {
                   Tracking & follow-up
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Sync delivered/opened/clicked from Resend into the CRM, then create a reminder campaign for a segment (e.g. not opened).
+                  Pull delivered/opened/clicked status from Resend into the CRM (requires Resend as sender), then create a reminder campaign for a segment (e.g. not opened).
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
@@ -2818,7 +2824,7 @@ export default function Campaigns() {
                     disabled={syncingFromResend}
                   >
                     {syncingFromResend ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-                    Sync from Resend
+                    Sync tracking
                   </Button>
                   <Button
                     variant="outline"
