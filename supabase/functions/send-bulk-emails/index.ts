@@ -12,6 +12,12 @@ const corsHeaders = {
 // Reply-To for campaign emails: use Resend inbound so replies are received by Resend and show in Conversations
 const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || 'leadgenie@eldapgraaa.resend.app';
 
+// Gmail daily send limit (free: 500/day, Workspace: 2000/day). 450 leaves headroom.
+const GMAIL_DAILY_LIMIT = 450;
+
+// Resend batch API limit per call
+const RESEND_BATCH_SIZE = 100;
+
 function parseResendError(status: number, bodyText: string): string {
   try {
     const j = JSON.parse(bodyText);
@@ -22,6 +28,99 @@ function parseResendError(status: number, bodyText: string): string {
     return typeof msg === 'string' ? msg : bodyText;
   } catch {
     return bodyText;
+  }
+}
+
+/** Render template + strip signoff for a single recipient's body */
+function buildWrappedHtml(
+  recipient: any,
+  branding: any,
+  userProfile: any,
+  senderName: string,
+  fromEmail: string,
+): string {
+  let bodyHtml = recipient.personalized_body_html || '';
+  if (!bodyHtml.trim() && (recipient.personalized_body_text || '').trim()) {
+    bodyHtml = recipient.personalized_body_text;
+  }
+  bodyHtml = stripTrailingDuplicateSignoffHtml(bodyHtml);
+
+  return renderEmailTemplate(branding.templateStyle, {
+    body: bodyHtml || '',
+    senderName,
+    signatureName: branding.signatureName ?? undefined,
+    senderEmail: fromEmail,
+    senderTitle: branding.senderTitle || userProfile?.job_title,
+    companyName: branding.companyName,
+    headerName: branding.headerName || undefined,
+    logoUrl: branding.logoUrl,
+    brandColor: branding.brandColor,
+    footerText: branding.footerText,
+    footerImageUrl: branding.footerImageUrl,
+    signature: branding.signature,
+    senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
+    websiteUrl: branding.websiteUrl ?? undefined,
+  });
+}
+
+/** Enroll a recipient's company in a follow-up sequence (non-fatal) */
+async function enrollFollowUp(
+  supabaseClient: any,
+  recipient: any,
+  campaign: any,
+  campaignId: string,
+  sentAt: string,
+  messageId: string | null,
+) {
+  if (!campaign.auto_follow_up_enabled || !campaign.follow_up_sequence_id || !recipient.person_id) return;
+  try {
+    const { data: person } = await supabaseClient.from('people').select('company_id').eq('id', recipient.person_id).single();
+    const companyId = person?.company_id;
+    if (!companyId) return;
+    const { data: existing } = await supabaseClient.from('company_sequences').select('id').eq('campaign_id', campaignId).eq('company_id', companyId).maybeSingle();
+    if (existing) return;
+    const { data: followUpSequence } = await supabaseClient.from('email_sequences').select('steps, repeat_sequence, repeat_after_days, repeat_only_for').eq('id', campaign.follow_up_sequence_id).single();
+    const steps = Array.isArray(followUpSequence?.steps) ? followUpSequence.steps : [];
+    const personalizedEmails: any[] = [{ stepNumber: 0, subject: '(Campaign)', body: '', delayDays: 0 }];
+    steps.forEach((rawStep: unknown, i: number) => {
+      const step = typeof rawStep === 'string' ? (() => { try { return JSON.parse(rawStep); } catch { return {}; } })() : (rawStep as Record<string, unknown>) || {};
+      const ar = (step as any)?.automation_rule as { type?: string; wait_hours?: number } | undefined;
+      const ruleType = ar?.type && ['no_open', 'opened_not_clicked', 'clicked_not_replied', 'no_reply_after_open', 'time_based', 'wait_for_open', 'wait_for_click'].includes(ar.type) ? ar.type : undefined;
+      personalizedEmails.push({
+        stepNumber: i + 1,
+        subject: (step as any)?.subject ?? `Follow-up ${i + 1}`,
+        body: (step as any)?.body ?? '',
+        delayDays: typeof (step as any)?.delayDays === 'number' ? (step as any).delayDays : (i === 0 ? 3 : (i + 1) * 2),
+        ...(ruleType && ruleType !== 'none' && ruleType !== 'time_based' ? { automation_rule: { type: ruleType, wait_hours: ar?.wait_hours ?? 24 } } : {}),
+      });
+    });
+    const { data: newCs, error: csErr } = await supabaseClient.from('company_sequences').insert({
+      company_id: companyId,
+      sequence_id: campaign.follow_up_sequence_id,
+      campaign_id: campaignId,
+      sender_profile_id: campaign.sender_profile_id ?? null,
+      current_step: 0,
+      personalized_emails: personalizedEmails,
+      status: 'active',
+      automation_rules: { enabled: true, rules: [{ type: 'no_reply_after_open', wait_hours: 48 }, { type: 'no_open', wait_hours: 72 }] },
+      metadata: {
+        first_email_sent_at: sentAt,
+        campaign_recipient_id: recipient.id,
+        repeat_sequence: !!(followUpSequence as any)?.repeat_sequence,
+        repeat_after_days: Math.max(1, Math.min(30, (followUpSequence as any)?.repeat_after_days ?? 5)),
+        repeat_only_for: (followUpSequence as any)?.repeat_only_for ?? 'no_reply',
+      },
+    }).select('id').single();
+    if (!csErr && newCs?.id) {
+      await supabaseClient.from('email_activities').insert({
+        company_sequence_id: newCs.id, contact_id: null, step_number: 0,
+        subject: recipient.personalized_subject, body: recipient.personalized_body_text,
+        status: 'sent', sent_at: sentAt, external_message_id: messageId,
+        metadata: { campaign_id: campaignId, campaign_recipient_id: recipient.id },
+      });
+    }
+  } catch (err) {
+    console.error('Follow-up enrollment failed (non-fatal):', err);
   }
 }
 
@@ -47,67 +146,36 @@ serve(async (req) => {
     let userId: string | null = null;
 
     if (isServiceRole || triggeredByCron) {
-      // Use service role client for cron-triggered requests
       supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
       );
-      
-      // Get the campaign's user_id
       const { data: campaign, error: campaignError } = await supabaseClient
-        .from('email_campaigns')
-        .select('user_id')
-        .eq('id', campaignId)
-        .single();
-      
-      if (campaignError || !campaign) {
-        throw new Error('Campaign not found');
-      }
-      
+        .from('email_campaigns').select('user_id').eq('id', campaignId).single();
+      if (campaignError || !campaign) throw new Error('Campaign not found');
       userId = campaign.user_id;
       console.log(`[cron] Processing campaign for user: ${userId}`);
     } else {
-      // Use authenticated client for user-initiated requests
       supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-        {
-          global: {
-            headers: { Authorization: authHeader },
-          },
-        }
+        { global: { headers: { Authorization: authHeader } } }
       );
-
-      const {
-        data: { user },
-        error: authError,
-      } = await supabaseClient.auth.getUser();
-
-      if (authError || !user) {
-        throw new Error('Unauthorized');
-      }
-      
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+      if (authError || !user) throw new Error('Unauthorized');
       userId = user.id;
     }
 
     // Get campaign details
     const { data: campaign, error: campaignError } = await supabaseClient
-      .from('email_campaigns')
-      .select('*')
-      .eq('id', campaignId)
-      .single();
+      .from('email_campaigns').select('*').eq('id', campaignId).single();
+    if (campaignError || !campaign) throw new Error('Campaign not found');
 
-    if (campaignError || !campaign) {
-      throw new Error('Campaign not found');
-    }
-    
-    // Verify user ownership for non-service-role requests
     if (!isServiceRole && !triggeredByCron && campaign.user_id !== userId) {
       throw new Error('Unauthorized: Campaign does not belong to user');
     }
 
-    // After auth, use service role for all DB operations. User JWT + RLS can block recipient/campaign updates and
-    // email_activities inserts (e.g. campaign rows have no company_sequence_id) while Resend still sends — CRM shows 0 sent.
+    // After auth, use service role for all DB operations
     if (!isServiceRole && !triggeredByCron) {
       supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
@@ -116,84 +184,43 @@ serve(async (req) => {
     }
 
     // Update campaign status to sending
-    await supabaseClient
-      .from('email_campaigns')
-      .update({ 
-        status: 'sending',
-        started_at: new Date().toISOString()
-      })
-      .eq('id', campaignId);
+    await supabaseClient.from('email_campaigns').update({
+      status: 'sending',
+      started_at: new Date().toISOString()
+    }).eq('id', campaignId);
 
-    // Get pending recipients (batch of 50 to avoid overwhelming)
-    const { data: recipients, error: recipientsError } = await supabaseClient
+    // Get ALL pending recipients — provider-specific limits applied below
+    const { data: allPendingRecipients, error: recipientsError } = await supabaseClient
       .from('email_campaign_recipients')
       .select('*')
       .eq('campaign_id', campaignId)
       .eq('status', 'pending')
-      .limit(50);
+      .order('created_at', { ascending: true })
+      .limit(5000);
 
-    if (recipientsError) {
-      throw new Error('Failed to fetch recipients');
+    if (recipientsError) throw new Error('Failed to fetch recipients');
+
+    if (!allPendingRecipients || allPendingRecipients.length === 0) {
+      await supabaseClient.from('email_campaigns').update({
+        status: 'completed',
+        completed_at: new Date().toISOString()
+      }).eq('id', campaignId);
+      return new Response(JSON.stringify({ success: true, message: 'No pending recipients', sent: 0 }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
-
-    if (!recipients || recipients.length === 0) {
-      // Mark campaign as completed if no pending recipients
-      await supabaseClient
-        .from('email_campaigns')
-        .update({ 
-          status: 'completed',
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', campaignId);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: 'No pending recipients',
-          sent: 0,
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    console.log(`Sending to ${recipients.length} recipients`);
 
     let sentCount = 0;
     let failedCount = 0;
 
-    // Get user profile for signature and business email
-    const { data: userProfile } = await supabaseClient
-      .from('profiles')
-      .select('full_name, job_title, email, avatar_url')
-      .eq('id', userId)
-      .maybeSingle();
-
-    // Get business profile with email provider preference and branding settings
-    const { data: businessProfile } = await supabaseClient
-      .from('business_profiles')
+    // Resolve branding
+    const { data: userProfile } = await supabaseClient.from('profiles')
+      .select('full_name, job_title, email, avatar_url').eq('id', userId).maybeSingle();
+    const { data: businessProfile } = await supabaseClient.from('business_profiles')
       .select('company_name, email_header_name, email_provider, email_template_style, email_logo_url, email_brand_color, email_footer_text, email_footer_image_url, email_footer_logo_url, email_sender_image_url, email_sender_name, email_signature_name, email_sender_title, email_sender_email, email_signature, website')
-      .eq('user_id', userId)
-      .maybeSingle();
+      .eq('user_id', userId).maybeSingle();
 
-    // Resolve branding: when a sender profile is selected, use that profile; otherwise use business (default)
-    let branding: {
-      companyName: string | null;
-      headerName: string | null;
-      logoUrl: string | null;
-      brandColor: string;
-      footerText: string | null;
-      footerImageUrl: string | null;
-      signature: string | null;
-      templateStyle: string;
-      senderName: string | null;
-      signatureName: string | null;
-      senderEmail: string | null;
-      senderTitle: string | null;
-      senderImageUrl: string | null;
-      websiteUrl: string | null;
-    } = {
+    let branding: any = {
       companyName: businessProfile?.company_name || null,
       headerName: businessProfile?.email_header_name || null,
       logoUrl: businessProfile?.email_logo_url ?? null,
@@ -209,14 +236,10 @@ serve(async (req) => {
       senderImageUrl: businessProfile?.email_sender_image_url ?? null,
       websiteUrl: businessProfile?.website ?? null,
     };
-    // When campaign has a sender profile, email branding (business) still overrides; profile fills in only when branding has no value
     if (campaign.sender_profile_id) {
-      const { data: senderProfile } = await supabaseClient
-        .from('sender_profiles')
+      const { data: senderProfile } = await supabaseClient.from('sender_profiles')
         .select('name, display_name, logo_url, brand_color, footer_text, footer_image_url, footer_logo_url, signature, template_style, sender_name, signature_name, sender_email, sender_title, sender_image_url, website_url')
-        .eq('id', campaign.sender_profile_id)
-        .eq('user_id', userId)
-        .maybeSingle();
+        .eq('id', campaign.sender_profile_id).eq('user_id', userId).maybeSingle();
       if (senderProfile) {
         branding = {
           companyName: businessProfile?.company_name ?? null,
@@ -236,38 +259,20 @@ serve(async (req) => {
         };
       }
     }
-    // Campaign-level header image overrides sender/business logo when set
     if (campaign.header_image_url) branding.logoUrl = campaign.header_image_url;
-    // Ensure we always have a name next to the logo when logo is present
     if (branding.logoUrl && !branding.companyName) branding.companyName = businessProfile?.company_name || 'Company';
 
-    // Get connection - use campaign's sender_connection_id if specified, otherwise find optimal
+    // Resolve connection
     let optimalConnection: any;
-    
     if (campaign.sender_connection_id) {
-      // Use the specific connection saved with the campaign
       const { data: campaignConnection, error: connectionError } = await supabaseClient
-        .from('crm_connections')
-        .select('*')
-        .eq('id', campaign.sender_connection_id)
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .single();
-
+        .from('crm_connections').select('*').eq('id', campaign.sender_connection_id)
+        .eq('user_id', userId).eq('status', 'active').single();
       if (connectionError || !campaignConnection) {
         console.error('Campaign connection not found, falling back to optimal:', connectionError);
-        // Fall back to finding optimal connection
-        const { data: connections } = await supabaseClient
-          .from('crm_connections')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('status', 'active')
-          .order('tracking_enabled', { ascending: false });
-
-        if (!connections || connections.length === 0) {
-          throw new Error('No active email connections found. Please configure an email provider.');
-        }
-
+        const { data: connections } = await supabaseClient.from('crm_connections').select('*')
+          .eq('user_id', userId).eq('status', 'active').order('tracking_enabled', { ascending: false });
+        if (!connections || connections.length === 0) throw new Error('No active email connections found.');
         optimalConnection = connections.find((c: any) => c.tracking_enabled && ['resend', 'sendgrid'].includes(c.provider))
           || connections.find((c: any) => c.tracking_enabled && ['gmail', 'outlook'].includes(c.provider))
           || connections[0];
@@ -275,63 +280,193 @@ serve(async (req) => {
         optimalConnection = campaignConnection;
       }
     } else {
-      // No specific connection in campaign, find optimal one
-      const { data: connections, error: connectionsError } = await supabaseClient
-        .from('crm_connections')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .order('tracking_enabled', { ascending: false });
-
-      if (!connections || connections.length === 0) {
-        throw new Error('No active email connections found. Please configure an email provider.');
-      }
-
-      // Priority: Providers with tracking > Resend/SendGrid > Gmail/Outlook > SMTP Direct
+      const { data: connections } = await supabaseClient.from('crm_connections').select('*')
+        .eq('user_id', userId).eq('status', 'active').order('tracking_enabled', { ascending: false });
+      if (!connections || connections.length === 0) throw new Error('No active email connections found. Please configure an email provider.');
       optimalConnection = connections.find((c: any) => c.tracking_enabled && ['resend', 'sendgrid'].includes(c.provider))
         || connections.find((c: any) => c.tracking_enabled && ['gmail', 'outlook'].includes(c.provider))
         || connections[0];
     }
 
     const emailProvider = optimalConnection.provider;
-    console.log(`Using email provider: ${emailProvider} (connection ID: ${optimalConnection.id}, tracking: ${optimalConnection.tracking_enabled})`);
+    console.log(`Using email provider: ${emailProvider} (connection: ${optimalConnection.id}, tracking: ${optimalConnection.tracking_enabled})`);
 
-    // Get API-key provider connection for verified from_email (if not already optimal)
     let effectiveConnection = optimalConnection;
     if (!['resend', 'sendgrid'].includes(optimalConnection.provider)) {
-      const { data: apiConnection } = await supabaseClient
-        .from('crm_connections')
-        .select('from_email')
-        .eq('user_id', userId)
-        .eq('provider', emailProvider)
-        .eq('status', 'active')
-        .maybeSingle();
-      
-      if (apiConnection?.from_email) {
-        effectiveConnection = { ...optimalConnection, from_email: apiConnection.from_email };
-      }
+      const { data: apiConnection } = await supabaseClient.from('crm_connections').select('from_email')
+        .eq('user_id', userId).eq('provider', emailProvider).eq('status', 'active').maybeSingle();
+      if (apiConnection?.from_email) effectiveConnection = { ...optimalConnection, from_email: apiConnection.from_email };
     }
 
-    // Send emails with rate limiting
-    for (const recipient of recipients) {
-      try {
-        // Validate recipient has required fields
+    // ═══════════════════════════════════════════════════════════════════
+    // RESEND — Batch-send all recipients in chunks of 100 via /emails/batch
+    // No cron batching needed; Resend handles thousands in seconds.
+    // ═══════════════════════════════════════════════════════════════════
+    if (emailProvider === 'resend') {
+      const resendApiKey = Deno.env.get('RESEND_API_KEY');
+      if (!resendApiKey) throw new Error('Resend not configured. Please add RESEND_API_KEY.');
+
+      const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'CRM';
+      const fromEmail = branding.senderEmail || effectiveConnection.from_email || userProfile?.email || 'onboarding@resend.dev';
+
+      console.log(`[Resend] Building ${allPendingRecipients.length} email payloads…`);
+
+      // Build all payloads (template render is CPU-only, no I/O)
+      const payloads: Array<{ recipientId: string; personId: string | null; email: any }> = [];
+      for (const recipient of allPendingRecipients) {
         if (!recipient.email || !recipient.personalized_subject) {
-          throw new Error(`Missing required fields for recipient ${recipient.id}: email or subject`);
+          console.warn(`Skipping recipient ${recipient.id}: missing email or subject`);
+          continue;
         }
-
-        // Ensure we have body content
-        const bodyText = recipient.personalized_body_text || '';
-        const bodyHtml = recipient.personalized_body_html || '';
-        
-        if (!bodyText.trim() && !bodyHtml.trim()) {
-          throw new Error(`No body content for recipient ${recipient.email}`);
+        let wrappedHtml: string;
+        try {
+          wrappedHtml = buildWrappedHtml(recipient, branding, userProfile, senderName, fromEmail);
+        } catch (err: any) {
+          console.error(`Template render error for ${recipient.email}:`, err);
+          wrappedHtml = `<p>${(recipient.personalized_body_html || recipient.personalized_body_text || '').replace(/\n/g, '<br>')}</p>`;
         }
+        payloads.push({
+          recipientId: recipient.id,
+          personId: recipient.person_id ?? null,
+          email: {
+            from: `${senderName} <${fromEmail}>`,
+            to: [recipient.email],
+            subject: recipient.personalized_subject,
+            text: recipient.personalized_body_text || '',
+            html: wrappedHtml,
+            reply_to: RESEND_INBOUND_EMAIL,
+            headers: { 'X-Priority': '3', Importance: 'normal' },
+          },
+        });
+      }
 
-        let messageId: string | null = null;
+      console.log(`[Resend] Sending ${payloads.length} emails in batches of ${RESEND_BATCH_SIZE}`);
+      const sentAt = new Date().toISOString();
 
-        if (optimalConnection.provider === 'gmail') {
-          // Send via Gmail/Nango
+      for (let i = 0; i < payloads.length; i += RESEND_BATCH_SIZE) {
+        const chunk = payloads.slice(i, i + RESEND_BATCH_SIZE);
+        const chunkNum = Math.floor(i / RESEND_BATCH_SIZE) + 1;
+        try {
+          const batchRes = await fetch('https://api.resend.com/emails/batch', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(chunk.map(c => c.email)),
+          });
+
+          if (!batchRes.ok) {
+            const errText = await batchRes.text();
+            const errMsg = parseResendError(batchRes.status, errText);
+            console.error(`[Resend] Chunk ${chunkNum} failed:`, errMsg);
+            const failUpdates = chunk.map(c => ({ id: c.recipientId, status: 'failed', error_message: errMsg }));
+            for (const u of failUpdates) {
+              await supabaseClient.from('email_campaign_recipients').update({ status: 'failed', error_message: u.error_message }).eq('id', u.id);
+            }
+            failedCount += chunk.length;
+            continue;
+          }
+
+          const batchResult = await batchRes.json();
+          // batchResult.data: Array<{ id: string }>
+          const messageIds: (string | null)[] = (batchResult.data || []).map((d: any) => d?.id ?? null);
+
+          // Bulk-update recipients (upsert on primary key)
+          await supabaseClient.from('email_campaign_recipients').upsert(
+            chunk.map((c, idx) => ({
+              id: c.recipientId,
+              status: 'sent',
+              sent_at: sentAt,
+              external_message_id: messageIds[idx] ?? null,
+              email_period: 'new',
+            })),
+            { onConflict: 'id' }
+          );
+
+          // Record A/B history + bulk-insert activities
+          const activityRows = [];
+          for (let j = 0; j < chunk.length; j++) {
+            const item = chunk[j];
+            const rec = allPendingRecipients.find((r: any) => r.id === item.recipientId);
+            if (!rec) continue;
+
+            // A/B history
+            const variantSent = rec.ab_variant === 'A' || rec.ab_variant === 'B' ? rec.ab_variant : null;
+            if (variantSent && campaign.ab_test_enabled) {
+              await supabaseClient.from('email_campaign_send_history').insert({
+                campaign_id: campaignId, recipient_id: rec.id, variant_sent: variantSent, sent_at: sentAt,
+              });
+            }
+
+            activityRows.push({
+              contact_id: item.personId,
+              step_number: 0,
+              subject: rec.personalized_subject,
+              body: rec.personalized_body_text,
+              status: 'sent',
+              sent_at: sentAt,
+              external_message_id: messageIds[j] ?? null,
+              email_period: 'new',
+              metadata: {
+                campaign_id: campaignId,
+                provider: 'resend',
+                sending_method: optimalConnection.sending_method,
+                tracking_enabled: optimalConnection.tracking_enabled,
+                can_track_opens: optimalConnection.capabilities?.opens || false,
+                can_track_clicks: optimalConnection.capabilities?.clicks || false,
+                can_track_replies: optimalConnection.capabilities?.replies || false,
+                recipient_email: rec.email,
+                recipient_name: rec.name,
+              },
+            });
+
+            // Auto follow-up (fire and forget per recipient)
+            await enrollFollowUp(supabaseClient, rec, campaign, campaignId, sentAt, messageIds[j] ?? null);
+          }
+
+          if (activityRows.length > 0) {
+            await supabaseClient.from('email_activities').insert(activityRows);
+          }
+
+          sentCount += chunk.length;
+          console.log(`[Resend] Chunk ${chunkNum}: sent ${chunk.length}  |  total so far: ${sentCount}`);
+        } catch (chunkErr: any) {
+          console.error(`[Resend] Chunk ${chunkNum} exception:`, chunkErr);
+          for (const c of chunk) {
+            await supabaseClient.from('email_campaign_recipients').update({ status: 'failed', error_message: chunkErr.message }).eq('id', c.recipientId);
+          }
+          failedCount += chunk.length;
+        }
+      }
+
+    } else if (emailProvider === 'gmail') {
+      // ═══════════════════════════════════════════════════════════════
+      // GMAIL — Daily limit of 450 emails. Cron continues the next day.
+      // ═══════════════════════════════════════════════════════════════
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+
+      // Count all campaign emails sent by this user today (via any campaign)
+      const { count: todaySentCount } = await supabaseClient
+        .from('email_campaign_recipients')
+        .select('email_campaigns!inner(user_id)', { count: 'exact', head: true })
+        .eq('email_campaigns.user_id', userId!)
+        .gte('sent_at', todayStart.toISOString())
+        .in('status', ['sent', 'delivered', 'opened', 'clicked']);
+
+      const remainingQuota = Math.max(0, GMAIL_DAILY_LIMIT - (todaySentCount || 0));
+      const recipients = allPendingRecipients.slice(0, remainingQuota);
+
+      console.log(`[Gmail] Daily quota: ${todaySentCount || 0} sent today, ${remainingQuota} remaining. Processing ${recipients.length} of ${allPendingRecipients.length} pending.`);
+
+      if (recipients.length === 0) {
+        console.log('[Gmail] Daily limit reached (450). Cron will pick up tomorrow.');
+      }
+
+      for (const recipient of recipients) {
+        try {
+          if (!recipient.email || !recipient.personalized_subject) {
+            throw new Error(`Missing required fields for recipient ${recipient.id}`);
+          }
+
           const nangoSecretKey = Deno.env.get('NANGO_SECRET_KEY');
           if (!nangoSecretKey) throw new Error('Gmail not configured');
 
@@ -346,472 +481,224 @@ serve(async (req) => {
             body: JSON.stringify({
               to: [{ email: recipient.email, name: recipient.name }],
               subject: recipient.personalized_subject,
-              body: {
-                content: recipient.personalized_body_text,
-                type: 'text/plain',
-              },
+              body: { content: recipient.personalized_body_text, type: 'text/plain' },
             }),
           });
 
-          if (!nangoResponse.ok) {
-            throw new Error('Gmail send failed');
-          }
+          if (!nangoResponse.ok) throw new Error('Gmail send failed');
 
           const nangoData = await nangoResponse.json();
-          messageId = nangoData.id || null;
-        } else if (optimalConnection.provider === 'smtp') {
-          // Send via SMTP with branded template
-          const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'Your Business';
-          const fromEmail = branding.senderEmail || optimalConnection.from_email || userProfile?.email || 'noreply@yourdomain.com';
-          
-          // Extract body HTML (remove trailing duplicate sign-off only — avoid greedy regex on first "Best regards" in body)
-          let bodyHtml = recipient.personalized_body_html || '';
-          // Fallback: when no HTML stored (e.g. legacy B or edge case), use plain text so template bodyTextToHtml can convert
-          if (!bodyHtml.trim() && (recipient.personalized_body_text || '').trim()) {
-            bodyHtml = recipient.personalized_body_text;
-          }
-          bodyHtml = stripTrailingDuplicateSignoffHtml(bodyHtml);
-          
-          // Render with branded template
-          let wrappedHtml: string;
-          try {
-            wrappedHtml = renderEmailTemplate(
-              branding.templateStyle,
-              {
-                body: bodyHtml || '',
-                senderName,
-                signatureName: branding.signatureName ?? undefined,
-                senderEmail: fromEmail,
-                senderTitle: branding.senderTitle || userProfile?.job_title,
-                companyName: branding.companyName,
-                headerName: branding.headerName || undefined,
-                logoUrl: branding.logoUrl,
-                brandColor: branding.brandColor,
-                footerText: branding.footerText,
-                footerImageUrl: branding.footerImageUrl,
-                signature: branding.signature,
-                senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
-                websiteUrl: branding.websiteUrl ?? undefined,
-              }
-            );
-          } catch (templateError: any) {
-            console.error('Error rendering email template (SMTP):', templateError);
-            throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
-          }
+          const messageId = nangoData.id || null;
+          const sentAt = new Date().toISOString();
 
-          const smtpMode = (optimalConnection.metadata as any)?.smtp_mode || 'direct'; // Default to 'direct' for open-source use
+          await supabaseClient.from('email_campaign_recipients').update({
+            status: 'sent', sent_at: sentAt, external_message_id: messageId, email_period: 'new',
+          }).eq('id', recipient.id);
 
-          if (smtpMode === 'direct' && (optimalConnection.metadata as any)?.smtp_host) {
-            // Direct SMTP
-            const smtpConfig = optimalConnection.metadata as any;
-            const client = new SMTPClient({
-              connection: {
-                hostname: smtpConfig.smtp_host,
-                port: smtpConfig.smtp_port || 587,
-                tls: smtpConfig.smtp_secure !== false,
-                auth: {
-                  username: smtpConfig.smtp_username,
-                  password: smtpConfig.smtp_password,
-                },
-              },
+          const variantSent = recipient.ab_variant === 'A' || recipient.ab_variant === 'B' ? recipient.ab_variant : null;
+          if (variantSent && campaign.ab_test_enabled) {
+            await supabaseClient.from('email_campaign_send_history').insert({
+              campaign_id: campaignId, recipient_id: recipient.id, variant_sent: variantSent, sent_at: sentAt,
             });
-
-            await client.send({
-              from: `${senderName} <${optimalConnection.from_email}>`,
-              to: recipient.email,
-              subject: recipient.personalized_subject,
-              content: recipient.personalized_body_text,
-              html: wrappedHtml,
-            });
-
-            await client.close();
-            messageId = `direct-smtp-${Date.now()}`;
-          } else {
-            // Resend relay - use verified email from connection or fallback
-            const resendApiKey = Deno.env.get('RESEND_API_KEY');
-            if (!resendApiKey) throw new Error('Email service not configured');
-
-            const effectiveFromEmail = effectiveConnection.from_email || userProfile?.email;
-            if (!effectiveFromEmail) {
-              throw new Error('Business Email not configured. Please set your business email in Settings > Profile.');
-            }
-
-            const resendResponse = await fetch('https://api.resend.com/emails', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${resendApiKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                from: `${senderName} <${effectiveFromEmail}>`,
-                to: [recipient.email],
-                subject: recipient.personalized_subject,
-                text: recipient.personalized_body_text,
-                html: wrappedHtml,
-              }),
-            });
-
-            if (!resendResponse.ok) {
-              const errorData = await resendResponse.text();
-              console.error('Resend API error:', errorData);
-              throw new Error(parseResendError(resendResponse.status, errorData));
-            }
-
-            const resendData = await resendResponse.json();
-            messageId = resendData.id || null;
-          }
-        } else if (emailProvider === 'sendgrid') {
-          // Send via SendGrid
-          const sendgridApiKey = Deno.env.get('SENDGRID_API_KEY');
-          if (!sendgridApiKey) throw new Error('SendGrid not configured');
-
-          const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'Your Business';
-          const fromEmail = branding.senderEmail || effectiveConnection.from_email || userProfile?.email;
-          if (!fromEmail) {
-            throw new Error('Business Email not configured. Please set your business email in Settings > Profile and verify it in SendGrid.');
-          }
-          
-          // Extract body HTML (remove trailing duplicate sign-off only — avoid greedy regex on first "Best regards" in body)
-          let bodyHtml = recipient.personalized_body_html || '';
-          // Fallback: when no HTML stored (e.g. legacy B or edge case), use plain text so template bodyTextToHtml can convert
-          if (!bodyHtml.trim() && (recipient.personalized_body_text || '').trim()) {
-            bodyHtml = recipient.personalized_body_text;
-          }
-          bodyHtml = stripTrailingDuplicateSignoffHtml(bodyHtml);
-          
-          // Render with branded template
-          let wrappedHtml: string;
-          try {
-            wrappedHtml = renderEmailTemplate(
-              branding.templateStyle,
-              {
-                body: bodyHtml || '',
-                senderName,
-                signatureName: branding.signatureName ?? undefined,
-                senderEmail: fromEmail,
-                senderTitle: branding.senderTitle || userProfile?.job_title,
-                companyName: branding.companyName,
-                headerName: branding.headerName || undefined,
-                logoUrl: branding.logoUrl,
-                brandColor: branding.brandColor,
-                footerText: branding.footerText,
-                footerImageUrl: branding.footerImageUrl,
-                signature: branding.signature,
-                senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
-                websiteUrl: branding.websiteUrl ?? undefined,
-              }
-            );
-          } catch (templateError: any) {
-            console.error('Error rendering email template (SMTP):', templateError);
-            throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
           }
 
-          const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${sendgridApiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              personalizations: [{
-                to: [{ email: recipient.email, name: recipient.name }],
-                subject: recipient.personalized_subject,
-              }],
-              from: {
-                email: fromEmail,
-                name: senderName,
-              },
-              reply_to: {
-                email: fromEmail,
-                name: senderName,
-              },
-              content: [
-                {
-                  type: 'text/plain',
-                  value: recipient.personalized_body_text,
-                },
-                {
-                  type: 'text/html',
-                  value: wrappedHtml,
-                },
-              ],
-            }),
-          });
-
-          if (!sendgridResponse.ok) {
-            throw new Error('SendGrid send failed');
-          }
-
-          messageId = sendgridResponse.headers.get('X-Message-Id') || null;
-        } else if (emailProvider === 'resend') {
-          // Send via Resend
-          const resendApiKey = Deno.env.get('RESEND_API_KEY');
-          if (!resendApiKey) throw new Error('Resend not configured. Please add RESEND_API_KEY.');
-
-          const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'CRM';
-          const fromEmail = branding.senderEmail || effectiveConnection.from_email || userProfile?.email || 'onboarding@resend.dev';
-          
-          // Extract body HTML (remove trailing duplicate sign-off only — avoid greedy regex on first "Best regards" in body)
-          let bodyHtml = recipient.personalized_body_html || '';
-          // Fallback: when no HTML stored (e.g. legacy B or edge case), use plain text so template bodyTextToHtml can convert
-          if (!bodyHtml.trim() && (recipient.personalized_body_text || '').trim()) {
-            bodyHtml = recipient.personalized_body_text;
-          }
-          bodyHtml = stripTrailingDuplicateSignoffHtml(bodyHtml);
-          
-          // Render with branded template
-          let wrappedHtml: string;
-          try {
-            wrappedHtml = renderEmailTemplate(
-              branding.templateStyle,
-              {
-                body: bodyHtml || '',
-                senderName,
-                signatureName: branding.signatureName ?? undefined,
-                senderEmail: fromEmail,
-                senderTitle: branding.senderTitle || userProfile?.job_title,
-                companyName: branding.companyName,
-                headerName: branding.headerName || undefined,
-                logoUrl: branding.logoUrl,
-                brandColor: branding.brandColor,
-                footerText: branding.footerText,
-                footerImageUrl: branding.footerImageUrl,
-                signature: branding.signature,
-                senderImageUrl: branding.senderImageUrl || userProfile?.avatar_url,
-                websiteUrl: branding.websiteUrl ?? undefined,
-              }
-            );
-          } catch (templateError: any) {
-            console.error('Error rendering email template (Resend):', templateError);
-            throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
-          }
-
-          const resendResponse = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${resendApiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              from: `${senderName} <${fromEmail}>`,
-              to: [recipient.email],
-              subject: recipient.personalized_subject,
-              text: recipient.personalized_body_text || '',
-              html: wrappedHtml,
-              reply_to: RESEND_INBOUND_EMAIL,
-              headers: {
-                'X-Priority': '3',
-                'Importance': 'normal',
-              },
-            }),
-          });
-
-          if (!resendResponse.ok) {
-            const errorData = await resendResponse.text();
-            console.error('Resend API error:', errorData);
-            throw new Error(parseResendError(resendResponse.status, errorData));
-          }
-
-          const resendData = await resendResponse.json();
-          messageId = resendData.id || null;
-        } else {
-          throw new Error(`Unsupported email provider: ${emailProvider}`);
-        }
-
-        // Update recipient status with tracking metadata
-        const sentAt = new Date().toISOString();
-        await supabaseClient
-          .from('email_campaign_recipients')
-          .update({
-            status: 'sent',
-            sent_at: sentAt,
-            external_message_id: messageId,
-            email_period: 'new', // Mark as new email
-          })
-          .eq('id', recipient.id);
-
-        // Record A/B send history so we never resend the same variant to the same person
-        const variantSent = recipient.ab_variant === 'A' || recipient.ab_variant === 'B' ? recipient.ab_variant : null;
-        if (variantSent && campaign.ab_test_enabled) {
-          await supabaseClient.from('email_campaign_send_history').insert({
-            campaign_id: campaignId,
-            recipient_id: recipient.id,
-            variant_sent: variantSent,
-            sent_at: sentAt,
-          });
-        }
-
-        // Record detailed email activity with provider tracking info
-        await supabaseClient
-          .from('email_activities')
-          .insert({
-            contact_id: recipient.person_id,
-            step_number: 0,
-            subject: recipient.personalized_subject,
-            body: recipient.personalized_body_text,
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-            external_message_id: messageId,
-            email_period: 'new', // Mark as new email
+          await supabaseClient.from('email_activities').insert({
+            contact_id: recipient.person_id, step_number: 0,
+            subject: recipient.personalized_subject, body: recipient.personalized_body_text,
+            status: 'sent', sent_at: sentAt, external_message_id: messageId, email_period: 'new',
             metadata: {
-              campaign_id: campaignId,
-              provider: optimalConnection.provider,
+              campaign_id: campaignId, provider: 'gmail',
               sending_method: optimalConnection.sending_method,
               tracking_enabled: optimalConnection.tracking_enabled,
               can_track_opens: optimalConnection.capabilities?.opens || false,
               can_track_clicks: optimalConnection.capabilities?.clicks || false,
               can_track_replies: optimalConnection.capabilities?.replies || false,
-              recipient_email: recipient.email,
-              recipient_name: recipient.name,
+              recipient_email: recipient.email, recipient_name: recipient.name,
             },
           });
 
-        // Auto follow-up: enroll recipient's company in follow-up sequence for no-reply reminders
-        const followUpSeqId = campaign.auto_follow_up_enabled && campaign.follow_up_sequence_id && recipient.person_id
-          ? campaign.follow_up_sequence_id
-          : null;
-        if (followUpSeqId) {
-          try {
-            const { data: person } = await supabaseClient
-              .from('people')
-              .select('company_id')
-              .eq('id', recipient.person_id)
-              .single();
-            const companyId = person?.company_id;
-            if (companyId) {
-              const { data: existing } = await supabaseClient
-                .from('company_sequences')
-                .select('id')
-                .eq('campaign_id', campaignId)
-                .eq('company_id', companyId)
-                .maybeSingle();
-              if (!existing) {
-                const { data: followUpSequence } = await supabaseClient
-                  .from('email_sequences')
-                  .select('steps, repeat_sequence, repeat_after_days, repeat_only_for')
-                  .eq('id', followUpSeqId)
-                  .single();
-                const steps = Array.isArray(followUpSequence?.steps) ? followUpSequence.steps : [];
-                const personalizedEmails: { stepNumber: number; subject: string; body: string; delayDays: number; automation_rule?: { type: string; wait_hours?: number } }[] = [
-                  { stepNumber: 0, subject: '(Campaign)', body: '', delayDays: 0 },
-                ];
-                steps.forEach((rawStep: unknown, i: number) => {
-                  const step = typeof rawStep === 'string' ? (() => { try { return JSON.parse(rawStep); } catch { return {}; } })() : (rawStep as Record<string, unknown>) || {};
-                  const subj = step?.subject ?? `Follow-up ${i + 1}`;
-                  const body = step?.body ?? '';
-                  const delayDays = typeof step?.delayDays === 'number' ? step.delayDays : (i === 0 ? 3 : (i + 1) * 2);
-                  const ar = step?.automation_rule as { type?: string; wait_hours?: number } | undefined;
-                  const ruleType = ar?.type && ['no_open', 'opened_not_clicked', 'clicked_not_replied', 'no_reply_after_open', 'time_based', 'wait_for_open', 'wait_for_click'].includes(ar.type) ? ar.type : undefined;
-                  personalizedEmails.push({
-                    stepNumber: i + 1,
-                    subject: subj,
-                    body,
-                    delayDays,
-                    ...(ruleType && ruleType !== 'none' && ruleType !== 'time_based' ? { automation_rule: { type: ruleType, wait_hours: ar?.wait_hours ?? 24 } } : {}),
-                  });
-                });
-                const { data: newCs, error: csErr } = await supabaseClient
-                  .from('company_sequences')
-                  .insert({
-                    company_id: companyId,
-                    sequence_id: followUpSeqId,
-                    campaign_id: campaignId,
-                    sender_profile_id: campaign.sender_profile_id ?? null,
-                    current_step: 0,
-                    personalized_emails: personalizedEmails,
-                    status: 'active',
-                    automation_rules: {
-                      enabled: true,
-                      rules: [
-                        { type: 'no_reply_after_open', wait_hours: 48 },
-                        { type: 'no_open', wait_hours: 72 },
-                      ],
-                    },
-                    metadata: {
-                      first_email_sent_at: new Date().toISOString(),
-                      campaign_recipient_id: recipient.id,
-                      repeat_sequence: !!(followUpSequence as { repeat_sequence?: boolean })?.repeat_sequence,
-                      repeat_after_days: Math.max(1, Math.min(30, (followUpSequence as { repeat_after_days?: number })?.repeat_after_days ?? 5)),
-                      repeat_only_for: (followUpSequence as { repeat_only_for?: string })?.repeat_only_for ?? 'no_reply',
-                    },
-                  })
-                  .select('id')
-                  .single();
-                if (!csErr && newCs?.id) {
-                  await supabaseClient.from('email_activities').insert({
-                    company_sequence_id: newCs.id,
-                    contact_id: null,
-                    step_number: 0,
-                    subject: recipient.personalized_subject,
-                    body: recipient.personalized_body_text,
-                    status: 'sent',
-                    sent_at: new Date().toISOString(),
-                    external_message_id: messageId,
-                    metadata: { campaign_id: campaignId, campaign_recipient_id: recipient.id },
-                  });
-                  console.log(`Enrolled company ${companyId} in follow-up sequence for campaign ${campaignId}`);
-                }
-              }
-            }
-          } catch (followUpErr) {
-            console.error('Campaign follow-up enrollment failed (non-fatal):', followUpErr);
-          }
+          await enrollFollowUp(supabaseClient, recipient, campaign, campaignId, sentAt, messageId);
+
+          sentCount++;
+          // 1-second gap between Gmail sends to stay within rate limits
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        } catch (error: any) {
+          console.error(`[Gmail] Failed to send to ${recipient.email}:`, error);
+          await supabaseClient.from('email_campaign_recipients').update({
+            status: 'failed', error_message: error.message,
+          }).eq('id', recipient.id);
+          failedCount++;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
+      }
 
-        sentCount++;
+    } else {
+      // ═══════════════════════════════════════════════════════════════
+      // SENDGRID / SMTP — Individual sends, no artificial delay
+      // ═══════════════════════════════════════════════════════════════
+      for (const recipient of allPendingRecipients) {
+        try {
+          if (!recipient.email || !recipient.personalized_subject) {
+            throw new Error(`Missing required fields for recipient ${recipient.id}: email or subject`);
+          }
+          const bodyText = recipient.personalized_body_text || '';
+          const bodyHtmlRaw = recipient.personalized_body_html || '';
+          if (!bodyText.trim() && !bodyHtmlRaw.trim()) {
+            throw new Error(`No body content for recipient ${recipient.email}`);
+          }
 
-        // Sending control: 1 email per 5 seconds to preserve SMTP health and avoid spam
-        const delayMs = 5000;
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+          let messageId: string | null = null;
 
-      } catch (error: any) {
-        console.error(`Failed to send to ${recipient.email}:`, error);
+          if (emailProvider === 'smtp') {
+            const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'Your Business';
+            const fromEmail = branding.senderEmail || optimalConnection.from_email || userProfile?.email || 'noreply@yourdomain.com';
+            let wrappedHtml: string;
+            try {
+              wrappedHtml = buildWrappedHtml(recipient, branding, userProfile, senderName, fromEmail);
+            } catch (templateError: any) {
+              throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
+            }
 
-        // Update recipient with error
-        await supabaseClient
-          .from('email_campaign_recipients')
-          .update({
-            status: 'failed',
-            error_message: error.message,
-          })
-          .eq('id', recipient.id);
+            const smtpMode = (optimalConnection.metadata as any)?.smtp_mode || 'direct';
+            if (smtpMode === 'direct' && (optimalConnection.metadata as any)?.smtp_host) {
+              const smtpConfig = optimalConnection.metadata as any;
+              const client = new SMTPClient({
+                connection: {
+                  hostname: smtpConfig.smtp_host,
+                  port: smtpConfig.smtp_port || 587,
+                  tls: smtpConfig.smtp_secure !== false,
+                  auth: { username: smtpConfig.smtp_username, password: smtpConfig.smtp_password },
+                },
+              });
+              await client.send({
+                from: `${senderName} <${optimalConnection.from_email}>`,
+                to: recipient.email,
+                subject: recipient.personalized_subject,
+                content: recipient.personalized_body_text,
+                html: wrappedHtml,
+              });
+              await client.close();
+              messageId = `direct-smtp-${Date.now()}`;
+            } else {
+              // SMTP relay via Resend
+              const resendApiKey = Deno.env.get('RESEND_API_KEY');
+              if (!resendApiKey) throw new Error('Email service not configured');
+              const effectiveFromEmail = effectiveConnection.from_email || userProfile?.email;
+              if (!effectiveFromEmail) throw new Error('Business Email not configured.');
+              const resendResponse = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  from: `${senderName} <${effectiveFromEmail}>`,
+                  to: [recipient.email],
+                  subject: recipient.personalized_subject,
+                  text: recipient.personalized_body_text,
+                  html: wrappedHtml,
+                }),
+              });
+              if (!resendResponse.ok) {
+                const errorData = await resendResponse.text();
+                throw new Error(parseResendError(resendResponse.status, errorData));
+              }
+              messageId = (await resendResponse.json()).id || null;
+            }
+          } else if (emailProvider === 'sendgrid') {
+            const sendgridApiKey = Deno.env.get('SENDGRID_API_KEY');
+            if (!sendgridApiKey) throw new Error('SendGrid not configured');
+            const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'Your Business';
+            const fromEmail = branding.senderEmail || effectiveConnection.from_email || userProfile?.email;
+            if (!fromEmail) throw new Error('Business Email not configured.');
+            let wrappedHtml: string;
+            try {
+              wrappedHtml = buildWrappedHtml(recipient, branding, userProfile, senderName, fromEmail);
+            } catch (templateError: any) {
+              throw new Error(`Failed to render email template: ${templateError instanceof Error ? templateError.message : String(templateError)}`);
+            }
+            const sendgridResponse = await fetch('https://api.sendgrid.com/v3/mail/send', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${sendgridApiKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                personalizations: [{ to: [{ email: recipient.email, name: recipient.name }], subject: recipient.personalized_subject }],
+                from: { email: fromEmail, name: senderName },
+                reply_to: { email: fromEmail, name: senderName },
+                content: [
+                  { type: 'text/plain', value: recipient.personalized_body_text },
+                  { type: 'text/html', value: wrappedHtml },
+                ],
+              }),
+            });
+            if (!sendgridResponse.ok) throw new Error('SendGrid send failed');
+            messageId = sendgridResponse.headers.get('X-Message-Id') || null;
+          } else {
+            throw new Error(`Unsupported email provider: ${emailProvider}`);
+          }
 
-        failedCount++;
+          const sentAt = new Date().toISOString();
+          await supabaseClient.from('email_campaign_recipients').update({
+            status: 'sent', sent_at: sentAt, external_message_id: messageId, email_period: 'new',
+          }).eq('id', recipient.id);
 
-        // Same delay after failed send so we don't hammer the provider
-        const delayMs = 5000;
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+          const variantSent = recipient.ab_variant === 'A' || recipient.ab_variant === 'B' ? recipient.ab_variant : null;
+          if (variantSent && campaign.ab_test_enabled) {
+            await supabaseClient.from('email_campaign_send_history').insert({
+              campaign_id: campaignId, recipient_id: recipient.id, variant_sent: variantSent, sent_at: sentAt,
+            });
+          }
+
+          await supabaseClient.from('email_activities').insert({
+            contact_id: recipient.person_id, step_number: 0,
+            subject: recipient.personalized_subject, body: recipient.personalized_body_text,
+            status: 'sent', sent_at: sentAt, external_message_id: messageId, email_period: 'new',
+            metadata: {
+              campaign_id: campaignId, provider: emailProvider,
+              sending_method: optimalConnection.sending_method,
+              tracking_enabled: optimalConnection.tracking_enabled,
+              can_track_opens: optimalConnection.capabilities?.opens || false,
+              can_track_clicks: optimalConnection.capabilities?.clicks || false,
+              can_track_replies: optimalConnection.capabilities?.replies || false,
+              recipient_email: recipient.email, recipient_name: recipient.name,
+            },
+          });
+
+          await enrollFollowUp(supabaseClient, recipient, campaign, campaignId, sentAt, messageId);
+
+          sentCount++;
+          // No artificial delay for API-based providers (SendGrid, SMTP relay)
+
+        } catch (error: any) {
+          console.error(`Failed to send to ${recipient.email}:`, error);
+          await supabaseClient.from('email_campaign_recipients').update({
+            status: 'failed', error_message: error.message,
+          }).eq('id', recipient.id);
+          failedCount++;
+        }
       }
     }
 
-    // Update campaign counts
-    await supabaseClient
-      .from('email_campaigns')
-      .update({
-        sent_count: campaign.sent_count + sentCount,
-        failed_count: campaign.failed_count + failedCount,
-      })
-      .eq('id', campaignId);
+    // Update campaign sent/failed counts
+    await supabaseClient.from('email_campaigns').update({
+      sent_count: campaign.sent_count + sentCount,
+      failed_count: campaign.failed_count + failedCount,
+    }).eq('id', campaignId);
 
-    // Check if more recipients remain
+    // Check remaining pending recipients
     const { count } = await supabaseClient
       .from('email_campaign_recipients')
       .select('*', { count: 'exact', head: true })
       .eq('campaign_id', campaignId)
       .eq('status', 'pending');
 
-    // If no more pending recipients, mark as completed
+    // Mark completed when no pending remain
     if (count === 0) {
-      await supabaseClient
-        .from('email_campaigns')
-        .update({ 
-          status: 'completed',
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', campaignId);
+      await supabaseClient.from('email_campaigns').update({
+        status: 'completed',
+        completed_at: new Date().toISOString()
+      }).eq('id', campaignId);
     }
+    // Gmail with remaining pending: leave as 'sending' — cron picks up tomorrow
 
-    console.log(`Campaign batch complete: ${sentCount} sent, ${failedCount} failed`);
+    console.log(`Campaign send complete: ${sentCount} sent, ${failedCount} failed, ${count ?? 0} still pending`);
 
     return new Response(
       JSON.stringify({
@@ -821,21 +708,14 @@ serve(async (req) => {
         failed: failedCount,
         remainingPending: count,
       }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: any) {
     console.error('Error in send-bulk-emails function:', error);
     return new Response(
-      JSON.stringify({
-        error: error.message || 'An error occurred',
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
+      JSON.stringify({ error: error.message || 'An error occurred' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });
