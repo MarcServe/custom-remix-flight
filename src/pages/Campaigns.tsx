@@ -425,7 +425,8 @@ export default function Campaigns() {
     () => (recipients ?? []).filter((r) => r.status === 'failed'),
     [recipients]
   );
-  const pendingRecipientsCount = (recipients ?? []).filter((r) => r.status === 'pending').length;
+  // Use server-side RPC count — always accurate regardless of which status filter is active
+  const pendingRecipientsCount = statusCounts?.pending ?? (recipients ?? []).filter((r) => r.status === 'pending').length;
   const canResendOrReschedule =
     selectedCampaignData &&
     ['sending', 'paused', 'completed', 'failed'].includes(selectedCampaignData.status?.toLowerCase?.() ?? '') &&
@@ -1244,9 +1245,14 @@ export default function Campaigns() {
     };
   }, [recipients]);
 
+  // Track pending count when sending started — for stall detection
+  const sendStartPendingRef = useRef<number>(0);
+  const pollCountRef = useRef<number>(0);
+
   // Stop polling when pending drops to 0 while a send is in progress
   useEffect(() => {
-    if (sendingPendingNow && pendingRecipientsCount === 0) {
+    if (!sendingPendingNow) return;
+    if (pendingRecipientsCount === 0) {
       if (sendPollRef.current) {
         clearInterval(sendPollRef.current);
         sendPollRef.current = null;
@@ -1258,7 +1264,18 @@ export default function Campaigns() {
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
         queryClient.invalidateQueries({ queryKey: ['campaign-send-history'] }),
       ]);
-      toast.success('All emails sent!');
+      toast.success('All pending emails sent!');
+      return;
+    }
+    // Stall detection: if after 20 polls (~60s) the count hasn't moved, warn
+    pollCountRef.current += 1;
+    if (pollCountRef.current >= 20 && pendingRecipientsCount >= sendStartPendingRef.current) {
+      if (sendPollRef.current) {
+        clearInterval(sendPollRef.current);
+        sendPollRef.current = null;
+      }
+      setSendingPendingNow(false);
+      toast.warning(`Send may have stalled — ${pendingRecipientsCount} still pending. Check your Resend connection and try again.`);
     }
   }, [pendingRecipientsCount, sendingPendingNow]);
 
@@ -1372,24 +1389,43 @@ export default function Campaigns() {
     }
   };
 
-  const handleSendPendingNow = () => {
+  const handleSendPendingNow = async () => {
     if (!selectedCampaign || pendingRecipientsCount === 0) return;
     setSendingPendingNow(true);
+    sendStartPendingRef.current = pendingRecipientsCount;
+    pollCountRef.current = 0;
 
-    // Fire-and-forget — don't await so UI stays responsive during the entire send
-    supabase.functions
-      .invoke('send-bulk-emails', { body: { campaignId: selectedCampaign } })
-      .catch((e: any) => console.error('Send bulk emails error:', e));
-
-    toast.info('Sending started — watching for completion automatically.');
-
-    // Poll every 3 s so the UI updates in real time without any manual refresh
+    // Start polling every 3 s for live progress — runs independently of the await below
     if (sendPollRef.current) clearInterval(sendPollRef.current);
     sendPollRef.current = setInterval(() => {
       queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] });
       queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] });
       queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
     }, 3000);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('send-bulk-emails', {
+        body: { campaignId: selectedCampaign },
+      });
+      if (error) {
+        throw new Error(error.message || 'Send failed');
+      }
+      // data.sent = how many went out in this invocation
+      // Self-retry handles any remaining pending — polling will catch the changes
+      if ((data?.sent ?? 0) === 0 && (data?.failed ?? 0) === 0) {
+        // Nothing was processed — likely a config issue
+        clearInterval(sendPollRef.current!);
+        sendPollRef.current = null;
+        setSendingPendingNow(false);
+        toast.error(data?.message || 'No emails were sent. Check your email provider connection in Settings.');
+      }
+      // Otherwise let polling handle the completion signal
+    } catch (e: any) {
+      clearInterval(sendPollRef.current!);
+      sendPollRef.current = null;
+      setSendingPendingNow(false);
+      toast.error(e?.message ?? 'Failed to send emails. Check your connection and try again.');
+    }
   };
 
   const handleEnrollSentCampaignInFollowUp = async () => {
