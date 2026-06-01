@@ -5,12 +5,24 @@ import { corsHeaders } from '../_shared/cors.ts';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-type ResendEmail = {
-  id: string;
-  to?: string[];
-  created_at?: string;
-  last_event?: string;
-};
+/**
+ * Fetch a single email's status from Resend using GET /emails/{id}.
+ * Much more targeted than listing all emails — no pagination, no rate-limit issues.
+ * Returns null if the request fails.
+ */
+async function fetchResendEmail(
+  id: string,
+  apiKey: string,
+): Promise<{ id: string; last_event?: string } | null> {
+  const res = await fetch(`https://api.resend.com/emails/${id}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!res.ok) {
+    console.warn(`[sync] Resend GET /emails/${id} → ${res.status}`);
+    return null;
+  }
+  return res.json();
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -38,8 +50,6 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const campaignId = body.campaignId as string | undefined;
-    const startDate = body.startDate as string | undefined; // ISO date or datetime
-    const endDate = body.endDate as string | undefined;
 
     if (!campaignId) {
       return new Response(
@@ -50,7 +60,6 @@ serve(async (req) => {
 
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     if (!resendApiKey) {
-      // Return 200 so the client gets the actual message instead of a generic "non-2xx" error
       return new Response(
         JSON.stringify({ success: false, skipped: true, message: 'Resend API key not configured. Add RESEND_API_KEY in Supabase secrets to enable tracking sync.' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -70,127 +79,77 @@ serve(async (req) => {
       );
     }
 
-    const start = startDate ? new Date(startDate).getTime() : null;
-    const end = endDate ? new Date(endDate).getTime() : null;
-    const allEmails: ResendEmail[] = [];
-    let cursor: string | undefined;
-    const maxPages = 10; // 10 × 100 = 1 000 emails max — avoids rate-limiting the list endpoint
-    let pages = 0;
-
-    while (pages < maxPages) {
-      const url = new URL('https://api.resend.com/emails');
-      url.searchParams.set('limit', '100');
-      if (cursor) url.searchParams.set('after', cursor);
-      const res = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${resendApiKey}` },
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        console.error('Resend list error:', res.status, text);
-        let userMessage: string;
-        if (res.status === 429) {
-          userMessage = 'Resend rate limit hit — please wait 30 seconds and try again.';
-        } else if (res.status === 401 || res.status === 403) {
-          userMessage = 'Resend API key invalid or expired. Re-add your RESEND_API_KEY in Supabase secrets.';
-        } else {
-          userMessage = `Resend API returned ${res.status}. Please try again shortly.`;
-        }
-        return new Response(
-          JSON.stringify({ success: false, skipped: true, message: userMessage }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      const json = await res.json();
-      const data = (json.data || []) as ResendEmail[];
-      for (const e of data) {
-        const created = e.created_at ? new Date(e.created_at).getTime() : 0;
-        if (start != null && created < start) continue;
-        if (end != null && created > end) continue;
-        allEmails.push(e);
-      }
-      if (!json.has_more || data.length === 0) break;
-      cursor = data[data.length - 1]?.id;
-      pages++;
-    }
-
-    const recipientByExternalId = new Map<string, { id: string; campaign_id: string }>();
+    // Fetch all sent recipients for this campaign that have a Resend message ID.
+    // Exclude already-clicked (highest status) to avoid unnecessary API calls.
     const { data: recipients } = await serviceSupabase
       .from('email_campaign_recipients')
-      .select('id, campaign_id, external_message_id, email, sent_at')
-      .eq('campaign_id', campaignId);
-    for (const r of recipients || []) {
-      if ((r as any).external_message_id) {
-        recipientByExternalId.set((r as any).external_message_id.trim(), { id: (r as any).id, campaign_id: (r as any).campaign_id });
-      }
+      .select('id, email, external_message_id, status')
+      .eq('campaign_id', campaignId)
+      .not('external_message_id', 'is', null)
+      .in('status', ['sent', 'delivered', 'opened']); // skip 'clicked' — already at max
+
+    if (!recipients || recipients.length === 0) {
+      return new Response(
+        JSON.stringify({ success: true, campaignId, checked: 0, updated: 0, message: 'No trackable recipients found. Send the campaign first.' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    const toEmail = (e: ResendEmail): string | null => {
-      const t = e.to?.[0];
-      if (typeof t === 'string') return t.trim().toLowerCase();
-      return null;
-    };
+    console.log(`[sync] Checking ${recipients.length} sent recipients via GET /emails/{id}`);
 
     let updated = 0;
-    let matched = 0;
     const now = new Date().toISOString();
 
-    for (const email of allEmails) {
-      let rec = recipientByExternalId.get(email.id);
-      if (!rec && toEmail(email)) {
-        const recipientEmail = toEmail(email)!;
-        const { data: byEmail } = await serviceSupabase
-          .from('email_campaign_recipients')
-          .select('id, campaign_id')
-          .eq('campaign_id', campaignId)
-          .ilike('email', recipientEmail)
-          .in('status', ['sent', 'opened', 'clicked'])
-          .order('sent_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (byEmail) {
-          rec = { id: byEmail.id, campaign_id: byEmail.campaign_id };
-          await serviceSupabase
+    // Process in parallel batches of 10 to stay well within rate limits
+    const CONCURRENCY = 10;
+    for (let i = 0; i < recipients.length; i += CONCURRENCY) {
+      const batch = (recipients as any[]).slice(i, i + CONCURRENCY);
+      await Promise.all(
+        batch.map(async (rec: any) => {
+          const emailData = await fetchResendEmail(rec.external_message_id, resendApiKey);
+          if (!emailData) return;
+
+          const lastEvent = (emailData.last_event || '').toLowerCase();
+          const updates: Record<string, unknown> = {};
+
+          if (['delivered', 'opened', 'clicked'].includes(lastEvent)) {
+            updates.delivered_at = now;
+            if (rec.status === 'sent') updates.status = 'delivered';
+          }
+          if (['opened', 'clicked'].includes(lastEvent)) {
+            updates.opened_at = now;
+            updates.status = 'opened';
+          }
+          if (lastEvent === 'clicked') {
+            updates.clicked_at = now;
+            updates.status = 'clicked';
+          }
+          if (lastEvent === 'bounced' || lastEvent === 'complained') {
+            updates.status = 'bounced';
+          }
+
+          if (Object.keys(updates).length === 0) return;
+
+          const { error: upErr } = await serviceSupabase
             .from('email_campaign_recipients')
-            .update({ external_message_id: email.id })
-            .eq('id', byEmail.id);
-          recipientByExternalId.set(email.id, rec);
-        }
-      }
-      if (!rec) continue;
-      matched++;
-
-      const lastEvent = (email.last_event || '').toLowerCase();
-      const updates: Record<string, unknown> = {};
-      if (['delivered', 'opened', 'clicked'].includes(lastEvent)) {
-        updates.delivered_at = now;
-      }
-      if (['opened', 'clicked'].includes(lastEvent)) {
-        updates.opened_at = now;
-        updates.status = 'opened';
-      }
-      if (lastEvent === 'clicked') {
-        updates.clicked_at = now;
-        updates.status = 'clicked';
-      }
-      if (Object.keys(updates).length === 0) continue;
-
-      const { error: upErr } = await serviceSupabase
-        .from('email_campaign_recipients')
-        .update(updates)
-        .eq('id', rec.id);
-      if (!upErr) updated++;
+            .update(updates)
+            .eq('id', rec.id);
+          if (!upErr) updated++;
+        })
+      );
     }
 
+    // Update campaign open/click counts
     if (updated > 0) {
-      const { count } = await serviceSupabase
+      const { count: openedCount } = await serviceSupabase
         .from('email_campaign_recipients')
         .select('*', { count: 'exact', head: true })
         .eq('campaign_id', campaignId)
         .in('status', ['opened', 'clicked']);
-      if (count != null) {
+      if (openedCount != null) {
         await serviceSupabase
           .from('email_campaigns')
-          .update({ opened_count: count })
+          .update({ opened_count: openedCount })
           .eq('id', campaignId);
       }
     }
@@ -199,10 +158,11 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         campaignId,
-        fetched: allEmails.length,
-        matched,
+        checked: recipients.length,
         updated,
-        message: `Synced ${updated} recipient(s) from Resend.`,
+        message: updated > 0
+          ? `Synced ${updated} recipient(s) — tracking data updated.`
+          : `Checked ${recipients.length} recipient(s) — no new tracking events.`,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
