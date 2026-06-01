@@ -228,14 +228,14 @@ serve(async (req) => {
       started_at: new Date().toISOString()
     }).eq('id', campaignId);
 
-    // Get ALL pending recipients — provider-specific limits applied below
+    // Get ALL pending recipients — no limit for Resend (handles thousands instantly)
     const { data: allPendingRecipients, error: recipientsError } = await supabaseClient
       .from('email_campaign_recipients')
       .select('*')
       .eq('campaign_id', campaignId)
       .eq('status', 'pending')
       .order('created_at', { ascending: true })
-      .limit(5000);
+      .limit(100000);
 
     if (recipientsError) throw new Error('Failed to fetch recipients');
 
@@ -351,57 +351,66 @@ serve(async (req) => {
       console.log(`[Resend] Building ${allPendingRecipients.length} email payloads…`);
 
       // Build all payloads (template render is CPU-only, no I/O)
+      // For Resend: the ONLY reason to skip a recipient is a truly unparseable email address.
+      // Missing subject/body always falls back — never leaves a recipient stuck as pending.
       const payloads: Array<{ recipientId: string; personId: string | null; resolvedSubject: string; resolvedBodyText: string; email: any }> = [];
+      const invalidEmailRows: any[] = [];
+
       for (const recipient of allPendingRecipients) {
-        // Guard: skip recipients whose email field is multi-address (comma-separated) — those should have been split at import time
         const emailStr = (recipient.email || '').trim();
         const isValidSingleEmail = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(emailStr);
         if (!emailStr || !isValidSingleEmail) {
-          console.warn(`Skipping recipient ${recipient.id}: invalid or multi-address email "${emailStr}"`);
-          await supabaseClient.from('email_campaign_recipients').update({
+          // Only hard-skip genuinely unparseable addresses — mark failed so they don't stay pending
+          invalidEmailRows.push({
+            id: recipient.id,
             status: 'failed',
-            error_message: emailStr.includes(',') ? 'Multiple email addresses in one recipient — re-add this company to split into separate recipients.' : 'Invalid email address',
-          }).eq('id', recipient.id);
+            error_message: emailStr.includes(',')
+              ? 'Multiple email addresses in one recipient — re-add to split into separate recipients.'
+              : 'Invalid email address',
+          });
           failedCount++;
           continue;
         }
 
-        // Resolve subject/body — fall back to campaign templates if personalization is missing
+        // Resolve subject / body — always produces a sendable value:
+        // 1. recipient's personalized field  2. campaign template  3. sensible default
         const { subject, bodyText, bodyHtml } = resolveRecipientContent(recipient, campaign);
-        if (!subject || subject === '(No subject)') {
-          console.warn(`Recipient ${recipient.id} has no subject and campaign has no subject_template — skipping`);
-          await supabaseClient.from('email_campaign_recipients').update({
-            status: 'failed',
-            error_message: 'Missing email subject — please set a subject template on the campaign.',
-          }).eq('id', recipient.id);
-          failedCount++;
-          continue;
-        }
+        const finalSubject = (subject && subject !== '(No subject)')
+          ? subject
+          : (campaign.name || 'Message for you');
+        const finalBodyText = bodyText || `Hi ${recipient.name || ''},\n\nPlease see this message.\n\nThank you.`;
+        const finalBodyHtml = bodyHtml || finalBodyText;
 
-        // Build a scratch recipient with resolved content for template rendering
-        const resolvedRecipient = { ...recipient, personalized_body_html: bodyHtml, personalized_body_text: bodyText };
+        const resolvedRecipient = { ...recipient, personalized_body_html: finalBodyHtml, personalized_body_text: finalBodyText };
         let wrappedHtml: string;
         try {
           wrappedHtml = buildWrappedHtml(resolvedRecipient, branding, userProfile, senderName, fromEmail);
         } catch (err: any) {
           console.error(`Template render error for ${recipient.email}:`, err);
-          wrappedHtml = `<p>${bodyHtml.replace(/\n/g, '<br>')}</p>`;
+          wrappedHtml = `<p>${finalBodyHtml.replace(/\n/g, '<br>')}</p>`;
         }
         payloads.push({
           recipientId: recipient.id,
           personId: recipient.person_id ?? null,
-          resolvedSubject: subject,
-          resolvedBodyText: bodyText,
+          resolvedSubject: finalSubject,
+          resolvedBodyText: finalBodyText,
           email: {
             from: `${senderName} <${fromEmail}>`,
             to: [recipient.email],
-            subject,
-            text: bodyText,
+            subject: finalSubject,
+            text: finalBodyText,
             html: wrappedHtml,
             reply_to: RESEND_INBOUND_EMAIL,
             headers: { 'X-Priority': '3', Importance: 'normal' },
           },
         });
+      }
+
+      // Bulk-write invalid email failures before sending
+      const DB_CHUNK = 500;
+      for (let i = 0; i < invalidEmailRows.length; i += DB_CHUNK) {
+        await supabaseClient.from('email_campaign_recipients')
+          .upsert(invalidEmailRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
       }
 
       // Split into chunks of 100 (Resend batch API limit per call)
@@ -486,7 +495,6 @@ serve(async (req) => {
       }
 
       // ── Single bulk DB write for all sent recipients (chunked at 500 rows) ─
-      const DB_CHUNK = 500;
       for (let i = 0; i < successUpsertRows.length; i += DB_CHUNK) {
         await supabaseClient.from('email_campaign_recipients')
           .upsert(successUpsertRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
