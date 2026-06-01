@@ -980,14 +980,14 @@ export default function Campaigns() {
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
-      let q = supabase.from('companies').select('id, name, email, industry').eq('user_id', user.id).not('email', 'is', null).order('created_at', { ascending: false }).limit(500);
+      let q = supabase.from('companies').select('id, name, general_email, industry').eq('user_id', user.id).not('general_email', 'is', null).order('created_at', { ascending: false }).limit(500);
       if (addRecipientsCompaniesSearch.trim()) {
         const term = addRecipientsCompaniesSearch.trim();
-        q = q.or(`name.ilike.%${term}%,email.ilike.%${term}%,industry.ilike.%${term}%`);
+        q = q.or(`name.ilike.%${term}%,general_email.ilike.%${term}%,industry.ilike.%${term}%`);
       }
       const { data, error } = await q;
       if (error) throw error;
-      return (data || []) as { id: string; name: string | null; email: string; industry: string | null }[];
+      return (data || []).map((c: any) => ({ ...c, email: c.general_email })) as { id: string; name: string | null; email: string; industry: string | null }[];
     },
   });
 
