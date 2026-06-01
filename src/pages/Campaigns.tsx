@@ -1324,7 +1324,7 @@ export default function Campaigns() {
         body: { campaignId: selectedCampaign },
       });
       if (sendError) console.error('Trigger send after resume:', sendError);
-      toast.success('Campaign resumed. Sending the next batch now; more will follow via cron or "Send pending now".');
+      toast.success('Campaign resumed. Sending all pending now (Resend/SendGrid sends all at once; Gmail sends up to 450/day).');
     } catch (e: any) {
       toast.error(e?.message ?? 'Failed to resume');
     } finally {
@@ -2705,7 +2705,7 @@ export default function Campaigns() {
                       : `${pendingRecipientsCount} still pending.`}
                   {pendingRecipientsCount > 0 && (
                     <span className="block text-xs mt-1 text-muted-foreground/90">
-                      Cron runs every 15 min. Use &quot;Send pending now&quot; to send the next batch immediately.
+                      Click &quot;Send pending now&quot; to send all pending immediately (Resend/SendGrid), or up to 450/day if using Gmail.
                     </span>
                   )}
                 </span>
@@ -3388,7 +3388,7 @@ export default function Campaigns() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2"><CalendarClock className="h-5 w-5" />Reschedule sending</DialogTitle>
               <DialogDescription>
-                Set a date and time to send. Failed recipients will be reset to pending and sent at the scheduled time (cron runs every 15 minutes).
+                Set a date and time to send. Failed recipients will be reset to pending and sent at the scheduled time. Resend/SendGrid sends all at once; Gmail sends up to 450/day.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
