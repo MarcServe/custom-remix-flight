@@ -249,6 +249,19 @@ serve(async (req) => {
       });
     }
 
+    // ── OPTIMISTIC LOCK ────────────────────────────────────────────────────────
+    // Mark every pending recipient as 'sent' RIGHT NOW before any email goes out.
+    // This means the cron (which queries status='pending') will see 0 results and
+    // never fire a second concurrent send. Failures are corrected to 'failed' below.
+    const lockSentAt = new Date().toISOString();
+    const LOCK_CHUNK = 500;
+    const lockRows = allPendingRecipients.map((r: any) => ({ id: r.id, status: 'sent', sent_at: lockSentAt }));
+    for (let i = 0; i < lockRows.length; i += LOCK_CHUNK) {
+      await supabaseClient.from('email_campaign_recipients')
+        .upsert(lockRows.slice(i, i + LOCK_CHUNK), { onConflict: 'id' });
+    }
+    console.log(`[Lock] Optimistically marked ${allPendingRecipients.length} recipients as sent — cron cannot double-send now`);
+
     let sentCount = 0;
     let failedCount = 0;
 
@@ -458,9 +471,11 @@ serve(async (req) => {
       );
 
       // ── Step 2: Consolidate what Resend accepted vs rejected ──────────────
-      const successUpsertRows: any[] = [];
+      // Invalid emails were never locked (they were skipped before building payloads)
+      // so we still need to write their failed status explicitly.
+      const successUpsertRows: any[] = []; // just adds message IDs — status already 'sent'
       const activityRows: any[] = [];
-      const failedUpsertRows: any[] = [...invalidEmailRows];
+      const failedUpsertRows: any[] = [...invalidEmailRows]; // these were never locked
 
       for (const result of chunkResults) {
         if (!result.success) {
@@ -647,23 +662,23 @@ serve(async (req) => {
 
           const nangoData = await nangoResponse.json();
           const messageId = nangoData.id || null;
-          const sentAt = new Date().toISOString();
 
+          // Recipient already locked as 'sent' — just add message ID
           await supabaseClient.from('email_campaign_recipients').update({
-            status: 'sent', sent_at: sentAt, external_message_id: messageId,
+            external_message_id: messageId,
           }).eq('id', recipient.id);
 
           const variantSent = recipient.ab_variant === 'A' || recipient.ab_variant === 'B' ? recipient.ab_variant : null;
           if (variantSent && campaign.ab_test_enabled) {
             await supabaseClient.from('email_campaign_send_history').insert({
-              campaign_id: campaignId, recipient_id: recipient.id, variant_sent: variantSent, sent_at: sentAt,
+              campaign_id: campaignId, recipient_id: recipient.id, variant_sent: variantSent, sent_at: lockSentAt,
             });
           }
 
           await supabaseClient.from('email_activities').insert({
             contact_id: recipient.person_id, step_number: 0,
             subject: gmailSubject, body: gmailBodyText,
-            status: 'sent', sent_at: sentAt, external_message_id: messageId,
+            status: 'sent', sent_at: lockSentAt, external_message_id: messageId,
             metadata: {
               campaign_id: campaignId, provider: 'gmail',
               sending_method: optimalConnection.sending_method,
@@ -675,7 +690,7 @@ serve(async (req) => {
             },
           });
 
-          await enrollFollowUp(supabaseClient, recipient, campaign, campaignId, sentAt, messageId);
+          await enrollFollowUp(supabaseClient, recipient, campaign, campaignId, lockSentAt, messageId);
 
           sentCount++;
           // 1-second gap between Gmail sends to stay within rate limits
@@ -683,8 +698,9 @@ serve(async (req) => {
 
         } catch (error: any) {
           console.error(`[Gmail] Failed to send to ${recipient.email}:`, error);
+          // Correct the optimistic lock — this recipient actually failed
           await supabaseClient.from('email_campaign_recipients').update({
-            status: 'failed', error_message: error.message,
+            status: 'failed', sent_at: null, error_message: error.message,
           }).eq('id', recipient.id);
           failedCount++;
           await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -806,22 +822,22 @@ serve(async (req) => {
             throw new Error(`Unsupported email provider: ${emailProvider}`);
           }
 
-          const sentAt = new Date().toISOString();
+          // Recipient already locked as 'sent' — just add message ID
           await supabaseClient.from('email_campaign_recipients').update({
-            status: 'sent', sent_at: sentAt, external_message_id: messageId,
+            external_message_id: messageId,
           }).eq('id', recipient.id);
 
           const variantSent = recipient.ab_variant === 'A' || recipient.ab_variant === 'B' ? recipient.ab_variant : null;
           if (variantSent && campaign.ab_test_enabled) {
             await supabaseClient.from('email_campaign_send_history').insert({
-              campaign_id: campaignId, recipient_id: recipient.id, variant_sent: variantSent, sent_at: sentAt,
+              campaign_id: campaignId, recipient_id: recipient.id, variant_sent: variantSent, sent_at: lockSentAt,
             });
           }
 
           await supabaseClient.from('email_activities').insert({
             contact_id: recipient.person_id, step_number: 0,
             subject: sgSubject, body: bodyText,
-            status: 'sent', sent_at: sentAt, external_message_id: messageId,
+            status: 'sent', sent_at: lockSentAt, external_message_id: messageId,
             metadata: {
               campaign_id: campaignId, provider: emailProvider,
               sending_method: optimalConnection.sending_method,
@@ -833,15 +849,15 @@ serve(async (req) => {
             },
           });
 
-          await enrollFollowUp(supabaseClient, recipient, campaign, campaignId, sentAt, messageId);
+          await enrollFollowUp(supabaseClient, recipient, campaign, campaignId, lockSentAt, messageId);
 
           sentCount++;
-          // No artificial delay for API-based providers (SendGrid, SMTP relay)
 
         } catch (error: any) {
           console.error(`Failed to send to ${recipient.email}:`, error);
+          // Correct the optimistic lock — this recipient actually failed
           await supabaseClient.from('email_campaign_recipients').update({
-            status: 'failed', error_message: error.message,
+            status: 'failed', sent_at: null, error_message: error.message,
           }).eq('id', recipient.id);
           failedCount++;
         }
