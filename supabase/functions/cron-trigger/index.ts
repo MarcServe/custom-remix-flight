@@ -87,29 +87,82 @@ Deno.serve(async (req) => {
         }
 
         // Campaign IDs that still have pending recipients (for continue logic)
-        const { data: pendingByCampaign, error: pendingError } = await supabase
+        const { data: pendingByCampaign } = await supabase
           .from('email_campaign_recipients')
           .select('campaign_id')
           .eq('status', 'pending');
         const campaignIdsWithPending = [...new Set((pendingByCampaign || []).map((r: any) => r.campaign_id))];
 
-        const { data: sendingCampaigns, error: sendingError } = campaignIdsWithPending.length > 0
-          ? await supabase
-              .from('email_campaigns')
-              .select('id, user_id, name, scheduled_at')
-              .eq('status', 'sending')
-              .in('id', campaignIdsWithPending)
-          : { data: [] as any[], error: null };
+        // Fetch in-progress campaigns with their connection provider so we can
+        // skip Resend — Resend sends everything in one shot on the first trigger
+        // and must never be cron-retried (causes duplicate sends).
+        // Only Gmail/SMTP campaigns legitimately need cron continuation.
+        let sendingCampaigns: any[] = [];
+        if (campaignIdsWithPending.length > 0) {
+          const { data: rawSending, error: sendingError } = await supabase
+            .from('email_campaigns')
+            .select('id, user_id, name, scheduled_at, sender_connection_id')
+            .eq('status', 'sending')
+            .in('id', campaignIdsWithPending);
 
-        if (sendingError) {
-          console.error('[cron-trigger] Error fetching sending campaigns:', sendingError);
+          if (sendingError) {
+            console.error('[cron-trigger] Error fetching sending campaigns:', sendingError);
+          }
+
+          if (rawSending && rawSending.length > 0) {
+            // Determine the provider for each campaign
+            const userIds = [...new Set(rawSending.map((c: any) => c.user_id))];
+            const connectionIds = rawSending
+              .map((c: any) => c.sender_connection_id)
+              .filter(Boolean);
+
+            // Fetch all relevant connections in one query
+            const { data: connections } = await supabase
+              .from('crm_connections')
+              .select('id, user_id, provider, status')
+              .or(
+                connectionIds.length > 0
+                  ? `id.in.(${connectionIds.join(',')}),and(user_id.in.(${userIds.join(',')}),status.eq.active)`
+                  : `user_id.in.(${userIds.join(',')}),status.eq.active`
+              );
+
+            const connById = new Map((connections || []).map((c: any) => [c.id, c]));
+            const connByUser = new Map<string, any[]>();
+            for (const c of (connections || [])) {
+              if (!connByUser.has(c.user_id)) connByUser.set(c.user_id, []);
+              connByUser.get(c.user_id)!.push(c);
+            }
+
+            for (const campaign of rawSending) {
+              // Resolve which provider this campaign uses
+              let provider: string | null = null;
+              if (campaign.sender_connection_id && connById.has(campaign.sender_connection_id)) {
+                provider = connById.get(campaign.sender_connection_id)!.provider;
+              } else {
+                // No explicit connection — find the user's best active connection
+                const userConns = connByUser.get(campaign.user_id) || [];
+                const best = userConns.find((c: any) => c.provider === 'resend')
+                  || userConns.find((c: any) => c.provider === 'sendgrid')
+                  || userConns[0];
+                provider = best?.provider ?? null;
+              }
+
+              if (provider === 'resend') {
+                // Resend campaigns send everything in one shot — never cron-retry
+                console.log(`[cron-trigger] Skipping Resend campaign "${campaign.name}" — Resend is one-shot, no cron retry`);
+                continue;
+              }
+
+              sendingCampaigns.push(campaign);
+            }
+          }
         }
 
         const campaigns = [
           ...(scheduledCampaigns || []),
-          ...(sendingCampaigns || []).filter((s: any) => !(scheduledCampaigns || []).some((sc: any) => sc.id === s.id))
+          ...sendingCampaigns.filter((s: any) => !(scheduledCampaigns || []).some((sc: any) => sc.id === s.id))
         ];
-        console.log(`[cron-trigger] Found ${scheduledCampaigns?.length || 0} scheduled, ${(sendingCampaigns || []).length} in-progress with pending → ${campaigns.length} campaigns to process`);
+        console.log(`[cron-trigger] Found ${scheduledCampaigns?.length || 0} scheduled, ${sendingCampaigns.length} in-progress non-Resend → ${campaigns.length} campaigns to process`);
 
         const results: any[] = [];
 
