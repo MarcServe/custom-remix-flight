@@ -338,8 +338,14 @@ serve(async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // RESEND — Batch-send all recipients in chunks of 100 via /emails/batch
-    // No cron batching needed; Resend handles thousands in seconds.
+    // RESEND — Batch-send ALL recipients at once via /emails/batch.
+    // Strategy:
+    //   1. Build payloads (CPU-only, sync)
+    //   2. Fire ALL Resend batch calls in parallel (fast, ~1-2s total)
+    //   3. Return response to caller IMMEDIATELY
+    //   4. Run all DB writes + follow-ups + campaign completion in
+    //      EdgeRuntime.waitUntil() so they never race against the
+    //      function timeout and the cron never sees pending recipients again.
     // ═══════════════════════════════════════════════════════════════════
     if (emailProvider === 'resend') {
       const resendApiKey = Deno.env.get('RESEND_API_KEY');
@@ -350,34 +356,28 @@ serve(async (req) => {
 
       console.log(`[Resend] Building ${allPendingRecipients.length} email payloads…`);
 
-      // Build all payloads (template render is CPU-only, no I/O)
-      // For Resend: the ONLY reason to skip a recipient is a truly unparseable email address.
-      // Missing subject/body always falls back — never leaves a recipient stuck as pending.
-      const payloads: Array<{ recipientId: string; personId: string | null; resolvedSubject: string; resolvedBodyText: string; email: any }> = [];
+      const payloads: Array<{
+        recipientId: string; personId: string | null;
+        resolvedSubject: string; resolvedBodyText: string; email: any;
+      }> = [];
       const invalidEmailRows: any[] = [];
 
       for (const recipient of allPendingRecipients) {
         const emailStr = (recipient.email || '').trim();
         const isValidSingleEmail = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(emailStr);
         if (!emailStr || !isValidSingleEmail) {
-          // Only hard-skip genuinely unparseable addresses — mark failed so they don't stay pending
           invalidEmailRows.push({
-            id: recipient.id,
-            status: 'failed',
+            id: recipient.id, status: 'failed',
             error_message: emailStr.includes(',')
-              ? 'Multiple email addresses in one recipient — re-add to split into separate recipients.'
+              ? 'Multiple email addresses — re-add to split into separate recipients.'
               : 'Invalid email address',
           });
           failedCount++;
           continue;
         }
 
-        // Resolve subject / body — always produces a sendable value:
-        // 1. recipient's personalized field  2. campaign template  3. sensible default
         const { subject, bodyText, bodyHtml } = resolveRecipientContent(recipient, campaign);
-        const finalSubject = (subject && subject !== '(No subject)')
-          ? subject
-          : (campaign.name || 'Message for you');
+        const finalSubject = (subject && subject !== '(No subject)') ? subject : (campaign.name || 'Message for you');
         const finalBodyText = bodyText || `Hi ${recipient.name || ''},\n\nPlease see this message.\n\nThank you.`;
         const finalBodyHtml = bodyHtml || finalBodyText;
 
@@ -390,10 +390,8 @@ serve(async (req) => {
           wrappedHtml = `<p>${finalBodyHtml.replace(/\n/g, '<br>')}</p>`;
         }
         payloads.push({
-          recipientId: recipient.id,
-          personId: recipient.person_id ?? null,
-          resolvedSubject: finalSubject,
-          resolvedBodyText: finalBodyText,
+          recipientId: recipient.id, personId: recipient.person_id ?? null,
+          resolvedSubject: finalSubject, resolvedBodyText: finalBodyText,
           email: {
             from: `${senderName} <${fromEmail}>`,
             to: [recipient.email],
@@ -406,23 +404,34 @@ serve(async (req) => {
         });
       }
 
-      // Bulk-write invalid email failures before sending
-      const DB_CHUNK = 500;
-      for (let i = 0; i < invalidEmailRows.length; i += DB_CHUNK) {
-        await supabaseClient.from('email_campaign_recipients')
-          .upsert(invalidEmailRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
+      if (payloads.length === 0) {
+        // Only invalid emails — nothing to send; return quickly
+        const DB_CHUNK = 500;
+        for (let i = 0; i < invalidEmailRows.length; i += DB_CHUNK) {
+          await supabaseClient.from('email_campaign_recipients')
+            .upsert(invalidEmailRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
+        }
+        await supabaseClient.from('email_campaigns').update({
+          sent_count: campaign.sent_count,
+          failed_count: campaign.failed_count + failedCount,
+        }).eq('id', campaignId);
+        return new Response(JSON.stringify({
+          success: true, message: `0 sent — all ${failedCount} recipients had invalid/multi-address emails`,
+          sent: 0, failed: failedCount,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // Split into chunks of 100 (Resend batch API limit per call)
+      // Split into chunks of 100 (Resend /emails/batch hard limit)
+      const DB_CHUNK = 500;
       const chunks: typeof payloads[] = [];
       for (let i = 0; i < payloads.length; i += RESEND_BATCH_SIZE) {
         chunks.push(payloads.slice(i, i + RESEND_BATCH_SIZE));
       }
-      console.log(`[Resend] Sending ${payloads.length} emails across ${chunks.length} parallel batch call(s)`);
+      console.log(`[Resend] Firing ${payloads.length} emails across ${chunks.length} parallel batch call(s)`);
       const sentAt = new Date().toISOString();
+      const recipientLookup = new Map(allPendingRecipients.map((r: any) => [r.id, r]));
 
-      // ── Fire ALL chunks to Resend in parallel ──────────────────────────────
-      // Resend handles thousands/second; we're doing at most ~50 calls for 5000 emails.
+      // ── Step 1: Fire ALL chunks to Resend simultaneously ──────────────────
       const chunkResults = await Promise.all(
         chunks.map(async (chunk, chunkIdx) => {
           try {
@@ -448,11 +457,10 @@ serve(async (req) => {
         })
       );
 
-      // ── Consolidate results ────────────────────────────────────────────────
+      // ── Step 2: Consolidate what Resend accepted vs rejected ──────────────
       const successUpsertRows: any[] = [];
       const activityRows: any[] = [];
-      const failedUpsertRows: any[] = [];
-      const recipientLookup = new Map(allPendingRecipients.map((r: any) => [r.id, r]));
+      const failedUpsertRows: any[] = [...invalidEmailRows];
 
       for (const result of chunkResults) {
         if (!result.success) {
@@ -468,13 +476,6 @@ serve(async (req) => {
           successUpsertRows.push({ id: item.recipientId, status: 'sent', sent_at: sentAt, external_message_id: msgId });
           const rec = recipientLookup.get(item.recipientId);
           if (rec) {
-            // A/B history
-            const variantSent = rec.ab_variant === 'A' || rec.ab_variant === 'B' ? rec.ab_variant : null;
-            if (variantSent && campaign.ab_test_enabled) {
-              await supabaseClient.from('email_campaign_send_history').insert({
-                campaign_id: campaignId, recipient_id: rec.id, variant_sent: variantSent, sent_at: sentAt,
-              });
-            }
             activityRows.push({
               contact_id: item.personId, step_number: 0,
               subject: item.resolvedSubject, body: item.resolvedBodyText,
@@ -494,58 +495,87 @@ serve(async (req) => {
         sentCount += result.chunk.length;
       }
 
-      // ── Single bulk DB write for all sent recipients (chunked at 500 rows) ─
-      for (let i = 0; i < successUpsertRows.length; i += DB_CHUNK) {
-        await supabaseClient.from('email_campaign_recipients')
-          .upsert(successUpsertRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
-      }
-      for (let i = 0; i < failedUpsertRows.length; i += DB_CHUNK) {
-        await supabaseClient.from('email_campaign_recipients')
-          .upsert(failedUpsertRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
-      }
-      // Bulk-insert activities
-      for (let i = 0; i < activityRows.length; i += DB_CHUNK) {
-        await supabaseClient.from('email_activities').insert(activityRows.slice(i, i + DB_CHUNK));
-      }
+      console.log(`[Resend] Accepted by Resend: ${sentCount} sent, ${failedCount} failed. Running DB writes in background…`);
 
-      // Auto follow-up enrollments in parallel (non-fatal)
-      await Promise.allSettled(
-        successUpsertRows.map(row => {
-          const rec = recipientLookup.get(row.id);
-          return rec ? enrollFollowUp(supabaseClient, rec, campaign, campaignId, sentAt, row.external_message_id) : Promise.resolve();
-        })
-      );
-
-      console.log(`[Resend] Complete: ${sentCount} sent, ${failedCount} failed`);
-
-      // ── Immediate self-retry if pending recipients remain (avoids 15-min cron wait) ──
-      // Only retry if we made progress (sentCount > 0) to avoid infinite loops on hard failures.
-      // Cap at 10 retries as a safety net.
-      const { count: remainingAfterSend } = await supabaseClient
-        .from('email_campaign_recipients')
-        .select('*', { count: 'exact', head: true })
-        .eq('campaign_id', campaignId)
-        .eq('status', 'pending');
-
-      if ((remainingAfterSend ?? 0) > 0 && sentCount > 0 && _retryCount < 10) {
-        console.log(`[Resend] ${remainingAfterSend} still pending — firing immediate self-retry #${_retryCount + 1}`);
-        const selfUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-bulk-emails`;
-        const retryPromise = fetch(selfUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ campaignId, triggeredByCron: true, _retryCount: _retryCount + 1 }),
-        });
-        // Use EdgeRuntime.waitUntil if available (keeps the fetch alive after response is sent)
+      // ── Step 3: Push ALL DB work into background (EdgeRuntime.waitUntil) ──
+      // This prevents the edge-function timeout from racing against DB writes.
+      // The cron won't re-trigger because writes complete long before 15 minutes.
+      const doBackgroundWrites = async () => {
         try {
-          (globalThis as any).EdgeRuntime?.waitUntil?.(retryPromise);
-        } catch {
-          // fallback: fire but don't block
-          retryPromise.catch(() => {});
+          // Write sent status
+          for (let i = 0; i < successUpsertRows.length; i += DB_CHUNK) {
+            await supabaseClient.from('email_campaign_recipients')
+              .upsert(successUpsertRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
+          }
+          // Write failed/invalid status
+          for (let i = 0; i < failedUpsertRows.length; i += DB_CHUNK) {
+            await supabaseClient.from('email_campaign_recipients')
+              .upsert(failedUpsertRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
+          }
+          // A/B history
+          for (const result of chunkResults) {
+            if (!result.success) continue;
+            for (let j = 0; j < result.chunk.length; j++) {
+              const item = result.chunk[j];
+              const rec = recipientLookup.get(item.recipientId);
+              if (rec) {
+                const variantSent = rec.ab_variant === 'A' || rec.ab_variant === 'B' ? rec.ab_variant : null;
+                if (variantSent && campaign.ab_test_enabled) {
+                  await supabaseClient.from('email_campaign_send_history').insert({
+                    campaign_id: campaignId, recipient_id: rec.id, variant_sent: variantSent, sent_at: sentAt,
+                  });
+                }
+              }
+            }
+          }
+          // Activity log
+          for (let i = 0; i < activityRows.length; i += DB_CHUNK) {
+            await supabaseClient.from('email_activities').insert(activityRows.slice(i, i + DB_CHUNK));
+          }
+          // Follow-up enrollments (non-fatal)
+          await Promise.allSettled(
+            successUpsertRows.map(row => {
+              const rec = recipientLookup.get(row.id);
+              return rec ? enrollFollowUp(supabaseClient, rec, campaign, campaignId, sentAt, row.external_message_id) : Promise.resolve();
+            })
+          );
+          // Update campaign counts
+          await supabaseClient.from('email_campaigns').update({
+            sent_count: campaign.sent_count + sentCount,
+            failed_count: campaign.failed_count + failedCount,
+          }).eq('id', campaignId);
+          // Mark completed if no pending remain
+          const { count: remainingPending } = await supabaseClient
+            .from('email_campaign_recipients')
+            .select('*', { count: 'exact', head: true })
+            .eq('campaign_id', campaignId).eq('status', 'pending');
+          if ((remainingPending ?? 0) === 0) {
+            await supabaseClient.from('email_campaigns').update({
+              status: 'completed', completed_at: new Date().toISOString(),
+            }).eq('id', campaignId);
+          }
+          console.log(`[Resend BG] DB writes done. ${sentCount} sent, ${failedCount} failed, ${remainingPending ?? 0} still pending`);
+        } catch (bgErr) {
+          console.error('[Resend BG] Background write error:', bgErr);
         }
+      };
+
+      // Register with EdgeRuntime so writes survive after response is sent
+      try {
+        (globalThis as any).EdgeRuntime.waitUntil(doBackgroundWrites());
+      } catch {
+        // EdgeRuntime not available (local dev) — run inline
+        await doBackgroundWrites();
       }
+
+      // ── Step 4: Return immediately — client gets result in seconds ────────
+      return new Response(JSON.stringify({
+        success: true,
+        message: `${sentCount} emails dispatched to Resend — DB updating in background`,
+        sent: sentCount,
+        failed: failedCount,
+        processing: true,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     } else if (emailProvider === 'gmail') {
       // ═══════════════════════════════════════════════════════════════
