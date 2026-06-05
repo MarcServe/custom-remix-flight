@@ -1249,14 +1249,26 @@ export default function Campaigns() {
   const sendStartPendingRef = useRef<number>(0);
   const pollCountRef = useRef<number>(0);
 
-  // Stop polling when pending drops to 0 while a send is in progress
+  // Track how many polls we've done at pending=0 waiting for background DB writes to land
+  const zeroPendingPollsRef = useRef<number>(0);
+
+  // Stop polling when pending drops to 0 AND campaign status reaches 'completed'
+  // (background EdgeRuntime.waitUntil writes sent_count + status after the response returns)
   useEffect(() => {
     if (!sendingPendingNow) return;
     if (pendingRecipientsCount === 0) {
+      zeroPendingPollsRef.current += 1;
+      const campaignStatus = selectedCampaignData?.status?.toLowerCase();
+      // Keep polling until the campaign flips to 'completed' or we've waited ~15s (5 polls × 3s)
+      if (campaignStatus !== 'completed' && zeroPendingPollsRef.current < 5) {
+        queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+        return;
+      }
       if (sendPollRef.current) {
         clearInterval(sendPollRef.current);
         sendPollRef.current = null;
       }
+      zeroPendingPollsRef.current = 0;
       setSendingPendingNow(false);
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ['campaign-recipients', selectedCampaign] }),
@@ -1267,6 +1279,7 @@ export default function Campaigns() {
       toast.success('All pending emails sent!');
       return;
     }
+    zeroPendingPollsRef.current = 0;
     // Stall detection: if after 20 polls (~60s) the count hasn't moved, warn
     pollCountRef.current += 1;
     if (pollCountRef.current >= 20 && pendingRecipientsCount >= sendStartPendingRef.current) {
@@ -1277,7 +1290,7 @@ export default function Campaigns() {
       setSendingPendingNow(false);
       toast.warning(`Send may have stalled — ${pendingRecipientsCount} still pending. Check your Resend connection and try again.`);
     }
-  }, [pendingRecipientsCount, sendingPendingNow]);
+  }, [pendingRecipientsCount, sendingPendingNow, selectedCampaignData?.status]);
 
   // Clean up polling when campaign changes or on unmount
   useEffect(() => {
