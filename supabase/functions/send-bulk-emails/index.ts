@@ -592,9 +592,10 @@ serve(async (req) => {
         processing: true,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-    } else if (emailProvider === 'gmail') {
+    } else if (emailProvider === 'gmail' || emailProvider === 'gmail_direct') {
       // ═══════════════════════════════════════════════════════════════
       // GMAIL — Daily limit of 450 emails. Cron continues the next day.
+      // Sends via Gmail Direct API (OAuth) with pre-emptive token refresh.
       // ═══════════════════════════════════════════════════════════════
       const todayStart = new Date();
       todayStart.setUTCHours(0, 0, 0, 0);
@@ -614,6 +615,20 @@ serve(async (req) => {
 
       if (recipients.length === 0) {
         console.log('[Gmail] Daily limit reached (450). Cron will pick up tomorrow.');
+      }
+
+      const { getValidGmailAccessToken, sendGmailMessage } = await import('../_shared/gmail-utils.ts');
+      const { encodeRfc2047 } = await import('../_shared/gmail-utils.ts');
+      const gmailFromEmail = (effectiveConnection.from_email || optimalConnection.from_email || '').trim();
+      if (!gmailFromEmail) {
+        throw new Error('Gmail connection has no from_email set. Reconnect Gmail in Settings.');
+      }
+      // Pre-emptively refresh once before the loop so the whole batch shares a fresh token.
+      try {
+        await getValidGmailAccessToken(supabaseClient, optimalConnection as any);
+      } catch (refreshErr) {
+        console.error('[Gmail] Pre-loop token refresh failed:', refreshErr);
+        throw new Error('Failed to refresh Gmail token. Please reconnect Gmail in Settings.');
       }
 
       for (const recipient of recipients) {
@@ -640,28 +655,24 @@ serve(async (req) => {
             continue;
           }
 
-          const nangoSecretKey = Deno.env.get('NANGO_SECRET_KEY');
-          if (!nangoSecretKey) throw new Error('Gmail not configured');
+          // Build RFC 2822 message and base64url encode
+          const toLine = recipient.name
+            ? `${encodeRfc2047(recipient.name)} <${recipient.email}>`
+            : recipient.email;
+          const rawMessage = [
+            `From: ${gmailFromEmail}`,
+            `To: ${toLine}`,
+            `Subject: ${encodeRfc2047(gmailSubject)}`,
+            'MIME-Version: 1.0',
+            'Content-Type: text/plain; charset=UTF-8',
+            '',
+            gmailBodyText,
+          ].join('\r\n');
+          const rawB64Url = btoa(unescape(encodeURIComponent(rawMessage)))
+            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-          const nangoResponse = await fetch('https://api.nango.dev/v1/gmail/messages', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${nangoSecretKey}`,
-              'Connection-Id': optimalConnection.connection_id,
-              'Provider-Config-Key': 'google-mail',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: [{ email: recipient.email, name: recipient.name }],
-              subject: gmailSubject,
-              body: { content: gmailBodyText, type: 'text/plain' },
-            }),
-          });
-
-          if (!nangoResponse.ok) throw new Error('Gmail send failed');
-
-          const nangoData = await nangoResponse.json();
-          const messageId = nangoData.id || null;
+          const gmailData = await sendGmailMessage(supabaseClient, optimalConnection as any, rawB64Url);
+          const messageId = gmailData?.id || null;
 
           // Recipient already locked as 'sent' — just add message ID
           await supabaseClient.from('email_campaign_recipients').update({
@@ -680,7 +691,7 @@ serve(async (req) => {
             subject: gmailSubject, body: gmailBodyText,
             status: 'sent', sent_at: lockSentAt, external_message_id: messageId,
             metadata: {
-              campaign_id: campaignId, provider: 'gmail',
+              campaign_id: campaignId, provider: 'gmail_direct',
               sending_method: optimalConnection.sending_method,
               tracking_enabled: optimalConnection.tracking_enabled,
               can_track_opens: optimalConnection.capabilities?.opens || false,
