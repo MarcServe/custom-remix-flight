@@ -313,28 +313,10 @@ serve(async (req) => {
       }
 
       const metadata = connection.metadata as any;
-      let accessToken = metadata?.access_token;
       const refreshToken = metadata?.refresh_token;
-      const expiresAt = metadata?.expires_at;
-
-      // Check if token is expired and refresh if needed
-      if (expiresAt && new Date(expiresAt) <= new Date()) {
-        console.log('Gmail access token expired, refreshing...');
-        
-        const refreshResponse = await supabaseClient.functions.invoke('gmail-oauth-refresh', {
-          body: { connection_id: connection.id }
-        });
-
-        if (refreshResponse.error || !refreshResponse.data?.access_token) {
-          throw new Error('Failed to refresh Gmail token. Please reconnect your Gmail account.');
-        }
-
-        accessToken = refreshResponse.data.access_token;
-      }
-
-      if (!accessToken) {
-        throw new Error('Gmail access token not found. Please reconnect your Gmail account.');
-      }
+      // Pre-emptively refresh if expiring within 5 minutes
+      const { getValidGmailAccessToken } = await import('../_shared/gmail-utils.ts');
+      const accessToken = await getValidGmailAccessToken(supabaseClient, connection as any);
 
       const fromEmail = branding.senderEmail || connection.from_email || userProfile?.email || user.email;
       if (!fromEmail) {
