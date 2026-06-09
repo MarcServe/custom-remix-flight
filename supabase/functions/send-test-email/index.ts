@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.78.0';
 import { corsHeaders } from '../_shared/cors.ts';
 import { renderEmailTemplate } from '../_shared/professional-template.ts';
-import { encodeRfc2047 } from '../_shared/gmail-utils.ts';
+import { encodeRfc2047, getValidGmailAccessToken } from '../_shared/gmail-utils.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -188,27 +188,8 @@ Deno.serve(async (req) => {
         }
 
         const metadata = connection.metadata as any;
-        let accessToken = metadata?.access_token;
-        const expiresAt = metadata?.expires_at;
-
-        // Check if token is expired and refresh if needed
-        if (expiresAt && new Date(expiresAt) <= new Date()) {
-          console.log('Gmail access token expired, refreshing...');
-          
-          const refreshResponse = await supabase.functions.invoke('gmail-oauth-refresh', {
-            body: { connection_id: connection.id }
-          });
-
-          if (refreshResponse.error || !refreshResponse.data?.access_token) {
-            throw new Error('Failed to refresh Gmail token. Please reconnect your Gmail account.');
-          }
-
-          accessToken = refreshResponse.data.access_token;
-        }
-
-        if (!accessToken) {
-          throw new Error('Gmail access token not found. Please reconnect your Gmail account.');
-        }
+        // Pre-emptively refresh if token expires within 5 minutes
+        const accessToken = await getValidGmailAccessToken(supabase, connection as any);
 
         const fromEmail = connection.from_email || userProfile?.email || user.email;
         
@@ -389,22 +370,8 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
         }
 
         const metadata = gmailConn.metadata as any;
-        let accessToken = metadata?.access_token;
-        const expiresAt = metadata?.expires_at;
-
-        if (expiresAt && new Date(expiresAt) <= new Date()) {
-          console.log('Gmail access token expired, refreshing...');
-          const refreshResponse = await supabase.functions.invoke('gmail-oauth-refresh', {
-            body: { connection_id: gmailConn.id }
-          });
-          if (refreshResponse.error || !refreshResponse.data?.access_token) {
-            throw new Error('Failed to refresh Gmail token. Please reconnect your Gmail account.');
-          }
-          accessToken = refreshResponse.data.access_token;
-        }
-        if (!accessToken) {
-          throw new Error('Gmail access token not found. Please reconnect your Gmail account.');
-        }
+        // Pre-emptively refresh if token expires within 5 minutes
+        const accessToken = await getValidGmailAccessToken(supabase, gmailConn as any);
 
         const fromEmail = overrideSenderEmail?.trim() || gmailConn.from_email || userProfile?.email || user.email;
         const fromName = (overrideSenderName || companyName || userProfile?.full_name || 'CRM').trim() || 'CRM';
@@ -563,27 +530,8 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
       }
 
       const metadata = connection.metadata as any;
-      let accessToken = metadata?.access_token;
-      const expiresAt = metadata?.expires_at;
-
-      // Check if token is expired and refresh if needed
-      if (expiresAt && new Date(expiresAt) <= new Date()) {
-        console.log('Gmail access token expired, refreshing...');
-        
-        const refreshResponse = await supabase.functions.invoke('gmail-oauth-refresh', {
-          body: { connection_id: connection.id }
-        });
-
-        if (refreshResponse.error || !refreshResponse.data?.access_token) {
-          throw new Error('Failed to refresh Gmail token. Please reconnect your Gmail account.');
-        }
-
-        accessToken = refreshResponse.data.access_token;
-      }
-
-      if (!accessToken) {
-        throw new Error('Gmail access token not found. Please reconnect your Gmail account.');
-      }
+      // Pre-emptively refresh if token expires within 5 minutes
+      const accessToken = await getValidGmailAccessToken(supabase, connection as any);
 
       const fromEmail = connection.from_email || userProfile?.email || user.email;
       const fromName = userProfile?.full_name || 'CRM';

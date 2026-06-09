@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderEmailTemplate } from "../_shared/professional-template.ts";
-import { encodeRfc2047 } from "../_shared/gmail-utils.ts";
+import { encodeRfc2047, getValidGmailAccessToken } from "../_shared/gmail-utils.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -590,17 +590,16 @@ serve(async (req) => {
                 ['gmail', 'gmail_direct'].includes(c.provider) && c.status === 'active'
               );
           if (gmailConnection) {
-            const metadata = gmailConnection.metadata as any;
-            let accessToken = metadata?.access_token;
-            const expiresAt = metadata?.expires_at;
-
-            if (expiresAt && new Date(expiresAt) <= new Date()) {
-              const refreshResponse = await (triggeredByCron ? supabaseAdmin : supabaseAnon).functions.invoke('gmail-oauth-refresh', {
-                body: { connection_id: gmailConnection.id },
-              });
-              if (refreshResponse.data?.access_token) {
-                accessToken = refreshResponse.data.access_token;
-              }
+            // Pre-emptively refresh if token expires within 5 minutes.
+            // Use admin client when triggered by cron (no user JWT available).
+            let accessToken: string | null = null;
+            try {
+              accessToken = await getValidGmailAccessToken(
+                triggeredByCron ? supabaseAdmin : supabaseAnon,
+                gmailConnection as any,
+              );
+            } catch (refreshErr) {
+              console.warn('[send-newsletter] Gmail token refresh failed:', refreshErr);
             }
 
             if (accessToken) {

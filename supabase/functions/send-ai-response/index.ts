@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getValidGmailAccessToken } from '../_shared/gmail-utils.ts';
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { renderEmailTemplate } from '../_shared/professional-template.ts';
@@ -226,30 +227,8 @@ serve(async (req) => {
 
     } else if (emailConnection?.provider === 'gmail' || emailConnection?.provider === 'gmail_direct') {
       // Send via Gmail direct OAuth (access token stored in crm_connections metadata)
-      const meta = emailConnection.metadata as any;
-      let accessToken = meta?.access_token;
-
-      if (!accessToken) {
-        throw new Error('Gmail not properly connected — missing access token. Please reconnect Gmail in Settings.');
-      }
-
-      // Refresh token if needed
-      try {
-        const refreshRes = await fetch(`${SUPABASE_URL}/functions/v1/gmail-oauth-refresh`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ connectionId: emailConnection.id }),
-        });
-        if (refreshRes.ok) {
-          const refreshData = await refreshRes.json().catch(() => ({}));
-          if (refreshData.access_token) accessToken = refreshData.access_token;
-        }
-      } catch (refreshErr) {
-        console.warn('Token refresh failed, proceeding with existing token:', refreshErr);
-      }
+      // Pre-emptively refresh if token expires within 5 minutes
+      const accessToken = await getValidGmailAccessToken(supabase, emailConnection as any);
 
       console.log(`Sending AI response via Gmail direct OAuth for user: ${userId}`);
 
