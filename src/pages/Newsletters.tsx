@@ -1413,7 +1413,7 @@ Return ONLY the HTML body content.`,
           status: "scheduled",
           scheduled_at: at.toISOString(),
           ...(scheduled_send_options != null && { scheduled_send_options }),
-        })
+        } as any)
         .eq("id", id)
         .eq("user_id", user.id);
       if (error) throw error;
@@ -3042,7 +3042,7 @@ Return ONLY the HTML body content.`,
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowScheduleDialog(false)}>Cancel</Button>
-              <Button onClick={handleScheduleNewsletter} disabled={scheduling || !scheduleDateTime.trim()}>
+              <Button onClick={() => handleScheduleNewsletter()} disabled={scheduling || !scheduleDateTime.trim()}>
                 {scheduling ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Scheduling...</> : <><CalendarClock className="h-4 w-4 mr-1.5" />Schedule</>}
               </Button>
             </DialogFooter>
@@ -3343,9 +3343,9 @@ Return ONLY the HTML body content.`,
                     if (error) throw error;
                     queryClient.invalidateQueries({ queryKey: ["business-profile-newsletter"] });
                     const tzLabel = cronTimezone ? ` ${cronTimezone}` : " UTC";
-                    toast.success("Sending window saved. Cron runs between " + cronStartHourUtc + ":00 and " + cronEndHourUtc + ":00" + tzLabel + ".");
+                    toast({ title: "Sending window saved", description: "Cron runs between " + cronStartHourUtc + ":00 and " + cronEndHourUtc + ":00" + tzLabel + "." });
                   } catch (e: any) {
-                    toast.error(e?.message ?? "Failed to save");
+                    toast({ title: "Failed to save", description: e?.message, variant: "destructive" });
                   } finally {
                     setSavingCronWindow(false);
                   }
@@ -3380,9 +3380,9 @@ Return ONLY the HTML body content.`,
                     const count = (data?.results as { result?: { sent?: number } }[] | undefined)?.filter((r) => r.result && !(r.result as any).error).length ?? 0;
                     queryClient.invalidateQueries({ queryKey: ["newsletters"] });
                     queryClient.invalidateQueries({ queryKey: ["newsletter-sent-counts"] });
-                    toast.success(count > 0 ? `Next batch triggered for ${count} newsletter(s).` : "No batch newsletters in progress, or next batch already sent.");
+                    toast({ title: count > 0 ? `Next batch triggered for ${count} newsletter(s).` : "No batch newsletters in progress, or next batch already sent." });
                   } catch (e: any) {
-                    toast.error(e?.message ?? "Failed to trigger next batch");
+                    toast({ title: "Failed to trigger next batch", description: e?.message, variant: "destructive" });
                   } finally {
                     setSendingBatchNow(false);
                   }

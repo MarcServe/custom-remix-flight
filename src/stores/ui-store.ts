@@ -18,7 +18,7 @@ interface UIStore {
   setAddDealOpen: (open: boolean) => void;
   setAddPersonOpen: (open: boolean) => void;
   setCompanyFilters: (filters: CompanyFilters) => void;
-  setLeadFinderResults: (results: any[]) => void;
+  setLeadFinderResults: (results: any) => void;
   resetFilters: () => void;
 }
 

@@ -386,7 +386,7 @@ export default function LeadInbox() {
 
         // Prepare tags: suggested tags + industry + optional category
         const tagsToApply: string[] = [];
-        const suggestedTags = (companyData.suggestedTags || lead.enrichment_data?.suggestedTags || []) as string[];
+        const suggestedTags = (companyData.suggestedTags || (lead.enrichment_data as any)?.suggestedTags || []) as string[];
         tagsToApply.push(...suggestedTags);
         if (lead.industry) {
           tagsToApply.push(lead.industry);
@@ -1258,7 +1258,7 @@ export default function LeadInbox() {
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent className="max-h-[300px]">
-                      {Intl.supportedValuesOf('timeZone')
+                      {(Intl as any).supportedValuesOf('timeZone')
                         .sort()
                         .map((tz) => {
                           const now = new Date();

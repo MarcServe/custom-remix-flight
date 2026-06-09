@@ -406,7 +406,7 @@ export default function Enrichment() {
               .from('enrichment_queue')
               .update({
                 email_extraction_status: 'failed',
-                email_extraction_attempts: (item.email_extraction_attempts || 0) + 1,
+                email_extraction_attempts: ((item as any).email_extraction_attempts || 0) + 1,
               })
               .eq('id', item.id);
           }
@@ -416,7 +416,7 @@ export default function Enrichment() {
             .from('enrichment_queue')
             .update({
               email_extraction_status: 'failed',
-              email_extraction_attempts: (item.email_extraction_attempts || 0) + 1,
+              email_extraction_attempts: ((item as any).email_extraction_attempts || 0) + 1,
             })
             .eq('id', item.id);
         }
