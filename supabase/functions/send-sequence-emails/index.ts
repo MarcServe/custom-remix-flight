@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.78.0';
 import { corsHeaders } from '../_shared/cors.ts';
 import { renderEmailTemplate } from '../_shared/professional-template.ts';
+import { encodeRfc2047, getValidGmailAccessToken, sendGmailMessage } from '../_shared/gmail-utils.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -89,7 +90,8 @@ Deno.serve(async (req) => {
 
     // Priority: Providers with tracking > Resend/SendGrid > Gmail/Outlook > SMTP Direct
     const connection = connections.find(c => c.tracking_enabled && ['resend', 'sendgrid'].includes(c.provider))
-      || connections.find(c => c.tracking_enabled && ['gmail', 'outlook'].includes(c.provider))
+      || connections.find(c => c.tracking_enabled && ['gmail', 'gmail_direct', 'outlook'].includes(c.provider))
+      || connections.find(c => ['gmail', 'gmail_direct'].includes(c.provider))
       || connections[0];
 
     const emailProvider = connection.provider;
@@ -183,31 +185,32 @@ Deno.serve(async (req) => {
 
         let emailMessageId = null;
 
-        if (emailProvider === 'gmail') {
-          // Send via Nango Gmail API
-          const nangoResponse = await fetch(`https://api.nango.dev/gmail/messages/send`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${NANGO_SECRET_KEY}`,
-              'Connection-Id': connection.connection_id,
-              'Provider-Config-Key': 'gmail',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: contact.email,
-              subject: emailData.subject,
-              body: emailData.body,
-              from: user.email,
-            }),
-          });
-
-          if (!nangoResponse.ok) {
-            const errorText = await nangoResponse.text();
-            throw new Error(`Failed to send email: ${errorText}`);
+        if (emailProvider === 'gmail' || emailProvider === 'gmail_direct') {
+          // Send via Gmail Direct API (OAuth) with pre-emptive token refresh.
+          const gmailFrom = (connection.from_email || user.email || '').trim();
+          if (!gmailFrom) {
+            throw new Error('Gmail connection has no from_email set. Reconnect Gmail in Settings.');
           }
+          // Refresh once per step
+          await getValidGmailAccessToken(supabase, connection as any);
 
-          const nangoData = await nangoResponse.json();
-          emailMessageId = nangoData.id || null;
+          const toLine = contact.name
+            ? `${encodeRfc2047(contact.name)} <${contact.email}>`
+            : contact.email;
+          const rawMessage = [
+            `From: ${encodeRfc2047(senderName)} <${gmailFrom}>`,
+            `To: ${toLine}`,
+            `Subject: ${encodeRfc2047(emailData.subject)}`,
+            'MIME-Version: 1.0',
+            'Content-Type: text/plain; charset=UTF-8',
+            '',
+            emailData.body,
+          ].join('\r\n');
+          const rawB64Url = btoa(unescape(encodeURIComponent(rawMessage)))
+            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+          const gmailData = await sendGmailMessage(supabase, connection as any, rawB64Url);
+          emailMessageId = gmailData?.id || null;
         } else if (emailProvider === 'sendgrid') {
           // Send via SendGrid
           const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY');
