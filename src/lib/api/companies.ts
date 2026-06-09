@@ -116,7 +116,7 @@ export const companiesApi = {
   async createCompany(company: Partial<Company>) {
     const { data, error } = await apiClient.supabase
       .from('companies')
-      .insert([company as any])
+      .insert([company as any] as any)
       .select()
       .maybeSingle();
 
@@ -129,7 +129,7 @@ export const companiesApi = {
   async updateCompany(id: string, updates: Partial<Company>) {
     const { data, error } = await apiClient.supabase
       .from('companies')
-      .update(updates)
+      .update(updates as any)
       .eq('id', id)
       .select()
       .maybeSingle();

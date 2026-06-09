@@ -1853,7 +1853,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         }
         const { error: updateError } = await supabase
           .from('email_campaigns')
-          .update(updatePayload)
+          .update(updatePayload as any)
           .eq('id', draftId);
 
         if (updateError) throw updateError;
@@ -2892,7 +2892,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         // If not scheduling, keep status as paused so they can click Resume
         const { error: contentUpdateError } = await supabase
           .from('email_campaigns')
-          .update(updatePayload)
+          .update(updatePayload as any)
           .eq('id', draftId);
         if (contentUpdateError) throw contentUpdateError;
 

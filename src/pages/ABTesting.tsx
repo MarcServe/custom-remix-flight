@@ -82,7 +82,7 @@ export default function ABTesting({ onOpenBulkEmailForAbTest, onSelectCampaignAn
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("scheduled_campaign_actions")
         .select("id, campaign_id, action, scheduled_at, status, created_at")
         .eq("user_id", user.id)
@@ -452,7 +452,7 @@ export default function ABTesting({ onOpenBulkEmailForAbTest, onSelectCampaignAn
                     if (!user) return;
                     setScheduling(true);
                     try {
-                      const { error } = await supabase.from("scheduled_campaign_actions").insert({
+                      const { error } = await (supabase as any).from("scheduled_campaign_actions").insert({
                         campaign_id: scheduleCampaignId,
                         user_id: user.id,
                         action: scheduleAction,
@@ -489,7 +489,7 @@ export default function ABTesting({ onOpenBulkEmailForAbTest, onSelectCampaignAn
                             onClick={async () => {
                               setCancellingId(s.id);
                               try {
-                                await supabase.from("scheduled_campaign_actions").update({ status: "cancelled" }).eq("id", s.id);
+                                await (supabase as any).from("scheduled_campaign_actions").update({ status: "cancelled" }).eq("id", s.id);
                                 queryClient.invalidateQueries({ queryKey: ["scheduled-campaign-actions"] });
                                 toast({ title: "Cancelled", description: "Scheduled action cancelled." });
                               } finally {

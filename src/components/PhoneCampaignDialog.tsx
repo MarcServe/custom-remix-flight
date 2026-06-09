@@ -340,7 +340,7 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
       // Store phone recipients - use email field to store phone number with prefix
       const { error: recipientsError } = await supabase
         .from('email_campaign_recipients')
-        .insert(recipients);
+        .insert(recipients as any);
 
       if (recipientsError) throw recipientsError;
 
