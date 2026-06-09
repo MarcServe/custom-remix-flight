@@ -696,18 +696,18 @@ export type Database = {
           email_footer_logo_url: string | null
           email_footer_text: string | null
           email_header_name: string | null
-          email_sender_image_url: string | null
-          email_sender_name: string | null
-          email_sender_title: string | null
-          email_sender_email: string | null
-          email_signature_closing: string | null
-          email_sender_phone: string | null
-          email_sender_address: string | null
-          email_signature_use_structured: boolean | null
-          signature_show_email: boolean | null
           email_logo_url: string | null
           email_provider: string | null
+          email_sender_address: string | null
+          email_sender_email: string | null
+          email_sender_image_url: string | null
+          email_sender_name: string | null
+          email_sender_phone: string | null
+          email_sender_title: string | null
           email_signature: string | null
+          email_signature_closing: string | null
+          email_signature_name: string | null
+          email_signature_use_structured: boolean | null
           email_template_style: string | null
           id: string
           industry: string | null
@@ -716,6 +716,7 @@ export type Database = {
           newsletter_cron_timezone: string | null
           phone: string | null
           services_description: string
+          signature_show_email: boolean
           target_audience: string | null
           tone_preference: string | null
           updated_at: string
@@ -740,18 +741,18 @@ export type Database = {
           email_footer_logo_url?: string | null
           email_footer_text?: string | null
           email_header_name?: string | null
-          email_sender_image_url?: string | null
-          email_sender_name?: string | null
-          email_sender_title?: string | null
-          email_sender_email?: string | null
-          email_signature_closing?: string | null
-          email_sender_phone?: string | null
-          email_sender_address?: string | null
-          email_signature_use_structured?: boolean | null
-          signature_show_email?: boolean | null
           email_logo_url?: string | null
           email_provider?: string | null
+          email_sender_address?: string | null
+          email_sender_email?: string | null
+          email_sender_image_url?: string | null
+          email_sender_name?: string | null
+          email_sender_phone?: string | null
+          email_sender_title?: string | null
           email_signature?: string | null
+          email_signature_closing?: string | null
+          email_signature_name?: string | null
+          email_signature_use_structured?: boolean | null
           email_template_style?: string | null
           id?: string
           industry?: string | null
@@ -760,6 +761,7 @@ export type Database = {
           newsletter_cron_timezone?: string | null
           phone?: string | null
           services_description: string
+          signature_show_email?: boolean
           target_audience?: string | null
           tone_preference?: string | null
           updated_at?: string
@@ -784,18 +786,18 @@ export type Database = {
           email_footer_logo_url?: string | null
           email_footer_text?: string | null
           email_header_name?: string | null
-          email_sender_image_url?: string | null
-          email_sender_name?: string | null
-          email_sender_title?: string | null
-          email_sender_email?: string | null
-          email_signature_closing?: string | null
-          email_sender_phone?: string | null
-          email_sender_address?: string | null
-          email_signature_use_structured?: boolean | null
-          signature_show_email?: boolean | null
           email_logo_url?: string | null
           email_provider?: string | null
+          email_sender_address?: string | null
+          email_sender_email?: string | null
+          email_sender_image_url?: string | null
+          email_sender_name?: string | null
+          email_sender_phone?: string | null
+          email_sender_title?: string | null
           email_signature?: string | null
+          email_signature_closing?: string | null
+          email_signature_name?: string | null
+          email_signature_use_structured?: boolean | null
           email_template_style?: string | null
           id?: string
           industry?: string | null
@@ -804,6 +806,7 @@ export type Database = {
           newsletter_cron_timezone?: string | null
           phone?: string | null
           services_description?: string
+          signature_show_email?: boolean
           target_audience?: string | null
           tone_preference?: string | null
           updated_at?: string
@@ -811,91 +814,15 @@ export type Database = {
           value_proposition?: string | null
           website?: string | null
         }
-        Relationships: []
-      }
-      sender_profiles: {
-        Row: {
-          id: string
-          user_id: string
-          name: string
-          display_name: string | null
-          logo_url: string | null
-          brand_color: string | null
-          footer_image_url: string | null
-          footer_logo_url: string | null
-          footer_text: string | null
-          signature: string | null
-          template_style: string
-          sort_order: number
-          sender_name: string | null
-          sender_email: string | null
-          sender_title: string | null
-          sender_image_url: string | null
-          website_url: string | null
-          signature_closing: string | null
-          sender_phone: string | null
-          sender_address: string | null
-          signature_use_structured: boolean | null
-          signature_show_email: boolean | null
-          signature_company: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          name: string
-          display_name?: string | null
-          logo_url?: string | null
-          brand_color?: string | null
-          footer_image_url?: string | null
-          footer_logo_url?: string | null
-          footer_text?: string | null
-          signature?: string | null
-          template_style?: string
-          sort_order?: number
-          sender_name?: string | null
-          sender_email?: string | null
-          sender_title?: string | null
-          sender_image_url?: string | null
-          website_url?: string | null
-          signature_closing?: string | null
-          sender_phone?: string | null
-          sender_address?: string | null
-          signature_use_structured?: boolean | null
-          signature_show_email?: boolean | null
-          signature_company?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          name?: string
-          display_name?: string | null
-          logo_url?: string | null
-          brand_color?: string | null
-          footer_image_url?: string | null
-          footer_logo_url?: string | null
-          footer_text?: string | null
-          signature?: string | null
-          template_style?: string
-          sort_order?: number
-          sender_name?: string | null
-          sender_email?: string | null
-          sender_title?: string | null
-          sender_image_url?: string | null
-          website_url?: string | null
-          signature_closing?: string | null
-          sender_phone?: string | null
-          sender_address?: string | null
-          signature_use_structured?: boolean | null
-          signature_show_email?: boolean | null
-          signature_company?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "business_profiles_default_follow_up_sequence_id_fkey"
+            columns: ["default_follow_up_sequence_id"]
+            isOneToOne: false
+            referencedRelation: "email_sequences"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       calendar_events: {
         Row: {
@@ -1154,8 +1081,8 @@ export type Database = {
           metadata: Json | null
           next_action: string | null
           personalized_emails: Json | null
-          sequence_id: string
           sender_profile_id: string | null
+          sequence_id: string
           status: string
           updated_at: string
         }
@@ -1172,16 +1099,16 @@ export type Database = {
           metadata?: Json | null
           next_action?: string | null
           personalized_emails?: Json | null
-          sequence_id: string
           sender_profile_id?: string | null
+          sequence_id: string
           status?: string
           updated_at?: string
         }
         Update: {
           ai_context?: Json | null
           auto_respond_enabled?: boolean
-          campaign_id?: string | null
           automation_rules?: Json | null
+          campaign_id?: string | null
           company_id?: string
           conversation_history?: Json | null
           created_at?: string
@@ -1190,12 +1117,19 @@ export type Database = {
           metadata?: Json | null
           next_action?: string | null
           personalized_emails?: Json | null
-          sequence_id?: string
           sender_profile_id?: string | null
+          sequence_id?: string
           status?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "company_sequences_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "email_campaigns"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "company_sequences_company_id_fkey"
             columns: ["company_id"]
@@ -1204,17 +1138,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "company_sequences_sequence_id_fkey"
-            columns: ["sequence_id"]
-            isOneToOne: false
-            referencedRelation: "email_sequences"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "company_sequences_sender_profile_id_fkey"
             columns: ["sender_profile_id"]
             isOneToOne: false
             referencedRelation: "sender_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_sequences_sequence_id_fkey"
+            columns: ["sequence_id"]
+            isOneToOne: false
+            referencedRelation: "email_sequences"
             referencedColumns: ["id"]
           },
         ]
@@ -1423,6 +1357,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      crm_notes: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          source: string | null
+          source_metadata: Json | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          id?: string
+          source?: string | null
+          source_metadata?: Json | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          source?: string | null
+          source_metadata?: Json | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       crm_sync_state: {
         Row: {
@@ -1872,6 +1839,7 @@ export type Database = {
           company_sequence_id: string | null
           contact_id: string | null
           created_at: string
+          email_period: string | null
           external_message_id: string | null
           id: string
           in_reply_to: string | null
@@ -1890,6 +1858,7 @@ export type Database = {
           company_sequence_id?: string | null
           contact_id?: string | null
           created_at?: string
+          email_period?: string | null
           external_message_id?: string | null
           id?: string
           in_reply_to?: string | null
@@ -1908,6 +1877,7 @@ export type Database = {
           company_sequence_id?: string | null
           contact_id?: string | null
           created_at?: string
+          email_period?: string | null
           external_message_id?: string | null
           id?: string
           in_reply_to?: string | null
@@ -1986,6 +1956,7 @@ export type Database = {
           created_at: string
           delivered_at: string | null
           email: string
+          email_period: string | null
           error_message: string | null
           external_message_id: string | null
           id: string
@@ -2007,6 +1978,7 @@ export type Database = {
           created_at?: string
           delivered_at?: string | null
           email: string
+          email_period?: string | null
           error_message?: string | null
           external_message_id?: string | null
           id?: string
@@ -2028,6 +2000,7 @@ export type Database = {
           created_at?: string
           delivered_at?: string | null
           email?: string
+          email_period?: string | null
           error_message?: string | null
           external_message_id?: string | null
           id?: string
@@ -2084,6 +2057,7 @@ export type Database = {
           started_at: string | null
           status: string
           subject_template: string
+          tags: string[] | null
           total_recipients: number
           updated_at: string
           user_id: string
@@ -2113,6 +2087,7 @@ export type Database = {
           started_at?: string | null
           status?: string
           subject_template: string
+          tags?: string[] | null
           total_recipients?: number
           updated_at?: string
           user_id: string
@@ -2142,11 +2117,19 @@ export type Database = {
           started_at?: string | null
           status?: string
           subject_template?: string
+          tags?: string[] | null
           total_recipients?: number
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "email_campaigns_follow_up_sequence_id_fkey"
+            columns: ["follow_up_sequence_id"]
+            isOneToOne: false
+            referencedRelation: "email_sequences"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "email_campaigns_sender_connection_id_fkey"
             columns: ["sender_connection_id"]
@@ -2242,20 +2225,20 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           custom_instructions: string | null
+          description: string | null
           goal: string | null
           id: string
           langfuse_trace_id: string | null
           model: string | null
           name: string
           provider: string | null
+          repeat_after_days: number
+          repeat_only_for: string
+          repeat_sequence: boolean
           segment_filters: Json | null
           steps: string[] | null
           updated_at: string | null
           use_email_branding: boolean
-          repeat_sequence: boolean
-          repeat_after_days: number
-          repeat_only_for: string
-          description: string | null
         }
         Insert: {
           ai_instructions?: string | null
@@ -2263,20 +2246,20 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           custom_instructions?: string | null
+          description?: string | null
           goal?: string | null
           id?: string
           langfuse_trace_id?: string | null
           model?: string | null
           name: string
           provider?: string | null
+          repeat_after_days?: number
+          repeat_only_for?: string
+          repeat_sequence?: boolean
           segment_filters?: Json | null
           steps?: string[] | null
           updated_at?: string | null
           use_email_branding?: boolean
-          repeat_sequence?: boolean
-          repeat_after_days?: number
-          repeat_only_for?: string
-          description?: string | null
         }
         Update: {
           ai_instructions?: string | null
@@ -2284,20 +2267,20 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           custom_instructions?: string | null
+          description?: string | null
           goal?: string | null
           id?: string
           langfuse_trace_id?: string | null
           model?: string | null
           name?: string
           provider?: string | null
+          repeat_after_days?: number
+          repeat_only_for?: string
+          repeat_sequence?: boolean
           segment_filters?: Json | null
           steps?: string[] | null
           updated_at?: string | null
           use_email_branding?: boolean
-          repeat_sequence?: boolean
-          repeat_after_days?: number
-          repeat_only_for?: string
-          description?: string | null
         }
         Relationships: []
       }
@@ -2312,6 +2295,7 @@ export type Database = {
           from_email: string
           id: string
           message_id: string | null
+          metadata: Json | null
           received_at: string
           sentiment: string | null
           subject: string | null
@@ -2328,6 +2312,7 @@ export type Database = {
           from_email: string
           id?: string
           message_id?: string | null
+          metadata?: Json | null
           received_at?: string
           sentiment?: string | null
           subject?: string | null
@@ -2344,6 +2329,7 @@ export type Database = {
           from_email?: string
           id?: string
           message_id?: string | null
+          metadata?: Json | null
           received_at?: string
           sentiment?: string | null
           subject?: string | null
@@ -2359,6 +2345,90 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      enrichment_queue: {
+        Row: {
+          created_at: string
+          description: string | null
+          email: string | null
+          email_extraction_attempts: number | null
+          email_extraction_status: string | null
+          enriched_at: string | null
+          enrichment_data: Json | null
+          enrichment_errors: string[] | null
+          enrichment_provider: string | null
+          enrichment_status: string | null
+          extracted_email: string | null
+          geography: string | null
+          id: string
+          industry: string | null
+          linkedin_url: string | null
+          metadata: Json | null
+          moved_to_crm_at: string | null
+          name: string
+          notes: string | null
+          phone: string | null
+          source: string | null
+          source_metadata: Json | null
+          updated_at: string
+          user_id: string
+          website: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          email?: string | null
+          email_extraction_attempts?: number | null
+          email_extraction_status?: string | null
+          enriched_at?: string | null
+          enrichment_data?: Json | null
+          enrichment_errors?: string[] | null
+          enrichment_provider?: string | null
+          enrichment_status?: string | null
+          extracted_email?: string | null
+          geography?: string | null
+          id?: string
+          industry?: string | null
+          linkedin_url?: string | null
+          metadata?: Json | null
+          moved_to_crm_at?: string | null
+          name: string
+          notes?: string | null
+          phone?: string | null
+          source?: string | null
+          source_metadata?: Json | null
+          updated_at?: string
+          user_id: string
+          website?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          email?: string | null
+          email_extraction_attempts?: number | null
+          email_extraction_status?: string | null
+          enriched_at?: string | null
+          enrichment_data?: Json | null
+          enrichment_errors?: string[] | null
+          enrichment_provider?: string | null
+          enrichment_status?: string | null
+          extracted_email?: string | null
+          geography?: string | null
+          id?: string
+          industry?: string | null
+          linkedin_url?: string | null
+          metadata?: Json | null
+          moved_to_crm_at?: string | null
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          source?: string | null
+          source_metadata?: Json | null
+          updated_at?: string
+          user_id?: string
+          website?: string | null
+        }
+        Relationships: []
       }
       events: {
         Row: {
@@ -2737,216 +2807,401 @@ export type Database = {
       }
       newsletter_categories: {
         Row: {
-          id: string
-          user_id: string
-          name: string
           color: string | null
+          created_at: string | null
           description: string | null
-          created_at: string
-          updated_at: string
+          id: string
+          name: string
+          updated_at: string | null
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          name: string
           color?: string | null
+          created_at?: string | null
           description?: string | null
-          created_at?: string
-          updated_at?: string
+          id?: string
+          name: string
+          updated_at?: string | null
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          name?: string
           color?: string | null
+          created_at?: string | null
           description?: string | null
-          created_at?: string
-          updated_at?: string
+          id?: string
+          name?: string
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }
       newsletter_sends: {
         Row: {
+          clicked_at: string | null
+          created_at: string | null
+          error_message: string | null
           id: string
           newsletter_id: string
-          subscriber_id: string
-          status: string
-          sent_at: string | null
           opened_at: string | null
-          clicked_at: string | null
-          delivered_at: string | null
-          external_message_id: string | null
-          error_message: string | null
-          created_at: string
+          sender_connection_id: string | null
+          sent_at: string | null
+          status: string | null
+          subscriber_id: string
         }
         Insert: {
+          clicked_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
           id?: string
           newsletter_id: string
-          subscriber_id: string
-          status?: string
-          sent_at?: string | null
           opened_at?: string | null
-          clicked_at?: string | null
-          delivered_at?: string | null
-          external_message_id?: string | null
-          error_message?: string | null
-          created_at?: string
+          sender_connection_id?: string | null
+          sent_at?: string | null
+          status?: string | null
+          subscriber_id: string
         }
         Update: {
+          clicked_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
           id?: string
           newsletter_id?: string
-          subscriber_id?: string
-          status?: string
-          sent_at?: string | null
           opened_at?: string | null
-          clicked_at?: string | null
-          delivered_at?: string | null
-          external_message_id?: string | null
-          error_message?: string | null
-          created_at?: string
+          sender_connection_id?: string | null
+          sent_at?: string | null
+          status?: string | null
+          subscriber_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_sends_newsletter_id_fkey"
+            columns: ["newsletter_id"]
+            isOneToOne: false
+            referencedRelation: "newsletters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_sends_sender_connection_id_fkey"
+            columns: ["sender_connection_id"]
+            isOneToOne: false
+            referencedRelation: "crm_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_sends_subscriber_id_fkey"
+            columns: ["subscriber_id"]
+            isOneToOne: false
+            referencedRelation: "newsletter_subscribers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      newsletter_series: {
+        Row: {
+          ai_target_audience: string | null
+          ai_tone: string | null
+          ai_topic_template: string | null
+          created_at: string | null
+          duration_days: number
+          header_image_urls: Json | null
+          id: string
+          name: string
+          scheduled_send_options: Json | null
+          send_time: string
+          sender_profile_id: string | null
+          start_date: string
+          status: string
+          template_styles: Json | null
+          timezone: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_target_audience?: string | null
+          ai_tone?: string | null
+          ai_topic_template?: string | null
+          created_at?: string | null
+          duration_days: number
+          header_image_urls?: Json | null
+          id?: string
+          name: string
+          scheduled_send_options?: Json | null
+          send_time?: string
+          sender_profile_id?: string | null
+          start_date: string
+          status?: string
+          template_styles?: Json | null
+          timezone?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_target_audience?: string | null
+          ai_tone?: string | null
+          ai_topic_template?: string | null
+          created_at?: string | null
+          duration_days?: number
+          header_image_urls?: Json | null
+          id?: string
+          name?: string
+          scheduled_send_options?: Json | null
+          send_time?: string
+          sender_profile_id?: string | null
+          start_date?: string
+          status?: string
+          template_styles?: Json | null
+          timezone?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_series_sender_profile_id_fkey"
+            columns: ["sender_profile_id"]
+            isOneToOne: false
+            referencedRelation: "sender_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      newsletter_series_editions: {
+        Row: {
+          created_at: string | null
+          edition_date: string
+          id: string
+          newsletter_id: string
+          series_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          edition_date: string
+          id?: string
+          newsletter_id: string
+          series_id: string
+        }
+        Update: {
+          created_at?: string | null
+          edition_date?: string
+          id?: string
+          newsletter_id?: string
+          series_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_series_editions_newsletter_id_fkey"
+            columns: ["newsletter_id"]
+            isOneToOne: false
+            referencedRelation: "newsletters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_series_editions_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "newsletter_series"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       newsletter_subscriber_categories: {
         Row: {
-          subscriber_id: string
           category_id: string
+          subscriber_id: string
         }
         Insert: {
-          subscriber_id: string
           category_id: string
+          subscriber_id: string
         }
         Update: {
-          subscriber_id?: string
           category_id?: string
+          subscriber_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_subscriber_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "newsletter_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_subscriber_categories_subscriber_id_fkey"
+            columns: ["subscriber_id"]
+            isOneToOne: false
+            referencedRelation: "newsletter_subscribers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       newsletter_subscribers: {
         Row: {
-          id: string
-          user_id: string
+          company: string | null
+          created_at: string | null
           email: string
           first_name: string | null
+          id: string
+          industry: string | null
           last_name: string | null
-          company: string | null
-          source: string
-          status: string
-          unsubscribe_token: string
+          source: string | null
+          status: string | null
+          unsubscribe_token: string | null
           unsubscribed_at: string | null
-          created_at: string
-          updated_at: string
+          updated_at: string | null
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
+          company?: string | null
+          created_at?: string | null
           email: string
           first_name?: string | null
+          id?: string
+          industry?: string | null
           last_name?: string | null
-          company?: string | null
-          source?: string
-          status?: string
-          unsubscribe_token?: string
+          source?: string | null
+          status?: string | null
+          unsubscribe_token?: string | null
           unsubscribed_at?: string | null
-          created_at?: string
-          updated_at?: string
+          updated_at?: string | null
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
+          company?: string | null
+          created_at?: string | null
           email?: string
           first_name?: string | null
+          id?: string
+          industry?: string | null
           last_name?: string | null
-          company?: string | null
-          source?: string
-          status?: string
-          unsubscribe_token?: string
+          source?: string | null
+          status?: string | null
+          unsubscribe_token?: string | null
           unsubscribed_at?: string | null
-          created_at?: string
-          updated_at?: string
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }
       newsletter_target_categories: {
         Row: {
-          newsletter_id: string
           category_id: string
+          newsletter_id: string
         }
         Insert: {
-          newsletter_id: string
           category_id: string
+          newsletter_id: string
         }
         Update: {
-          newsletter_id?: string
           category_id?: string
+          newsletter_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_target_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "newsletter_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_target_categories_newsletter_id_fkey"
+            columns: ["newsletter_id"]
+            isOneToOne: false
+            referencedRelation: "newsletters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       newsletters: {
         Row: {
-          id: string
-          user_id: string
-          title: string
-          subject: string
+          batch_next_at: string | null
+          batch_send: boolean
+          batch_sent_count: number
+          batch_size: number | null
           body_html: string | null
-          body_json: any | null
+          body_json: Json | null
+          created_at: string | null
           cta_text: string | null
           cta_url: string | null
-          sender_profile_id: string | null
-          template_style: string
-          status: string
+          header_image_url: string | null
+          id: string
           scheduled_at: string | null
+          scheduled_send_options: Json | null
+          sender_profile_id: string | null
           sent_at: string | null
-          total_recipients: number
-          total_sent: number
-          total_opened: number
-          total_clicked: number
-          created_at: string
-          updated_at: string
+          status: string | null
+          subject: string
+          template_style: string | null
+          title: string
+          total_clicked: number | null
+          total_opened: number | null
+          total_recipients: number | null
+          total_sent: number | null
+          updated_at: string | null
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          title?: string
-          subject?: string
+          batch_next_at?: string | null
+          batch_send?: boolean
+          batch_sent_count?: number
+          batch_size?: number | null
           body_html?: string | null
-          body_json?: any | null
+          body_json?: Json | null
+          created_at?: string | null
           cta_text?: string | null
           cta_url?: string | null
-          sender_profile_id?: string | null
-          template_style?: string
-          status?: string
+          header_image_url?: string | null
+          id?: string
           scheduled_at?: string | null
+          scheduled_send_options?: Json | null
+          sender_profile_id?: string | null
           sent_at?: string | null
-          total_recipients?: number
-          total_sent?: number
-          total_opened?: number
-          total_clicked?: number
-          created_at?: string
-          updated_at?: string
+          status?: string | null
+          subject?: string
+          template_style?: string | null
+          title?: string
+          total_clicked?: number | null
+          total_opened?: number | null
+          total_recipients?: number | null
+          total_sent?: number | null
+          updated_at?: string | null
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          title?: string
-          subject?: string
+          batch_next_at?: string | null
+          batch_send?: boolean
+          batch_sent_count?: number
+          batch_size?: number | null
           body_html?: string | null
-          body_json?: any | null
+          body_json?: Json | null
+          created_at?: string | null
           cta_text?: string | null
           cta_url?: string | null
-          sender_profile_id?: string | null
-          template_style?: string
-          status?: string
+          header_image_url?: string | null
+          id?: string
           scheduled_at?: string | null
+          scheduled_send_options?: Json | null
+          sender_profile_id?: string | null
           sent_at?: string | null
-          total_recipients?: number
-          total_sent?: number
-          total_opened?: number
-          total_clicked?: number
-          created_at?: string
-          updated_at?: string
+          status?: string | null
+          subject?: string
+          template_style?: string | null
+          title?: string
+          total_clicked?: number | null
+          total_opened?: number | null
+          total_recipients?: number | null
+          total_sent?: number | null
+          updated_at?: string | null
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "newsletters_sender_profile_id_fkey"
+            columns: ["sender_profile_id"]
+            isOneToOne: false
+            referencedRelation: "sender_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       people: {
         Row: {
@@ -2961,6 +3216,7 @@ export type Database = {
           linkedin_url: string | null
           location: string | null
           phone: string | null
+          tags: string[] | null
           title: string | null
           twitter_url: string | null
           updated_at: string
@@ -2978,6 +3234,7 @@ export type Database = {
           linkedin_url?: string | null
           location?: string | null
           phone?: string | null
+          tags?: string[] | null
           title?: string | null
           twitter_url?: string | null
           updated_at?: string
@@ -2995,6 +3252,7 @@ export type Database = {
           linkedin_url?: string | null
           location?: string | null
           phone?: string | null
+          tags?: string[] | null
           title?: string | null
           twitter_url?: string | null
           updated_at?: string
@@ -3043,6 +3301,186 @@ export type Database = {
           phone?: string | null
           updated_at?: string | null
           website?: string | null
+        }
+        Relationships: []
+      }
+      recipient_group_members: {
+        Row: {
+          company: string | null
+          created_at: string
+          email: string
+          first_name: string | null
+          group_id: string
+          id: string
+          last_name: string | null
+          person_id: string | null
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string
+          email: string
+          first_name?: string | null
+          group_id: string
+          id?: string
+          last_name?: string | null
+          person_id?: string | null
+        }
+        Update: {
+          company?: string | null
+          created_at?: string
+          email?: string
+          first_name?: string | null
+          group_id?: string
+          id?: string
+          last_name?: string | null
+          person_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipient_group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "recipient_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipient_group_members_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipient_groups: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      research_chat_history: {
+        Row: {
+          messages: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          messages?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          messages?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sender_profiles: {
+        Row: {
+          brand_color: string | null
+          created_at: string
+          display_name: string | null
+          footer_image_url: string | null
+          footer_logo_url: string | null
+          footer_text: string | null
+          id: string
+          logo_url: string | null
+          name: string
+          sender_address: string | null
+          sender_email: string | null
+          sender_image_url: string | null
+          sender_name: string | null
+          sender_phone: string | null
+          sender_title: string | null
+          signature: string | null
+          signature_closing: string | null
+          signature_company: string | null
+          signature_name: string | null
+          signature_show_email: boolean
+          signature_use_structured: boolean | null
+          sort_order: number
+          template_style: string
+          updated_at: string
+          user_id: string
+          website_url: string | null
+        }
+        Insert: {
+          brand_color?: string | null
+          created_at?: string
+          display_name?: string | null
+          footer_image_url?: string | null
+          footer_logo_url?: string | null
+          footer_text?: string | null
+          id?: string
+          logo_url?: string | null
+          name: string
+          sender_address?: string | null
+          sender_email?: string | null
+          sender_image_url?: string | null
+          sender_name?: string | null
+          sender_phone?: string | null
+          sender_title?: string | null
+          signature?: string | null
+          signature_closing?: string | null
+          signature_company?: string | null
+          signature_name?: string | null
+          signature_show_email?: boolean
+          signature_use_structured?: boolean | null
+          sort_order?: number
+          template_style?: string
+          updated_at?: string
+          user_id: string
+          website_url?: string | null
+        }
+        Update: {
+          brand_color?: string | null
+          created_at?: string
+          display_name?: string | null
+          footer_image_url?: string | null
+          footer_logo_url?: string | null
+          footer_text?: string | null
+          id?: string
+          logo_url?: string | null
+          name?: string
+          sender_address?: string | null
+          sender_email?: string | null
+          sender_image_url?: string | null
+          sender_name?: string | null
+          sender_phone?: string | null
+          sender_title?: string | null
+          signature?: string | null
+          signature_closing?: string | null
+          signature_company?: string | null
+          signature_name?: string | null
+          signature_show_email?: boolean
+          signature_use_structured?: boolean | null
+          sort_order?: number
+          template_style?: string
+          updated_at?: string
+          user_id?: string
+          website_url?: string | null
         }
         Relationships: []
       }
