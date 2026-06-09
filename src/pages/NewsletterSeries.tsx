@@ -132,7 +132,7 @@ export default function NewsletterSeries() {
         .select("id, series_id, edition_date, newsletter_id, newsletters(id, title, subject, status, total_sent)");
       if (error) throw error;
       const map: Record<string, Edition[]> = {};
-      (data || []).forEach((e: Edition) => {
+      (data || []).forEach((e: any) => {
         if (!map[e.series_id]) map[e.series_id] = [];
         map[e.series_id].push(e);
       });
@@ -292,11 +292,11 @@ export default function NewsletterSeries() {
       };
       if (editingSeriesId) {
         // Update existing series
-        const { error } = await supabase.from("newsletter_series").update({ ...seriesPayload, updated_at: new Date().toISOString() }).eq("id", editingSeriesId);
+        const { error } = await supabase.from("newsletter_series").update({ ...seriesPayload, updated_at: new Date().toISOString() } as any).eq("id", editingSeriesId);
         if (error) throw error;
       } else {
         // Insert new series
-        const { error } = await supabase.from("newsletter_series").insert({ user_id: user.id, ...seriesPayload, status: "active" });
+        const { error } = await supabase.from("newsletter_series").insert({ user_id: user.id, ...seriesPayload, status: "active" } as any);
         if (error) throw error;
       }
       queryClient.invalidateQueries({ queryKey: ["newsletter-series"] });

@@ -506,7 +506,7 @@ export function GoogleMapsScraper({ onLeadsScraped }: GoogleMapsScraperProps) {
           </div>
 
           <Button 
-            onClick={handleStartScraping} 
+            onClick={() => handleStartScraping()} 
             disabled={!searchQuery || !location}
             className="w-full"
           >

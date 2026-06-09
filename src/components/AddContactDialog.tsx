@@ -127,27 +127,28 @@ export function AddContactDialog({ open, onOpenChange, onSuccess, initialValues 
           .maybeSingle();
 
         if (existingPerson) {
+          const existingAny = existingPerson as any;
           // Update existing contact with new information if provided
           const updates: any = {};
           let hasUpdates = false;
 
-          if (values.first_name && values.first_name.trim() && !existingPerson.first_name) {
+          if (values.first_name && values.first_name.trim() && !existingAny.first_name) {
             updates.first_name = values.first_name.trim();
             hasUpdates = true;
           }
-          if (values.last_name && values.last_name.trim() && !existingPerson.last_name) {
+          if (values.last_name && values.last_name.trim() && !existingAny.last_name) {
             updates.last_name = values.last_name.trim();
             hasUpdates = true;
           }
-          if (values.phone && !existingPerson.phone) {
+          if (values.phone && !existingAny.phone) {
             updates.phone = values.phone;
             hasUpdates = true;
           }
-          if (values.title && !existingPerson.title) {
+          if (values.title && !existingAny.title) {
             updates.title = values.title;
             hasUpdates = true;
           }
-          if (values.linkedin_url && !existingPerson.linkedin_url) {
+          if (values.linkedin_url && !existingAny.linkedin_url) {
             updates.linkedin_url = values.linkedin_url;
             hasUpdates = true;
           }

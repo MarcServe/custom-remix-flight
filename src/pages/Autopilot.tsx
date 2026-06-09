@@ -91,7 +91,7 @@ export default function Autopilot() {
     queryKey: ['autopilot-pending-campaigns', user?.id],
     queryFn: async () => {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('email_campaigns')
         .select('id, name, total_recipients, created_at, source')
         .eq('user_id', user?.id)
@@ -99,7 +99,7 @@ export default function Autopilot() {
         .or(`source.eq.auto_discovery,created_at.gte.${sevenDaysAgo}`)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data || [];
+      return (data || []) as Array<{ id: string; name: string; total_recipients: number | null; created_at: string; source: string | null }>;
     },
     enabled: !!user?.id,
   });

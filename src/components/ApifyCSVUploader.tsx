@@ -426,7 +426,7 @@ export function ApifyCSVUploader({ open, onOpenChange, onComplete }: ApifyCSVUpl
       setImportProgress(Math.round(((i + 1) / totalRows) * 100));
     }
 
-    setImportStats(stats);
+    setImportStats(stats as any);
     setImportedCompanyIds(importedIds);
     setFailedRows(failed);
     setStep('complete');
@@ -565,11 +565,11 @@ export function ApifyCSVUploader({ open, onOpenChange, onComplete }: ApifyCSVUpl
         company_id: companyId,
         name: nameVal || 'Contact',
         email,
-        title: failed.contactData.title,
-        phone: failed.contactData.phone,
-        linkedin_url: failed.contactData.linkedin_url,
-        department: failed.contactData.department,
-      }]);
+        title: failed.contactData.title as string | undefined,
+        phone: failed.contactData.phone as string | undefined,
+        linkedin_url: failed.contactData.linkedin_url as string | undefined,
+        department: failed.contactData.department as string | undefined,
+      }] as any);
       if (!contactErr) contactsAdded++;
     }
     setFailedRows(prev => prev.filter(r => r.id !== failed.id));

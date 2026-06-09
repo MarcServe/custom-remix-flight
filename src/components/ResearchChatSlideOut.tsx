@@ -1127,7 +1127,7 @@ export function ResearchChatSlideOut() {
                       Send leads without email to Enrichment Queue
                     </Label>
                   </div>
-                  <Button type="button" size="sm" onClick={importExtractedToCrm} disabled={importing} className="flex-1 min-w-0">
+                  <Button type="button" size="sm" onClick={() => importExtractedToCrm()} disabled={importing} className="flex-1 min-w-0">
                     {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Building2 className="h-3.5 w-3.5 mr-1.5" />}
                     Import to CRM
                   </Button>

@@ -358,7 +358,7 @@ export default function Campaigns() {
     enabled: !!(deliveryReportCampaignId || selectedCampaign),
     queryFn: async () => {
       const cid = deliveryReportCampaignId || selectedCampaign!;
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('email_campaign_send_history')
         .select('id, recipient_id, variant_sent, sent_at')
         .eq('campaign_id', cid)
@@ -1457,19 +1457,19 @@ export default function Campaigns() {
 
       switch (enrollSegment) {
         case 'not_opened':
-          enrollQuery = enrollQuery.in('status', ['sent', 'opened', 'clicked']).is('opened_at', null);
+          enrollQuery = (enrollQuery as any).in('status', ['sent', 'opened', 'clicked']).is('opened_at', null);
           break;
         case 'opened':
-          enrollQuery = enrollQuery.not('opened_at', 'is', null);
+          enrollQuery = (enrollQuery as any).not('opened_at', 'is', null);
           break;
         case 'clicked':
-          enrollQuery = enrollQuery.not('clicked_at', 'is', null);
+          enrollQuery = (enrollQuery as any).not('clicked_at', 'is', null);
           break;
         case 'opened_no_click':
-          enrollQuery = enrollQuery.not('opened_at', 'is', null).is('clicked_at', null);
+          enrollQuery = (enrollQuery as any).not('opened_at', 'is', null).is('clicked_at', null);
           break;
         default:
-          enrollQuery = enrollQuery.in('status', ['sent', 'opened', 'clicked']);
+          enrollQuery = (enrollQuery as any).in('status', ['sent', 'opened', 'clicked']);
           break;
       }
 
@@ -1488,14 +1488,16 @@ export default function Campaigns() {
         toast.error('Could not load contact companies.');
         return;
       }
-      const companyByPerson = new Map<string, string>(peopleData.map((p: any) => [p.id, p.company_id]).filter(([, cid]) => cid));
+      const companyByPerson = new Map<string, string>(
+        (peopleData.map((p: any) => [p.id, p.company_id]).filter(([, cid]: any[]) => cid)) as [string, string][]
+      );
       const { data: seqData, error: seqErr } = await supabase
         .from('email_sequences')
         .select('steps')
         .eq('id', sequenceId)
         .single();
       if (seqErr || !seqData) throw new Error('Sequence not found');
-      const steps = Array.isArray(seqData.steps) ? seqData.steps : [];
+      const steps = (Array.isArray(seqData.steps) ? seqData.steps : []) as any[];
       const personalizedEmails: { stepNumber: number; subject: string; body: string; delayDays: number }[] = [
         { stepNumber: 0, subject: '(Campaign)', body: '', delayDays: 0 },
       ];

@@ -93,7 +93,7 @@ export const useLeadFinderStream = () => {
   const searchParamsRef = useRef<SearchParams | null>(null);
   const currentSearchIdRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<any>(null);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [state, setState] = useState<StreamState>({
     leads: [],
