@@ -50,6 +50,12 @@ serve(async (req: Request) => {
     // Exchange code for tokens
     const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
     const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET');
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Missing Gmail OAuth callback configuration');
+    }
+
     const redirectUri = `${SUPABASE_URL}/functions/v1/gmail-oauth-callback`;
 
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
@@ -78,23 +84,45 @@ serve(async (req: Request) => {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     });
 
+    if (!userInfoResponse.ok) {
+      const userInfoError = await userInfoResponse.text();
+      console.error('User info lookup failed:', userInfoError);
+      throw new Error('Failed to fetch Google account details');
+    }
+
     const userInfo = await userInfoResponse.json();
     console.log('Got user email:', userInfo.email);
+
+    if (!userInfo.email) {
+      throw new Error('Google account email not returned');
+    }
 
     // Store connection in database
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      SUPABASE_SERVICE_ROLE_KEY
     );
 
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
+    const { error: disconnectError } = await supabase
+      .from('crm_connections')
+      .update({ status: 'disconnected' })
+      .eq('user_id', user_id)
+      .eq('provider', 'gmail_direct')
+      .eq('status', 'active');
+
+    if (disconnectError) {
+      console.error('Error disconnecting existing Gmail connections:', disconnectError);
+      throw disconnectError;
+    }
+
     const { error: dbError } = await supabase
       .from('crm_connections')
-      .upsert({
+      .insert({
         user_id,
         provider: 'gmail_direct',
-        connection_id: `gmail_direct_${Date.now()}`,
+        connection_id: `gmail_direct_${crypto.randomUUID()}`,
         status: 'active',
         from_email: userInfo.email,
         sending_method: 'api',
@@ -111,8 +139,6 @@ serve(async (req: Request) => {
           supports_attachments: true,
           api_based: true,
         },
-      }, {
-        onConflict: 'user_id,provider'
       });
 
     if (dbError) {
