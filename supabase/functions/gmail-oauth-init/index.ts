@@ -14,10 +14,10 @@ serve(async (req: Request) => {
   try {
     const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
 
-    if (!GOOGLE_CLIENT_ID) {
-      throw new Error('GOOGLE_CLIENT_ID not configured');
+    if (!GOOGLE_CLIENT_ID || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      throw new Error('Missing Gmail OAuth configuration');
     }
 
     const authHeader = req.headers.get('Authorization');
@@ -29,13 +29,14 @@ serve(async (req: Request) => {
       );
     }
 
-    // Verify JWT using service-role client — never trust unverified JWT payload
-    const supabaseAdmin = createClient(SUPABASE_URL ?? '', SUPABASE_SERVICE_ROLE_KEY ?? '', {
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: { Authorization: authHeader },
+      },
       auth: { persistSession: false },
     });
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
 
     if (authError || !user?.id) {
       console.error('Auth verification failed:', authError?.message);
