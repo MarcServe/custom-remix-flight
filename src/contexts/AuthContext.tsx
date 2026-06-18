@@ -76,7 +76,7 @@ interface AuthContextType {
   isAtLeast: (tier: PlanTier) => boolean;
   checkSubscription: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName?: string, redirectPath?: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: any }>;
 }
@@ -228,9 +228,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const signUp = async (email: string, password: string, fullName?: string) => {
+  const signUp = async (email: string, password: string, fullName?: string, redirectPath = '/') => {
     try {
-      const redirectUrl = `${window.location.origin}/`;
+      const safeRedirectPath = redirectPath.startsWith('/') && !redirectPath.startsWith('//') ? redirectPath : '/';
+      const redirectUrl = `${window.location.origin}${safeRedirectPath}`;
 
       const { error } = await supabase.auth.signUp({
         email,
