@@ -253,7 +253,7 @@ export default function Auth() {
     const password = formData.get('password') as string;
     if (!validateField('fullName', fullName) || !validateField('email', email) || !validateField('password', password)) return;
     setLoading(true);
-    await signUp(email, password, fullName);
+    await signUp(email, password, fullName, returnTo);
     setLoading(false);
   };
 
