@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -206,8 +206,17 @@ export default function Auth() {
     }, 50);
   };
 
+  // Navigate away ONLY in an effect — never during render.
+  // Calling navigate() during render causes React 18 to throw
+  // "Cannot update a component while rendering" which freezes
+  // the whole page and makes inputs unresponsive.
+  useEffect(() => {
+    if (user) {
+      navigate(returnTo, { replace: true });
+    }
+  }, [user, navigate, returnTo]);
+
   if (user) {
-    navigate(returnTo);
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
