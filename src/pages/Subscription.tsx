@@ -8,8 +8,9 @@ import {
   Users, Building2, Target, Mail, Bot,
   BarChart2, Layers, ShieldCheck, Inbox, Globe, Star
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
+import { useSearchParams } from "react-router-dom";
 
 const FEATURE_GROUPS = [
   {
@@ -119,6 +120,8 @@ export default function Subscription() {
   const { subscribed, productId, subscriptionEnd, trialEndsAt, isInTrial, checkSubscription } = useAuth();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoCheckoutStarted = useRef(false);
 
   const handleSubscribe = async () => {
     try {
