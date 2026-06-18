@@ -196,6 +196,14 @@ export default function Auth() {
   const mode = searchParams.get('mode') || 'signin';
   const invitationToken = searchParams.get('invitation');
 
+  const goToAuth = (signupMode: boolean) => {
+    navigate(`/auth?mode=${signupMode ? 'signup' : 'signin'}`, { replace: false });
+    setTimeout(() => {
+      const el = document.getElementById('auth');
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
   if (user) {
     navigate('/');
     return (
@@ -414,12 +422,10 @@ export default function Auth() {
           <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block">Pricing</a>
           <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block mr-2">Features</a>
           <span className="text-sm text-muted-foreground hidden sm:block">|</span>
-          <a href="?mode=signin#auth" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors sm:block hidden ml-2">Sign in</a>
-          <a href="?mode=signup#auth">
-            <Button size="sm" className="gap-1.5">
-              Get started free <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          </a>
+          <button type="button" onClick={() => goToAuth(false)} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors sm:block hidden ml-2">Sign in</button>
+          <Button size="sm" className="gap-1.5" onClick={() => goToAuth(true)}>
+            Get started free <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </nav>
 
@@ -443,12 +449,10 @@ export default function Auth() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center mb-12">
-          <a href="?mode=signup#auth">
-            <Button size="lg" className="gap-2 px-8 shadow-lg">
-              <Sparkles className="h-4 w-4" />
-              Start free 7-day trial
-            </Button>
-          </a>
+          <Button size="lg" className="gap-2 px-8 shadow-lg" onClick={() => goToAuth(true)}>
+            <Sparkles className="h-4 w-4" />
+            Start free 7-day trial
+          </Button>
           <a href="#features">
             <Button size="lg" variant="outline" className="gap-2 px-8">
               See all features <ArrowRight className="h-4 w-4" />
@@ -557,15 +561,14 @@ export default function Auth() {
                     </li>
                   ))}
                 </ul>
-                <a href="?mode=signup#auth">
-                  <Button
-                    className="w-full"
-                    variant={plan.highlight ? 'default' : 'outline'}
-                    size="sm"
-                  >
-                    {plan.cta}
-                  </Button>
-                </a>
+                <Button
+                  className="w-full"
+                  variant={plan.highlight ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => goToAuth(true)}
+                >
+                  {plan.cta}
+                </Button>
                 <p className="text-center text-[10px] text-muted-foreground mt-2">
                   7-day free trial included
                 </p>
@@ -609,12 +612,10 @@ export default function Auth() {
           <p className="text-muted-foreground text-sm mb-6">
             Join teams using LeadBoosters to find, enrich, and close leads at scale.
           </p>
-          <a href="?mode=signup#auth">
-            <Button size="lg" className="gap-2 px-10 shadow-lg">
-              <Sparkles className="h-4 w-4" />
-              Start free trial
-            </Button>
-          </a>
+          <Button size="lg" className="gap-2 px-10 shadow-lg" onClick={() => goToAuth(true)}>
+            <Sparkles className="h-4 w-4" />
+            Start free trial
+          </Button>
           <p className="text-xs text-muted-foreground mt-3">7 days free. No credit card. Cancel any time.</p>
         </div>
       </section>
