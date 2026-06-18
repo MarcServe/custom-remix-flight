@@ -66,7 +66,7 @@ const navigation: NavigationItem[] = [
       { name: "Campaigns", href: "/campaigns", icon: Briefcase },
       { name: "Email Branding", href: "/email-branding", icon: Palette },
       { name: "Newsletters", href: "/newsletters", icon: Newspaper },
-      { name: "Newsletter Series", href: "/newsletter-series", icon: CalendarClock },
+      // Newsletter Series retired from the UI (backend kept). Re-add this entry to restore it.
       { name: "Recipient Groups", href: "/recipient-groups", icon: UsersRound },
       { name: "Notes", href: "/notes", icon: StickyNote },
     ]

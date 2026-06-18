@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ResearchChatProvider } from "./contexts/ResearchChatContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -93,7 +93,8 @@ const App = () => (
                           <Route path="/lead-inbox" element={<PlanGate requiredTier="pro" feature="Lead Inbox"><LeadInbox /></PlanGate>} />
                           <Route path="/sequences" element={<PlanGate requiredTier="pro" feature="Email Sequences"><Sequences /></PlanGate>} />
                           <Route path="/company-sequences" element={<PlanGate requiredTier="pro" feature="Company Sequences"><CompanySequences /></PlanGate>} />
-                          <Route path="/newsletter-series" element={<PageErrorBoundary fallbackTitle="Newsletter Series failed to load"><PlanGate requiredTier="pro" feature="Newsletter Series"><NewsletterSeries /></PlanGate></PageErrorBoundary>} />
+                          {/* Newsletter Series retired — redirect old links to Newsletters. Component kept for easy restore. */}
+                          <Route path="/newsletter-series" element={<Navigate to="/newsletters" replace />} />
                           {/* More specific path first */}
                           <Route path="/campaigns/import-email" element={<PlanGate requiredTier="pro" feature="Per-recipient Personalised Email"><PersonalizedEmailCampaign /></PlanGate>} />
                           <Route path="/all-campaigns" element={<PlanGate requiredTier="pro" feature="Unified Campaigns"><UnifiedCampaigns /></PlanGate>} />
