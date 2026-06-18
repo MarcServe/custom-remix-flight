@@ -567,7 +567,7 @@ export default function Auth() {
                   className="w-full"
                   variant={plan.highlight ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => navigate('/subscription?checkout=true')}
+                  onClick={() => navigate(`/auth?mode=signup&returnTo=${encodeURIComponent('/subscription?checkout=true')}`)}
                 >
                   {plan.cta}
                 </Button>
