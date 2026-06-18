@@ -195,6 +195,8 @@ export default function Auth() {
 
   const mode = searchParams.get('mode') || 'signin';
   const invitationToken = searchParams.get('invitation');
+  const rawReturnTo = searchParams.get('returnTo');
+  const returnTo = rawReturnTo?.startsWith('/') && !rawReturnTo.startsWith('//') ? rawReturnTo : '/';
 
   const goToAuth = (signupMode: boolean) => {
     navigate(`/auth?mode=${signupMode ? 'signup' : 'signin'}`, { replace: false });
@@ -205,7 +207,7 @@ export default function Auth() {
   };
 
   if (user) {
-    navigate('/');
+    navigate(returnTo);
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -565,7 +567,7 @@ export default function Auth() {
                   className="w-full"
                   variant={plan.highlight ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => goToAuth(true)}
+                  onClick={() => navigate('/subscription?checkout=true')}
                 >
                   {plan.cta}
                 </Button>
