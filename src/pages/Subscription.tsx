@@ -126,22 +126,10 @@ export default function Subscription() {
   const handleSubscribe = async () => {
     try {
       setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(
-        'https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/create-checkout',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`,
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtnbmRwd3pxb2hlcG90YWhuZmVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE4NDU1MzMsImV4cCI6MjA3NzQyMTUzM30.2bCLyRArq4uFd4eg9TjB2PYq3ewxKCQMcW6C-ZX_nf0',
-          },
-        }
-      );
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`);
-      if (body?.url) {
-        window.open(body.url, '_blank');
+      const { data, error } = await supabase.functions.invoke('create-checkout');
+      if (error) throw error;
+      if (data?.url) {
+        window.location.assign(data.url);
       } else {
         throw new Error('No checkout URL returned');
       }
@@ -157,6 +145,15 @@ export default function Subscription() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (searchParams.get('checkout') !== 'true' || subscribed || autoCheckoutStarted.current) return;
+    autoCheckoutStarted.current = true;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('checkout');
+    setSearchParams(nextParams, { replace: true });
+    void handleSubscribe();
+  }, [searchParams, setSearchParams, subscribed]);
 
   const handleManageSubscription = async () => {
     try {
