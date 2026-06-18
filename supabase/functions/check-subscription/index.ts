@@ -57,17 +57,20 @@ serve(async (req) => {
     const customerId = customers.data[0].id;
     logStep("Found Stripe customer", { customerId });
 
-    const subscriptions = await stripe.subscriptions.list({
-      customer: customerId,
-      status: "active",
-      limit: 1,
-    });
-    const hasActiveSub = subscriptions.data.length > 0;
+    // Check both 'active' and 'trialing' — new subscribers start on a 7-day trial
+    // which has status 'trialing', not 'active'. Only querying 'active' was locking
+    // out brand-new subscribers immediately after they paid.
+    const [activeSubs, trialingSubs] = await Promise.all([
+      stripe.subscriptions.list({ customer: customerId, status: "active", limit: 1 }),
+      stripe.subscriptions.list({ customer: customerId, status: "trialing", limit: 1 }),
+    ]);
+    const allSubs = [...activeSubs.data, ...trialingSubs.data];
+    const hasActiveSub = allSubs.length > 0;
     let productId = null;
     let subscriptionEnd = null;
 
     if (hasActiveSub) {
-      const subscription = subscriptions.data[0];
+      const subscription = allSubs[0];
       logStep("Active subscription found", { subscriptionId: subscription.id });
       
       // Safely handle subscription end date
