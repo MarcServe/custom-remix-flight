@@ -2,12 +2,20 @@ import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Trash2, Users, FolderOpen, Plus, Upload, Building2, UserCircle } from "lucide-react";
+import { Loader2, Pencil, Trash2, Users, FolderOpen, Plus, Upload, Building2, UserCircle, ClipboardPaste, Inbox, Target, Megaphone } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -55,6 +63,39 @@ type CompanyRow = {
   contacts: { email: string | null; name: string | null }[] | null;
 };
 
+type LeadRow = {
+  id: string;
+  company_name: string | null;
+  contacts: unknown;
+};
+
+type DealRow = {
+  id: string;
+  title: string | null;
+  company_id: string | null;
+  companies: { name: string | null } | null;
+};
+
+/** Extract {email, name} pairs from an autonomous_lead's contacts JSON. */
+function leadEmails(lead: LeadRow): { email: string; first_name: string | null; last_name: string | null }[] {
+  const raw = Array.isArray(lead.contacts) ? (lead.contacts as any[]) : [];
+  const out: { email: string; first_name: string | null; last_name: string | null }[] = [];
+  const seen = new Set<string>();
+  for (const c of raw) {
+    const email = (c?.email || "").toString().trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || seen.has(email)) continue;
+    seen.add(email);
+    const full = (c?.name || "").toString().trim();
+    const parts = full.split(/\s+/);
+    out.push({
+      email,
+      first_name: parts[0] || null,
+      last_name: parts.length > 1 ? parts.slice(1).join(" ") : null,
+    });
+  }
+  return out;
+}
+
 export default function RecipientGroups() {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -67,16 +108,30 @@ export default function RecipientGroups() {
   const [deleting, setDeleting] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [createTab, setCreateTab] = useState<"csv" | "people" | "companies">("csv");
+  const [createTab, setCreateTab] = useState<
+    "csv" | "paste" | "people" | "companies" | "leads" | "deals" | "campaign"
+  >("csv");
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
   const [csvPreviewCount, setCsvPreviewCount] = useState(0);
   const [csvRows, setCsvRows] = useState<ReturnType<typeof parseRecipientRowsFromCSVText>>([]);
+  const [pasteText, setPasteText] = useState("");
   const [peopleSearch, setPeopleSearch] = useState("");
   const [companySearch, setCompanySearch] = useState("");
+  const [leadSearch, setLeadSearch] = useState("");
+  const [dealSearch, setDealSearch] = useState("");
   const [selectedPeopleIds, setSelectedPeopleIds] = useState<Set<string>>(new Set());
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<Set<string>>(new Set());
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+  const [selectedDealIds, setSelectedDealIds] = useState<Set<string>>(new Set());
+  const [campaignPickId, setCampaignPickId] = useState<string>("");
   const [creating, setCreating] = useState(false);
+
+  // Parsed preview of pasted emails (one per line or comma-separated; external sources)
+  const pasteRows = useMemo(
+    () => (pasteText.trim() ? parseRecipientRowsFromCSVText(pasteText) : []),
+    [pasteText]
+  );
 
   const { data: groups = [], isLoading } = useQuery({
     queryKey: ["recipient-groups-page"],
@@ -162,6 +217,89 @@ export default function RecipientGroups() {
     },
   });
 
+  // Lead Inbox leads (autonomous_leads) — emails live inside the contacts JSON
+  const { data: leadsPickList = [], isLoading: loadingLeadsPick } = useQuery({
+    queryKey: ["recipient-groups-pick-leads", user?.id],
+    enabled: createOpen && createTab === "leads",
+    queryFn: async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return [] as LeadRow[];
+      const all: LeadRow[] = [];
+      const PAGE = 1000;
+      let page = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("autonomous_leads")
+          .select("id, company_name, contacts")
+          .eq("user_id", u.user.id)
+          .order("created_at", { ascending: false })
+          .range(page * PAGE, (page + 1) * PAGE - 1);
+        if (error) throw error;
+        if (data?.length) all.push(...(data as unknown as LeadRow[]));
+        if (!data || data.length < PAGE) break;
+        page++;
+      }
+      // Keep only leads that have at least one contact email
+      return all.filter((l) => leadEmails(l).length > 0);
+    },
+  });
+
+  // Deals — resolve contacts via the deal's company
+  const { data: dealsPickList = [], isLoading: loadingDealsPick } = useQuery({
+    queryKey: ["recipient-groups-pick-deals", user?.id],
+    enabled: createOpen && createTab === "deals",
+    queryFn: async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return [] as DealRow[];
+      const { data, error } = await supabase
+        .from("deals")
+        .select("id, title, company_id, companies(name)")
+        .eq("user_id", u.user.id)
+        .not("company_id", "is", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as unknown as DealRow[];
+    },
+  });
+
+  // Existing campaigns — reuse a past campaign's recipient list
+  const { data: campaignsPickList = [], isLoading: loadingCampaignsPick } = useQuery({
+    queryKey: ["recipient-groups-pick-campaigns", user?.id],
+    enabled: createOpen && createTab === "campaign",
+    queryFn: async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return [] as { id: string; name: string }[];
+      const { data, error } = await supabase
+        .from("email_campaigns")
+        .select("id, name")
+        .eq("user_id", u.user.id)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      return (data || []) as { id: string; name: string }[];
+    },
+  });
+
+  const filteredLeads = useMemo(() => {
+    const q = leadSearch.trim().toLowerCase();
+    if (!q) return leadsPickList;
+    return leadsPickList.filter(
+      (l) =>
+        (l.company_name || "").toLowerCase().includes(q) ||
+        leadEmails(l).some((e) => e.email.includes(q))
+    );
+  }, [leadsPickList, leadSearch]);
+
+  const filteredDeals = useMemo(() => {
+    const q = dealSearch.trim().toLowerCase();
+    if (!q) return dealsPickList;
+    return dealsPickList.filter(
+      (d) =>
+        (d.title || "").toLowerCase().includes(q) ||
+        (d.companies?.name || "").toLowerCase().includes(q)
+    );
+  }, [dealsPickList, dealSearch]);
+
   const filteredPeople = useMemo(() => {
     const q = peopleSearch.trim().toLowerCase();
     if (!q) return peoplePickList;
@@ -196,10 +334,16 @@ export default function RecipientGroups() {
     setCreateDescription("");
     setCsvPreviewCount(0);
     setCsvRows([]);
+    setPasteText("");
     setPeopleSearch("");
     setCompanySearch("");
+    setLeadSearch("");
+    setDealSearch("");
     setSelectedPeopleIds(new Set());
     setSelectedCompanyIds(new Set());
+    setSelectedLeadIds(new Set());
+    setSelectedDealIds(new Set());
+    setCampaignPickId("");
     setCreateTab("csv");
   };
 
@@ -262,6 +406,141 @@ export default function RecipientGroups() {
             company: r.company,
             person_id: null,
           }));
+      } else if (createTab === "paste") {
+        if (pasteRows.length === 0) {
+          toast({ title: "Paste some emails", description: "One email per line, or comma-separated. External lists are fine.", variant: "destructive" });
+          setCreating(false);
+          return;
+        }
+        const seen = new Set<string>();
+        members = pasteRows
+          .filter((r) => {
+            const k = r.email.toLowerCase();
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          })
+          .map((r) => ({
+            email: r.email.toLowerCase(),
+            first_name: r.first_name,
+            last_name: r.last_name,
+            company: r.company,
+            person_id: null,
+          }));
+      } else if (createTab === "leads") {
+        const seen = new Set<string>();
+        members = [];
+        for (const lead of leadsPickList.filter((l) => selectedLeadIds.has(l.id))) {
+          for (const c of leadEmails(lead)) {
+            if (seen.has(c.email)) continue;
+            seen.add(c.email);
+            members.push({
+              email: c.email,
+              first_name: c.first_name,
+              last_name: c.last_name,
+              company: lead.company_name || null,
+              person_id: null,
+            });
+          }
+        }
+        if (members.length === 0) {
+          toast({ title: "Select leads", description: "Choose at least one lead that has a contact email.", variant: "destructive" });
+          setCreating(false);
+          return;
+        }
+      } else if (createTab === "deals") {
+        if (selectedDealIds.size === 0) {
+          toast({ title: "Select deals", description: "Choose at least one deal.", variant: "destructive" });
+          setCreating(false);
+          return;
+        }
+        const selectedDeals = dealsPickList.filter((d) => selectedDealIds.has(d.id));
+        const companyIds = [...new Set(selectedDeals.map((d) => d.company_id).filter(Boolean))] as string[];
+        const seen = new Set<string>();
+        members = [];
+        if (companyIds.length > 0) {
+          const { data: dealPeople } = await supabase
+            .from("people")
+            .select("id, first_name, last_name, email, company_id, companies(name)")
+            .in("company_id", companyIds)
+            .not("email", "is", null);
+          for (const p of (dealPeople || []) as any[]) {
+            const k = (p.email || "").trim().toLowerCase();
+            if (!k || seen.has(k)) continue;
+            seen.add(k);
+            members.push({
+              email: k,
+              first_name: p.first_name || null,
+              last_name: p.last_name || null,
+              company: p.companies?.name || null,
+              person_id: p.id,
+            });
+          }
+          // Fallback to companies' general/contact email when a deal's company has no people
+          const { data: dealCompanies } = await supabase
+            .from("companies")
+            .select("id, name, general_email, contacts(email, name)")
+            .in("id", companyIds);
+          for (const c of (dealCompanies || []) as any[]) {
+            const resolved = getCompanyResolvableEmail(c);
+            if (resolved && !seen.has(resolved.email)) {
+              seen.add(resolved.email);
+              members.push({
+                email: resolved.email,
+                first_name: resolved.first_name,
+                last_name: resolved.last_name,
+                company: resolved.company,
+                person_id: null,
+              });
+            }
+          }
+        }
+        if (members.length === 0) {
+          toast({ title: "No emails found", description: "Selected deals' companies have no contacts or general email.", variant: "destructive" });
+          setCreating(false);
+          return;
+        }
+      } else if (createTab === "campaign") {
+        if (!campaignPickId) {
+          toast({ title: "Pick a campaign", description: "Choose a campaign to copy its recipients from.", variant: "destructive" });
+          setCreating(false);
+          return;
+        }
+        const recips: { email: string; name: string | null; person_id: string | null }[] = [];
+        const PAGE = 1000;
+        let page = 0;
+        while (true) {
+          const { data, error } = await supabase
+            .from("email_campaign_recipients")
+            .select("email, name, person_id")
+            .eq("campaign_id", campaignPickId)
+            .range(page * PAGE, (page + 1) * PAGE - 1);
+          if (error) throw error;
+          if (data?.length) recips.push(...(data as any[]));
+          if (!data || data.length < PAGE) break;
+          page++;
+        }
+        const seen = new Set<string>();
+        members = [];
+        for (const r of recips) {
+          const k = (r.email || "").trim().toLowerCase();
+          if (!k || k.includes(",") || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(k) || seen.has(k)) continue;
+          seen.add(k);
+          const full = (r.name || "").trim();
+          const parts = full.split(/\s+/);
+          members.push({
+            email: k,
+            first_name: parts[0] || null,
+            last_name: parts.length > 1 ? parts.slice(1).join(" ") : null,
+            company: null,
+            person_id: r.person_id || null,
+          });
+        }
+        if (members.length === 0) {
+          toast({ title: "No recipients", description: "That campaign has no valid recipient emails.", variant: "destructive" });
+          setCreating(false);
+          return;
+        }
       } else if (createTab === "people") {
         const picked = peoplePickList.filter((p) => selectedPeopleIds.has(p.id) && p.email);
         const seen = new Set<string>();
@@ -537,10 +816,14 @@ export default function RecipientGroups() {
               />
             </div>
             <Tabs value={createTab} onValueChange={(v) => setCreateTab(v as typeof createTab)} className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="flex flex-wrap h-auto w-full justify-start gap-1">
                 <TabsTrigger value="csv" className="gap-1 text-xs sm:text-sm">
                   <Upload className="h-3.5 w-3.5" />
                   CSV
+                </TabsTrigger>
+                <TabsTrigger value="paste" className="gap-1 text-xs sm:text-sm">
+                  <ClipboardPaste className="h-3.5 w-3.5" />
+                  Paste
                 </TabsTrigger>
                 <TabsTrigger value="people" className="gap-1 text-xs sm:text-sm">
                   <UserCircle className="h-3.5 w-3.5" />
@@ -550,7 +833,159 @@ export default function RecipientGroups() {
                   <Building2 className="h-3.5 w-3.5" />
                   Companies
                 </TabsTrigger>
+                <TabsTrigger value="leads" className="gap-1 text-xs sm:text-sm">
+                  <Inbox className="h-3.5 w-3.5" />
+                  Lead Inbox
+                </TabsTrigger>
+                <TabsTrigger value="deals" className="gap-1 text-xs sm:text-sm">
+                  <Target className="h-3.5 w-3.5" />
+                  Deals
+                </TabsTrigger>
+                <TabsTrigger value="campaign" className="gap-1 text-xs sm:text-sm">
+                  <Megaphone className="h-3.5 w-3.5" />
+                  Campaign
+                </TabsTrigger>
               </TabsList>
+              <TabsContent value="paste" className="space-y-3 mt-3">
+                <p className="text-xs text-muted-foreground">
+                  Paste emails from anywhere — one per line, or comma-separated. Great for external lists.
+                  Optional columns (Email, First, Last, Company) are detected if you paste a header row.
+                </p>
+                <Textarea
+                  placeholder={"jane@acme.com\njohn@beta.co, John, Smith, Beta Ltd"}
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                  rows={6}
+                  className="font-mono text-xs"
+                />
+                {pasteRows.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    <strong>{pasteRows.length}</strong> unique email(s) ready to import.
+                  </p>
+                )}
+              </TabsContent>
+              <TabsContent value="leads" className="space-y-3 mt-3">
+                <p className="text-xs text-muted-foreground">
+                  Pull contact emails from leads captured in your Lead Inbox.
+                </p>
+                <Input
+                  placeholder="Search by company or email…"
+                  value={leadSearch}
+                  onChange={(e) => setLeadSearch(e.target.value)}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>{filteredLeads.length} shown · {selectedLeadIds.size} selected</span>
+                  <div className="flex gap-3">
+                    {selectedLeadIds.size > 0 && (
+                      <button type="button" className="text-muted-foreground hover:underline" onClick={() => setSelectedLeadIds(new Set())}>
+                        Deselect all
+                      </button>
+                    )}
+                    <button type="button" className="text-primary hover:underline font-medium" onClick={() => setSelectedLeadIds(new Set(leadsPickList.map((l) => l.id)))}>
+                      Select all ({leadsPickList.length})
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-52 overflow-y-auto rounded-md border p-2 space-y-1">
+                  {loadingLeadsPick ? (
+                    <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                  ) : filteredLeads.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-4 text-center">No leads with a contact email.</p>
+                  ) : (
+                    filteredLeads.map((l) => {
+                      const emails = leadEmails(l);
+                      return (
+                        <label key={l.id} className="flex items-center gap-2 cursor-pointer py-1.5 px-2 rounded hover:bg-muted/50">
+                          <Checkbox
+                            checked={selectedLeadIds.has(l.id)}
+                            onCheckedChange={(c) => {
+                              setSelectedLeadIds((prev) => {
+                                const next = new Set(prev);
+                                if (c) next.add(l.id); else next.delete(l.id);
+                                return next;
+                              });
+                            }}
+                          />
+                          <span className="text-sm truncate">
+                            {l.company_name || "Lead"}
+                            <span className="text-muted-foreground"> · {emails.length} email{emails.length === 1 ? "" : "s"}</span>
+                          </span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </TabsContent>
+              <TabsContent value="deals" className="space-y-3 mt-3">
+                <p className="text-xs text-muted-foreground">
+                  Add contacts from your pipeline deals (resolved via each deal's company).
+                </p>
+                <Input
+                  placeholder="Search by deal or company…"
+                  value={dealSearch}
+                  onChange={(e) => setDealSearch(e.target.value)}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>{filteredDeals.length} shown · {selectedDealIds.size} selected</span>
+                  <div className="flex gap-3">
+                    {selectedDealIds.size > 0 && (
+                      <button type="button" className="text-muted-foreground hover:underline" onClick={() => setSelectedDealIds(new Set())}>
+                        Deselect all
+                      </button>
+                    )}
+                    <button type="button" className="text-primary hover:underline font-medium" onClick={() => setSelectedDealIds(new Set(dealsPickList.map((d) => d.id)))}>
+                      Select all ({dealsPickList.length})
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-52 overflow-y-auto rounded-md border p-2 space-y-1">
+                  {loadingDealsPick ? (
+                    <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                  ) : filteredDeals.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-4 text-center">No deals linked to a company.</p>
+                  ) : (
+                    filteredDeals.map((d) => (
+                      <label key={d.id} className="flex items-center gap-2 cursor-pointer py-1.5 px-2 rounded hover:bg-muted/50">
+                        <Checkbox
+                          checked={selectedDealIds.has(d.id)}
+                          onCheckedChange={(c) => {
+                            setSelectedDealIds((prev) => {
+                              const next = new Set(prev);
+                              if (c) next.add(d.id); else next.delete(d.id);
+                              return next;
+                            });
+                          }}
+                        />
+                        <span className="text-sm truncate">
+                          {d.title || "Deal"}
+                          {d.companies?.name && <span className="text-muted-foreground"> · {d.companies.name}</span>}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </TabsContent>
+              <TabsContent value="campaign" className="space-y-3 mt-3">
+                <p className="text-xs text-muted-foreground">
+                  Copy the recipient list from one of your existing email campaigns.
+                </p>
+                {loadingCampaignsPick ? (
+                  <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                ) : campaignsPickList.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-4 text-center">No campaigns found.</p>
+                ) : (
+                  <Select value={campaignPickId} onValueChange={setCampaignPickId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a campaign…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {campaignsPickList.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </TabsContent>
               <TabsContent value="csv" className="space-y-3 mt-3">
                 <p className="text-xs text-muted-foreground">
                   Comma-separated CSV with a header row. Include an <strong>email</strong> column (or put emails in the first
