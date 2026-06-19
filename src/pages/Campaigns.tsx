@@ -404,17 +404,44 @@ export default function Campaigns() {
     );
   };
 
-  const getRecipientStatusBadge = (status: string) => {
-    const variants: Record<string, "default" | "secondary" | "destructive"> = {
-      pending: "secondary",
-      sent: "default",
-      failed: "destructive",
-      opened: "default",
-      clicked: "default",
-      bounced: "destructive",
-    };
+  /**
+   * Derive the *true* delivery state from both the status column and the tracking
+   * timestamps. "delivered" is only ever stored as a delivered_at timestamp (the
+   * status column stays 'sent'), so without this a delivered email shows as "Sent".
+   * Priority: clicked → opened → delivered → bounced/failed → sent → pending.
+   */
+  const getRecipientStatusBadge = (recipient: {
+    status: string;
+    sent_at?: string | null;
+    delivered_at?: string | null;
+    opened_at?: string | null;
+    clicked_at?: string | null;
+  }) => {
+    const s = (recipient.status || '').toLowerCase();
+    let key: string;
+    if (s === 'clicked' || recipient.clicked_at) key = 'clicked';
+    else if (s === 'opened' || recipient.opened_at) key = 'opened';
+    else if (s === 'bounced') key = 'bounced';
+    else if (s === 'failed') key = 'failed';
+    else if (recipient.delivered_at) key = 'delivered';
+    else if (s === 'sent' || recipient.sent_at) key = 'sent';
+    else key = s || 'pending';
 
-    return <Badge variant={variants[status] || "secondary"}>{status}</Badge>;
+    const cfg: Record<string, { cls: string; label: string }> = {
+      pending:   { cls: "bg-zinc-100 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-600", label: "Pending" },
+      sent:      { cls: "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-700", label: "Sent" },
+      delivered: { cls: "bg-sky-100 text-sky-700 border-sky-300 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-700", label: "Delivered" },
+      opened:    { cls: "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700", label: "Opened" },
+      clicked:   { cls: "bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-700", label: "Clicked" },
+      bounced:   { cls: "bg-red-100 text-red-700 border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-700", label: "Bounced" },
+      failed:    { cls: "bg-red-100 text-red-700 border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-700", label: "Failed" },
+    };
+    const { cls, label } = cfg[key] ?? { cls: "bg-muted text-muted-foreground border-border", label: key };
+    return (
+      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${cls}`}>
+        {label}
+      </span>
+    );
   };
 
   const selectedCampaignData = useMemo(
@@ -3286,7 +3313,7 @@ export default function Campaigns() {
                       <TableCell className="text-sm text-muted-foreground">
                         {recipient.email}
                       </TableCell>
-                      <TableCell>{getRecipientStatusBadge(recipient.status)}</TableCell>
+                      <TableCell>{getRecipientStatusBadge(recipient)}</TableCell>
                       {abTestResults && (
                         <TableCell className="text-sm">
                           {recipient.ab_variant === 'A' || recipient.ab_variant === 'B' ? (
