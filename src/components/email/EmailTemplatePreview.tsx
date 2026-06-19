@@ -132,7 +132,24 @@ export function EmailTemplatePreview({
 
   const renderBody = (color: string) => {
     if (bodyHtml) {
-      const bodyContent = <div style={{ color, fontSize: '15px', lineHeight: '1.6' }} dangerouslySetInnerHTML={{ __html: bodyHtml }} />;
+      // Replicate the spacing the *sent* email applies via .email-content so the
+      // preview matches both the editor and what recipients receive. Without this,
+      // Tailwind's base reset (p { margin: 0 }) collapses all paragraph spacing in
+      // the preview even when the body field has blank lines / new paragraphs.
+      const bodyContent = (
+        <div className="lb-preview-body" style={{ color, fontSize: '15px', lineHeight: '1.6' }}>
+          <style>{`
+            .lb-preview-body p, .lb-preview-body div { margin: 0 0 12px 0; }
+            .lb-preview-body p:last-child, .lb-preview-body div:last-child { margin-bottom: 0; }
+            .lb-preview-body ul, .lb-preview-body ol { margin: 12px 0; padding-left: 20px; }
+            .lb-preview-body li { margin-bottom: 6px; }
+            .lb-preview-body h1, .lb-preview-body h2, .lb-preview-body h3 { margin: 16px 0 8px 0; line-height: 1.3; }
+            .lb-preview-body img { max-width: 100%; height: auto; border-radius: 8px; }
+            .lb-preview-body br { line-height: 1.6; }
+          `}</style>
+          <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+        </div>
+      );
       if (bare && onEditImage) {
         return (
           <div onClick={handleBodyClick} style={{ cursor: onEditImage ? 'pointer' : undefined }} title="Click image to edit">
