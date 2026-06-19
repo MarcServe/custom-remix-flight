@@ -1793,7 +1793,10 @@ Return ONLY the HTML body content.`,
       senderEmail,
       senderImageUrl: sp?.sender_image_url || businessProfile?.email_sender_image_url || userProfile?.avatar_url || undefined,
       footerText: sp?.footer_text || businessProfile?.email_footer_text || undefined,
-      footerImageUrl: sp?.footer_logo_url || sp?.logo_url || businessProfile?.email_footer_logo_url || businessProfile?.email_logo_url || undefined,
+      // A newsletter header image overrides ALL branding images (header + footer)
+      footerImageUrl: headerImageUrl.trim()
+        ? undefined
+        : (sp?.footer_logo_url || sp?.logo_url || businessProfile?.email_footer_logo_url || businessProfile?.email_logo_url || undefined),
       websiteUrl: sp?.website_url || businessProfile?.website || undefined,
       signature: sp?.signature || businessProfile?.email_signature || undefined,
       bodyHtml: fullBody || undefined,

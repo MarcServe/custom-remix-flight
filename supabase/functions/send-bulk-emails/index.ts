@@ -70,6 +70,26 @@ function parseResendError(status: number, bodyText: string): string {
   }
 }
 
+/**
+ * Apply per-row updates to email_campaign_recipients, chunked for concurrency.
+ * We must use UPDATE (not upsert): the table has NOT NULL columns without defaults
+ * (campaign_id, email, name, personalized_*), so a partial upsert violates NOT NULL
+ * and silently fails — the bug that left recipients stuck 'pending'.
+ */
+async function applyRecipientUpdates(
+  supabaseClient: any,
+  rows: Array<{ id: string; [k: string]: any }>,
+  concurrency = 50,
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += concurrency) {
+    await Promise.allSettled(
+      rows.slice(i, i + concurrency).map(({ id, ...fields }) =>
+        supabaseClient.from('email_campaign_recipients').update(fields).eq('id', id)
+      )
+    );
+  }
+}
+
 /** Render template + strip signoff for a single recipient's body */
 function buildWrappedHtml(
   recipient: any,
@@ -253,14 +273,18 @@ serve(async (req) => {
     // Mark every pending recipient as 'sent' RIGHT NOW before any email goes out.
     // This means the cron (which queries status='pending') will see 0 results and
     // never fire a second concurrent send. Failures are corrected to 'failed' below.
+    // IMPORTANT: use UPDATE, not upsert. The table has NOT NULL columns without
+    // defaults (campaign_id, email, name, personalized_*), so a partial upsert
+    // ({id,status,sent_at}) violates NOT NULL and silently fails — which left
+    // recipients stuck 'pending' and campaigns stuck 'sending' even after Resend
+    // had sent everything. A single UPDATE by campaign + status avoids that.
     const lockSentAt = new Date().toISOString();
-    const LOCK_CHUNK = 500;
-    const lockRows = allPendingRecipients.map((r: any) => ({ id: r.id, status: 'sent', sent_at: lockSentAt }));
-    for (let i = 0; i < lockRows.length; i += LOCK_CHUNK) {
-      await supabaseClient.from('email_campaign_recipients')
-        .upsert(lockRows.slice(i, i + LOCK_CHUNK), { onConflict: 'id' });
-    }
-    console.log(`[Lock] Optimistically marked ${allPendingRecipients.length} recipients as sent — cron cannot double-send now`);
+    const { error: lockErr } = await supabaseClient.from('email_campaign_recipients')
+      .update({ status: 'sent', sent_at: lockSentAt })
+      .eq('campaign_id', campaignId)
+      .eq('status', 'pending');
+    if (lockErr) console.error('[Lock] Failed to optimistically mark recipients sent:', lockErr.message);
+    else console.log(`[Lock] Optimistically marked ${allPendingRecipients.length} recipients as sent — cron cannot double-send now`);
 
     let sentCount = 0;
     let failedCount = 0;
@@ -311,7 +335,12 @@ serve(async (req) => {
         };
       }
     }
-    if (campaign.header_image_url) branding.logoUrl = campaign.header_image_url;
+    // A campaign's directly-uploaded header image overrides ALL branding images
+    // (header logo + footer logo) so no branding image leaks through when applied.
+    if (campaign.header_image_url) {
+      branding.logoUrl = campaign.header_image_url;
+      branding.footerImageUrl = null;
+    }
     if (branding.logoUrl && !branding.companyName) branding.companyName = businessProfile?.company_name || 'Company';
 
     // Resolve connection
@@ -419,11 +448,7 @@ serve(async (req) => {
 
       if (payloads.length === 0) {
         // Only invalid emails — nothing to send; return quickly
-        const DB_CHUNK = 500;
-        for (let i = 0; i < invalidEmailRows.length; i += DB_CHUNK) {
-          await supabaseClient.from('email_campaign_recipients')
-            .upsert(invalidEmailRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
-        }
+        await applyRecipientUpdates(supabaseClient, invalidEmailRows.map((r: any) => ({ ...r, sent_at: null })));
         await supabaseClient.from('email_campaigns').update({
           sent_count: campaign.sent_count,
           failed_count: campaign.failed_count + failedCount,
@@ -517,16 +542,17 @@ serve(async (req) => {
       // The cron won't re-trigger because writes complete long before 15 minutes.
       const doBackgroundWrites = async () => {
         try {
-          // Write sent status
-          for (let i = 0; i < successUpsertRows.length; i += DB_CHUNK) {
-            await supabaseClient.from('email_campaign_recipients')
-              .upsert(successUpsertRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
-          }
-          // Write failed/invalid status
-          for (let i = 0; i < failedUpsertRows.length; i += DB_CHUNK) {
-            await supabaseClient.from('email_campaign_recipients')
-              .upsert(failedUpsertRows.slice(i, i + DB_CHUNK), { onConflict: 'id' });
-          }
+          // Attach Resend message IDs to the (already 'sent') recipients so the
+          // webhook can match delivered/opened/clicked events back to them.
+          await applyRecipientUpdates(
+            supabaseClient,
+            successUpsertRows.map((r: any) => ({ id: r.id, external_message_id: r.external_message_id ?? null })),
+          );
+          // Correct the recipients that actually failed (undo the optimistic lock)
+          await applyRecipientUpdates(
+            supabaseClient,
+            failedUpsertRows.map((r: any) => ({ id: r.id, status: 'failed', sent_at: null, error_message: r.error_message ?? null })),
+          );
           // A/B history
           for (const result of chunkResults) {
             if (!result.success) continue;
@@ -554,28 +580,38 @@ serve(async (req) => {
               return rec ? enrollFollowUp(supabaseClient, rec, campaign, campaignId, sentAt, row.external_message_id) : Promise.resolve();
             })
           );
-          // Update campaign counts
-          await supabaseClient.from('email_campaigns').update({
-            sent_count: campaign.sent_count + sentCount,
-            failed_count: campaign.failed_count + failedCount,
-          }).eq('id', campaignId);
-          // Mark completed if no pending remain
-          const { count: remainingPending } = await supabaseClient
-            .from('email_campaign_recipients')
-            .select('*', { count: 'exact', head: true })
-            .eq('campaign_id', campaignId).eq('status', 'pending');
-          if ((remainingPending ?? 0) === 0) {
-            await supabaseClient.from('email_campaigns').update({
-              status: 'completed', completed_at: new Date().toISOString(),
-            }).eq('id', campaignId);
-          }
-          console.log(`[Resend BG] DB writes done. ${sentCount} sent, ${failedCount} failed, ${remainingPending ?? 0} still pending`);
+          console.log(`[Resend BG] DB writes done. ${sentCount} sent, ${failedCount} failed`);
         } catch (bgErr) {
           console.error('[Resend BG] Background write error:', bgErr);
         }
       };
 
-      // Register with EdgeRuntime so writes survive after response is sent
+      // ── Finalize campaign status SYNCHRONOUSLY before responding ──────────
+      // The optimistic lock already marked every recipient sent/failed, so there
+      // are no pending recipients left. We update counts + completion here (not in
+      // the background task) so the UI flips from "Sending" to "Completed" even if
+      // the slower per-recipient background writes get cut off by the function
+      // timeout. This was the cause of campaigns being stuck on "Sending".
+      try {
+        await supabaseClient.from('email_campaigns').update({
+          sent_count: campaign.sent_count + sentCount,
+          failed_count: campaign.failed_count + failedCount,
+        }).eq('id', campaignId);
+        const { count: remainingPending } = await supabaseClient
+          .from('email_campaign_recipients')
+          .select('*', { count: 'exact', head: true })
+          .eq('campaign_id', campaignId).eq('status', 'pending');
+        if ((remainingPending ?? 0) === 0) {
+          await supabaseClient.from('email_campaigns').update({
+            status: 'completed', completed_at: new Date().toISOString(),
+          }).eq('id', campaignId);
+        }
+      } catch (finErr) {
+        console.error('[Resend] Campaign finalize error:', finErr);
+      }
+
+      // Register with EdgeRuntime so the heavier per-recipient writes survive
+      // after the response is sent (message IDs, activity log, A/B, follow-ups).
       try {
         (globalThis as any).EdgeRuntime.waitUntil(doBackgroundWrites());
       } catch {

@@ -186,9 +186,12 @@ serve(async (req) => {
       }
     }
 
-    // Per-newsletter header image override (fully customise branding for this send)
+    // Per-newsletter header image override (fully customise branding for this send).
+    // A directly-uploaded header image overrides ALL branding images (header + footer)
+    // so no branding logo leaks through when applied.
     if (newsletter.header_image_url && String(newsletter.header_image_url).trim()) {
       branding.logoUrl = newsletter.header_image_url.trim();
+      branding.footerImageUrl = null;
     }
 
     // Determine subscribers (or single test recipient)

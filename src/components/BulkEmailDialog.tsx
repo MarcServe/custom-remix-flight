@@ -4374,7 +4374,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             const previewSenderTitle = sp?.sender_title || businessProfile?.email_sender_title || userProfile?.job_title || '';
             const previewSenderEmail = sp?.sender_email || businessProfile?.email_sender_email || userProfile?.email || '';
             const previewFooterText = sp?.footer_text || businessProfile?.email_footer_text || undefined;
-            const previewFooterImage = sp?.footer_logo_url || sp?.logo_url || businessProfile?.email_footer_logo_url || businessProfile?.email_logo_url || undefined;
+            // A campaign header image overrides ALL branding images (header + footer)
+            const previewFooterImage = headerImageUrl.trim()
+              ? undefined
+              : (sp?.footer_logo_url || sp?.logo_url || businessProfile?.email_footer_logo_url || businessProfile?.email_logo_url || undefined);
             const previewWebsiteUrl = sp?.website_url || businessProfile?.website || undefined;
             const previewSenderImageUrl = sp?.sender_image_url || businessProfile?.email_sender_image_url || userProfile?.avatar_url || undefined;
             const previewSignature = (sp?.signature ?? businessProfile?.email_signature ?? '')?.trim() || undefined;
