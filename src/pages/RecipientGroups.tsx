@@ -15,7 +15,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Trash2, Users, FolderOpen, Plus, Upload, Building2, UserCircle, ClipboardPaste, Inbox, Target, Megaphone } from "lucide-react";
+import { Loader2, Pencil, Trash2, Users, FolderOpen, Plus, Upload, Building2, UserCircle, ClipboardPaste, Inbox, Target, Megaphone, Send } from "lucide-react";
+import { useCampaignDialog } from "@/contexts/CampaignDialogContext";
 import {
   Dialog,
   DialogContent,
@@ -100,6 +101,8 @@ export default function RecipientGroups() {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { openWithPeople } = useCampaignDialog();
+  const [launchingCampaignId, setLaunchingCampaignId] = useState<string | null>(null);
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameName, setRenameName] = useState("");
   const [renameDescription, setRenameDescription] = useState("");
@@ -322,6 +325,53 @@ export default function RecipientGroups() {
     if (!q) return base;
     return base.filter((c) => (c.name || "").toLowerCase().includes(q));
   }, [companiesWithEmail, companySearch]);
+
+  // Launch a new campaign pre-filled with this group's members — connects
+  // recipient groups directly to the campaign composer.
+  const handleCreateCampaignFromGroup = async (g: RecipientGroup) => {
+    setLaunchingCampaignId(g.id);
+    try {
+      const rows: { email: string; first_name: string | null; last_name: string | null; company: string | null; person_id: string | null }[] = [];
+      const PAGE = 1000;
+      let page = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("recipient_group_members")
+          .select("email, first_name, last_name, company, person_id")
+          .eq("group_id", g.id)
+          .range(page * PAGE, (page + 1) * PAGE - 1);
+        if (error) throw error;
+        if (data?.length) rows.push(...(data as any[]));
+        if (!data || data.length < PAGE) break;
+        page++;
+      }
+      const seen = new Set<string>();
+      const people = rows
+        .filter((m) => {
+          const e = (m.email || "").trim().toLowerCase();
+          if (!e || seen.has(e)) return false;
+          seen.add(e);
+          return true;
+        })
+        .map((m) => ({
+          id: m.person_id || `group-${g.id}-${m.email}`,
+          first_name: m.first_name || "",
+          last_name: m.last_name || "",
+          email: m.email.trim(),
+          companies: m.company ? { name: m.company } : undefined,
+        }));
+      if (people.length === 0) {
+        toast({ title: "Group is empty", description: "Add members to this group first.", variant: "destructive" });
+        return;
+      }
+      openWithPeople(people);
+      toast({ title: "Campaign started", description: `${people.length} recipient(s) from "${g.name}" added. Compose and send.` });
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message ?? "Failed to start campaign", variant: "destructive" });
+    } finally {
+      setLaunchingCampaignId(null);
+    }
+  };
 
   const openRename = (g: RecipientGroup) => {
     setRenameId(g.id);
@@ -754,6 +804,16 @@ export default function RecipientGroups() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1.5"
+                          disabled={launchingCampaignId === g.id || (g.member_count ?? 0) === 0}
+                          onClick={() => handleCreateCampaignFromGroup(g)}
+                        >
+                          {launchingCampaignId === g.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                          <span className="hidden sm:inline">Create campaign</span>
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"

@@ -1847,12 +1847,26 @@ export default function Companies() {
       }
       const existingEmails = new Set(peopleForEmail.map((p) => p.email.toLowerCase().trim()));
       for (const company of companiesWithEmail) {
-        const emailMatch = getCompanyEmailContact(company);
-        if (emailMatch?.email && !existingEmails.has(emailMatch.email.toLowerCase().trim())) {
+        // Carry EVERY contact email for the company (not just the first). A company
+        // with multiple contacts must contribute one recipient per contact — this was
+        // the "doesn't carry all leads" bug. Fall back to the general email only when
+        // the company has no contacts with emails.
+        const contactEmails = (company.contacts || [])
+          .filter((c: any) => c?.email && String(c.email).trim())
+          .map((c: any) => ({ email: String(c.email).trim(), name: (c.name || "").trim() }));
+        const emailsToAdd = contactEmails.length > 0
+          ? contactEmails
+          : (company.general_email && String(company.general_email).trim()
+              ? [{ email: String(company.general_email).trim(), name: "" }]
+              : []);
+
+        for (const { email, name } of emailsToAdd) {
+          const norm = email.toLowerCase().trim();
+          if (!norm || existingEmails.has(norm)) continue;
           const { data: existingPersonByEmail } = await supabase
             .from("people")
             .select("id, first_name, last_name, email, company_id, companies(id, name, tags)")
-            .ilike("email", emailMatch.email)
+            .ilike("email", email)
             .maybeSingle();
           if (existingPersonByEmail) {
             if (!peopleForEmail.find((p) => p.id === existingPersonByEmail.id)) {
@@ -1867,16 +1881,13 @@ export default function Companies() {
               existingEmails.add(existingPersonByEmail.email.toLowerCase().trim());
             }
           } else {
-            const nameParts =
-              emailMatch.type === "contact" && emailMatch.contact?.name
-                ? emailMatch.contact.name.trim().split(" ")
-                : company.name.trim().split(" ");
+            const nameParts = name ? name.split(/\s+/) : company.name.trim().split(/\s+/);
             const { data: newPerson, error: createError } = await supabase
               .from("people")
               .insert({
                 first_name: nameParts[0] || company.name,
                 last_name: nameParts.slice(1).join(" ") || "",
-                email: emailMatch.email,
+                email,
                 company_id: company.id,
                 user_id: user.id,
               })
