@@ -290,7 +290,11 @@ export default function Auth() {
   };
 
   // ── Auth panel (shared by mobile + desktop) ──────────────────────────────
-  const AuthPanel = () => (
+  // NOTE: this MUST be a plain JSX element, not a nested component. Defining a
+  // component inside Auth's render (const AuthPanel = () => …) makes it a new
+  // component type every render, so React remounts the whole panel on each
+  // keystroke — destroying the input's focus/value. That was the "can't type" bug.
+  const authPanel = (
     <div className="w-full max-w-sm mx-auto">
       <div className="flex justify-center mb-6">
         <img src={leadBoostersLogo} alt="LeadBoosters" className="h-14 w-auto drop-shadow" />
@@ -421,7 +425,8 @@ export default function Auth() {
   );
 
   // ── Marketing content ─────────────────────────────────────────────────────
-  const MarketingContent = () => (
+  // Plain JSX element (not a nested component) — same reason as authPanel above.
+  const marketingContent = (
     <>
       {/* ── Nav ── */}
       <nav className="flex items-center justify-between px-6 py-4 border-b sticky top-0 z-10 bg-background/80 backdrop-blur-md">
@@ -655,11 +660,11 @@ export default function Auth() {
       <div className="hidden lg:flex h-screen">
         {/* Left: scrollable marketing */}
         <div className="flex-1 overflow-y-auto">
-          <MarketingContent />
+          {marketingContent}
         </div>
         {/* Right: sticky auth panel */}
         <div id="auth" className="w-[420px] shrink-0 border-l h-screen overflow-y-auto flex items-center justify-center px-8 py-12 bg-card/40 backdrop-blur-sm">
-          <AuthPanel />
+          {authPanel}
         </div>
       </div>
 
@@ -667,10 +672,10 @@ export default function Auth() {
       <div className="lg:hidden flex flex-col">
         {/* Auth first on mobile */}
         <div id="auth" className="px-6 py-10 border-b bg-card/40">
-          <AuthPanel />
+          {authPanel}
         </div>
         {/* Marketing below */}
-        <MarketingContent />
+        {marketingContent}
       </div>
     </div>
   );
