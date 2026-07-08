@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical, Phone, Plus, Settings, FileText, Edit, Trash2, Building2, Copy, Save, FolderInput, CalendarClock, RotateCcw, RefreshCw, SendHorizontal, ArrowLeftRight, BarChart3, Search, Pause, Play } from "lucide-react";
+import { Loader2, Mail, Users, Send, CheckCircle, XCircle, Clock, Eye, Shield, Zap, FlaskConical, Phone, Plus, Settings, FileText, Edit, Trash2, Building2, Copy, Save, FolderInput, CalendarClock, RotateCcw, RefreshCw, SendHorizontal, ArrowLeftRight, BarChart3, Search, Pause, Play, Inbox, Target } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -119,11 +119,15 @@ export default function Campaigns() {
   const [savingAsGroup, setSavingAsGroup] = useState(false);
   const [addFromGroupOpen, setAddFromGroupOpen] = useState(false);
   const [addRecipientsDialogOpen, setAddRecipientsDialogOpen] = useState(false);
-  const [addRecipientsTab, setAddRecipientsTab] = useState<'groups' | 'people' | 'companies' | 'paste'>('groups');
+  const [addRecipientsTab, setAddRecipientsTab] = useState<'groups' | 'people' | 'companies' | 'leads' | 'deals' | 'paste'>('groups');
   const [addRecipientsPeopleSearch, setAddRecipientsPeopleSearch] = useState('');
   const [addRecipientsCompaniesSearch, setAddRecipientsCompaniesSearch] = useState('');
+  const [addRecipientsLeadsSearch, setAddRecipientsLeadsSearch] = useState('');
+  const [addRecipientsDealsSearch, setAddRecipientsDealsSearch] = useState('');
   const [addRecipientsSelectedPeople, setAddRecipientsSelectedPeople] = useState<Set<string>>(new Set());
   const [addRecipientsSelectedCompanies, setAddRecipientsSelectedCompanies] = useState<Set<string>>(new Set());
+  const [addRecipientsSelectedLeads, setAddRecipientsSelectedLeads] = useState<Set<string>>(new Set());
+  const [addRecipientsSelectedDeals, setAddRecipientsSelectedDeals] = useState<Set<string>>(new Set());
   const [addRecipientsPasteText, setAddRecipientsPasteText] = useState('');
   const [addingRecipientsFromDialog, setAddingRecipientsFromDialog] = useState(false);
   const [overviewStatusFilter, setOverviewStatusFilter] = useState<string>("all");
@@ -1019,14 +1023,60 @@ export default function Campaigns() {
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
-      let q = supabase.from('companies').select('id, name, general_email, industry').eq('user_id', user.id).not('general_email', 'is', null).order('created_at', { ascending: false }).limit(500);
+      let q = supabase.from('companies').select('id, name, general_email, industry, contacts(email, name)').eq('user_id', user.id).order('created_at', { ascending: false }).limit(500);
       if (addRecipientsCompaniesSearch.trim()) {
         const term = addRecipientsCompaniesSearch.trim();
         q = q.or(`name.ilike.%${term}%,general_email.ilike.%${term}%,industry.ilike.%${term}%`);
       }
       const { data, error } = await q;
       if (error) throw error;
-      return (data || []).map((c: any) => ({ ...c, email: c.general_email })) as { id: string; name: string | null; email: string; industry: string | null }[];
+      // Combine ALL contact emails + the general email so a company with multiple
+      // contacts contributes every recipient (not just one). The Add handler splits
+      // this comma list back into individual recipients.
+      return (data || [])
+        .map((c: any) => {
+          const contactEmails = (c.contacts || []).map((ct: any) => ct?.email).filter((e: any) => e && String(e).trim());
+          const allEmails = [...contactEmails, c.general_email].filter((e: any) => e && String(e).trim());
+          const unique = [...new Set(allEmails.map((e: string) => String(e).trim()))];
+          return { id: c.id, name: c.name, email: unique.join(', '), industry: c.industry };
+        })
+        .filter((c: any) => c.email) as { id: string; name: string | null; email: string; industry: string | null }[];
+    },
+  });
+
+  const { data: addRecipientsLeadsList = [] } = useQuery({
+    queryKey: ['campaign-add-recipients-leads', addRecipientsLeadsSearch],
+    enabled: addRecipientsDialogOpen && addRecipientsTab === 'leads',
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      let q = supabase.from('autonomous_leads').select('id, company_name, contacts').eq('user_id', user.id).order('created_at', { ascending: false }).limit(500);
+      if (addRecipientsLeadsSearch.trim()) q = q.ilike('company_name', `%${addRecipientsLeadsSearch.trim()}%`);
+      const { data, error } = await q;
+      if (error) throw error;
+      // Keep only leads that have at least one contact email; expose those emails
+      return (data || [])
+        .map((l: any) => {
+          const emails = (Array.isArray(l.contacts) ? l.contacts : [])
+            .map((ct: any) => ({ email: (ct?.email || '').toString().trim(), name: (ct?.name || '').toString().trim() }))
+            .filter((c: any) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email));
+          return { id: l.id, company_name: l.company_name, emails };
+        })
+        .filter((l: any) => l.emails.length > 0) as { id: string; company_name: string | null; emails: { email: string; name: string }[] }[];
+    },
+  });
+
+  const { data: addRecipientsDealsList = [] } = useQuery({
+    queryKey: ['campaign-add-recipients-deals', addRecipientsDealsSearch],
+    enabled: addRecipientsDialogOpen && addRecipientsTab === 'deals',
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      let q = supabase.from('deals').select('id, title, company_id, companies(name)').eq('user_id', user.id).not('company_id', 'is', null).order('created_at', { ascending: false }).limit(500);
+      if (addRecipientsDealsSearch.trim()) q = q.ilike('title', `%${addRecipientsDealsSearch.trim()}%`);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data || []) as { id: string; title: string | null; company_id: string | null; companies: { name: string | null } | null }[];
     },
   });
 
@@ -2554,11 +2604,11 @@ export default function Campaigns() {
         </Dialog>
 
         {/* Add Recipients dialog (customizable: groups, people, companies, paste) */}
-        <Dialog open={addRecipientsDialogOpen} onOpenChange={(open) => { setAddRecipientsDialogOpen(open); if (!open) { setAddRecipientsSelectedPeople(new Set()); setAddRecipientsSelectedCompanies(new Set()); setAddRecipientsPasteText(''); } }}>
+        <Dialog open={addRecipientsDialogOpen} onOpenChange={(open) => { setAddRecipientsDialogOpen(open); if (!open) { setAddRecipientsSelectedPeople(new Set()); setAddRecipientsSelectedCompanies(new Set()); setAddRecipientsSelectedLeads(new Set()); setAddRecipientsSelectedDeals(new Set()); setAddRecipientsPasteText(''); } }}>
           <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>Add recipients</DialogTitle>
-              <DialogDescription>Add recipients from groups, People, Companies, or paste a list of emails. Duplicates are skipped.</DialogDescription>
+              <DialogDescription>Add recipients from groups, People, Companies, Lead Inbox, Deals, or paste a list of emails. Duplicates are skipped.</DialogDescription>
               {(() => {
                 const hasPrepared = !!localStorage.getItem('leadboosters_draft_recipients');
                 const hasPeople = !!localStorage.getItem('leadboosters_selected_people_ids');
@@ -2573,10 +2623,12 @@ export default function Campaigns() {
               })()}
             </DialogHeader>
             <Tabs value={addRecipientsTab} onValueChange={(v) => setAddRecipientsTab(v as typeof addRecipientsTab)} className="flex-1 min-h-0 flex flex-col">
-              <TabsList className="grid grid-cols-4 w-full">
+              <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full h-auto">
                 <TabsTrigger value="groups" className="gap-1"><FolderInput className="h-3.5 w-3.5" />Groups</TabsTrigger>
                 <TabsTrigger value="people" className="gap-1"><Users className="h-3.5 w-3.5" />People</TabsTrigger>
                 <TabsTrigger value="companies" className="gap-1"><Building2 className="h-3.5 w-3.5" />Companies</TabsTrigger>
+                <TabsTrigger value="leads" className="gap-1"><Inbox className="h-3.5 w-3.5" />Leads</TabsTrigger>
+                <TabsTrigger value="deals" className="gap-1"><Target className="h-3.5 w-3.5" />Deals</TabsTrigger>
                 <TabsTrigger value="paste" className="gap-1"><FileText className="h-3.5 w-3.5" />Paste</TabsTrigger>
               </TabsList>
               <TabsContent value="groups" className="flex-1 min-h-0 mt-3 space-y-3">
@@ -2685,6 +2737,107 @@ export default function Campaigns() {
                 }}>
                   {addingRecipientsFromDialog ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
                   Add {addRecipientsSelectedCompanies.size} selected ({buildRecipientRows(addRecipientsCompaniesList.filter(c => addRecipientsSelectedCompanies.has(c.id)).flatMap(c => { const es = (c.email||'').split(/[,;]+/).map((e: string)=>e.trim()).filter((e: string)=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)); return es.map((email: string)=>({email,name:c.name||email})); })).length} new)
+                </Button>
+              </TabsContent>
+              <TabsContent value="leads" className="flex-1 min-h-0 mt-3 space-y-3">
+                <Input placeholder="Search leads by company..." value={addRecipientsLeadsSearch} onChange={(e) => setAddRecipientsLeadsSearch(e.target.value)} className="max-w-sm" />
+                <div className="max-h-[320px] overflow-y-auto border rounded-md">
+                  {addRecipientsLeadsList.length === 0 ? (
+                    <p className="text-sm text-muted-foreground p-4 text-center">No Lead Inbox leads with a contact email found.</p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10" />
+                          <TableHead>Company</TableHead>
+                          <TableHead>Contacts</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {addRecipientsLeadsList.map((l) => {
+                          const checked = addRecipientsSelectedLeads.has(l.id);
+                          return (
+                            <TableRow key={l.id} className="cursor-pointer" onClick={() => setAddRecipientsSelectedLeads(prev => { const n = new Set(prev); if (n.has(l.id)) n.delete(l.id); else n.add(l.id); return n; })}>
+                              <TableCell onClick={(e) => e.stopPropagation()}><Checkbox checked={checked} onCheckedChange={() => setAddRecipientsSelectedLeads(prev => { const n = new Set(prev); if (n.has(l.id)) n.delete(l.id); else n.add(l.id); return n; })} /></TableCell>
+                              <TableCell>{l.company_name || '—'}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{l.emails.length} email{l.emails.length === 1 ? '' : 's'}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+                <Button disabled={addRecipientsSelectedLeads.size === 0 || addingRecipientsFromDialog} onClick={async () => {
+                  const selected = addRecipientsLeadsList.filter(l => addRecipientsSelectedLeads.has(l.id));
+                  const items = selected.flatMap(l => l.emails.map(c => {
+                    const parts = (c.name || '').split(/\s+/);
+                    return { email: c.email, first_name: parts[0] || undefined, last_name: parts.length > 1 ? parts.slice(1).join(' ') : undefined, name: c.name || undefined };
+                  }));
+                  const rows = buildRecipientRows(items);
+                  if (rows.length === 0) { toast.info('Selected leads are already in this campaign.'); return; }
+                  await addRecipientsFromDialog(rows);
+                }}>
+                  {addingRecipientsFromDialog ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                  Add from {addRecipientsSelectedLeads.size} lead(s)
+                </Button>
+              </TabsContent>
+              <TabsContent value="deals" className="flex-1 min-h-0 mt-3 space-y-3">
+                <Input placeholder="Search deals by title..." value={addRecipientsDealsSearch} onChange={(e) => setAddRecipientsDealsSearch(e.target.value)} className="max-w-sm" />
+                <div className="max-h-[320px] overflow-y-auto border rounded-md">
+                  {addRecipientsDealsList.length === 0 ? (
+                    <p className="text-sm text-muted-foreground p-4 text-center">No deals linked to a company found.</p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10" />
+                          <TableHead>Deal</TableHead>
+                          <TableHead>Company</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {addRecipientsDealsList.map((d) => {
+                          const checked = addRecipientsSelectedDeals.has(d.id);
+                          return (
+                            <TableRow key={d.id} className="cursor-pointer" onClick={() => setAddRecipientsSelectedDeals(prev => { const n = new Set(prev); if (n.has(d.id)) n.delete(d.id); else n.add(d.id); return n; })}>
+                              <TableCell onClick={(e) => e.stopPropagation()}><Checkbox checked={checked} onCheckedChange={() => setAddRecipientsSelectedDeals(prev => { const n = new Set(prev); if (n.has(d.id)) n.delete(d.id); else n.add(d.id); return n; })} /></TableCell>
+                              <TableCell>{d.title || '—'}</TableCell>
+                              <TableCell>{d.companies?.name || '—'}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+                <Button disabled={addRecipientsSelectedDeals.size === 0 || addingRecipientsFromDialog} onClick={async () => {
+                  const selected = addRecipientsDealsList.filter(d => addRecipientsSelectedDeals.has(d.id));
+                  const companyIds = [...new Set(selected.map(d => d.company_id).filter(Boolean))] as string[];
+                  if (companyIds.length === 0) { toast.info('Selected deals have no linked company.'); return; }
+                  const items: { email: string; first_name?: string; last_name?: string; name?: string; person_id?: string | null }[] = [];
+                  const seen = new Set<string>();
+                  const { data: dealPeople } = await supabase.from('people').select('id, first_name, last_name, email, companies(name)').in('company_id', companyIds).not('email', 'is', null);
+                  for (const p of (dealPeople || []) as any[]) {
+                    const e = (p.email || '').trim().toLowerCase();
+                    if (!e || seen.has(e)) continue; seen.add(e);
+                    items.push({ email: p.email.trim(), first_name: p.first_name || undefined, last_name: p.last_name || undefined, person_id: p.id });
+                  }
+                  const { data: dealCompanies } = await supabase.from('companies').select('id, name, general_email, contacts(email, name)').in('id', companyIds);
+                  for (const c of (dealCompanies || []) as any[]) {
+                    const emails = [...(c.contacts || []).map((ct: any) => ct?.email), c.general_email].filter((x: any) => x && String(x).trim());
+                    for (const em of emails) {
+                      const e = String(em).trim().toLowerCase();
+                      if (!e || seen.has(e) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) continue; seen.add(e);
+                      items.push({ email: String(em).trim(), name: c.name || undefined });
+                    }
+                  }
+                  const rows = buildRecipientRows(items);
+                  if (rows.length === 0) { toast.info('No new recipients from selected deals.'); return; }
+                  await addRecipientsFromDialog(rows);
+                }}>
+                  {addingRecipientsFromDialog ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                  Add from {addRecipientsSelectedDeals.size} deal(s)
                 </Button>
               </TabsContent>
               <TabsContent value="paste" className="flex-1 min-h-0 mt-3 space-y-3">
