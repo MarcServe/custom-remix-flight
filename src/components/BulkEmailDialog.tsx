@@ -2331,32 +2331,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const create135FollowUp = async () => {
     setCreating135FollowUp(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      // delayDays are gaps from the previous email → 1, then +2, then +2 = lands on day 1, 3, 5.
-      const steps = [
-        { subject: 'Just following up', body: "Hi {{firstName}},\n\nI wanted to quickly follow up on my previous email in case it slipped through. Would you be open to a short conversation?\n\nThanks!", delayDays: 1 },
-        { subject: 'Re: quick follow-up', body: "Hi {{firstName}},\n\nCircling back on this — I'd genuinely value your thoughts, and I'm happy to share more detail or answer any questions.\n\nBest,", delayDays: 2 },
-        { subject: 'Last note from me', body: "Hi {{firstName}},\n\nI don't want to clutter your inbox, so this will be my last note. If the timing isn't right, no problem at all — just let me know and I'll reach out again down the line.\n\nThanks for your time.", delayDays: 2 },
-      ].map((s) => JSON.stringify(s));
-      const { data: seq, error } = await supabase
-        .from('email_sequences')
-        .insert({
-          name: 'No-reply follow-up (Day 1 / 3 / 5)',
-          description: 'Auto-created: 3 gentle follow-ups on day 1, 3 and 5. Stops automatically as soon as the recipient replies.',
-          steps,
-          created_by: user.id,
-          repeat_sequence: false,
-          repeat_after_days: 5,
-          repeat_only_for: 'no_reply',
-          auto_respond: false,
-          use_email_branding: true,
-        } as any)
-        .select('id')
-        .single();
-      if (error || !seq) throw error || new Error('Failed to create follow-up');
+      // Server-side (service role) so it's not blocked by row-level security on email_sequences.
+      const { data, error } = await supabase.functions.invoke('setup-noreply-followup', { body: {} });
+      if (error) throw new Error(error.message || 'Failed to create follow-up');
+      if (data?.error) throw new Error(data.error);
+      if (!data?.sequenceId) throw new Error('No sequence returned');
       setAutoFollowUpEnabled(true);
-      setFollowUpSequenceId(seq.id);
+      setFollowUpSequenceId(data.sequenceId);
       queryClient.invalidateQueries({ queryKey: ['email-sequences-follow-up'] });
       queryClient.invalidateQueries({ queryKey: ['sequences'] });
       toast({ title: 'Follow-up ready', description: 'Day 1 / 3 / 5 no-reply follow-up added and selected. It stops the moment they reply.' });

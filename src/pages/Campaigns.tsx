@@ -158,6 +158,7 @@ export default function Campaigns() {
   const sendPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [createFollowUpOpen, setCreateFollowUpOpen] = useState(false);
   const [createFollowUpSegment, setCreateFollowUpSegment] = useState<'delivered_not_opened' | 'not_opened' | 'opened_no_click'>('not_opened');
+  const [settingUpNoReplyFollowUp, setSettingUpNoReplyFollowUp] = useState(false);
   const [creatingFollowUp, setCreatingFollowUp] = useState(false);
 
   const { data: followUpSequences = [] } = useQuery({
@@ -1814,6 +1815,36 @@ export default function Campaigns() {
     }
   };
 
+  // One-click: attach the Day 1/3/5 no-reply follow-up to this campaign and enroll
+  // its sent-but-not-replied recipients (cadence starts fresh from now; stops on reply).
+  const handleSetupNoReplyFollowUp = async () => {
+    if (!selectedCampaign) return;
+    const ok = window.confirm(
+      'Set up a "Day 1 / 3 / 5" no-reply follow-up for this campaign?\n\n' +
+      'Recipients who were sent this campaign and have NOT replied will get 3 gentle follow-ups (day 1, 3, 5 from now). ' +
+      'Anyone who replies is skipped, and follow-ups stop automatically the moment someone replies.'
+    );
+    if (!ok) return;
+    setSettingUpNoReplyFollowUp(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('setup-noreply-followup', {
+        body: { campaignId: selectedCampaign, enrollExisting: true },
+      });
+      if (error) throw new Error(error.message || 'Failed');
+      if (data?.error) throw new Error(data.error);
+      await queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+      toast.success(
+        data?.enrolledCompanies > 0
+          ? `Follow-up set up — ${data.enrolledCompanies} recipient(s) enrolled. They'll get day 1/3/5 nudges until they reply.`
+          : 'Follow-up attached to this campaign. New/unreplied recipients will get day 1/3/5 nudges.'
+      );
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to set up follow-up');
+    } finally {
+      setSettingUpNoReplyFollowUp(false);
+    }
+  };
+
   const handleAddFromGroup = async (groupId: string) => {
     if (!selectedCampaign || !selectedCampaignData) return;
     setAddingFromGroup(true);
@@ -3158,6 +3189,23 @@ export default function Campaigns() {
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <RefreshCw className="h-4 w-4 text-primary shrink-0" />
                   Auto follow-up / sequences
+                </div>
+                {/* One-click no-reply follow-up preset */}
+                <div className="rounded-md border border-primary/40 bg-primary/5 p-3">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="w-full"
+                    disabled={settingUpNoReplyFollowUp}
+                    onClick={handleSetupNoReplyFollowUp}
+                  >
+                    {settingUpNoReplyFollowUp
+                      ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Setting up…</>
+                      : <><CalendarClock className="h-4 w-4 mr-2" />Follow up if no reply — Day 1 / 3 / 5</>}
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 text-center">
+                    Enrolls sent recipients who haven&apos;t replied — 3 nudges on day 1, 3 &amp; 5, stopping the moment they reply.
+                  </p>
                 </div>
                 {selectedCampaignData.auto_follow_up_enabled && selectedCampaignData.follow_up_sequence_id && (
                   <p className="text-sm text-muted-foreground">
