@@ -501,9 +501,11 @@ serve(async (req) => {
       const successUpsertRows: any[] = []; // just adds message IDs — status already 'sent'
       const activityRows: any[] = [];
       const failedUpsertRows: any[] = [...invalidEmailRows]; // these were never locked
+      let firstResendError: string | null = null; // real Resend rejection reason to surface to the UI
 
       for (const result of chunkResults) {
         if (!result.success) {
+          if (!firstResendError && result.errMsg) firstResendError = result.errMsg;
           for (const c of result.chunk) {
             failedUpsertRows.push({ id: c.recipientId, status: 'failed', error_message: result.errMsg });
           }
@@ -620,12 +622,18 @@ serve(async (req) => {
       }
 
       // ── Step 4: Return immediately — client gets result in seconds ────────
+      // When nothing sent, surface the REAL Resend rejection (e.g. monthly limit
+      // reached, domain not verified) instead of a generic "check your connection".
+      const allFailed = sentCount === 0 && failedCount > 0;
       return new Response(JSON.stringify({
-        success: true,
-        message: `${sentCount} emails dispatched to Resend — DB updating in background`,
+        success: !allFailed,
+        message: allFailed
+          ? `Resend rejected all ${failedCount} email(s): ${firstResendError || 'unknown error'}`
+          : `${sentCount} emails dispatched to Resend — DB updating in background`,
         sent: sentCount,
         failed: failedCount,
-        processing: true,
+        processing: sentCount > 0,
+        resendError: firstResendError,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     } else if (emailProvider === 'gmail' || emailProvider === 'gmail_direct') {

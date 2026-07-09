@@ -3050,8 +3050,8 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         });
 
         // Call edge function to start sending (with attachments if any)
-        const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
-          body: { 
+        const { data: sendData, error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
+          body: {
             campaignId: campaign.id,
             attachments: attachments.length > 0 ? attachments : undefined,
           },
@@ -3064,8 +3064,15 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             .from('email_campaigns')
             .update({ status: 'failed' })
             .eq('id', campaign.id);
-          
+
           throw new Error('Failed to start sending emails');
+        }
+
+        // The function returns 200 even when the provider rejected every email.
+        // Surface the REAL reason (e.g. Resend monthly limit / domain not verified)
+        // instead of a false "Campaign started".
+        if ((sendData?.sent ?? 0) === 0 && (sendData?.failed ?? 0) > 0) {
+          throw new Error(sendData?.resendError || sendData?.message || 'The email provider rejected all emails. Check your Resend domain verification and monthly limit.');
         }
 
         toast({

@@ -1500,14 +1500,18 @@ export default function Campaigns() {
       if (error) {
         throw new Error(error.message || 'Send failed');
       }
-      // data.sent = how many went out in this invocation
-      // Self-retry handles any remaining pending — polling will catch the changes
-      if ((data?.sent ?? 0) === 0 && (data?.failed ?? 0) === 0) {
-        // Nothing was processed — likely a config issue
+      // If nothing sent — surface the REAL reason. When Resend rejected every email
+      // (e.g. monthly limit reached, domain not verified), data.resendError carries the
+      // actual message; show it instead of a misleading "check your connection".
+      if ((data?.sent ?? 0) === 0) {
         clearInterval(sendPollRef.current!);
         sendPollRef.current = null;
         setSendingPendingNow(false);
-        toast.error(data?.message || 'No emails were sent. Check your email provider connection in Settings.');
+        if ((data?.failed ?? 0) > 0) {
+          toast.error(data?.resendError || data?.message || 'Resend rejected all emails. Check Resend for domain verification or monthly limit.', { duration: 10000 });
+        } else {
+          toast.error(data?.message || 'No emails were sent. Check your email provider connection in Settings.');
+        }
       }
       // Otherwise let polling handle the completion signal
     } catch (e: any) {
