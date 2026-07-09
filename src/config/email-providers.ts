@@ -4,8 +4,10 @@
  */
 
 export const EMAIL_PROVIDER_CONFIG = {
-  // Enable/disable Nango-based integrations (Gmail, Outlook via Nango)
-  nango_enabled: true,
+  // Enable/disable Nango-based integrations (Gmail, Outlook via Nango).
+  // OFF: Gmail uses Direct OAuth only. Nango backend functions remain intact,
+  // so this can be flipped back to true anytime to restore the Nango option.
+  nango_enabled: false,
   
   // Enable/disable Direct Gmail OAuth (standalone implementation)
   gmail_direct_enabled: true,
