@@ -2919,7 +2919,9 @@ export default function Companies() {
                                 try {
                                   localStorage.removeItem('leadboosters_draft_recipients');
                                   localStorage.removeItem('leadboosters_selected_people_ids');
-                                  sessionStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
+                                  // localStorage (not sessionStorage) so the campaign tab that opened
+                                  // this one can read the selection — sessionStorage is per-tab.
+                                  localStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
                                   window.opener?.postMessage?.(
                                     { type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" },
                                     window.location.origin
@@ -2948,7 +2950,8 @@ export default function Companies() {
                                 try {
                                   localStorage.removeItem('leadboosters_draft_recipients');
                                   localStorage.removeItem('leadboosters_selected_people_ids');
-                                  sessionStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
+                                  // localStorage (not sessionStorage) so the campaign tab can read it cross-tab.
+                                  localStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
                                   window.opener?.postMessage?.(
                                     { type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" },
                                     window.location.origin

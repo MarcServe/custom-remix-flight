@@ -547,6 +547,23 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     enabled: open,
   });
 
+  // Recipient groups — so the composer can add a whole saved list in one click
+  const { data: recipientGroups = [] } = useQuery({
+    queryKey: ['bulk-email-recipient-groups'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('recipient_groups')
+        .select('id, name')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) return [];
+      return data || [];
+    },
+    enabled: open,
+  });
+
   // Fetch business profile for sender display
   const { data: businessProfile } = useQuery({
     queryKey: ['business-profile'],
@@ -2558,6 +2575,58 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     }
   };
 
+  // Add a whole recipient group's members to the composer list (dedupe by email)
+  const addRecipientsFromGroup = async (groupId: string) => {
+    if (!groupId) return;
+    setReplacingRecipients(true);
+    try {
+      const members: { email: string; first_name: string | null; last_name: string | null; company: string | null; person_id: string | null }[] = [];
+      const PAGE = 1000;
+      let page = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('recipient_group_members')
+          .select('email, first_name, last_name, company, person_id')
+          .eq('group_id', groupId)
+          .range(page * PAGE, (page + 1) * PAGE - 1);
+        if (error) throw error;
+        if (data?.length) members.push(...(data as any[]));
+        if (!data || data.length < PAGE) break;
+        page++;
+      }
+      const existingEmails = new Set(filteredRecipients.map((p) => p.email?.toLowerCase().trim()));
+      const seen = new Set<string>();
+      const newRecipients = members
+        .filter((m) => {
+          const e = (m.email || '').toLowerCase().trim();
+          if (!e || existingEmails.has(e) || seen.has(e)) return false;
+          seen.add(e);
+          return true;
+        })
+        .map((m) => ({
+          id: m.person_id || `group-${groupId}-${m.email}`,
+          first_name: m.first_name || '',
+          last_name: m.last_name || '',
+          email: m.email.trim(),
+          companies: m.company ? { name: m.company } : undefined,
+        })) as typeof filteredRecipients;
+      if (newRecipients.length === 0) {
+        toast({ title: 'No new recipients', description: 'Everyone in that group is already in the list (or the group is empty).' });
+        return;
+      }
+      setFilteredRecipients((prev) => {
+        const updated = [...prev, ...newRecipients];
+        unfilteredRecipientsRef.current = updated;
+        return updated;
+      });
+      toast({ title: 'Group added', description: `Added ${newRecipients.length} recipient(s) from the group. Save draft to keep this list.` });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message ?? 'Failed to load group', variant: 'destructive' });
+    } finally {
+      setReplacingRecipients(false);
+    }
+  };
+
   useImperativeHandle(ref, () => ({
     addRecipientsFromSelection,
     replaceRecipientsWithSelection,
@@ -4554,6 +4623,18 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                   <RefreshCw className="h-4 w-4 mr-1" />
                   Replace All
                 </Button>
+                {recipientGroups.length > 0 && (
+                  <Select value="" onValueChange={(v) => { if (v) void addRecipientsFromGroup(v); }} disabled={replacingRecipients}>
+                    <SelectTrigger className="h-8 w-[150px]" title="Add all members of a saved recipient group">
+                      <SelectValue placeholder="Add from group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {recipientGroups.map((g: { id: string; name: string }) => (
+                        <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <Button
                   type="button"
                   variant="outline"
