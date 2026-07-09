@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, User, Users, Info, Sparkles, Mail, ChevronDown, ChevronLeft, ChevronRight, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical, ExternalLink, Edit2, Upload, ImagePlus, Trash2, FileType } from "lucide-react";
+import { Loader2, Send, User, Users, Info, Sparkles, Mail, ChevronDown, ChevronLeft, ChevronRight, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, CalendarClock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical, ExternalLink, Edit2, Upload, ImagePlus, Trash2, FileType } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUpdateSequence } from "@/hooks/use-sequences";
@@ -270,6 +270,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const [abTrafficSplit, setAbTrafficSplit] = useState(50);
   const [abWinnerMetric, setAbWinnerMetric] = useState<'open_rate' | 'click_rate' | 'reply_rate'>('open_rate');
   const [creatingSequenceFromBody, setCreatingSequenceFromBody] = useState(false);
+  const [creating135FollowUp, setCreating135FollowUp] = useState(false);
   const [headerImageUrl, setHeaderImageUrl] = useState("");
   const [uploadingHeaderImage, setUploadingHeaderImage] = useState(false);
   const headerImageFileRef = useRef<HTMLInputElement>(null);
@@ -2324,6 +2325,48 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     }
   };
 
+  // One-click preset: a ready-made 3-step no-reply follow-up landing on day 1, 3, 5.
+  // No AI, no manual sequence building. Combined with the guaranteed reply-stop in
+  // the follow-up engine, it stops automatically the moment the recipient replies.
+  const create135FollowUp = async () => {
+    setCreating135FollowUp(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      // delayDays are gaps from the previous email → 1, then +2, then +2 = lands on day 1, 3, 5.
+      const steps = [
+        { subject: 'Just following up', body: "Hi {{firstName}},\n\nI wanted to quickly follow up on my previous email in case it slipped through. Would you be open to a short conversation?\n\nThanks!", delayDays: 1 },
+        { subject: 'Re: quick follow-up', body: "Hi {{firstName}},\n\nCircling back on this — I'd genuinely value your thoughts, and I'm happy to share more detail or answer any questions.\n\nBest,", delayDays: 2 },
+        { subject: 'Last note from me', body: "Hi {{firstName}},\n\nI don't want to clutter your inbox, so this will be my last note. If the timing isn't right, no problem at all — just let me know and I'll reach out again down the line.\n\nThanks for your time.", delayDays: 2 },
+      ].map((s) => JSON.stringify(s));
+      const { data: seq, error } = await supabase
+        .from('email_sequences')
+        .insert({
+          name: 'No-reply follow-up (Day 1 / 3 / 5)',
+          description: 'Auto-created: 3 gentle follow-ups on day 1, 3 and 5. Stops automatically as soon as the recipient replies.',
+          steps,
+          created_by: user.id,
+          repeat_sequence: false,
+          repeat_after_days: 5,
+          repeat_only_for: 'no_reply',
+          auto_respond: false,
+          use_email_branding: true,
+        } as any)
+        .select('id')
+        .single();
+      if (error || !seq) throw error || new Error('Failed to create follow-up');
+      setAutoFollowUpEnabled(true);
+      setFollowUpSequenceId(seq.id);
+      queryClient.invalidateQueries({ queryKey: ['email-sequences-follow-up'] });
+      queryClient.invalidateQueries({ queryKey: ['sequences'] });
+      toast({ title: 'Follow-up ready', description: 'Day 1 / 3 / 5 no-reply follow-up added and selected. It stops the moment they reply.' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message ?? 'Failed to create follow-up', variant: 'destructive' });
+    } finally {
+      setCreating135FollowUp(false);
+    }
+  };
+
   const createSequenceFromEmailBody = async () => {
     const plainBody = (bodyText || '').trim() || (bodyHtml ? bodyHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '');
     if (!plainBody) {
@@ -4108,6 +4151,25 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 <p className="text-xs text-muted-foreground">
                   Recipients who don&apos;t reply will get follow-up steps from this sequence (no-reply rules apply).
                 </p>
+                <div className="rounded-md border border-primary/40 bg-primary/5 p-2.5">
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={create135FollowUp}
+                    disabled={creating135FollowUp || sending || generatingAi}
+                    className="w-full"
+                  >
+                    {creating135FollowUp ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Setting up…</>
+                    ) : (
+                      <><CalendarClock className="h-4 w-4 mr-2" />Follow up if no reply — Day 1 / 3 / 5</>
+                    )}
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 text-center">
+                    One click: 3 gentle nudges on day 1, 3 &amp; 5 — automatically stops the moment they reply.
+                  </p>
+                </div>
                 <Button
                   type="button"
                   variant="outline"

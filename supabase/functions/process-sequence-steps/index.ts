@@ -235,6 +235,29 @@ serve(async (req) => {
           continue;
         }
 
+        // ── GUARANTEED STOP-ON-REPLY ─────────────────────────────────────────
+        // If the contact has replied to ANY email in this sequence, stop all
+        // follow-ups immediately — a human takes over from the AI-drafted reply.
+        // This must run before both the behavioral rules AND the time-based
+        // fallback, otherwise a plain "wait N days" step would fire even after a
+        // reply. This is what makes the "we stop the moment they reply" promise true.
+        const { data: replyActivity } = await supabase
+          .from('email_activities')
+          .select('id')
+          .eq('company_sequence_id', sequence.id)
+          .not('replied_at', 'is', null)
+          .limit(1)
+          .maybeSingle();
+        if (replyActivity) {
+          await supabase
+            .from('company_sequences')
+            .update({ status: 'completed', next_action: 'replied', updated_at: new Date().toISOString() })
+            .eq('id', sequence.id);
+          console.log(`Sequence ${sequence.id}: contact replied — follow-ups stopped`);
+          processed.push({ sequenceId: sequence.id, stepNumber: sequence.current_step, trigger: 'stopped_on_reply' });
+          continue;
+        }
+
         // Check automation rules: per-step rule (nextStep.automation_rule) or global rules
         const automationRules = sequence.automation_rules || { enabled: true, rules: [] };
         const nextStepRule = nextStep?.automation_rule as { type?: string; wait_hours?: number } | undefined;
