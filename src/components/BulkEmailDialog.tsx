@@ -2582,19 +2582,23 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       return;
     }
 
-    if (recipientsToUse.length === 0) {
-      toast({
-        title: "No recipients",
-        description: "Please select at least one person for personalization context",
-        variant: "destructive",
-      });
-      return;
-    }
+    // A test email should work even with no campaign recipients — send it to
+    // yourself to preview the template. When the list is empty, use a placeholder
+    // person so personalization tokens ({{firstName}} etc.) resolve to sensible values.
+    const fallbackTestPerson = {
+      id: 'test',
+      first_name: (testEmailAddress.split('@')[0] || 'there').replace(/[._-]+/g, ' ').trim() || 'there',
+      last_name: '',
+      email: testEmailAddress.trim(),
+      companies: undefined,
+    } as any;
 
     // Determine which recipient to use for testing
-    const testPerson = testRecipientId 
-      ? recipientsToUse.find(p => p.id === testRecipientId) || recipientsToUse[0]
-      : recipientsToUse[0];
+    const testPerson = recipientsToUse.length > 0
+      ? (testRecipientId
+          ? recipientsToUse.find(p => p.id === testRecipientId) || recipientsToUse[0]
+          : recipientsToUse[0])
+      : fallbackTestPerson;
 
     // Check if we have personalized email for this recipient
     const hasPersonalizedEmail = usePersonalizedEmails && personalizedEmails[testPerson.id];
