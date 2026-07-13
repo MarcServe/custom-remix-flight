@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useCampaignDialog } from "@/contexts/CampaignDialogContext";
+import { sendRecipientsToOpenComposer } from "@/lib/recipient-broadcast";
 import type { Company } from "@/lib/api/companies";
 import { getCompanySource, SOURCE_TAG_LIST } from "@/lib/company-sources";
 import {
@@ -1989,8 +1990,25 @@ export default function Companies() {
           variant: "default",
         });
       }
-      if (mode === 'add') {
-        addPeople(dedupedPeople as any);
+      const lean = dedupedPeople.map((p: any) => ({
+        id: p.id, first_name: p.first_name ?? '', last_name: p.last_name ?? '', email: p.email,
+        company_id: p.company_id, companies: p.companies ? { name: p.companies.name } : undefined,
+      }));
+      if (mode === 'add' || mode === 'replace') {
+        if (bulkEmailDialogOpen) {
+          // Composer is open in THIS tab — use context directly.
+          if (mode === 'add') addPeople(dedupedPeople as any);
+          else openWithPeople(dedupedPeople as any);
+        } else {
+          // Composer may be open in another tab — hand off cross-tab. If no open
+          // composer acknowledges, open a fresh one here so it's never a no-op.
+          const delivered = await sendRecipientsToOpenComposer(mode, lean);
+          if (delivered) {
+            toast({ title: mode === 'add' ? 'Added to your open campaign' : 'Replaced your campaign list', description: `${lean.length} recipient(s) sent to the campaign open in your other tab.` });
+          } else {
+            openWithPeople(dedupedPeople as any);
+          }
+        }
       } else {
         openWithPeople(dedupedPeople as any);
       }

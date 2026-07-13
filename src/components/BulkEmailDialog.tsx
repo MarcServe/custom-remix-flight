@@ -42,6 +42,7 @@ import {
   stripTrailingDuplicateSignoffPlain,
 } from "@/lib/strip-trailing-signoff";
 import { cn } from "@/lib/utils";
+import { subscribeToRecipients } from "@/lib/recipient-broadcast";
 
 export interface BulkEmailDialogHandle {
   addRecipientsFromSelection: () => Promise<void>;
@@ -953,21 +954,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         }
       };
 
-      // Try to find in draftCampaigns first (faster for drafts), otherwise fetch directly (covers scheduled, sending, completed)
-      if (draftCampaigns && draftCampaigns.length > 0) {
-        const draftToLoad = draftCampaigns.find((d: any) => d.id === initialDraftId);
-        if (draftToLoad) {
-          hasAutoLoadedDraft.current = true;
-          contentOnlyEditRef.current = false;
-          setTimeout(() => {
-            handleLoadDraft(draftToLoad);
-          }, 150);
-        } else {
-          loadDraftById();
-        }
-      } else {
-        loadDraftById();
-      }
+      // Always fetch fresh by id so we load the latest saved content (the cached
+      // draftCampaigns list can be stale after an edit) and set the content-only
+      // flag correctly for sent/scheduled campaigns.
+      loadDraftById();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialDraftId, draftCampaigns]);
@@ -1999,6 +1989,11 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           description: `Draft "${campaignName}" has been saved with ${recipients.length} recipients. You can resume editing later.`,
         });
       }
+
+      // Refresh caches so reopening the draft shows the UPDATED content, not the
+      // stale cached copy. Without this, the auto-loader served the old version.
+      queryClient.invalidateQueries({ queryKey: ['draft-campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
     } catch (error: any) {
       console.error('Error saving draft:', error);
       toast({
@@ -2563,6 +2558,33 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       description: `Removed ${duplicateRecipients.length} recipient(s) who already received a previous campaign.`,
     });
   };
+
+  // Listen for recipients sent from the Companies/People pages in ANOTHER tab.
+  // (Same-tab hand-off still uses the CampaignDialog context.)
+  useEffect(() => {
+    if (!open) return;
+    const unsub = subscribeToRecipients((action, incoming) => {
+      const mapped = (incoming || [])
+        .filter((r) => r.email)
+        .map((r) => ({ id: r.id, first_name: r.first_name ?? '', last_name: r.last_name ?? '', email: r.email, company_id: r.company_id, companies: r.companies })) as typeof filteredRecipients;
+      if (action === 'replace') {
+        setFilteredRecipients(mapped);
+        unfilteredRecipientsRef.current = mapped;
+        setSelectedTags([]);
+        toast({ title: 'Recipients updated', description: `Replaced with ${mapped.length} recipient(s) from your selection.` });
+      } else {
+        setFilteredRecipients((prev) => {
+          const existing = new Set(prev.map((p) => p.email?.toLowerCase().trim()));
+          const toAdd = mapped.filter((p) => p.email && !existing.has(p.email.toLowerCase().trim()));
+          const updated = toAdd.length ? [...prev, ...toAdd] : prev;
+          unfilteredRecipientsRef.current = updated;
+          if (toAdd.length) toast({ title: 'Recipients added', description: `Added ${toAdd.length} recipient(s) from your selection.` });
+          return updated;
+        });
+      }
+    });
+    return unsub;
+  }, [open]);
 
   const addRecipientsFromSelection = async () => {
     setReplacingRecipients(true);
