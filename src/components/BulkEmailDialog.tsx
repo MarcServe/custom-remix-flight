@@ -1830,7 +1830,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             const hourDiff = hours - candidateHour;
             const minuteDiff = minutes - candidateMinute;
             const totalMinutesDiff = hourDiff * 60 + minuteDiff;
-            candidate = new Date(candidate.getTime() - totalMinutesDiff * 60 * 1000);
+            // ADD the difference: to make the wall-clock time LATER we move the UTC
+            // instant LATER. Using minus here inverted the direction and made the
+            // loop diverge, so a "15th 09:00" schedule drifted to the wrong time.
+            candidate = new Date(candidate.getTime() + totalMinutesDiff * 60 * 1000);
           }
           
           scheduledDateTime = candidate;

@@ -91,6 +91,33 @@ function formatDateInLondon(date: Date | string): string {
   return d.toLocaleDateString(undefined, { timeZone: DEFAULT_TIMEZONE });
 }
 
+/**
+ * Interpret a datetime-local value ("YYYY-MM-DDTHH:mm") as a London wall-clock time
+ * and return the correct UTC instant — so scheduling isn't skewed by the browser's
+ * (or VPN's) timezone. Auto-handles BST/GMT.
+ */
+function londonWallClockToUtc(dtLocal: string, tz: string = DEFAULT_TIMEZONE): Date {
+  const [datePart, timePart = "00:00"] = dtLocal.split("T");
+  const [y, mo, d] = datePart.split("-").map(Number);
+  const [h, mi] = timePart.split(":").map(Number);
+  const targetUtcParts = Date.UTC(y, (mo || 1) - 1, d || 1, h || 0, mi || 0, 0);
+  let ts = targetUtcParts;
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  for (let i = 0; i < 3; i++) {
+    const parts = fmt.formatToParts(new Date(ts));
+    const g = (t: string) => parseInt(parts.find((p) => p.type === t)?.value || "0", 10);
+    // 24:00 → 0 normalisation for hour
+    const shownHour = g("hour") === 24 ? 0 : g("hour");
+    const shownUtc = Date.UTC(g("year"), g("month") - 1, g("day"), shownHour, g("minute"), 0);
+    const diff = targetUtcParts - shownUtc; // how far the shown wall-clock is from target
+    if (diff === 0) break;
+    ts += diff;
+  }
+  return new Date(ts);
+}
+
 /** Placeholder / fake domains that are not real inboxes. Helps avoid bounces and protect sender reputation. */
 const PLACEHOLDER_DOMAINS = new Set([
   "domain.com", "domain.org", "domain.net", "example.com", "example.org", "example.net", "example.edu", "example.co",
@@ -1397,7 +1424,9 @@ Return ONLY the HTML body content.`,
   const handleScheduleNewsletter = async (opts?: { scheduled_send_options?: Record<string, unknown> }) => {
     const dateTime = showSendDialog ? sendDialogScheduleDateTime : scheduleDateTime;
     if (!dateTime.trim() || !user) return;
-    const at = new Date(dateTime);
+    // Interpret the picked time as London wall-clock (matches how we display it),
+    // so scheduling isn't off by the browser/VPN timezone offset.
+    const at = londonWallClockToUtc(dateTime);
     if (isNaN(at.getTime()) || at <= new Date()) {
       toast({ title: "Invalid time", description: "Choose a future date and time.", variant: "destructive" });
       return;
