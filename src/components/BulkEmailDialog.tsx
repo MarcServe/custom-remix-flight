@@ -3164,7 +3164,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       // Start sending immediately if not scheduled
       if (campaignStatus === 'scheduled' && scheduledDateTime) {
         // Format the scheduled time in the selected timezone for display
-        const tzAbbr = new Date().toLocaleString('en-US', { timeZone: scheduledTimezone, timeZoneName: 'short' }).split(' ').pop() || '';
+        const tzAbbr = new Date().toLocaleString('en-GB', { timeZone: scheduledTimezone, timeZoneName: 'short' }).split(' ').pop() || '';
         const formattedDate = scheduledDateTime.toLocaleString('en-US', {
           timeZone: scheduledTimezone,
           month: 'long',
@@ -4070,7 +4070,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                             .map((tz) => {
                               try {
                                 const now = new Date();
-                                const offset = now.toLocaleString('en-US', { timeZone: tz, timeZoneName: 'short' }).split(' ').pop() || '';
+                                const offset = now.toLocaleString('en-GB', { timeZone: tz, timeZoneName: 'short' }).split(' ').pop() || '';
                                 const displayName = tz.replace(/_/g, ' ');
                                 return (
                                   <SelectItem key={tz} value={tz}>
@@ -4106,7 +4106,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                   <p className="text-xs text-muted-foreground">
                     Campaign will be sent on {format(scheduledDate, "PPP")} at {scheduledTime} {(() => {
                       try {
-                        const offset = new Date().toLocaleString('en-US', { timeZone: scheduledTimezone, timeZoneName: 'short' }).split(' ').pop() || '';
+                        const offset = new Date().toLocaleString('en-GB', { timeZone: scheduledTimezone, timeZoneName: 'short' }).split(' ').pop() || '';
                         return `(${scheduledTimezone.replace(/_/g, ' ')} ${offset})`;
                       } catch {
                         return `(${scheduledTimezone})`;
