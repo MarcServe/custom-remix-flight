@@ -77,6 +77,42 @@ server.tool(
   },
 );
 
+server.tool(
+  "create_newsletter",
+  "Create a newsletter to your subscriber base and (optionally) schedule it. Sends automatically at schedule_at (London time). Audience defaults to all active subscribers; pass recipient group ids to target instead.",
+  {
+    subject: z.string(),
+    title: z.string().optional().describe("Internal title; defaults to the subject."),
+    body_html: z.string().optional(),
+    body_text: z.string().optional(),
+    audience: z.object({
+      all_active: z.boolean().optional().describe("Send to all active subscribers (default when no groups given)."),
+      group_ids: z.array(z.string()).optional().describe("Recipient group ids to target."),
+      tag_ids: z.array(z.string()).optional(),
+    }).optional(),
+    schedule_at: z.string().optional().describe("London wall-clock 'YYYY-MM-DDTHH:mm' or full ISO. Omit for a draft."),
+  },
+  async (args) => {
+    const data = await callApi({ action: "create_newsletter", ...args });
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "send_test",
+  "Send a single test email to yourself to preview subject/body before scheduling a real send. Sends immediately from your active sender.",
+  {
+    to_email: z.string().describe("Where to send the test (usually your own address)."),
+    subject: z.string(),
+    body_html: z.string().optional(),
+    body_text: z.string().optional(),
+  },
+  async (args) => {
+    const data = await callApi({ action: "send_test", ...args });
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error("[leadboosters-mcp] ready");

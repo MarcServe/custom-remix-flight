@@ -57,3 +57,27 @@ curl -X POST https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/api-campaigns
   -H "x-api-key: lb_live_your_key" -H "Content-Type: application/json" \
   -d '{"action":"create","name":"Daily","subject":"Hi {{firstName}}","body_text":"...","recipients":[{"email":"jane@acme.com","first_name":"Jane"}],"schedule_at":"2026-07-16T09:00"}'
 ```
+
+## Newsletters
+- **create_newsletter** — `{ subject, title?, body_html?, body_text?, audience?, schedule_at? }`
+  - `audience`: `{ "all_active": true }` (default) or `{ "group_ids": ["…"] }` / `{ "tag_ids": ["…"] }`.
+  - Sends to your subscriber base at `schedule_at` (London). Omit → draft.
+
+## Send a test first
+- **send_test** — `{ to_email, subject, body_html?, body_text? }` sends one email now from
+  your active sender, so you can eyeball it before scheduling a real run. Surfaces the real
+  provider error (e.g. "domain not verified") if the sender isn't ready.
+
+## Daily cadence (agent-triggered)
+The API/MCP is stateless — schedule the *cadence* on your side and call the API each day.
+
+**Option A — shell cron:** see `examples/daily-campaign.sh` (build today's list, schedule at 09:00 London).
+```
+# crontab -e
+0 6 * * *  LEADBOOSTERS_API_KEY=lb_live_...  /path/to/mcp-server/examples/daily-campaign.sh
+```
+
+**Option B — Claude Code scheduled task:** create a routine that runs daily and tells Claude:
+> "Using the leadboosters MCP: build today's recipient list from <your source>, send_test to me first, then create_campaign scheduled for 09:00 London."
+
+Claude will call `send_test` then `create_campaign` via this server on each run.

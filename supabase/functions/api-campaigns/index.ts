@@ -144,7 +144,76 @@ Deno.serve(async (req) => {
       });
     }
 
-    return json({ error: "Unknown action. Use create | list | status." }, 400);
+    if (action === "create_newsletter") {
+      const subject = String(body.subject || "").trim();
+      const title = String(body.title || body.name || subject || "Newsletter").trim();
+      const bodyHtml = String(body.body_html || body.bodyHtml || "").trim();
+      const bodyText = String(body.body_text || body.bodyText || "").trim();
+      if (!subject) return json({ error: "subject is required" }, 400);
+      if (!bodyHtml && !bodyText) return json({ error: "body_html or body_text is required" }, 400);
+      const finalHtml = bodyHtml || `<p>${bodyText.replace(/\n/g, "</p><p>")}</p>`;
+
+      // Audience → scheduled_send_options (read by send-newsletter on the scheduled cron)
+      const aud = body.audience || {};
+      const groupIds = aud.group_ids || aud.groupIds;
+      const tagIds = aud.tag_ids || aud.tagIds;
+      const opts: Record<string, unknown> = {};
+      if (Array.isArray(groupIds) && groupIds.length) opts.recipientGroupIds = groupIds;
+      if (Array.isArray(tagIds) && tagIds.length) opts.tagCategoryIds = tagIds;
+      // Default to all active subscribers when no explicit audience is given.
+      if (!opts.recipientGroupIds && !opts.tagCategoryIds) opts.sendToAllActive = true;
+      else if (aud.all_active || aud.allActive) opts.sendToAllActive = true;
+
+      const scheduledAt = (body.schedule_at || body.scheduleAt) ? toUtcIso(String(body.schedule_at || body.scheduleAt), body.timezone || "Europe/London") : null;
+      const status = scheduledAt ? "scheduled" : "draft";
+      const { data: nl, error } = await db.from("newsletters").insert({
+        user_id: userId, title, subject, body_html: finalHtml,
+        status, scheduled_at: scheduledAt,
+        scheduled_send_options: Object.keys(opts).length ? opts : null,
+      }).select("id").single();
+      if (error || !nl) return json({ error: error?.message || "Failed to create newsletter" }, 500);
+      return json({
+        newsletter_id: nl.id, status, scheduled_at: scheduledAt, audience: opts,
+        message: scheduledAt
+          ? `Newsletter scheduled — sends automatically at ${scheduledAt} (UTC) to ${opts.sendToAllActive ? "all active subscribers" : "the selected audience"}.`
+          : "Newsletter draft created. Provide schedule_at to send automatically.",
+      });
+    }
+
+    if (action === "send_test") {
+      const toEmail = String(body.to_email || body.toEmail || "").trim().toLowerCase();
+      const subject = String(body.subject || "").trim();
+      const bodyHtml = String(body.body_html || body.bodyHtml || "").trim();
+      const bodyText = String(body.body_text || body.bodyText || "").trim();
+      if (!EMAIL_RE.test(toEmail)) return json({ error: "A valid to_email is required" }, 400);
+      if (!subject || (!bodyHtml && !bodyText)) return json({ error: "subject and body_text/body_html are required" }, 400);
+
+      const { data: conns } = await db.from("crm_connections")
+        .select("provider, from_email").eq("user_id", userId).eq("status", "active").in("provider", ["resend", "sendgrid"]);
+      const conn = (conns || []).find((c: any) => c.provider === "resend") || (conns || [])[0];
+      if (!conn?.from_email) return json({ error: "No active Resend/SendGrid sender with a from address. Connect one in Settings → Email Providers." }, 400);
+      const finalHtml = bodyHtml || `<p>${bodyText.replace(/\n/g, "</p><p>")}</p>`;
+
+      if (conn.provider === "resend") {
+        const r = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ from: conn.from_email, to: [toEmail], subject: `[TEST] ${subject}`, html: finalHtml, text: bodyText || undefined }),
+        });
+        const t = await r.text();
+        if (!r.ok) { let d: any; try { d = JSON.parse(t); } catch { d = {}; } return json({ error: `Resend rejected the test: ${d?.message || d?.error || t}` }, 400); }
+        return json({ ok: true, sent_to: toEmail, provider: "resend", from: conn.from_email, message: `Test email sent to ${toEmail}.` });
+      }
+      const r = await fetch("https://api.sendgrid.com/v3/mail/send", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${Deno.env.get("SENDGRID_API_KEY")}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ personalizations: [{ to: [{ email: toEmail }], subject: `[TEST] ${subject}` }], from: { email: conn.from_email }, content: [{ type: "text/html", value: finalHtml }] }),
+      });
+      if (!r.ok) { const t = await r.text(); return json({ error: `SendGrid rejected the test: ${t}` }, 400); }
+      return json({ ok: true, sent_to: toEmail, provider: "sendgrid", from: conn.from_email, message: `Test email sent to ${toEmail}.` });
+    }
+
+    return json({ error: "Unknown action. Use create | create_newsletter | send_test | list | status." }, 400);
   } catch (e: any) {
     return json({ error: e?.message || "Failed" }, 500);
   }
