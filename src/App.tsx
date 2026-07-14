@@ -26,6 +26,7 @@ import Autopilot from "./pages/Autopilot";
 import LeadInbox from "./pages/LeadInbox";
 import Enrichment from "./pages/Enrichment";
 import BusinessProfile from "./pages/BusinessProfile";
+import ApiKeys from "./pages/ApiKeys";
 import Profile from "./pages/Profile";
 import Pipeline from "./pages/Pipeline";
 import Sequences from "./pages/Sequences";
@@ -106,6 +107,7 @@ const App = () => (
                           <Route path="/campaigns" element={<PlanGate requiredTier="individual" feature="Email Campaigns"><Campaigns /></PlanGate>} />
                           <Route path="/newsletters" element={<PlanGate requiredTier="individual" feature="Newsletters"><Newsletters /></PlanGate>} />
                           <Route path="/business-profile" element={<BusinessProfile />} />
+                          <Route path="/api-keys" element={<ApiKeys />} />
                           <Route path="/profile" element={<Profile />} />
                           <Route path="/pipeline" element={<Pipeline />} />
                           <Route path="/email-branding" element={<PageErrorBoundary fallbackTitle="Email Branding failed to load"><EmailBranding /></PageErrorBoundary>} />

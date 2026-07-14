@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, CalendarClock, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FileSpreadsheet, FolderOpen, CreditCard, Inbox, Brain, Wand2, StickyNote, Palette, Newspaper, UsersRound, Lock } from "lucide-react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, CalendarClock, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FileSpreadsheet, FolderOpen, CreditCard, Inbox, Brain, Wand2, StickyNote, Palette, Newspaper, UsersRound, Lock, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth, PlanTier, TIER_RANK, PLAN_LABELS } from "@/contexts/AuthContext";
@@ -107,6 +107,7 @@ const navigation: NavigationItem[] = [
     children: [
       { name: "Email Providers", href: "/integrations/email-providers", icon: Send },
       { name: "Business Profile", href: "/business-profile", icon: Building2 },
+      { name: "API Keys", href: "/api-keys", icon: KeyRound },
       { name: "Subscription", href: "/subscription", icon: CreditCard },
     ]
   },
