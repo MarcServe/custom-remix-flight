@@ -385,13 +385,18 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
   const perRecipientContentReady = useMemo(() => {
     if (!usePersonalizedEmails || recipientsToUse.length === 0) return false;
-    return recipientsToUse.every(
-      (p) =>
-        p.email &&
-        personalizedEmailsEffective[p.id]?.subject?.trim() &&
-        (personalizedEmailsEffective[p.id]?.bodyText?.trim() || personalizedEmailsEffective[p.id]?.bodyHtml?.trim())
-    );
-  }, [usePersonalizedEmails, recipientsToUse, personalizedEmailsEffective]);
+    // Recipients added from a group/company/list have no per-row content — that's
+    // fine: buildRecipientDbRow falls back to the shared subject/body (personalized
+    // with {{tokens}}) for them. So a recipient is "ready" if it either has its own
+    // personalized content OR there's a generic subject+body to use as the fallback.
+    const hasGenericTemplate = !!subject.trim() && !!(bodyText.trim() || bodyHtml.trim());
+    return recipientsToUse.every((p) => {
+      if (!p.email) return false;
+      const pe = personalizedEmailsEffective[p.id];
+      const hasPersonalized = !!(pe?.subject?.trim() && (pe?.bodyText?.trim() || pe?.bodyHtml?.trim()));
+      return hasPersonalized || hasGenericTemplate;
+    });
+  }, [usePersonalizedEmails, recipientsToUse, personalizedEmailsEffective, subject, bodyText, bodyHtml]);
 
   const personalizedEmailsRef = useRef(personalizedEmails);
   personalizedEmailsRef.current = personalizedEmails;
