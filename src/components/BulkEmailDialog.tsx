@@ -462,9 +462,12 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const personIdForDb = (person: { id?: string }) => {
     const id = person?.id;
     if (!id) return null;
+    // person_id is a uuid column — only pass through real UUIDs. Synthetic ids
+    // (group-…, rec-…, csv-…, imp-…, pdf-…) must be nulled or the insert fails with
+    // "invalid input syntax for type uuid".
     const s = String(id);
-    if (s.startsWith("rec-") || s.startsWith("csv-") || s.startsWith("imp-") || s.startsWith("pdf-")) return null;
-    return id;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+    return isUuid ? id : null;
   };
 
   // Check for duplicate emails (people who already received emails in previous campaigns)
