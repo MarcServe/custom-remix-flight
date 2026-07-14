@@ -70,18 +70,24 @@ function previewBodyToHtml(text: string): string {
 }
 
 /**
- * Browser IANA zone, or Europe/London when the engine reports UTC and the user locale is en-GB
- * (common on misconfigured servers / some embedded browsers).
+ * Default scheduling timezone. UK-first product: default to Europe/London, which
+ * auto-handles BST/GMT, so scheduled sends land at the exact London wall-clock time
+ * regardless of the browser/VPN-reported zone (which can resolve to a fixed GMT+1
+ * offset and cause off-by-an-hour sends). Only fall back to the browser zone when
+ * it is a real IANA zone that isn't London or a bare UTC/offset.
  */
 function getDefaultCampaignTimeZone(): string {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (tz && tz !== "UTC") return tz;
+    // Treat London/UK, UTC, and any fixed-offset "Etc/GMT*" zone as "use London".
+    if (!tz || tz === "UTC" || /^Etc\//i.test(tz) || tz === "Europe/London" || tz === "GB") {
+      return "Europe/London";
+    }
     const lang = typeof navigator !== "undefined" ? navigator.language : "";
     if (lang.toLowerCase().startsWith("en-gb")) return "Europe/London";
-    return tz || "UTC";
+    return tz;
   } catch {
-    return "UTC";
+    return "Europe/London";
   }
 }
 
@@ -708,7 +714,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     scheduleEnabled: false,
     scheduledDate: null as string | null,
     scheduledTime: '09:00',
-    scheduledTimezone: 'UTC',
+    scheduledTimezone: 'Europe/London',
     autoFollowUpEnabled: true,
     followUpSequenceId: '',
   });
