@@ -87,18 +87,36 @@ Deno.serve(async (req) => {
       if (!name) return json({ error: "name is required" }, 400);
       if (!subject) return json({ error: "subject is required" }, 400);
       if (!bodyText && !bodyHtml) return json({ error: "body_text or body_html is required" }, 400);
-      if (recipientsIn.length === 0) return json({ error: "recipients is required (non-empty array)" }, 400);
+      const hasGroups = Array.isArray(body.group_ids || body.groupIds) && (body.group_ids || body.groupIds).length > 0;
+      if (recipientsIn.length === 0 && !hasGroups) return json({ error: "Provide 'recipients' (array) and/or 'group_ids'" }, 400);
 
-      // Dedupe + validate recipients
+      // Optionally pull recipients from saved recipient groups (so daily automation
+      // can just reference a group id instead of hardcoding a list each day).
+      const groupIds: string[] = Array.isArray(body.group_ids || body.groupIds)
+        ? (body.group_ids || body.groupIds).map((g: any) => String(g)).filter(Boolean) : [];
+      const fromGroups: any[] = [];
+      if (groupIds.length) {
+        // Scope to the caller's own groups
+        const { data: ownGroups } = await db.from("recipient_groups").select("id").eq("user_id", userId).in("id", groupIds);
+        const allowed = new Set((ownGroups || []).map((g: any) => g.id));
+        const scoped = groupIds.filter((g) => allowed.has(g));
+        if (scoped.length) {
+          const { data: members } = await db.from("recipient_group_members")
+            .select("email, first_name, last_name, company").in("group_id", scoped);
+          for (const m of members || []) fromGroups.push(m);
+        }
+      }
+
+      // Dedupe + validate recipients (explicit array + any group members)
       const seen = new Set<string>();
       const recips = [];
-      for (const r of recipientsIn) {
+      for (const r of [...recipientsIn, ...fromGroups]) {
         const email = String(r?.email || "").trim().toLowerCase();
         if (!EMAIL_RE.test(email) || seen.has(email)) continue;
         seen.add(email);
         recips.push({ email, first_name: r.first_name || r.firstName || "", last_name: r.last_name || r.lastName || "", company: r.company || "", name: r.name || "" });
       }
-      if (recips.length === 0) return json({ error: "No valid recipient emails" }, 400);
+      if (recips.length === 0) return json({ error: "No valid recipient emails (provide 'recipients' and/or 'group_ids')" }, 400);
 
       const scheduledAt = body.schedule_at || body.scheduleAt ? toUtcIso(String(body.schedule_at || body.scheduleAt), body.timezone || "Europe/London") : null;
       const status = scheduledAt ? "scheduled" : "draft";

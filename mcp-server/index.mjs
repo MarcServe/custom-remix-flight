@@ -48,7 +48,8 @@ server.tool(
       first_name: z.string().optional(),
       last_name: z.string().optional(),
       company: z.string().optional(),
-    })).describe("Recipients. Duplicates and invalid emails are dropped."),
+    })).optional().describe("Explicit recipients. Duplicates and invalid emails are dropped."),
+    group_ids: z.array(z.string()).optional().describe("Recipient group ids to pull recipients from (instead of, or in addition to, an explicit list)."),
     schedule_at: z.string().optional().describe("London wall-clock 'YYYY-MM-DDTHH:mm' or full ISO. Omit for a draft."),
   },
   async (args) => {
