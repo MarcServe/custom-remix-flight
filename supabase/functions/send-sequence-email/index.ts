@@ -75,6 +75,27 @@ serve(async (req) => {
     const company = companySequence.company as { id: string; name: string; website?: string; user_id?: string } | null;
     const userId = authUser?.id ?? company?.user_id ?? null;
 
+    // Personalize the step's subject/body with the recipient contact's details.
+    // The follow-up templates carry {{firstName}} etc. verbatim, so substitute here
+    // (send-sequence-email never did, which is why literal {{firstName}} shipped).
+    {
+      const cname = String((contact as any).name || '').trim();
+      const cfirst = cname ? cname.split(/\s+/)[0] : '';
+      const clast = cname ? cname.split(/\s+/).slice(1).join(' ') : '';
+      const cfull = cname || String((contact as any).email || '');
+      const ccompany = String(company?.name || '').trim();
+      const cemail = String((contact as any).email || '');
+      const fill = (tpl: string): string => (tpl || '')
+        .replace(/\{\{\s*first[_ ]?name\s*\}\}/gi, cfirst || 'there')
+        .replace(/\{\{\s*last[_ ]?name\s*\}\}/gi, clast)
+        .replace(/\{\{\s*full[_ ]?name\s*\}\}/gi, cfull)
+        .replace(/\{\{\s*name\s*\}\}/gi, cfull)
+        .replace(/\{\{\s*company([_ ]?name)?\s*\}\}/gi, ccompany)
+        .replace(/\{\{\s*email\s*\}\}/gi, cemail);
+      emailStep.subject = fill(emailStep.subject);
+      emailStep.body = fill(emailStep.body);
+    }
+
     // Get business profile: email provider and optionally full branding for template
     let emailProvider = 'resend';
     let fromEmail = 'noreply@yourdomain.com';
