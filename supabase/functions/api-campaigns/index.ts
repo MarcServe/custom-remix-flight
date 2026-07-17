@@ -91,45 +91,67 @@ async function ensureNoReplySequence(db: any, userId: string): Promise<string | 
   return seq?.id ?? null;
 }
 
-// Ensure a recipient is a CRM person with a company, so the scheduled send's
-// enrollFollowUp (which needs person_id → company_id) can enrol them. Idempotent:
-// re-running the same daily group reuses the same people/companies.
+// Ensure a recipient is a CRM person with a company AND a verified contact, so the
+// scheduled send's enrollFollowUp (needs person_id → company_id) enrols them and the
+// follow-up sender (send-sequence-email reads `contacts` where email_verified=true)
+// can actually send the Day 1/3/5 steps. Idempotent: re-running the same daily group
+// reuses the same people/companies/contacts.
 async function ensurePersonCompany(db: any, userId: string, r: any): Promise<string | null> {
   const email = String(r.email || "").toLowerCase().trim();
   if (!email) return null;
-  const { data: person } = await db.from("people").select("id, company_id").eq("user_id", userId).eq("email", email).maybeSingle();
-  if (person?.id && person.company_id) return person.id;
-
-  // Company: real company name when given; otherwise group by business domain,
-  // and keep free-mail contacts distinct (their own email) so each follows up.
-  const domain = (email.split("@")[1] || "").toLowerCase();
-  const isFree = FREEMAIL.has(domain);
-  let companyName = String(r.company || "").trim();
-  if (!companyName) companyName = isFree ? email : (domainToName(domain) || email);
-
-  let companyId: string | null = null;
-  const { data: existingCo } = await db.from("companies").select("id").eq("user_id", userId).eq("name", companyName).maybeSingle();
-  if (existingCo?.id) companyId = existingCo.id;
-  else {
-    const { data: co, error } = await db.from("companies").insert({ user_id: userId, name: companyName, general_email: isFree ? email : null }).select("id").single();
-    if (co?.id) companyId = co.id;
-    else if (error) {
-      const { data: retry } = await db.from("companies").select("id").eq("user_id", userId).eq("name", companyName).maybeSingle();
-      companyId = retry?.id ?? null;
-    }
-  }
-  if (!companyId) return person?.id ?? null;
-
-  if (person?.id) { await db.from("people").update({ company_id: companyId }).eq("id", person.id); return person.id; }
   const first = String(r.first_name || (r.name ? String(r.name).split(" ")[0] : "") || "Contact");
   const last = String(r.last_name || (r.name ? String(r.name).split(" ").slice(1).join(" ") : "") || "");
-  const { data: np, error: pErr } = await db.from("people").insert({ user_id: userId, email, first_name: first, last_name: last, company_id: companyId }).select("id").single();
-  if (np?.id) return np.id;
-  if (pErr) {
-    const { data: retry } = await db.from("people").select("id, company_id").eq("user_id", userId).eq("email", email).maybeSingle();
-    if (retry?.id) { if (!retry.company_id) await db.from("people").update({ company_id: companyId }).eq("id", retry.id); return retry.id; }
+  const fullName = [first, last].filter(Boolean).join(" ") || email;
+
+  const { data: person } = await db.from("people").select("id, company_id").eq("user_id", userId).eq("email", email).maybeSingle();
+  let personId: string | null = person?.id ?? null;
+  let companyId: string | null = person?.company_id ?? null;
+
+  // Resolve/create a company when the person doesn't already have one.
+  if (!companyId) {
+    // Real company name when given; otherwise group by business domain, and keep
+    // free-mail contacts distinct (their own email) so each follows up separately.
+    const domain = (email.split("@")[1] || "").toLowerCase();
+    const isFree = FREEMAIL.has(domain);
+    let companyName = String(r.company || "").trim();
+    if (!companyName) companyName = isFree ? email : (domainToName(domain) || email);
+
+    const { data: existingCo } = await db.from("companies").select("id").eq("user_id", userId).eq("name", companyName).maybeSingle();
+    if (existingCo?.id) companyId = existingCo.id;
+    else {
+      const { data: co, error } = await db.from("companies").insert({ user_id: userId, name: companyName, general_email: isFree ? email : null }).select("id").single();
+      if (co?.id) companyId = co.id;
+      else if (error) {
+        const { data: retry } = await db.from("companies").select("id").eq("user_id", userId).eq("name", companyName).maybeSingle();
+        companyId = retry?.id ?? null;
+      }
+    }
   }
-  return null;
+  if (!companyId) return personId;
+
+  // Ensure the person exists and is linked to the company.
+  if (personId) {
+    if (!person?.company_id) await db.from("people").update({ company_id: companyId }).eq("id", personId);
+  } else {
+    const { data: np, error: pErr } = await db.from("people").insert({ user_id: userId, email, first_name: first, last_name: last, company_id: companyId }).select("id").single();
+    if (np?.id) personId = np.id;
+    else if (pErr) {
+      const { data: retry } = await db.from("people").select("id, company_id").eq("user_id", userId).eq("email", email).maybeSingle();
+      if (retry?.id) { personId = retry.id; if (!retry.company_id) await db.from("people").update({ company_id: companyId }).eq("id", retry.id); }
+    }
+  }
+
+  // Ensure a verified contact on this company for this email — this is what the
+  // follow-up sender actually delivers to. (contacts has no user_id; it's scoped
+  // by company_id, which is already user-owned.)
+  const { data: ec } = await db.from("contacts").select("id, email_verified").eq("company_id", companyId).eq("email", email).maybeSingle();
+  if (ec?.id) {
+    if (!ec.email_verified) await db.from("contacts").update({ email_verified: true }).eq("id", ec.id);
+  } else {
+    await db.from("contacts").insert({ company_id: companyId, name: fullName, email, email_verified: true, is_primary_contact: true });
+  }
+
+  return personId;
 }
 
 // Turn subject/body into a short, human recipient-group name, e.g.

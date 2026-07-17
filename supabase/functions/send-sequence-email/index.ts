@@ -243,6 +243,51 @@ serve(async (req) => {
       }
 
       externalMessageId = sendgridResponse.headers.get('X-Message-Id') || `sendgrid-${crypto.randomUUID()}`;
+    } else if (emailProvider === 'gmail' || emailProvider === 'gmail_direct') {
+      // GMAIL DIRECT — send the follow-up through the user's connected Gmail (OAuth),
+      // mirroring send-bulk-emails. Without this, gmail_direct users fell through to
+      // Resend and got a "domain not verified" 403, so follow-ups never sent.
+      const { getValidGmailAccessToken, sendGmailMessage, encodeRfc2047 } = await import('../_shared/gmail-utils.ts');
+      const { data: gmailConn } = await supabase
+        .from('crm_connections')
+        .select('*')
+        .eq('user_id', userId)
+        .in('provider', ['gmail_direct', 'gmail'])
+        .eq('status', 'active')
+        .order('provider', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (!gmailConn) throw new Error('No active Gmail connection found. Reconnect Gmail in Settings.');
+      const gmailFromEmail = (gmailConn.from_email || fromEmail || '').trim();
+      if (!gmailFromEmail) throw new Error('Gmail connection has no from_email set. Reconnect Gmail in Settings.');
+      try {
+        await getValidGmailAccessToken(supabase, gmailConn as any);
+      } catch (_e) {
+        throw new Error('Failed to refresh Gmail token. Please reconnect Gmail in Settings.');
+      }
+      const toLine = contact.name ? `${encodeRfc2047(contact.name)} <${contact.email}>` : contact.email;
+      const boundary = `seq_${crypto.randomUUID()}`;
+      const rawMessage = [
+        `From: ${encodeRfc2047(senderName)} <${gmailFromEmail}>`,
+        `To: ${toLine}`,
+        `Subject: ${encodeRfc2047(emailStep.subject)}`,
+        'MIME-Version: 1.0',
+        `Content-Type: multipart/alternative; boundary="${boundary}"`,
+        '',
+        `--${boundary}`,
+        'Content-Type: text/plain; charset=UTF-8',
+        '',
+        plainBody,
+        `--${boundary}`,
+        'Content-Type: text/html; charset=UTF-8',
+        '',
+        htmlBody,
+        `--${boundary}--`,
+      ].join('\r\n');
+      const rawB64Url = btoa(unescape(encodeURIComponent(rawMessage)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const gmailData = await sendGmailMessage(supabase, gmailConn as any, rawB64Url);
+      externalMessageId = gmailData?.id || `gmail-${crypto.randomUUID()}`;
     } else if (RESEND_API_KEY) {
       const resendResponse = await fetch('https://api.resend.com/emails', {
         method: 'POST',
