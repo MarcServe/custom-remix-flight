@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Trash2, Users, FolderOpen, Plus, Upload, Building2, UserCircle, ClipboardPaste, Inbox, Target, Megaphone, Send } from "lucide-react";
+import { Loader2, Pencil, Trash2, Users, FolderOpen, Plus, Upload, Building2, UserCircle, ClipboardPaste, Inbox, Target, Megaphone, Send, Copy, Check } from "lucide-react";
 import { useCampaignDialog } from "@/contexts/CampaignDialogContext";
 import {
   Dialog,
@@ -103,6 +103,7 @@ export default function RecipientGroups() {
   const queryClient = useQueryClient();
   const { openWithPeople } = useCampaignDialog();
   const [launchingCampaignId, setLaunchingCampaignId] = useState<string | null>(null);
+  const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameName, setRenameName] = useState("");
   const [renameDescription, setRenameDescription] = useState("");
@@ -813,6 +814,21 @@ export default function RecipientGroups() {
                         >
                           {launchingCampaignId === g.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                           <span className="hidden sm:inline">Create campaign</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            navigator.clipboard.writeText(g.id);
+                            setCopiedGroupId(g.id);
+                            setTimeout(() => setCopiedGroupId((c) => (c === g.id ? null : c)), 1500);
+                            toast({ title: "Group ID copied", description: "Use it as group_id in the API / daily automation." });
+                          }}
+                          aria-label="Copy group ID"
+                          title="Copy group ID (for the API / MCP)"
+                        >
+                          {copiedGroupId === g.id ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
                         </Button>
                         <Button
                           variant="ghost"

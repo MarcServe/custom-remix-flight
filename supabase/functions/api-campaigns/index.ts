@@ -69,6 +69,19 @@ Deno.serve(async (req) => {
       return json({ campaigns: data || [] });
     }
 
+    if (action === "list_groups") {
+      const { data: groups } = await db.from("recipient_groups")
+        .select("id, name, description, created_at").eq("user_id", userId).order("created_at", { ascending: false });
+      // Attach member counts
+      const ids = (groups || []).map((g: any) => g.id);
+      const counts: Record<string, number> = {};
+      if (ids.length) {
+        const { data: members } = await db.from("recipient_group_members").select("group_id").in("group_id", ids).limit(100000);
+        for (const m of members || []) counts[m.group_id] = (counts[m.group_id] || 0) + 1;
+      }
+      return json({ groups: (groups || []).map((g: any) => ({ id: g.id, name: g.name, description: g.description, members: counts[g.id] || 0 })) });
+    }
+
     if (action === "status") {
       if (!body.campaign_id) return json({ error: "campaign_id required" }, 400);
       const { data } = await db.from("email_campaigns")

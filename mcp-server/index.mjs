@@ -69,6 +69,16 @@ server.tool(
 );
 
 server.tool(
+  "list_groups",
+  "List the user's recipient groups (id, name, member count). Use this to resolve a group by name into the group_id needed by create_campaign.",
+  {},
+  async () => {
+    const data = await callApi({ action: "list_groups" });
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
   "campaign_status",
   "Get the status and counts for a single campaign by id.",
   { campaign_id: z.string() },
