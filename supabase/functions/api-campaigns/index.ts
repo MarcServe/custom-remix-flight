@@ -46,6 +46,103 @@ function toUtcIso(schedule: string, tz = "Europe/London"): string | null {
 
 const EMAIL_RE = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/;
 
+// Free-mail domains never represent a shared company, so contacts on them get a
+// distinct company (their own email) → each enrolls in its own follow-up thread.
+const FREEMAIL = new Set([
+  "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.uk", "hotmail.com", "hotmail.co.uk",
+  "outlook.com", "live.com", "msn.com", "icloud.com", "me.com", "mac.com", "aol.com",
+  "proton.me", "protonmail.com", "gmx.com", "gmx.net", "mail.com", "yandex.com", "zoho.com",
+]);
+
+function domainToName(domain: string): string {
+  const base = (domain || "").split(".")[0] || "";
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : "";
+}
+
+// Run an async mapper over items with a bounded concurrency so linking hundreds
+// of recipients doesn't fan out into unbounded parallel DB calls.
+async function mapPool<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
+  const out = new Array(items.length) as R[];
+  let idx = 0;
+  async function worker() { while (idx < items.length) { const i = idx++; out[i] = await fn(items[i]); } }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length || 1) }, worker));
+  return out;
+}
+
+// The ready-made "Day 1 / 3 / 5" no-reply follow-up. Mirrors setup-noreply-followup
+// so API campaigns share the exact same sequence (found-or-created once per user).
+const FOLLOWUP_STEPS = [
+  { subject: "Just following up", body: "Hi {{firstName}},\n\nI wanted to quickly follow up on my previous email in case it slipped through. Would you be open to a short conversation?\n\nThanks!", delayDays: 1 },
+  { subject: "Re: quick follow-up", body: "Hi {{firstName}},\n\nCircling back on this — I'd genuinely value your thoughts, and I'm happy to share more detail or answer any questions.\n\nBest,", delayDays: 2 },
+  { subject: "Last note from me", body: "Hi {{firstName}},\n\nI don't want to clutter your inbox, so this will be my last note. If the timing isn't right, no problem at all — just let me know and I'll reach out again down the line.\n\nThanks for your time.", delayDays: 2 },
+];
+const NOREPLY_SEQ_NAME = "No-reply follow-up (Day 1 / 3 / 5)";
+
+async function ensureNoReplySequence(db: any, userId: string): Promise<string | null> {
+  const { data: existing } = await db.from("email_sequences").select("id").eq("created_by", userId).eq("name", NOREPLY_SEQ_NAME).limit(1).maybeSingle();
+  if (existing?.id) return existing.id;
+  const { data: seq } = await db.from("email_sequences").insert({
+    name: NOREPLY_SEQ_NAME,
+    description: "Auto-created: 3 gentle follow-ups on day 1, 3 and 5. Stops automatically as soon as the recipient replies.",
+    steps: FOLLOWUP_STEPS.map((s) => JSON.stringify(s)),
+    created_by: userId, repeat_sequence: false, repeat_after_days: 5, repeat_only_for: "no_reply",
+    auto_respond: false, use_email_branding: true,
+  }).select("id").single();
+  return seq?.id ?? null;
+}
+
+// Ensure a recipient is a CRM person with a company, so the scheduled send's
+// enrollFollowUp (which needs person_id → company_id) can enrol them. Idempotent:
+// re-running the same daily group reuses the same people/companies.
+async function ensurePersonCompany(db: any, userId: string, r: any): Promise<string | null> {
+  const email = String(r.email || "").toLowerCase().trim();
+  if (!email) return null;
+  const { data: person } = await db.from("people").select("id, company_id").eq("user_id", userId).eq("email", email).maybeSingle();
+  if (person?.id && person.company_id) return person.id;
+
+  // Company: real company name when given; otherwise group by business domain,
+  // and keep free-mail contacts distinct (their own email) so each follows up.
+  const domain = (email.split("@")[1] || "").toLowerCase();
+  const isFree = FREEMAIL.has(domain);
+  let companyName = String(r.company || "").trim();
+  if (!companyName) companyName = isFree ? email : (domainToName(domain) || email);
+
+  let companyId: string | null = null;
+  const { data: existingCo } = await db.from("companies").select("id").eq("user_id", userId).eq("name", companyName).maybeSingle();
+  if (existingCo?.id) companyId = existingCo.id;
+  else {
+    const { data: co, error } = await db.from("companies").insert({ user_id: userId, name: companyName, general_email: isFree ? email : null }).select("id").single();
+    if (co?.id) companyId = co.id;
+    else if (error) {
+      const { data: retry } = await db.from("companies").select("id").eq("user_id", userId).eq("name", companyName).maybeSingle();
+      companyId = retry?.id ?? null;
+    }
+  }
+  if (!companyId) return person?.id ?? null;
+
+  if (person?.id) { await db.from("people").update({ company_id: companyId }).eq("id", person.id); return person.id; }
+  const first = String(r.first_name || (r.name ? String(r.name).split(" ")[0] : "") || "Contact");
+  const last = String(r.last_name || (r.name ? String(r.name).split(" ").slice(1).join(" ") : "") || "");
+  const { data: np, error: pErr } = await db.from("people").insert({ user_id: userId, email, first_name: first, last_name: last, company_id: companyId }).select("id").single();
+  if (np?.id) return np.id;
+  if (pErr) {
+    const { data: retry } = await db.from("people").select("id, company_id").eq("user_id", userId).eq("email", email).maybeSingle();
+    if (retry?.id) { if (!retry.company_id) await db.from("people").update({ company_id: companyId }).eq("id", retry.id); return retry.id; }
+  }
+  return null;
+}
+
+// Turn subject/body into a short, human recipient-group name, e.g.
+// "Q3 partnership outreach" → "Q3 Partnership Outreach · Jul 17".
+function deriveGroupName(subject: string, bodyText: string): string {
+  let base = (subject || "").replace(/\{\{[^}]+\}\}/g, "").replace(/\s+/g, " ").trim();
+  if (!base) base = (bodyText || "").replace(/\{\{[^}]+\}\}/g, "").replace(/\s+/g, " ").trim().split(/[.!?\n]/)[0] || "";
+  if (base.length > 48) base = base.slice(0, 45).trim() + "…";
+  if (!base) base = "Campaign recipients";
+  const date = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
+  return `${base} · ${date}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -134,6 +231,19 @@ Deno.serve(async (req) => {
       const scheduledAt = body.schedule_at || body.scheduleAt ? toUtcIso(String(body.schedule_at || body.scheduleAt), body.timezone || "Europe/London") : null;
       const status = scheduledAt ? "scheduled" : "draft";
 
+      // Link recipients to CRM people + companies (default on) so the scheduled
+      // send auto-enrols them into the no-reply follow-up. Best-effort per recipient.
+      const linkPeople = body.link_people !== false && body.linkPeople !== false;
+      let linkedCount = 0;
+      if (linkPeople) {
+        const ids = await mapPool(recips, 8, (r) => ensurePersonCompany(db, userId, r).catch(() => null));
+        recips.forEach((r, i) => { (r as any).person_id = ids[i] || null; if (ids[i]) linkedCount++; });
+      }
+
+      // Enable the Day 1/3/5 no-reply follow-up (default on) so cold sends chase non-repliers.
+      const wantFollowUp = body.follow_up !== false && body.followUp !== false;
+      const followUpSeqId = wantFollowUp ? await ensureNoReplySequence(db, userId) : null;
+
       const finalHtml = bodyHtml || `<p>${bodyText.replace(/\n/g, "</p><p>")}</p>`;
       const { data: campaign, error: campErr } = await db.from("email_campaigns").insert({
         user_id: userId,
@@ -144,6 +254,8 @@ Deno.serve(async (req) => {
         status,
         scheduled_at: scheduledAt,
         total_recipients: recips.length,
+        auto_follow_up_enabled: !!followUpSeqId,
+        follow_up_sequence_id: followUpSeqId,
       }).select("id").single();
       if (campErr || !campaign) return json({ error: campErr?.message || "Failed to create campaign" }, 500);
 
@@ -153,6 +265,7 @@ Deno.serve(async (req) => {
           campaign_id: campaign.id,
           email: r.email,
           name: nm,
+          person_id: (r as any).person_id || null,
           personalized_subject: personalize(subject, r) || subject,
           personalized_body_html: personalize(finalHtml, r) || finalHtml,
           personalized_body_text: personalize(bodyText || finalHtml.replace(/<[^>]+>/g, " "), r),
@@ -164,14 +277,41 @@ Deno.serve(async (req) => {
         if (rErr) return json({ error: `Recipients insert failed: ${rErr.message}`, campaign_id: campaign.id }, 500);
       }
 
+      // Save an explicit recipient list as a reusable, named group (Claude passes a
+      // group_name derived from the email's context; otherwise derive one from the
+      // subject). Skipped when recipients came purely from existing group_ids.
+      let createdGroup: { id: string; name: string; members: number } | null = null;
+      if (recipientsIn.length > 0) {
+        const groupName = String(body.group_name || body.groupName || "").trim() || deriveGroupName(subject, bodyText);
+        const { data: grp } = await db.from("recipient_groups").insert({
+          user_id: userId, name: groupName,
+          description: `Auto-created from API campaign "${name}".`,
+        }).select("id, name").single();
+        if (grp?.id) {
+          const members = recips.map((r) => ({
+            group_id: grp.id, email: r.email,
+            first_name: r.first_name || null, last_name: r.last_name || null,
+            company: r.company || null, person_id: (r as any).person_id || null,
+          }));
+          for (let i = 0; i < members.length; i += 500) {
+            await db.from("recipient_group_members").insert(members.slice(i, i + 500));
+          }
+          createdGroup = { id: grp.id, name: grp.name, members: members.length };
+        }
+      }
+
+      const followUpMsg = followUpSeqId ? " No-reply follow-up (Day 1/3/5) is enabled." : "";
       return json({
         campaign_id: campaign.id,
         status,
         scheduled_at: scheduledAt,
         recipients: rows.length,
-        message: scheduledAt
+        linked_people: linkedCount,
+        follow_up_enabled: !!followUpSeqId,
+        group: createdGroup,
+        message: (scheduledAt
           ? `Campaign scheduled — it will send automatically at ${scheduledAt} (UTC).`
-          : "Campaign created as a draft. Provide schedule_at to have it sent automatically.",
+          : "Campaign created as a draft. Provide schedule_at to have it sent automatically.") + followUpMsg,
       });
     }
 

@@ -37,7 +37,7 @@ const server = new McpServer({ name: "leadboosters", version: "1.0.0" });
 
 server.tool(
   "create_campaign",
-  "Create an email campaign and (optionally) schedule it. If schedule_at is given, LeadBoosters sends it automatically at that London time — all safeguards (dedupe, domain verification, monthly limits, no-reply follow-ups) still apply. Omit schedule_at to create a draft.",
+  "Create an email campaign and (optionally) schedule it. If schedule_at is given, LeadBoosters sends it automatically at that London time — all safeguards (dedupe, domain verification, monthly limits) still apply. By default the Day 1/3/5 no-reply follow-up is enabled and recipients are linked to CRM people/companies so non-repliers are chased automatically. When you pass an explicit `recipients` list, always set a short, descriptive `group_name` based on the email's context (e.g. \"Q3 partnership outreach\") — it's saved as a reusable recipient group. Omit schedule_at to create a draft.",
   {
     name: z.string().describe("Internal campaign name."),
     subject: z.string().describe("Email subject. Supports {{firstName}}, {{lastName}}, {{fullName}}, {{company}}, {{email}}."),
@@ -49,7 +49,9 @@ server.tool(
       last_name: z.string().optional(),
       company: z.string().optional(),
     })).optional().describe("Explicit recipients. Duplicates and invalid emails are dropped."),
-    group_ids: z.array(z.string()).optional().describe("Recipient group ids to pull recipients from (instead of, or in addition to, an explicit list)."),
+    group_ids: z.array(z.string()).optional().describe("Recipient group ids to pull recipients from (instead of, or in addition to, an explicit list). Use list_groups to resolve a group by name."),
+    group_name: z.string().optional().describe("Name for the reusable group auto-created from an explicit `recipients` list. Set this yourself to a concise label reflecting the email's context/audience. Ignored when only group_ids are used."),
+    follow_up: z.boolean().optional().describe("Enable the Day 1/3/5 no-reply follow-up (default true). Set false to send a single email with no follow-ups."),
     schedule_at: z.string().optional().describe("London wall-clock 'YYYY-MM-DDTHH:mm' or full ISO. Omit for a draft."),
   },
   async (args) => {

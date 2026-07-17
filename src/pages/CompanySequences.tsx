@@ -243,6 +243,33 @@ export default function CompanySequences() {
     return { sent, opened, replied, openRate, replyRate, untrackedCount, topProvider };
   };
 
+  // When is the next follow-up going to send? Mirrors process-sequence-steps'
+  // time-based rule: the next step (current_step + 1) becomes due delayDays
+  // after the current step's send. Returns null when nothing is pending
+  // (no next step, not active, or the contact already replied → sequence stops).
+  const computeNextFollowUp = (sequence: CompanySequence): { text: string; due: boolean } | null => {
+    if (sequence.status !== 'active') return null;
+    const steps = (sequence.personalized_emails || []) as Array<{ delayDays?: number }>;
+    const nextStepNumber = (sequence.current_step ?? 0) + 1;
+    const nextStep = steps[nextStepNumber];
+    if (!nextStep) return null; // no more follow-ups queued
+    // Stop-on-reply: a reply anywhere halts the sequence, so nothing is pending.
+    if ((sequence.email_activities || []).some(a => a.replied_at)) return null;
+    // Most-recent send of the current step is the clock the delay counts from.
+    const lastForStep = (sequence.email_activities || [])
+      .filter(a => a.step_number === (sequence.current_step ?? 0) && a.sent_at)
+      .sort((a, b) => new Date(b.sent_at!).getTime() - new Date(a.sent_at!).getTime())[0];
+    if (!lastForStep?.sent_at) return null;
+    const delayDays = Number(nextStep.delayDays) || 0;
+    const dueTime = new Date(lastForStep.sent_at).getTime() + delayDays * 86400000;
+    const msLeft = dueTime - Date.now();
+    if (msLeft <= 0) return { text: 'Next follow-up: due now', due: true };
+    const days = Math.round(msLeft / 86400000);
+    if (days <= 0) return { text: 'Next follow-up: today', due: false };
+    if (days === 1) return { text: 'Next follow-up: in ~1 day', due: false };
+    return { text: `Next follow-up: in ~${days} days`, due: false };
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -443,13 +470,30 @@ export default function CompanySequences() {
                             )}
                             <Badge variant="outline" className="text-xs">
                               <Clock className="h-3 w-3 mr-1" />
-                              Created {new Date(sequence.created_at).toLocaleDateString('en-US', { 
-                                month: 'short', 
+                              Created {new Date(sequence.created_at).toLocaleDateString('en-US', {
+                                month: 'short',
                                 day: 'numeric',
                                 hour: '2-digit',
                                 minute: '2-digit'
                               })}
                             </Badge>
+                            {(() => {
+                              const nf = computeNextFollowUp(sequence);
+                              if (!nf) return null;
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs font-medium ${
+                                    nf.due
+                                      ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                                      : 'bg-indigo-500/10 text-indigo-600 border-indigo-500/30'
+                                  }`}
+                                >
+                                  <Send className="h-3 w-3 mr-1" />
+                                  {nf.text}
+                                </Badge>
+                              );
+                            })()}
                             {engagement.topProvider && (
                               <TooltipProvider>
                                 <Tooltip>
