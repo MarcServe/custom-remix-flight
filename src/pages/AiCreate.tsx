@@ -311,6 +311,16 @@ export default function AiCreate() {
         </div>
       </div>
 
+      <div className="mt-4 rounded-lg border bg-muted/30 p-4 text-sm">
+        <p className="font-medium mb-1.5">New here? Pick the way that suits you:</p>
+        <ul className="space-y-1 text-muted-foreground">
+          <li><span className="font-medium text-foreground">✨ Generate for me</span> — easiest. Describe your campaign in a sentence and we write it. No setup.</li>
+          <li><span className="font-medium text-foreground">💬 Use my AI chat</span> — already use ChatGPT or Claude? Copy our prompt in, paste the reply back, done.</li>
+          <li><span className="font-medium text-foreground">🔌 Automate daily</span> — advanced. Connect once so drafts appear every morning on autopilot.</li>
+        </ul>
+        <p className="mt-2 text-muted-foreground">Every result is saved as a <span className="font-medium text-foreground">draft</span> — nothing sends until you review it and click send. For campaigns you can attach a saved recipient group so the draft comes out ready to go.</p>
+      </div>
+
       <Tabs defaultValue="generate" className="mt-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="generate" className="gap-1.5"><Wand2 className="h-4 w-4" /> Generate for me</TabsTrigger>
