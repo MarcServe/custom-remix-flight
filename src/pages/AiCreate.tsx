@@ -74,7 +74,7 @@ export default function AiCreate() {
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [creatingKey, setCreatingKey] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [recipientMode, setRecipientMode] = useState<"later" | "group">("later");
+  const [recipientMode, setRecipientMode] = useState<"later" | "group" | "discover">("later");
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
 
   // Load the user's recipient groups so a campaign draft can be sent to a saved list.
@@ -156,6 +156,16 @@ export default function AiCreate() {
         if (error) throw error;
         toast.success("Newsletter draft saved.");
         navigate("/newsletters");
+      } else if (recipientMode === "discover") {
+        // Find fresh publicly-listed leads for this sector, attach a first batch now,
+        // and keep discovering more in the background.
+        const { data, error } = await supabase.functions.invoke("ai-find-leads", {
+          body: { name: `AI campaign · ${today}`, subject: subject.trim(), body_text: body, audience },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+        toast.success(data?.message || "Draft created with fresh leads.");
+        navigate("/campaigns");
       } else if (recipientMode === "group" && selectedGroupId) {
         // Fully-wired draft: recipients from the group, CRM linking + no-reply
         // follow-up, via the same pipeline the API/automation uses (no schedule = draft).
@@ -254,16 +264,25 @@ export default function AiCreate() {
       {kind === "campaign" && (
         <div className="space-y-2 rounded-lg border p-3 bg-muted/20">
           <Label className="flex items-center gap-1.5"><Users className="h-4 w-4" /> Recipients</Label>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button type="button" onClick={() => setRecipientMode("later")}
-              className={`flex-1 text-left text-sm rounded-md border px-3 py-2 ${recipientMode === "later" ? "border-primary bg-background shadow-sm" : "text-muted-foreground"}`}>
-              Add them later in the composer
+          <div className="grid sm:grid-cols-3 gap-2">
+            <button type="button" onClick={() => setRecipientMode("discover")}
+              className={`text-left text-sm rounded-md border px-3 py-2 ${recipientMode === "discover" ? "border-primary bg-background shadow-sm" : "text-muted-foreground"}`}>
+              🔎 Find fresh leads for me
             </button>
             <button type="button" onClick={() => setRecipientMode("group")}
-              className={`flex-1 text-left text-sm rounded-md border px-3 py-2 ${recipientMode === "group" ? "border-primary bg-background shadow-sm" : "text-muted-foreground"}`}>
-              Send to a saved group now
+              className={`text-left text-sm rounded-md border px-3 py-2 ${recipientMode === "group" ? "border-primary bg-background shadow-sm" : "text-muted-foreground"}`}>
+              👥 Use my saved group
+            </button>
+            <button type="button" onClick={() => setRecipientMode("later")}
+              className={`text-left text-sm rounded-md border px-3 py-2 ${recipientMode === "later" ? "border-primary bg-background shadow-sm" : "text-muted-foreground"}`}>
+              ✍️ Add them later
             </button>
           </div>
+          {recipientMode === "discover" && (
+            <p className="text-xs text-muted-foreground">
+              We'll find businesses matching <span className="font-medium text-foreground">{audience || "your sector (from your business profile)"}</span> and attach their public emails. A first batch is added right away (~30–60s), then more arrive in the background. Everything stays a draft for you to review.
+            </p>
+          )}
           {recipientMode === "group" && (
             groups.length ? (
               <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
@@ -286,13 +305,15 @@ export default function AiCreate() {
       <div className="flex items-center gap-2">
         <Button onClick={saveDraft} disabled={saving || !body.trim() || (kind === "campaign" && recipientMode === "group" && !selectedGroupId)}>
           {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
-          Save as draft
+          {kind === "campaign" && recipientMode === "discover" ? (saving ? "Finding leads…" : "Find leads & save draft") : "Save as draft"}
         </Button>
         {body.trim() && (
           <span className="text-xs text-muted-foreground">
-            {kind === "campaign" && recipientMode === "group"
-              ? "Saves a draft with recipients + the Day 1/3/5 follow-up ready."
-              : `Saves to ${kind === "campaign" ? "Campaigns" : "Newsletters"} → review & send there.`}
+            {kind === "campaign" && recipientMode === "discover"
+              ? "Finds fresh leads (~30–60s), then keeps adding more in the background."
+              : kind === "campaign" && recipientMode === "group"
+                ? "Saves a draft with recipients + the Day 1/3/5 follow-up ready."
+                : `Saves to ${kind === "campaign" ? "Campaigns" : "Newsletters"} → review & send there.`}
           </span>
         )}
       </div>
