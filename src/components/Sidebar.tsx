@@ -60,6 +60,7 @@ const navigation: NavigationItem[] = [
     icon: Send,
     children: [
       // First so it stays visible without scrolling; same as /campaigns/import-email
+      { name: "Create with AI", href: "/ai-create", icon: Sparkles },
       { name: "Personalized emails", href: "/campaigns/import-email", icon: FileSpreadsheet },
       { name: "Sequences", href: "/sequences", icon: Mail },
       { name: "Active Campaigns", href: "/company-sequences", icon: Activity },

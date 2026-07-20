@@ -177,6 +177,40 @@ Each edition should feel fresh: vary opening hook, section titles, and examples 
       });
     }
 
+    // Campaign TEMPLATE generation: one email sent to many recipients, with merge tokens.
+    if (requestBody.context === 'campaign' && requestBody.prompt) {
+      const sys = `You are an expert outreach/campaign copywriter. Write ONE short email (about 90-140 words) that will be sent to MANY recipients.
+Personalize with these EXACT merge tokens where natural: {{firstName}} and {{company}}. Never invent other tokens or use real names.
+Tone: warm, human, concise, non-salesy, with ONE clear call to action. Plain text with line breaks — no HTML, no markdown.
+Do NOT include a signature or sign-off name; the system appends the sender's signature automatically.
+Return ONLY JSON: {"subject":"...","body":"..."}`;
+      const usr = `Sender/business: ${senderCompany || 'a business'}${senderTitle ? ', ' + senderTitle : ''}.
+Campaign brief: ${requestBody.prompt}
+${requestBody.audience ? 'Target audience: ' + requestBody.audience : ''}
+Write the subject and body now.`;
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'system', content: sys }, { role: 'user', content: usr }],
+          temperature: 0.7, max_tokens: 700, response_format: { type: 'json_object' },
+        }),
+      });
+      if (!response.ok) {
+        const t = await response.text();
+        if (response.status === 429) throw new Error('Rate limit exceeded. Please try again later.');
+        if (response.status === 401 || response.status === 402) throw new Error('OpenAI API key invalid or billing issue.');
+        throw new Error(`OpenAI API error: ${response.status} ${t}`);
+      }
+      const data = await response.json();
+      let parsed: { subject?: string; body?: string } = {};
+      try { parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}'); } catch { parsed = {}; }
+      return new Response(JSON.stringify({ subject: parsed.subject || '', body: parsed.body || '' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Check if this is an invoice/quotation request (has 'type' field)
     if (requestBody.type) {
       const { context, type } = requestBody;

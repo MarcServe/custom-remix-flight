@@ -27,6 +27,7 @@ import LeadInbox from "./pages/LeadInbox";
 import Enrichment from "./pages/Enrichment";
 import BusinessProfile from "./pages/BusinessProfile";
 import ApiKeys from "./pages/ApiKeys";
+import AiCreate from "./pages/AiCreate";
 import Profile from "./pages/Profile";
 import Pipeline from "./pages/Pipeline";
 import Sequences from "./pages/Sequences";
@@ -104,6 +105,7 @@ const App = () => (
                           <Route path="/autopilot" element={<PlanGate requiredTier="leadboosters" feature="Autopilot"><Autopilot /></PlanGate>} />
                           <Route path="/auto-responses" element={<PlanGate requiredTier="leadboosters" feature="Auto-Response Hub"><AutoResponseHub /></PlanGate>} />
                           {/* Individual tier routes */}
+                          <Route path="/ai-create" element={<PlanGate requiredTier="individual" feature="Create with AI"><AiCreate /></PlanGate>} />
                           <Route path="/campaigns" element={<PlanGate requiredTier="individual" feature="Email Campaigns"><Campaigns /></PlanGate>} />
                           <Route path="/newsletters" element={<PlanGate requiredTier="individual" feature="Newsletters"><Newsletters /></PlanGate>} />
                           <Route path="/business-profile" element={<BusinessProfile />} />
