@@ -168,15 +168,28 @@ function deriveGroupName(subject: string, bodyText: string): string {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
-    // ── Auth via API key (X-API-Key or Authorization: Bearer lb_live_...) ──
-    const rawKey = (req.headers.get("x-api-key") || req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
-    if (!rawKey.startsWith("lb_live_")) return json({ error: "Missing or invalid API key" }, 401);
+    // ── Auth: either an lb_live_ API key (external automation) OR a Supabase
+    // user JWT (in-app calls via supabase.functions.invoke). ──
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const keyHash = await sha256Hex(rawKey);
-    const { data: keyRow } = await db.from("api_keys").select("id, user_id, revoked_at").eq("key_hash", keyHash).maybeSingle();
-    if (!keyRow || keyRow.revoked_at) return json({ error: "Invalid or revoked API key" }, 401);
-    const userId = keyRow.user_id;
-    db.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyRow.id).then(() => {});
+    const xApiKey = (req.headers.get("x-api-key") || "").trim();
+    const authHeader = req.headers.get("authorization") || "";
+    const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const rawKey = xApiKey || bearer;
+    let userId: string;
+    if (rawKey.startsWith("lb_live_")) {
+      const keyHash = await sha256Hex(rawKey);
+      const { data: keyRow } = await db.from("api_keys").select("id, user_id, revoked_at").eq("key_hash", keyHash).maybeSingle();
+      if (!keyRow || keyRow.revoked_at) return json({ error: "Invalid or revoked API key" }, 401);
+      userId = keyRow.user_id;
+      db.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyRow.id).then(() => {});
+    } else if (bearer && bearer.split(".").length === 3) {
+      // Supabase access token from an authenticated in-app session.
+      const { data: userData, error: uErr } = await db.auth.getUser(bearer);
+      if (uErr || !userData?.user) return json({ error: "Invalid or expired session" }, 401);
+      userId = userData.user.id;
+    } else {
+      return json({ error: "Missing or invalid API key" }, 401);
+    }
 
     const body = await req.json().catch(() => ({}));
     const action = body.action || (req.method === "GET" ? "list" : "create");

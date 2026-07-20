@@ -1,10 +1,17 @@
 {
   "name": "leadboosters-mcp",
   "version": "1.0.0",
-  "description": "MCP server exposing LeadBoosters campaign create/schedule tools to Claude, Codex, and other MCP clients.",
+  "description": "MCP server exposing LeadBoosters campaign & newsletter create/schedule tools to Claude, Codex, and other MCP clients.",
   "type": "module",
   "bin": { "leadboosters-mcp": "index.mjs" },
+  "files": ["index.mjs", "README.md"],
   "scripts": { "start": "node index.mjs" },
+  "engines": { "node": ">=18" },
+  "keywords": ["mcp", "leadboosters", "claude", "codex", "email", "campaigns", "crm"],
+  "homepage": "https://github.com/MarcServe/custom-remix-flight/tree/roundup/mcp-server#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/MarcServe/custom-remix-flight.git", "directory": "mcp-server" },
+  "license": "MIT",
+  "publishConfig": { "access": "public" },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
     "zod": "^3.23.8"

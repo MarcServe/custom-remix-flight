@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sparkles, Copy, Check, Wand2, MessageSquareText, Plug, Mail, Newspaper, ArrowRight, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sparkles, Copy, Check, Wand2, MessageSquareText, Plug, Mail, Newspaper, ArrowRight, Loader2, Users } from "lucide-react";
+
+type Group = { id: string; name: string; members: number };
 
 type Kind = "campaign" | "newsletter";
 
@@ -70,6 +73,26 @@ export default function AiCreate() {
   const [pasteVal, setPasteVal] = useState("");
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [creatingKey, setCreatingKey] = useState(false);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [recipientMode, setRecipientMode] = useState<"later" | "group">("later");
+  const [selectedGroupId, setSelectedGroupId] = useState<string>("");
+
+  // Load the user's recipient groups so a campaign draft can be sent to a saved list.
+  useEffect(() => {
+    (async () => {
+      const { data: grp } = await supabase
+        .from("recipient_groups")
+        .select("id, name")
+        .order("created_at", { ascending: false });
+      const ids = (grp || []).map((g: any) => g.id);
+      const counts: Record<string, number> = {};
+      if (ids.length) {
+        const { data: mem } = await supabase.from("recipient_group_members").select("group_id").in("group_id", ids);
+        for (const m of mem || []) counts[m.group_id] = (counts[m.group_id] || 0) + 1;
+      }
+      setGroups((grp || []).map((g: any) => ({ id: g.id, name: g.name, members: counts[g.id] || 0 })));
+    })();
+  }, []);
 
   const copy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -133,6 +156,23 @@ export default function AiCreate() {
         if (error) throw error;
         toast.success("Newsletter draft saved.");
         navigate("/newsletters");
+      } else if (recipientMode === "group" && selectedGroupId) {
+        // Fully-wired draft: recipients from the group, CRM linking + no-reply
+        // follow-up, via the same pipeline the API/automation uses (no schedule = draft).
+        const { data, error } = await supabase.functions.invoke("api-campaigns", {
+          body: {
+            action: "create",
+            name: `AI campaign · ${today}`,
+            subject: subject.trim(),
+            body_text: body,
+            group_ids: [selectedGroupId],
+            follow_up: true,
+          },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+        toast.success(`Campaign draft saved with ${data?.recipients ?? 0} recipients.`);
+        navigate("/campaigns");
       } else {
         const html = `<p>${body.replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br/>")}</p>`;
         const { error } = await supabase.from("email_campaigns").insert({
@@ -210,13 +250,50 @@ export default function AiCreate() {
         <Label>Body {kind === "campaign" && <span className="text-xs text-muted-foreground">— uses {"{{firstName}}"} / {"{{company}}"}</span>}</Label>
         <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={12} placeholder="Email body will appear here…" className="font-mono text-sm" />
       </div>
+
+      {kind === "campaign" && (
+        <div className="space-y-2 rounded-lg border p-3 bg-muted/20">
+          <Label className="flex items-center gap-1.5"><Users className="h-4 w-4" /> Recipients</Label>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button type="button" onClick={() => setRecipientMode("later")}
+              className={`flex-1 text-left text-sm rounded-md border px-3 py-2 ${recipientMode === "later" ? "border-primary bg-background shadow-sm" : "text-muted-foreground"}`}>
+              Add them later in the composer
+            </button>
+            <button type="button" onClick={() => setRecipientMode("group")}
+              className={`flex-1 text-left text-sm rounded-md border px-3 py-2 ${recipientMode === "group" ? "border-primary bg-background shadow-sm" : "text-muted-foreground"}`}>
+              Send to a saved group now
+            </button>
+          </div>
+          {recipientMode === "group" && (
+            groups.length ? (
+              <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
+                <SelectTrigger><SelectValue placeholder="Choose a recipient group…" /></SelectTrigger>
+                <SelectContent>
+                  {groups.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>{g.name} · {g.members} contacts</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No recipient groups yet. Create one under <button className="underline" onClick={() => navigate("/recipient-groups")}>Recipient Groups</button>, or use “find new leads” via your daily AI routine.
+              </p>
+            )
+          )}
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
-        <Button onClick={saveDraft} disabled={saving || !body.trim()}>
+        <Button onClick={saveDraft} disabled={saving || !body.trim() || (kind === "campaign" && recipientMode === "group" && !selectedGroupId)}>
           {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
           Save as draft
         </Button>
         {body.trim() && (
-          <span className="text-xs text-muted-foreground">Saves to {kind === "campaign" ? "Campaigns" : "Newsletters"} → you add recipients & send there.</span>
+          <span className="text-xs text-muted-foreground">
+            {kind === "campaign" && recipientMode === "group"
+              ? "Saves a draft with recipients + the Day 1/3/5 follow-up ready."
+              : `Saves to ${kind === "campaign" ? "Campaigns" : "Newsletters"} → review & send there.`}
+          </span>
         )}
       </div>
     </div>
