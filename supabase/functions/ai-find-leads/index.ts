@@ -7,8 +7,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-api-key",
 };
+
+async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 const EMAIL_RE = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/;
 const FREEMAIL = new Set([
@@ -222,11 +227,25 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
-    if (!bearer || bearer.split(".").length !== 3) return json({ error: "Sign in required" }, 401);
-    const { data: userData, error: uErr } = await db.auth.getUser(bearer);
-    if (uErr || !userData?.user) return json({ error: "Invalid or expired session" }, 401);
-    const userId = userData.user.id;
+    // Auth: lb_live_ API key (scheduled routine) OR a Supabase user session (in-app).
+    const xApiKey = (req.headers.get("x-api-key") || "").trim();
+    const authHeader = req.headers.get("authorization") || "";
+    const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const rawKey = xApiKey || bearer;
+    let userId: string;
+    if (rawKey.startsWith("lb_live_")) {
+      const keyHash = await sha256Hex(rawKey);
+      const { data: keyRow } = await db.from("api_keys").select("id, user_id, revoked_at").eq("key_hash", keyHash).maybeSingle();
+      if (!keyRow || keyRow.revoked_at) return json({ error: "Invalid or revoked API key" }, 401);
+      userId = keyRow.user_id;
+      db.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyRow.id).then(() => {});
+    } else if (bearer && bearer.split(".").length === 3) {
+      const { data: userData, error: uErr } = await db.auth.getUser(bearer);
+      if (uErr || !userData?.user) return json({ error: "Invalid or expired session" }, 401);
+      userId = userData.user.id;
+    } else {
+      return json({ error: "Sign in or API key required" }, 401);
+    }
 
     const serpKey = Deno.env.get("SERPAPI_API_KEY");
     if (!serpKey) return json({ error: "Lead discovery isn't configured (missing search key)." }, 400);
