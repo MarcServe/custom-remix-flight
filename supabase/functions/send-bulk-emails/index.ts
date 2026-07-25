@@ -12,6 +12,18 @@ const corsHeaders = {
 // Reply-To for campaign emails: use Resend inbound so replies are received by Resend and show in Conversations
 const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || 'leadgenie@eldapgraaa.resend.app';
 
+// A recipient's email cell may hold several addresses ("a@x.com, b@y.com", or
+// separated by ; or whitespace). Return the first syntactically valid one so the
+// send reaches the primary address instead of bouncing the whole row.
+function firstValidEmail(raw: string): string | null {
+  if (!raw) return null;
+  for (const p of String(raw).split(/[,;\s]+/)) {
+    const e = p.trim();
+    if (/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(e)) return e;
+  }
+  return null;
+}
+
 // Gmail daily send limit (free: 500/day, Workspace: 2000/day). 450 leaves headroom.
 const GMAIL_DAILY_LIMIT = 450;
 
@@ -405,18 +417,13 @@ serve(async (req) => {
       const invalidEmailRows: any[] = [];
 
       for (const recipient of allPendingRecipients) {
-        const emailStr = (recipient.email || '').trim();
-        const isValidSingleEmail = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(emailStr);
-        if (!emailStr || !isValidSingleEmail) {
-          invalidEmailRows.push({
-            id: recipient.id, status: 'failed',
-            error_message: emailStr.includes(',')
-              ? 'Multiple email addresses — re-add to split into separate recipients.'
-              : 'Invalid email address',
-          });
+        const primaryEmail = firstValidEmail(recipient.email || '');
+        if (!primaryEmail) {
+          invalidEmailRows.push({ id: recipient.id, status: 'failed', error_message: 'Invalid email address' });
           failedCount++;
           continue;
         }
+        recipient.email = primaryEmail; // multi-address cell → send to the first valid address
 
         const { subject, bodyText, bodyHtml } = resolveRecipientContent(recipient, campaign);
         const finalSubject = (subject && subject !== '(No subject)') ? subject : (campaign.name || 'Message for you');
@@ -677,16 +684,15 @@ serve(async (req) => {
 
       for (const recipient of recipients) {
         try {
-          const gmailEmailStr = (recipient.email || '').trim();
-          const isValidGmailEmail = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(gmailEmailStr);
-          if (!gmailEmailStr || !isValidGmailEmail) {
+          const gmailPrimary = firstValidEmail(recipient.email || '');
+          if (!gmailPrimary) {
             await supabaseClient.from('email_campaign_recipients').update({
-              status: 'failed',
-              error_message: gmailEmailStr.includes(',') ? 'Multiple email addresses — re-add this company to split into separate recipients.' : 'Invalid email address',
+              status: 'failed', error_message: 'Invalid email address',
             }).eq('id', recipient.id);
             failedCount++;
             continue;
           }
+          recipient.email = gmailPrimary; // multi-address cell → send to the first valid address
 
           // Resolve subject/body — fall back to campaign templates if personalization is missing
           const { subject: gmailSubject, bodyText: gmailBodyText } = resolveRecipientContent(recipient, campaign);
@@ -768,16 +774,15 @@ serve(async (req) => {
       // ═══════════════════════════════════════════════════════════════
       for (const recipient of allPendingRecipients) {
         try {
-          const sgEmailStr = (recipient.email || '').trim();
-          const isValidSgEmail = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(sgEmailStr);
-          if (!sgEmailStr || !isValidSgEmail) {
+          const sgPrimary = firstValidEmail(recipient.email || '');
+          if (!sgPrimary) {
             await supabaseClient.from('email_campaign_recipients').update({
-              status: 'failed',
-              error_message: sgEmailStr.includes(',') ? 'Multiple email addresses — re-add this company to split into separate recipients.' : 'Invalid email address',
+              status: 'failed', error_message: 'Invalid email address',
             }).eq('id', recipient.id);
             failedCount++;
             continue;
           }
+          recipient.email = sgPrimary; // multi-address cell → send to the first valid address
 
           // Resolve subject/body — fall back to campaign templates if personalization is missing
           const { subject: sgSubject, bodyText, bodyHtml: bodyHtmlRaw } = resolveRecipientContent(recipient, campaign);

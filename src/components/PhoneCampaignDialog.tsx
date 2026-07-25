@@ -320,20 +320,20 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
       if (campaignError) throw campaignError;
 
       // Prepare recipients from companies and manual phones
+      // NOTE: email_campaign_recipients has no company_id column — including it
+      // makes the insert fail ("Could not find the 'company_id' column…").
       const recipients = [
         ...selectedCompaniesData.map(company => ({
           campaign_id: campaign.id,
           email: `phone:${company.company_phone}`, // Store phone in email field with prefix
           name: company.name,
           status: 'pending' as const,
-          company_id: company.id,
         })),
         ...manualPhones.map(phone => ({
           campaign_id: campaign.id,
           email: `phone:${phone.phone}`,
           name: phone.name || 'Manual Entry',
           status: 'pending' as const,
-          company_id: null,
         })),
       ];
 
