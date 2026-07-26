@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Trash2, Users, FolderOpen, Plus, Upload, Building2, UserCircle, ClipboardPaste, Inbox, Target, Megaphone, Send, Copy, Check } from "lucide-react";
+import { Loader2, Pencil, Trash2, Users, FolderOpen, Plus, Upload, Building2, UserCircle, ClipboardPaste, Inbox, Target, Megaphone, Send, Copy, Check, UserPlus, X } from "lucide-react";
 import { useCampaignDialog } from "@/contexts/CampaignDialogContext";
 import {
   Dialog,
@@ -110,6 +110,11 @@ export default function RecipientGroups() {
   const [savingRename, setSavingRename] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [manageId, setManageId] = useState<string | null>(null);
+  const [manageName, setManageName] = useState("");
+  const [addEmailsText, setAddEmailsText] = useState("");
+  const [savingMembers, setSavingMembers] = useState(false);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createTab, setCreateTab] = useState<
@@ -730,6 +735,81 @@ export default function RecipientGroups() {
     }
   };
 
+  // ── Manage members (view / add / remove) ──
+  const { data: manageMembers = [], isLoading: loadingManageMembers } = useQuery({
+    queryKey: ["recipient-group-members", manageId],
+    enabled: !!manageId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("recipient_group_members")
+        .select("id, email, first_name, last_name, company")
+        .eq("group_id", manageId)
+        .order("email", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const openManage = (g: RecipientGroup) => {
+    setManageId(g.id);
+    setManageName(g.name);
+    setAddEmailsText("");
+    setSelectedMemberIds(new Set());
+  };
+
+  const refreshMembers = () => {
+    queryClient.invalidateQueries({ queryKey: ["recipient-group-members", manageId] });
+    queryClient.invalidateQueries({ queryKey: ["recipient-groups-page"] });
+    queryClient.invalidateQueries({ queryKey: ["recipient-groups"] });
+  };
+
+  const addMembers = async () => {
+    if (!manageId || !addEmailsText.trim()) return;
+    setSavingMembers(true);
+    try {
+      // Forgiving: pull every email-looking token from the paste (comma/newline/space).
+      const emails = (addEmailsText.match(/[^\s@,;<>()"']+@[^\s@,;<>()"']+\.[^\s@,;<>()"']+/g) || [])
+        .map((e) => e.toLowerCase().trim());
+      const existing = new Set((manageMembers as any[]).map((m) => (m.email || "").toLowerCase()));
+      const seen = new Set<string>();
+      const toInsert: any[] = [];
+      for (const email of emails) {
+        if (existing.has(email) || seen.has(email)) continue;
+        seen.add(email);
+        toInsert.push({ group_id: manageId, email });
+      }
+      if (toInsert.length === 0) {
+        toast({ title: "Nothing to add", description: "No new valid emails found in that text.", variant: "destructive" });
+        return;
+      }
+      const { error } = await supabase.from("recipient_group_members").insert(toInsert);
+      if (error) throw error;
+      toast({ title: `Added ${toInsert.length} member${toInsert.length === 1 ? "" : "s"}` });
+      setAddEmailsText("");
+      refreshMembers();
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message ?? "Failed to add members", variant: "destructive" });
+    } finally {
+      setSavingMembers(false);
+    }
+  };
+
+  const removeMembers = async (ids: string[]) => {
+    if (!manageId || ids.length === 0) return;
+    setSavingMembers(true);
+    try {
+      const { error } = await supabase.from("recipient_group_members").delete().in("id", ids);
+      if (error) throw error;
+      toast({ title: `Removed ${ids.length} member${ids.length === 1 ? "" : "s"}` });
+      setSelectedMemberIds((prev) => { const n = new Set(prev); ids.forEach((i) => n.delete(i)); return n; });
+      refreshMembers();
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message ?? "Failed to remove", variant: "destructive" });
+    } finally {
+      setSavingMembers(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -829,6 +909,16 @@ export default function RecipientGroups() {
                           title="Copy group ID (for the API / MCP)"
                         >
                           {copiedGroupId === g.id ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => openManage(g)}
+                          aria-label="Manage members"
+                          title="Add or remove emails"
+                        >
+                          <UserPlus className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -1259,6 +1349,74 @@ export default function RecipientGroups() {
               {savingRename ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Save
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage members dialog */}
+      <Dialog open={!!manageId} onOpenChange={(open) => !open && setManageId(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manage members — {manageName}</DialogTitle>
+            <DialogDescription>Add or remove emails in this group. Changes save immediately.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-1">
+            {/* Add emails */}
+            <div className="space-y-2">
+              <Label>Add emails</Label>
+              <Textarea
+                value={addEmailsText}
+                onChange={(e) => setAddEmailsText(e.target.value)}
+                rows={2}
+                placeholder="Paste emails — commas, spaces or new lines (e.g. jane@acme.com, john@beta.co)"
+              />
+              <Button size="sm" onClick={addMembers} disabled={savingMembers || !addEmailsText.trim()}>
+                {savingMembers ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+                Add to group
+              </Button>
+            </div>
+
+            {/* Members list */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>{(manageMembers as any[]).length} member{(manageMembers as any[]).length === 1 ? "" : "s"}</Label>
+                {selectedMemberIds.size > 0 && (
+                  <Button size="sm" variant="destructive" onClick={() => removeMembers([...selectedMemberIds])} disabled={savingMembers}>
+                    <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove {selectedMemberIds.size} selected
+                  </Button>
+                )}
+              </div>
+              <div className="max-h-72 overflow-auto rounded-md border divide-y">
+                {loadingManageMembers ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
+                ) : (manageMembers as any[]).length === 0 ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">No members yet — add some above.</div>
+                ) : (
+                  (manageMembers as any[]).map((m) => (
+                    <div key={m.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+                      <Checkbox
+                        checked={selectedMemberIds.has(m.id)}
+                        onCheckedChange={(c) => setSelectedMemberIds((prev) => { const n = new Set(prev); c ? n.add(m.id) : n.delete(m.id); return n; })}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate">{m.email}</div>
+                        {(m.first_name || m.last_name || m.company) && (
+                          <div className="truncate text-xs text-muted-foreground">{[[m.first_name, m.last_name].filter(Boolean).join(" "), m.company].filter(Boolean).join(" · ")}</div>
+                        )}
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeMembers([m.id])} disabled={savingMembers} aria-label="Remove">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManageId(null)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
