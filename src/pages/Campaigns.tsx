@@ -620,6 +620,40 @@ export default function Campaigns() {
     }
   };
 
+  // One-click clean: remove every bounced/failed (undeliverable) recipient so the
+  // remaining list is send-ready. Deletes by status server-side (not just the loaded
+  // page) and recomputes the campaign's total.
+  const handleRemoveInvalid = async () => {
+    if (!selectedCampaign) return;
+    const invalidCount = (statusCounts?.bounced ?? 0) + (statusCounts?.failed ?? 0);
+    if (invalidCount === 0) { toast.info("No bounced or failed recipients to remove."); return; }
+    setBulkRemoving(true);
+    try {
+      const { error: delErr } = await supabase
+        .from("email_campaign_recipients")
+        .delete()
+        .eq("campaign_id", selectedCampaign)
+        .in("status", ["bounced", "failed"]);
+      if (delErr) throw delErr;
+      const { count: newTotal } = await supabase
+        .from("email_campaign_recipients")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", selectedCampaign);
+      await supabase.from("email_campaigns").update({ total_recipients: newTotal ?? 0 }).eq("id", selectedCampaign);
+      toast.success(`Removed ${invalidCount} bounced/failed recipient(s) — list cleaned.`);
+      setSelectedRecipientIds(new Set());
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["campaign-recipients", selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ["campaign-recipient-counts", selectedCampaign] }),
+        queryClient.invalidateQueries({ queryKey: ["email-campaigns"] }),
+      ]);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to clean list");
+    } finally {
+      setBulkRemoving(false);
+    }
+  };
+
   const openCompaniesForNewList = () => {
     window.open(window.location.origin + "/companies", "_blank");
     toast.success("Companies page opened. Select companies there, then come back and click Add Recipients.");
@@ -3405,6 +3439,18 @@ export default function Campaigns() {
                       {bulkRemoving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
                       {selectedRecipientIds.size > 0 ? `Delete selected (${selectedRecipientIds.size})` : "Delete selected"}
                     </Button>
+                    {((statusCounts?.bounced ?? 0) + (statusCounts?.failed ?? 0)) > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRemoveInvalid}
+                        disabled={bulkRemoving}
+                        className="text-destructive border-destructive/40 hover:text-destructive hover:bg-destructive/5"
+                      >
+                        {bulkRemoving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
+                        Remove bounced/failed ({(statusCounts?.bounced ?? 0) + (statusCounts?.failed ?? 0)})
+                      </Button>
+                    )}
                     {pendingRecipients.length > 0 && (
                       <Button
                         variant="outline"
