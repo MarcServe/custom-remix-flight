@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -93,6 +94,8 @@ export default function CompanySequences() {
   const [industryFilter, setIndustryFilter] = useState<string>('all');
   const [selectedSequence, setSelectedSequence] = useState<CompanySequence | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [selectedSeqIds, setSelectedSeqIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Real-time updates for company sequences
   useEffect(() => {
@@ -185,6 +188,66 @@ export default function CompanySequences() {
 
   const industries = Array.from(new Set(companySequences?.map(s => s.companies.industry).filter(Boolean) || []));
   const maxSteps = Math.min(10, Math.max(1, ...(filteredSequences?.map(s => s.email_sequences?.steps?.length || 0) || [0])));
+
+  // Resolve campaign names so sequences can be grouped by the bulk campaign they came from.
+  const campaignIds = useMemo(
+    () => Array.from(new Set((companySequences || []).map(s => (s as any).campaign_id).filter(Boolean))),
+    [companySequences]
+  );
+  const { data: campaignNameMap = {} } = useQuery({
+    queryKey: ['seq-campaign-names', campaignIds],
+    enabled: campaignIds.length > 0,
+    queryFn: async () => {
+      const { data } = await supabase.from('email_campaigns').select('id, name').in('id', campaignIds);
+      const m: Record<string, string> = {};
+      for (const c of data || []) m[c.id] = c.name;
+      return m;
+    },
+  });
+
+  // Group the (filtered) sequences by their originating campaign so you can track
+  // who responded within each bulk campaign, instead of one flat list.
+  const groupedSequences = useMemo(() => {
+    const map = new Map<string, { key: string; name: string; seqs: CompanySequence[] }>();
+    for (const seq of filteredSequences || []) {
+      const cid = (seq as any).campaign_id || 'none';
+      if (!map.has(cid)) {
+        map.set(cid, { key: cid, name: cid === 'none' ? 'Standalone sequences' : (campaignNameMap[cid] || 'Campaign'), seqs: [] });
+      }
+      map.get(cid)!.seqs.push(seq);
+    }
+    // Named campaigns first, standalone last.
+    return Array.from(map.values()).sort((a, b) => (a.key === 'none' ? 1 : b.key === 'none' ? -1 : a.name.localeCompare(b.name)));
+  }, [filteredSequences, campaignNameMap]);
+
+  const toggleSeq = (id: string) =>
+    setSelectedSeqIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleGroup = (seqs: CompanySequence[]) =>
+    setSelectedSeqIds(prev => {
+      const n = new Set(prev);
+      const allSelected = seqs.every(s => n.has(s.id));
+      seqs.forEach(s => allSelected ? n.delete(s.id) : n.add(s.id));
+      return n;
+    });
+
+  const handleBulkDeleteSequences = async () => {
+    if (selectedSeqIds.size === 0) return;
+    if (!confirm(`Delete ${selectedSeqIds.size} sequence(s)? This removes them and their tracking. This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      const ids = Array.from(selectedSeqIds);
+      await supabase.from('email_activities').delete().in('company_sequence_id', ids);
+      const { error } = await supabase.from('company_sequences').delete().in('id', ids);
+      if (error) throw error;
+      toast.success(`Deleted ${ids.length} sequence(s)`);
+      setSelectedSeqIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['company-sequences-page'] });
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to delete sequences');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   const handleStatusChange = async (id: string, status: 'draft' | 'active' | 'paused' | 'completed') => {
     await updateStatusMutation.mutateAsync({ id, status });
@@ -379,6 +442,18 @@ export default function CompanySequences() {
 
         {/* Sequences List */}
         <div className="space-y-4">
+          {selectedSeqIds.size > 0 && (
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/50 p-2 sticky top-2 z-10 backdrop-blur">
+              <span className="text-sm font-medium px-1">{selectedSeqIds.size} selected</span>
+              <Button size="sm" variant="destructive" onClick={handleBulkDeleteSequences} disabled={bulkDeleting}>
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                {bulkDeleting ? 'Deleting…' : 'Delete selected'}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedSeqIds(new Set())} disabled={bulkDeleting}>
+                Clear
+              </Button>
+            </div>
+          )}
           {filteredSequences?.length === 0 ? (
             <Card className="border-2">
               <CardContent className="py-12 text-center">
@@ -396,13 +471,24 @@ export default function CompanySequences() {
               </CardContent>
             </Card>
           ) : (
-            filteredSequences?.map(sequence => {
+            groupedSequences.map(group => {
+              const groupReplied = group.seqs.reduce((n, s) => n + ((s.email_activities || []).some(a => a.replied_at) ? 1 : 0), 0);
+              const groupAllSelected = group.seqs.length > 0 && group.seqs.every(s => selectedSeqIds.has(s.id));
+              return (
+                <div key={group.key} className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-3 pt-2 border-b pb-2">
+                    <Checkbox checked={groupAllSelected} onCheckedChange={() => toggleGroup(group.seqs)} aria-label="Select all in campaign" />
+                    <h3 className="text-base font-semibold">{group.name}</h3>
+                    <Badge variant="secondary">{group.seqs.length} {group.seqs.length === 1 ? 'company' : 'companies'}</Badge>
+                    {groupReplied > 0 && <Badge variant="outline" className="text-green-600 border-green-500/30">{groupReplied} replied</Badge>}
+                  </div>
+                  {group.seqs.map(sequence => {
               const engagement = calculateEngagement(sequence.email_activities || []);
               const totalSteps = sequence.email_sequences?.steps?.length || 0;
               const progress = totalSteps > 0 ? Math.round((sequence.current_step / totalSteps) * 100) : 0;
 
               return (
-                <Card 
+                <Card
                   key={sequence.id}
                   className="border-2 hover:border-primary/50 transition-all shadow-lg hover:shadow-xl cursor-pointer group relative overflow-hidden"
                   onClick={() => {
@@ -422,6 +508,13 @@ export default function CompanySequences() {
 
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-start gap-4 flex-1">
+                        <div onClick={(e) => e.stopPropagation()} className="pt-1">
+                          <Checkbox
+                            checked={selectedSeqIds.has(sequence.id)}
+                            onCheckedChange={() => toggleSeq(sequence.id)}
+                            aria-label="Select sequence"
+                          />
+                        </div>
                         <div className={`w-12 h-12 rounded-lg flex items-center justify-center shadow-sm shrink-0 ${
                           sequence.status === 'active' ? 'bg-green-500' :
                           sequence.status === 'paused' ? 'bg-yellow-500' :
@@ -741,6 +834,9 @@ export default function CompanySequences() {
                     )}
                   </CardContent>
                 </Card>
+              );
+            })}
+                </div>
               );
             })
           )}
