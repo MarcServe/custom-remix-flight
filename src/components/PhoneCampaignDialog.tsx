@@ -10,7 +10,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { Phone, Loader2, Users, Send, CheckCircle, Settings, AlertCircle, X, FlaskConical, Plus } from 'lucide-react';
+import { Phone, Loader2, Users, Send, CheckCircle, Settings, AlertCircle, X, FlaskConical, Plus, Upload } from 'lucide-react';
+import { parseCSV } from '@/lib/utils/csv-parser';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PhoneServiceDialog } from '@/components/integrations/PhoneServiceDialog';
@@ -27,6 +28,7 @@ interface ManualPhoneNumber {
   id: string;
   phone: string;
   name?: string;
+  message?: string; // optional per-recipient SMS text (from CSV), overrides the campaign message
 }
 
 export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [] }: PhoneCampaignDialogProps) {
@@ -150,6 +152,60 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
 
   const removeManualPhone = (id: string) => {
     setManualPhones(prev => prev.filter(p => p.id !== id));
+  };
+
+  // Import a CSV of recipients — auto-detects name / phone / message columns and
+  // populates the list ready to send. Message column is optional (per-recipient text).
+  const handleCsvImport = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const { headers, rows } = parseCSV(text);
+      if (headers.length === 0 || rows.length === 0) {
+        toast({ title: 'Empty file', description: 'No rows found in that CSV.', variant: 'destructive' });
+        return;
+      }
+      const findCol = (re: RegExp) => headers.findIndex(h => re.test(h.trim()));
+      let phoneIdx = findCol(/phone|mobile|tel|number|cell|whatsapp|contact\s*number/i);
+      const nameIdx = findCol(/name|contact|company|business|organi[sz]ation|first/i);
+      const msgIdx = findCol(/message|text|body|sms|note|content/i);
+      // No obvious phone header → pick the column whose values look like phone numbers.
+      if (phoneIdx === -1) {
+        for (let i = 0; i < headers.length; i++) {
+          const sample = rows.find(r => (r[headers[i]] || '').trim())?.[headers[i]] || '';
+          if (/[\d][\d\s()+.\-]{6,}/.test(sample) && (sample.replace(/\D/g, '').length >= 7)) { phoneIdx = i; break; }
+        }
+      }
+      if (phoneIdx === -1) {
+        toast({ title: 'No phone column found', description: 'Add a header like "phone" or "mobile".', variant: 'destructive' });
+        return;
+      }
+      const existing = new Set(manualPhones.map(p => p.phone));
+      const added: ManualPhoneNumber[] = [];
+      for (const r of rows) {
+        const raw = (r[headers[phoneIdx]] || '').trim();
+        const phone = raw.replace(/[^\d+]/g, ''); // keep digits and leading +
+        if (!phone || phone.replace(/\D/g, '').length < 7) continue;
+        if (existing.has(phone)) continue;
+        existing.add(phone);
+        added.push({
+          id: `csv_${Date.now()}_${added.length}`,
+          phone,
+          name: nameIdx >= 0 ? ((r[headers[nameIdx]] || '').trim() || undefined) : undefined,
+          message: msgIdx >= 0 ? ((r[headers[msgIdx]] || '').trim() || undefined) : undefined,
+        });
+      }
+      if (added.length === 0) {
+        toast({ title: 'Nothing imported', description: 'No new valid phone numbers found.', variant: 'destructive' });
+        return;
+      }
+      setManualPhones(prev => [...prev, ...added]);
+      setActiveTab('manual');
+      const withMsg = added.filter(a => a.message).length;
+      toast({ title: `Imported ${added.length} number${added.length === 1 ? '' : 's'}`, description: withMsg ? `${withMsg} include a per-recipient message.` : 'Ready to send.' });
+    } catch (e: any) {
+      toast({ title: 'Import failed', description: e?.message ?? 'Could not read that CSV.', variant: 'destructive' });
+    }
   };
 
   const handleTestSMS = async () => {
@@ -334,6 +390,8 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
           email: `phone:${phone.phone}`,
           name: phone.name || 'Manual Entry',
           status: 'pending' as const,
+          // Per-recipient SMS text where the CSV provided one (falls back to the campaign message at send).
+          ...(phone.message ? { personalized_body_text: phone.message } : {}),
         })),
       ];
 
@@ -594,7 +652,26 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
             </TabsContent>
 
             <TabsContent value="manual" className="space-y-2 mt-4">
-              <Label>Add Phone Numbers Manually</Label>
+              {/* CSV import */}
+              <div className="rounded-lg border border-dashed p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-muted/20">
+                <div className="text-sm">
+                  <div className="font-medium flex items-center gap-1.5"><Upload className="h-4 w-4" /> Import from CSV</div>
+                  <div className="text-xs text-muted-foreground">Columns auto-detected: <strong>name</strong>, <strong>phone</strong>, and optional <strong>message</strong> (per-recipient text).</div>
+                </div>
+                <Button variant="outline" size="sm" asChild disabled={isCreating}>
+                  <label className="cursor-pointer">
+                    <Upload className="h-4 w-4 mr-2" /> Choose CSV
+                    <input
+                      type="file"
+                      accept=".csv,text/csv,text/plain"
+                      className="hidden"
+                      onChange={(e) => { handleCsvImport(e.target.files?.[0] || null); e.currentTarget.value = ''; }}
+                    />
+                  </label>
+                </Button>
+              </div>
+
+              <Label className="pt-2 block">Or add phone numbers manually</Label>
               <div className="flex gap-2">
                 <div className="flex-1 space-y-2">
                   <Input
@@ -646,6 +723,11 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
                             <Phone className="h-3 w-3" />
                             {phone.phone}
                           </div>
+                          {phone.message && (
+                            <div className="text-xs text-muted-foreground/80 mt-1 truncate italic" title={phone.message}>
+                              “{phone.message}”
+                            </div>
+                          )}
                         </div>
                         <Button
                           variant="ghost"
