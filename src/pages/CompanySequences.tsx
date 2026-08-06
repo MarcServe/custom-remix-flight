@@ -261,8 +261,15 @@ export default function CompanySequences() {
   };
 
   const handleDeleteSequence = async (sequenceId: string) => {
-    if (confirm('Are you sure you want to delete this sequence? This action cannot be undone.')) {
-      await updateStatusMutation.mutateAsync({ id: sequenceId, status: 'completed' });
+    if (!confirm('Delete this sequence? This removes it and its tracking. This cannot be undone.')) return;
+    try {
+      await supabase.from('email_activities').delete().eq('company_sequence_id', sequenceId);
+      const { error } = await supabase.from('company_sequences').delete().eq('id', sequenceId);
+      if (error) throw error;
+      toast.success('Sequence deleted');
+      queryClient.invalidateQueries({ queryKey: ['company-sequences-page'] });
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to delete sequence');
     }
   };
 
