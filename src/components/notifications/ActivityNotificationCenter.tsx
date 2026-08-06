@@ -176,8 +176,18 @@ export function ActivityNotificationCenter() {
     setTimeout(() => navigate(target), 0);
   };
 
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    // Treat "viewed the panel and closed it" as read, like most notification
+    // centers — otherwise the badge only clears on an explicit click, which
+    // looks stuck if you just glance at the list without clicking each item.
+    if (!next && notifications.length > 0) {
+      markAllAsReadInState(notifications.map((n) => n.id));
+    }
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
