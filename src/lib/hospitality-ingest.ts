@@ -50,25 +50,53 @@ export function isVerifiedHospitalityLead(lead: CuratedHospitalityLead): boolean
   return !!(lead.propertyEmail || lead.decisionMakerEmail || lead.salesEmail || lead.reservationsEmail);
 }
 
+function normalizeEmail(raw: string | undefined | null): string | null {
+  const email = String(raw || "")
+    .trim()
+    .toLowerCase();
+  if (!email || !email.includes("@")) return null;
+  const local = email.split("@")[0];
+  const domain = email.split("@")[1] || "";
+  if (SKIP_LOCAL.has(local)) return null;
+  if (FREEMAIL.has(domain)) return null;
+  return email;
+}
+
+/** Best single outreach email (decision maker → sales → property → reservations). */
 export function pickBestVerifiedEmail(lead: CuratedHospitalityLead): string | null {
-  const ordered = [
+  for (const raw of [
     lead.decisionMakerEmail,
     lead.salesEmail,
     lead.propertyEmail,
     lead.reservationsEmail,
-  ];
-  for (const raw of ordered) {
-    const email = String(raw || "")
-      .trim()
-      .toLowerCase();
-    if (!email || !email.includes("@")) continue;
-    const local = email.split("@")[0];
-    const domain = email.split("@")[1] || "";
-    if (SKIP_LOCAL.has(local)) continue;
-    if (FREEMAIL.has(domain)) continue;
-    return email;
+  ]) {
+    const email = normalizeEmail(raw);
+    if (email) return email;
   }
   return null;
+}
+
+export type HospitalityContactRole = "Decision maker" | "Sales" | "Property" | "Reservations";
+
+/** All verified published emails for a property (one campaign recipient each). */
+export function listVerifiedEmails(
+  lead: CuratedHospitalityLead
+): Array<{ email: string; role: HospitalityContactRole }> {
+  const ordered: Array<{ raw?: string; role: HospitalityContactRole }> = [
+    { raw: lead.decisionMakerEmail, role: "Decision maker" },
+    { raw: lead.salesEmail, role: "Sales" },
+    { raw: lead.propertyEmail, role: "Property" },
+    { raw: lead.reservationsEmail, role: "Reservations" },
+  ];
+  const seen = new Set<string>();
+  const out: Array<{ email: string; role: HospitalityContactRole }> = [];
+  for (const item of ordered) {
+    const email = normalizeEmail(item.raw);
+    if (!email || seen.has(email)) continue;
+    seen.add(email);
+    out.push({ email, role: item.role });
+  }
+  return out;
 }
 
 export function marketForLead(lead: CuratedHospitalityLead): HospitalityMarket | null {
@@ -79,29 +107,33 @@ export function marketForLead(lead: CuratedHospitalityLead): HospitalityMarket |
 }
 
 export function curatedLeadToRecipient(lead: CuratedHospitalityLead): HospitalityRecipient | null {
-  if (!isVerifiedHospitalityLead(lead)) return null;
-  const email = pickBestVerifiedEmail(lead);
-  if (!email) return null;
+  const many = curatedLeadToRecipients(lead);
+  return many[0] || null;
+}
+
+/** One recipient per published verified email on the property (multi-contact safe). */
+export function curatedLeadToRecipients(lead: CuratedHospitalityLead): HospitalityRecipient[] {
+  if (!isVerifiedHospitalityLead(lead)) return [];
   const market = marketForLead(lead);
-  if (!market) return null;
+  if (!market) return [];
 
   const dmName = String(lead.decisionMakerName || "").trim();
   const parts = dmName.split(/\s+/).filter(Boolean);
   const first = parts[0] || "Team";
   const last = parts.slice(1).join(" ") || "";
-
-  return {
+  const contacts = listVerifiedEmails(lead);
+  return contacts.map(({ email, role }) => ({
     email,
-    first_name: first,
-    last_name: last,
+    first_name: role === "Decision maker" ? first : role,
+    last_name: role === "Decision maker" ? last : "",
     company: lead.propertyName,
-    name: dmName || lead.propertyName,
+    name: role === "Decision maker" && dmName ? dmName : `${lead.propertyName} (${role})`,
     market,
     city: lead.city,
     website: lead.website,
     sourceUrl: lead.sourceUrl,
     phone: lead.phone,
-  };
+  }));
 }
 
 export function partitionRecipientsByMarket(leads: CuratedHospitalityLead[]): {
@@ -115,19 +147,18 @@ export function partitionRecipientsByMarket(leads: CuratedHospitalityLead[]): {
   let skipped = 0;
 
   for (const lead of leads) {
-    const r = curatedLeadToRecipient(lead);
-    if (!r) {
+    const recips = curatedLeadToRecipients(lead);
+    if (!recips.length) {
       skipped++;
       continue;
     }
-    const key = r.email.toLowerCase();
-    if (seen.has(key)) {
-      skipped++;
-      continue;
+    for (const r of recips) {
+      const key = r.email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (r.market === "US") US.push(r);
+      else UK.push(r);
     }
-    seen.add(key);
-    if (r.market === "US") US.push(r);
-    else UK.push(r);
   }
 
   return { US, UK, skipped };

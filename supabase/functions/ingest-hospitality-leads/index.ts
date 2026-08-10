@@ -80,16 +80,25 @@ function dateLabel(): string {
   });
 }
 
-function pickEmail(lead: CuratedLead): string | null {
-  for (const raw of [lead.decisionMakerEmail, lead.salesEmail, lead.propertyEmail, lead.reservationsEmail]) {
-    const email = String(raw || "").trim().toLowerCase();
-    if (!EMAIL_RE.test(email)) continue;
+function pickEmails(lead: CuratedLead): Array<{ email: string; role: string }> {
+  const ordered: Array<{ raw?: string; role: string }> = [
+    { raw: lead.decisionMakerEmail, role: "Decision maker" },
+    { raw: lead.salesEmail, role: "Sales" },
+    { raw: lead.propertyEmail, role: "Property" },
+    { raw: lead.reservationsEmail, role: "Reservations" },
+  ];
+  const seen = new Set<string>();
+  const out: Array<{ email: string; role: string }> = [];
+  for (const item of ordered) {
+    const email = String(item.raw || "").trim().toLowerCase();
+    if (!EMAIL_RE.test(email) || seen.has(email)) continue;
     const local = email.split("@")[0];
     const domain = email.split("@")[1] || "";
     if (SKIP_LOCAL.has(local) || FREEMAIL.has(domain)) continue;
-    return email;
+    seen.add(email);
+    out.push({ email, role: item.role });
   }
-  return null;
+  return out;
 }
 
 function marketFor(lead: CuratedLead): Market | null {
@@ -112,25 +121,30 @@ function toRecipients(leads: CuratedLead[], markets: Market[]): { byMarket: Reco
   let skipped = 0;
   for (const lead of leads) {
     if (!isVerified(lead)) { skipped++; continue; }
-    const email = pickEmail(lead);
     const market = marketFor(lead);
-    if (!email || !market || !want.has(market)) { skipped++; continue; }
-    if (seen.has(email)) { skipped++; continue; }
-    seen.add(email);
+    if (!market || !want.has(market)) { skipped++; continue; }
+    const contacts = pickEmails(lead);
+    if (!contacts.length) { skipped++; continue; }
     const dm = String(lead.decisionMakerName || "").trim();
     const parts = dm.split(/\s+/).filter(Boolean);
-    byMarket[market].push({
-      email,
-      first_name: parts[0] || "Team",
-      last_name: parts.slice(1).join(" ") || "",
-      company: String(lead.propertyName || "").trim() || email,
-      name: dm || String(lead.propertyName || "").trim() || email,
-      market,
-      city: lead.city,
-      website: lead.website,
-      sourceUrl: lead.sourceUrl,
-      phone: lead.phone,
-    });
+    const company = String(lead.propertyName || "").trim() || contacts[0].email;
+    for (const { email, role } of contacts) {
+      if (seen.has(email)) continue;
+      seen.add(email);
+      // One campaign recipient per published contact email (avoids invalid multi-email cells)
+      byMarket[market].push({
+        email,
+        first_name: role === "Decision maker" ? (parts[0] || "Team") : role,
+        last_name: role === "Decision maker" ? (parts.slice(1).join(" ") || "") : "",
+        company,
+        name: role === "Decision maker" && dm ? dm : `${company} (${role})`,
+        market,
+        city: lead.city,
+        website: lead.website,
+        sourceUrl: lead.sourceUrl,
+        phone: lead.phone,
+      });
+    }
   }
   return { byMarket, skipped };
 }

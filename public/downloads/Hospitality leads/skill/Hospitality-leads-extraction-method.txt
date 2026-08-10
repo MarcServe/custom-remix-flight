@@ -99,14 +99,19 @@ Current download pack:
 - Branch raw URL pattern:  
   `https://github.com/MarcServe/custom-remix-flight/raw/<branch>/public/downloads/Hospitality-leads-FOR-DESKTOP.zip`
 
-## Campaign / newsletter ingest
+## Campaign groups (preferred path)
 
-After a verified batch exists:
+UI: `/hospitality-leads` → **Create US + UK groups** (client-side, no edge deploy required).
 
-1. Call `ingest-hospitality-leads` with `action: "ingest"`, `markets: ["US","UK"]`, and `leads` (or `leads_base_url`).
-2. Creates separate **US** and **UK** recipient groups, CRM rows, draft campaigns (modern HTML), newsletter drafts, and daily newsletter series.
-3. Optional `enable_daily` + cron `hospitality-ingest` for morning re-ingest of verified emails only.
-4. UI: `/hospitality-leads` → **Campaign & newsletter ingest**.
+- One **recipient_group_members** row per published contact email (multi-contact businesses expand).
+- Then on `/campaigns` use **Add from group**, or click **US/UK group + open campaign**.
+- Full ingest (`ingest-hospitality-leads`) still available for CRM + draft campaigns + newsletters.
+
+## Multi-email / campaign upload
+
+Campaign CSV/JSON import must **expand** comma/semicolon-separated emails into one recipient each
+(`expandCampaignEmailCell` in `src/lib/csv-campaign-import.ts`). Never reject a whole row because a
+business cell contains `a@x.com, b@x.com`.
 
 ## High-yield brand patterns (examples)
 

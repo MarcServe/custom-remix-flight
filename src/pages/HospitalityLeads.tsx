@@ -50,6 +50,14 @@ import {
   type HospitalityLeadExportRow,
 } from "@/lib/utils/hospitality-leads-export";
 import { loadCuratedHospitalityLeads } from "@/lib/data/curated-hospitality-leads";
+import {
+  hospitalityGroupName,
+  partitionRecipientsByMarket,
+  type HospitalityMarket,
+  type HospitalityRecipient,
+} from "@/lib/hospitality-ingest";
+import { createRecipientGroupWithMembers } from "@/lib/recipient-group-mutations";
+import { useCampaignDialog } from "@/contexts/CampaignDialogContext";
 import { useLeadFinderStream } from "@/hooks/use-lead-finder-stream";
 import { cn } from "@/lib/utils";
 
@@ -124,6 +132,7 @@ export default function HospitalityLeads() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { openWithPeople } = useCampaignDialog();
   const streamingSearch = useLeadFinderStream();
 
   const [selectedTypes, setSelectedTypes] = useState<string[]>(["hotels", "short-stay"]);
@@ -148,11 +157,13 @@ export default function HospitalityLeads() {
   const [dailyAutomationOn, setDailyAutomationOn] = useState(false);
   const [ingestOpts, setIngestOpts] = useState({
     createCrm: true,
-    createCampaigns: true,
-    createNewsletters: true,
-    createSeries: true,
+    createCampaigns: false,
+    createNewsletters: false,
+    createSeries: false,
   });
   const [lastIngestSummary, setLastIngestSummary] = useState<string | null>(null);
+  const [createdGroupIds, setCreatedGroupIds] = useState<Partial<Record<HospitalityMarket, string>>>({});
+  const [isCreatingGroups, setIsCreatingGroups] = useState(false);
 
   const isRunning = pipelineStep !== "idle" && pipelineStep !== "done";
 
@@ -615,6 +626,90 @@ export default function HospitalityLeads() {
     toast({ title: "Exported", description: `${rows.length} leads downloaded as CSV.` });
   };
 
+  const recipientsToCampaignPeople = (recips: HospitalityRecipient[]) =>
+    recips.map((r, i) => ({
+      id: `hosp-${r.market}-${i}-${r.email}`,
+      first_name: r.first_name || "",
+      last_name: r.last_name || "",
+      email: r.email,
+      companies: r.company ? { name: r.company } : undefined,
+    }));
+
+  /** Create US/UK recipient groups locally (no edge deploy needed) — one member per contact email. */
+  const handleCreateCampaignGroups = async (
+    markets: HospitalityMarket[] = ["US", "UK"],
+    opts?: { openCampaign?: boolean; marketToOpen?: HospitalityMarket }
+  ) => {
+    if (!user) {
+      toast({ title: "Sign in required", variant: "destructive" });
+      return;
+    }
+    setIsCreatingGroups(true);
+    setLastIngestSummary(null);
+    try {
+      const file = await loadCuratedHospitalityLeads();
+      const { US, UK, skipped } = partitionRecipientsByMarket(file.leads);
+      const byMarket: Record<HospitalityMarket, HospitalityRecipient[]> = { US, UK };
+      const created: Partial<Record<HospitalityMarket, { id: string; name: string; count: number }>> = {};
+
+      for (const market of markets) {
+        const recips = byMarket[market];
+        if (!recips.length) continue;
+        const { groupId, count } = await createRecipientGroupWithMembers(supabase, {
+          userId: user.id,
+          name: hospitalityGroupName(market),
+          description: `Hospitality ${market} verified emails (one recipient per published contact). Use via Campaigns → Add from group.`,
+          members: recips.map((r) => ({
+            email: r.email,
+            first_name: r.first_name || null,
+            last_name: r.last_name || null,
+            company: r.company || null,
+            person_id: null,
+          })),
+        });
+        created[market] = { id: groupId, name: hospitalityGroupName(market), count };
+      }
+
+      const ids: Partial<Record<HospitalityMarket, string>> = {};
+      if (created.US) ids.US = created.US.id;
+      if (created.UK) ids.UK = created.UK.id;
+      setCreatedGroupIds(ids);
+
+      const parts = markets.map((m) => {
+        const c = created[m];
+        return c ? `${m}: ${c.count} emails → "${c.name}"` : `${m}: 0`;
+      });
+      const summary = `${parts.join(" · ")}${skipped ? ` · skipped ${skipped} properties` : ""}. Open Campaigns → Add from group.`;
+      setLastIngestSummary(summary);
+      queryClient.invalidateQueries({ queryKey: ["recipient-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["recipient-groups-page"] });
+      queryClient.invalidateQueries({ queryKey: ["bulk-email-recipient-groups"] });
+
+      if (opts?.openCampaign) {
+        const openMarket = opts.marketToOpen || markets[0];
+        const recips = byMarket[openMarket] || [];
+        if (recips.length) {
+          openWithPeople(recipientsToCampaignPeople(recips));
+          toast({
+            title: `${openMarket} campaign ready`,
+            description: `${recips.length} recipients loaded. Group also saved for reuse.`,
+          });
+        }
+      } else {
+        toast({ title: "Groups created", description: summary });
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        title: "Could not create groups",
+        description: err?.message || "Group creation failed.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingGroups(false);
+    }
+  };
+
   const handleIngestPipeline = async (markets: Array<"US" | "UK"> = ["US", "UK"]) => {
     if (!user) {
       toast({ title: "Sign in required", variant: "destructive" });
@@ -900,66 +995,99 @@ export default function HospitalityLeads() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Rocket className="h-4 w-4 text-primary" />
-                Campaign &amp; newsletter ingest
+                Campaign groups &amp; ingest
               </CardTitle>
               <CardDescription>
-                Automatically create US and UK recipient groups, draft campaigns with modern templates, and daily
-                newsletter series — verified website emails only.
+                Creates separate US and UK recipient groups (one row per contact email — multi-contact businesses
+                expand automatically). Then use <strong>Add from group</strong> on the Campaigns page, or open a
+                campaign here.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-4 text-sm">
-                <label className="flex items-center gap-2">
-                  <Checkbox
-                    checked={ingestOpts.createCrm}
-                    onCheckedChange={(v) => setIngestOpts((o) => ({ ...o, createCrm: !!v }))}
-                  />
-                  Save to CRM
-                </label>
-                <label className="flex items-center gap-2">
-                  <Checkbox
-                    checked={ingestOpts.createCampaigns}
-                    onCheckedChange={(v) => setIngestOpts((o) => ({ ...o, createCampaigns: !!v }))}
-                  />
-                  Create US + UK campaigns
-                </label>
-                <label className="flex items-center gap-2">
-                  <Checkbox
-                    checked={ingestOpts.createNewsletters}
-                    onCheckedChange={(v) => setIngestOpts((o) => ({ ...o, createNewsletters: !!v }))}
-                  />
-                  Create newsletter drafts
-                </label>
-                <label className="flex items-center gap-2">
-                  <Checkbox
-                    checked={ingestOpts.createSeries}
-                    onCheckedChange={(v) => setIngestOpts((o) => ({ ...o, createSeries: !!v }))}
-                  />
-                  Daily newsletter series
-                </label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() => void handleCreateCampaignGroups(["US", "UK"])}
+                  disabled={isCreatingGroups || isIngesting}
+                  className="gap-2"
+                >
+                  {isCreatingGroups ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                  {isCreatingGroups ? "Creating groups…" : "Create US + UK groups"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => void handleCreateCampaignGroups(["US"], { openCampaign: true, marketToOpen: "US" })}
+                  disabled={isCreatingGroups || isIngesting}
+                  className="gap-2"
+                >
+                  <Megaphone className="h-4 w-4" />
+                  US group + open campaign
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => void handleCreateCampaignGroups(["UK"], { openCampaign: true, marketToOpen: "UK" })}
+                  disabled={isCreatingGroups || isIngesting}
+                  className="gap-2"
+                >
+                  <Megaphone className="h-4 w-4" />
+                  UK group + open campaign
+                </Button>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={() => void handleIngestPipeline(["US", "UK"])} disabled={isIngesting} className="gap-2">
-                  {isIngesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
-                  {isIngesting ? "Ingesting…" : "Ingest US + UK"}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => void handleIngestPipeline(["US"])}
-                  disabled={isIngesting}
-                  className="gap-2"
-                >
-                  US only
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => void handleIngestPipeline(["UK"])}
-                  disabled={isIngesting}
-                  className="gap-2"
-                >
-                  UK only
-                </Button>
+              {(createdGroupIds.US || createdGroupIds.UK) && (
+                <p className="text-xs text-muted-foreground">
+                  Saved groups — add them anytime under Campaigns → Add from group
+                  {createdGroupIds.US ? " · US ready" : ""}
+                  {createdGroupIds.UK ? " · UK ready" : ""}.{" "}
+                  <Link to="/recipient-groups" className="underline underline-offset-2">
+                    View recipient groups
+                  </Link>
+                </p>
+              )}
+
+              <div className="border-t pt-3 space-y-3">
+                <p className="text-sm font-medium">Full ingest (CRM + optional drafts)</p>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <label className="flex items-center gap-2">
+                    <Checkbox
+                      checked={ingestOpts.createCrm}
+                      onCheckedChange={(v) => setIngestOpts((o) => ({ ...o, createCrm: !!v }))}
+                    />
+                    Save to CRM
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <Checkbox
+                      checked={ingestOpts.createCampaigns}
+                      onCheckedChange={(v) => setIngestOpts((o) => ({ ...o, createCampaigns: !!v }))}
+                    />
+                    Also create draft campaigns
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <Checkbox
+                      checked={ingestOpts.createNewsletters}
+                      onCheckedChange={(v) => setIngestOpts((o) => ({ ...o, createNewsletters: !!v }))}
+                    />
+                    Newsletter drafts
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <Checkbox
+                      checked={ingestOpts.createSeries}
+                      onCheckedChange={(v) => setIngestOpts((o) => ({ ...o, createSeries: !!v }))}
+                    />
+                    Daily newsletter series
+                  </label>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => void handleIngestPipeline(["US", "UK"])}
+                    disabled={isIngesting || isCreatingGroups}
+                    className="gap-2"
+                  >
+                    {isIngesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                    {isIngesting ? "Ingesting…" : "Run full ingest US + UK"}
+                  </Button>
+                </div>
               </div>
 
               <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
