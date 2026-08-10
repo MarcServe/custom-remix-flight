@@ -1,0 +1,500 @@
+market,propertyName,city,country,contactRole,email,phone,website,sourceUrl,verificationStatus
+UK,Carmelite Hotel,Aberdeen,United Kingdom,Property,info@carmelitehotels.com,01224 589101,https://www.carmelitehotels.com,https://www.carmelitehotels.com/contact,verified
+UK,Leonardo Hotel Aberdeen,Aberdeen,United Kingdom,Property,aberdeen@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/aberdeen/leonardo-hotel-aberdeen/faq,verified
+UK,Leonardo Hotel Aberdeen Airport,Aberdeen,United Kingdom,Property,aberdeenairport@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/aberdeen/leonardo-hotel-and-conference-venue-aberdeen-airport/faq,verified
+UK,Leonardo Inn Aberdeen Airport,Aberdeen,United Kingdom,Property,aberdeenairportreservations@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/aberdeen/leonardo-inn-hotel-aberdeen-airport/faq,verified
+UK,Malmaison Aberdeen,Aberdeen,United Kingdom,Decision maker,groupsdesk@malmaison.com,+44 1224 507 097,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Malmaison Aberdeen,Aberdeen,United Kingdom,Property,aberdeen@malmaison.com,+44 1224 507 097,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,The Chester Hotel,Aberdeen,United Kingdom,Property,enquiries@chester-hotel.com,,https://www.chester-hotel.com,https://www.chester-hotel.com/contact,verified
+UK,Royal Berkshire,Ascot,United Kingdom,Property,royalberkshire@exclusive.co.uk,,https://www.exclusive.co.uk/royal-berkshire/,https://www.exclusive.co.uk/royal-berkshire/,verified
+UK,Ashford International Hotel,Ashford,United Kingdom,Property,ashfordinternationalhotelspa@theqhotelscollection.co.uk,,https://www.ashfordhotel.co.uk,https://www.ashfordhotel.co.uk/,verified
+UK,Ashford International Hotel,Ashford,United Kingdom,Sales,events@ashfordinternationalhotel.com,,https://www.ashfordhotel.co.uk,https://www.ashfordhotel.co.uk/,verified
+UK,Gleneagles Hotel,Auchterarder,United Kingdom,Sales,playground.planners@gleneagles.com,,https://www.gleneagles.com,https://www.gleneagles.com/contact-us/,verified
+UK,Pennyhill Park,Bagshot,United Kingdom,Property,pennyhillpark@exclusive.co.uk,,https://www.exclusive.co.uk/pennyhill-park/,https://www.exclusive.co.uk/pennyhill-park/,verified
+UK,The Hampshire Court Hotel,Basingstoke,United Kingdom,Property,hampshirecourthotel@theqhotelscollection.co.uk,,https://www.thehampshirecourthotel.co.uk,https://www.thehampshirecourthotel.co.uk/,verified
+UK,The Hampshire Court Hotel,Basingstoke,United Kingdom,Sales,events@thehampshirecourthotel.co.uk,,https://www.thehampshirecourthotel.co.uk,https://www.thehampshirecourthotel.co.uk/,verified
+UK,Apex City of Bath Hotel,Bath,United Kingdom,Decision maker,apex.groups@apexhotels.co.uk,+44 1225 418 500,https://www.apexhotels.co.uk,https://www.apexhotels.co.uk/contact-us,verified
+UK,Apex City of Bath Hotel,Bath,United Kingdom,Property,bath.reservations@apexhotels.co.uk,+44 1225 418 500,https://www.apexhotels.co.uk,https://www.apexhotels.co.uk/contact-us,verified
+UK,No. 15 Bath by GuestHouse,Bath,United Kingdom,Decision maker,no15.reservations@guesthousehotels.co.uk,+44 1225 807015,https://guesthousehotels.co.uk/no-15-bath/,https://guesthousehotels.co.uk/no-15-bath/,verified
+UK,No.15 by Guesthouse,Bath,United Kingdom,Property,no15.reception@guesthousehotels.co.uk,,https://www.guesthousehotels.co.uk,https://www.guesthousehotels.co.uk/contact/,verified
+UK,THE PIG near Bath,Bath,United Kingdom,Property,reservations@thepighotel.com,0345 225 9494,https://www.thepighotel.com/near-bath/,https://www.thepighotel.com/contact-us/,verified
+UK,The Gainsborough Bath Spa,Bath,United Kingdom,Decision maker,reservations@thegainsboroughbathspa.co.uk,+44 1225 358 888,https://www.thegainsboroughbathspa.co.uk,https://www.thegainsboroughbathspa.co.uk/,verified
+UK,The Z Hotel Bath,Bath,United Kingdom,Property,bath@thezhotels.com,+44 (0) 1225 613160,https://www.thezhotels.com/hotels/bath/,https://www.thezhotels.com/hotels/bath/,verified
+UK,Bullitt Hotel,Belfast,United Kingdom,Property,info@bullitthotel.com,028 9590 0600,https://bullitthotel.com,https://bullitthotel.com/contact,verified
+UK,Leonardo Hotel Belfast,Belfast,United Kingdom,Property,belfast@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/belfast/leonardo-hotel-belfast/faq,verified
+UK,Malmaison Belfast,Belfast,United Kingdom,Property,belfast@malmaison.com,+44 28 9600 1405,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Ten Square Hotel,Belfast,United Kingdom,Property,reservations@tensquare.co.uk,,https://www.tensquare.co.uk,https://www.tensquare.co.uk/contact,verified
+UK,The Merchant Hotel,Belfast,United Kingdom,Property,info@themerchanthotel.com,028 9026 2710,https://www.themerchanthotel.com,https://www.themerchanthotel.com/contact-us,verified
+UK,Titanic Hotel Belfast,Belfast,United Kingdom,Property,info@titanichotelbelfast.com,028 9508 2000,https://www.titanichotelbelfast.com,https://www.titanichotelbelfast.com/contact-us,verified
+UK,Hillscourt Hotel,Birmingham,United Kingdom,Property,info@hillscourt.co.uk,0121 457 6100,https://www.hillscourt.co.uk,https://www.hillscourt.co.uk/contact,verified
+UK,Hillscourt Hotel,Birmingham,United Kingdom,Reservations,accommodation@hillscourt.co.uk,0121 457 6100,https://www.hillscourt.co.uk,https://www.hillscourt.co.uk/contact,verified
+UK,Hillscourt Hotel,Birmingham,United Kingdom,Sales,functions@hillscourt.co.uk,0121 457 6100,https://www.hillscourt.co.uk,https://www.hillscourt.co.uk/contact,verified
+UK,Hotel Holloway,Birmingham,United Kingdom,Property,info@hotelholloway.co.uk,,https://hotelholloway.co.uk,https://hotelholloway.co.uk/contact,verified
+UK,Hotel du Vin Birmingham,Birmingham,United Kingdom,Decision maker,groupsdesk@hotelduvin.com,+44 121 794 3005,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Hotel du Vin Birmingham,Birmingham,United Kingdom,Property,info.birmingham@hotelduvin.com,+44 121 794 3005,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Leonardo Royal Hotel Birmingham,Birmingham,United Kingdom,Property,birminghamroyal@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/birmingham/leonardo-royal-hotel-birmingham/faq,verified
+UK,Malmaison Birmingham,Birmingham,United Kingdom,Property,birmingham@malmaison.com,+44 121 794 3004,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Dalhousie Castle,Bonnyrigg,United Kingdom,Property,info@dalhousiecastle.co.uk,,https://www.dalhousiecastle.co.uk,https://www.dalhousiecastle.co.uk/about/faqs/,verified
+UK,Leonardo Hotel Bradford,Bradford,United Kingdom,Property,jurysinnbradford@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/bradford/leonardo-hotel-bradford/faq,verified
+UK,Monkey Island Estate,Bray-on-Thames,United Kingdom,Decision maker,events@monkeyislandestate.co.uk,,https://www.monkeyislandestate.co.uk,https://www.monkeyislandestate.co.uk/,verified
+UK,Monkey Island Estate,Bray-on-Thames,United Kingdom,Property,reservations@monkeyislandestate.co.uk,,https://www.monkeyislandestate.co.uk,https://www.monkeyislandestate.co.uk/,verified
+UK,Artist Residence Brighton,Brighton,United Kingdom,Property,brighton@artistresidence.co.uk,,https://www.artistresidence.co.uk,https://www.artistresidence.co.uk/termsandconditions,verified
+UK,Drakes Hotel Brighton,Brighton,United Kingdom,Decision maker,richard.hayes@drakeshotel.com,+44 1273 696934,https://drakeshotel.com,https://drakeshotel.com/contact/,verified
+UK,Drakes Hotel Brighton,Brighton,United Kingdom,Property,stay@drakeshotel.com,+44 1273 696934,https://drakeshotel.com,https://drakeshotel.com/contact/,verified
+UK,Drakes Hotel Brighton,Brighton,United Kingdom,Sales,sales@curioushotels.com,+44 1273 696934,https://drakeshotel.com,https://drakeshotel.com/contact/,verified
+UK,Hotel du Vin Brighton,Brighton,United Kingdom,Property,reception.brighton@hotelduvin.com,+44 1273 855 221,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Leonardo Hotel Brighton,Brighton,United Kingdom,Property,brighton@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/brighton/leonardo-hotel-brighton/faq,verified
+UK,Leonardo Royal Hotel Brighton Waterfront,Brighton,United Kingdom,Property,brightonroyal@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/brighton/leonardo-royal-hotel-brighton-waterfront/faq,verified
+UK,Malmaison Brighton,Brighton,United Kingdom,Property,info@malmaison.com,+44 1273 041 482,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,No. 124 Brighton by GuestHouse,Brighton,United Kingdom,Decision maker,no124.events@guesthousehotels.co.uk,,https://guesthousehotels.co.uk,https://guesthousehotels.co.uk/no-124-brighton/,verified
+UK,No. 124 Brighton by GuestHouse,Brighton,United Kingdom,Property,no124.reservations@guesthousehotels.co.uk,,https://guesthousehotels.co.uk,https://guesthousehotels.co.uk/no-124-brighton/,verified
+UK,myhotel Brighton,Brighton,United Kingdom,Property,brighton@myhotels.com,,https://www.myhotels.com/brighton/,https://www.myhotels.com/contact/,verified
+UK,Artist Residence Bristol,Bristol,United Kingdom,Property,bristol@artistresidence.co.uk,,https://www.artistresidence.co.uk,https://www.artistresidence.co.uk/termsandconditions,verified
+UK,Hotel du Vin Bristol,Bristol,United Kingdom,Property,info.bristol@hotelduvin.com,,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Hotel du Vin Bristol Avon Gorge,Bristol,United Kingdom,Property,theteam@hotelduvin.com,+44 117 403 0210,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Leonardo Hotel Bristol City,Bristol,United Kingdom,Property,bristolenquiries@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/bristol/leonardo-hotel-bristol-city/faq,verified
+UK,Your Stay Bristol Beaufort House,Bristol,United Kingdom,Property,info@yourstaybristol.co.uk,+44 117 973 3046,https://www.yourstaybristol.co.uk,https://www.yourstaybristol.co.uk/contact,verified
+UK,Your Stay Bristol Hamilton Court,Bristol,United Kingdom,Property,reservations@yourstaybristol.co.uk,+44 117 973 3046,https://www.yourstaybristol.co.uk,https://www.yourstaybristol.co.uk/contact,verified
+UK,The Lygon Arms,Broadway,United Kingdom,Property,spa.reservations@lygonarmshotel.co.uk,,https://www.iconichotelsresorts.com,https://www.lygonarmshotel.co.uk/contact/,verified
+UK,The Lygon Arms,Broadway,United Kingdom,Reservations,reservations@lygonarmshotel.co.uk,,https://www.iconichotelsresorts.com,https://www.lygonarmshotel.co.uk/contact/,verified
+UK,The Lygon Arms,Broadway,United Kingdom,Sales,events@lygonarmshotel.co.uk,,https://www.iconichotelsresorts.com,https://www.lygonarmshotel.co.uk/contact/,verified
+UK,Forest Pines Hotel,Broughton,United Kingdom,Property,forestpineshotelspagolfresort@theqhotelscollection.co.uk,,https://www.forestpineshotel.co.uk,https://www.forestpineshotel.co.uk/,verified
+UK,Forest Pines Hotel,Broughton,United Kingdom,Sales,events@forestpineshotel.co.uk,,https://www.forestpineshotel.co.uk,https://www.forestpineshotel.co.uk/,verified
+UK,The Cambridge Belfry,Cambourne,United Kingdom,Property,cambridgebelfryhotelspa@theqhotelscollection.co.uk,,https://www.thecambridgebelfry.co.uk,https://www.thecambridgebelfry.co.uk/,verified
+UK,The Cambridge Belfry,Cambourne,United Kingdom,Sales,events@thecambridgebelfry.co.uk,,https://www.thecambridgebelfry.co.uk,https://www.thecambridgebelfry.co.uk/,verified
+UK,Hotel du Vin Cambridge,Cambridge,United Kingdom,Property,info.cambridge@hotelduvin.com,+44 1223 928 991,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Turing Locke,Cambridge,United Kingdom,Decision maker,askturing@lockeliving.com,+44 1223 618861,https://www.lockeliving.com,https://www.lockeliving.com/en/help/property-information/how-do-i-contact-locke-hotels,verified
+UK,ABode Canterbury,Canterbury,United Kingdom,Property,info@abodecanterbury.co.uk,01227 766 266,https://abodecanterbury.co.uk,https://www.abodehotels.co.uk/contact,verified
+UK,House of Agnes,Canterbury,United Kingdom,Property,info@houseofagnes.co.uk,+44 1227 472185,https://www.houseofagnes.co.uk,https://www.houseofagnes.co.uk/,verified
+UK,The Falstaff Hotel,Canterbury,United Kingdom,Property,stay@thefalstaffincanterbury.com,,https://www.thefalstaffincanterbury.com,https://www.thefalstaffincanterbury.com/contact,verified
+UK,Aaron Wise Serviced Apartments Cardiff,Cardiff,United Kingdom,Decision maker,info@aaronwise.co.uk,+44 29 2078 2782,https://aaronwise.co.uk,https://aaronwise.co.uk/hotel-room/deluxe-one-bedroom-apartment/,verified
+UK,Continental Haven Cardiff,Cardiff,United Kingdom,Decision maker,info@continentalhaven.co.uk,+44 7823 590135,https://continentalhaven.co.uk,https://continentalhaven.co.uk/terms-conditions/,verified
+UK,Leonardo Hotel Cardiff,Cardiff,United Kingdom,Property,cardiff@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/cardiff/leonardo-hotel-cardiff/faq,verified
+UK,Park Lane Aparthotel (Urban Space Cardiff),Cardiff,United Kingdom,Decision maker,info@theurbanspace.co.uk,,https://theurbanspace.co.uk,https://theurbanspace.co.uk/exclusive-use-stays/,verified
+UK,The Castle Inn,Castle Combe,United Kingdom,Property,thecastleinn@exclusive.co.uk,,https://www.exclusive.co.uk/the-castle-inn/,https://www.exclusive.co.uk/the-castle-inn/,verified
+UK,The Manor House,Castle Combe,United Kingdom,Property,themanorhouse@exclusive.co.uk,,https://www.exclusive.co.uk/the-manor-house/,https://www.exclusive.co.uk/the-manor-house/,verified
+UK,Gidleigh Park,Chagford,United Kingdom,Property,info@gidleigh.co.uk,,https://gidleigh.co.uk,https://gidleigh.co.uk/information/,verified
+UK,Leonardo Hotel Cheltenham,Cheltenham,United Kingdom,Property,cheltenham@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/cheltenham/leonardo-hotel-cheltenham/faq,verified
+UK,ABode Chester,Chester,United Kingdom,Property,info@abodechester.co.uk,01244 347 000,https://abodechester.co.uk,https://www.abodehotels.co.uk/contact,verified
+UK,ABode Chester,Chester,United Kingdom,Sales,events@abodechester.co.uk,01244 347 000,https://abodechester.co.uk,https://www.abodehotels.co.uk/contact,verified
+UK,Leonardo Hotel Chester,Chester,United Kingdom,Property,chester_reservations@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/chester/leonardo-hotel-chester/faq,verified
+UK,Oddfellows Chester,Chester,United Kingdom,Property,reception@oddfellowschester.com,,https://oddfellowschester.com,https://oddfellowschester.com/,verified
+UK,Roomzzz Chester City,Chester,United Kingdom,Property,chestercity@roomzzz.com,,https://roomzzz.com,https://roomzzz.com/contact,verified
+UK,Roomzzz Chester City,Chester,United Kingdom,Sales,corporate@roomzzz.com,,https://roomzzz.com,https://roomzzz.com/contact,verified
+UK,Lucknam Park Hotel & Spa,Chippenham,United Kingdom,Property,lp.spa@lucknampark.co.uk,,https://www.lucknampark.co.uk,https://www.lucknampark.co.uk/contact/,verified
+UK,Lucknam Park Hotel & Spa,Chippenham,United Kingdom,Reservations,lp.reservations@lucknampark.co.uk,,https://www.lucknampark.co.uk,https://www.lucknampark.co.uk/contact/,verified
+UK,Lucknam Park Hotel & Spa,Chippenham,United Kingdom,Sales,lp.events@lucknampark.co.uk,,https://www.lucknampark.co.uk,https://www.lucknampark.co.uk/contact/,verified
+UK,Ansty Hall,Coventry,United Kingdom,Property,enquiries@anstyhall.com,,https://www.exclusive.co.uk/ansty-hall/,https://www.exclusive.co.uk/ansty-hall/,verified
+UK,Cowley Manor Experimental,Cowley,United Kingdom,Property,relax@cowleymanor.com,,https://www.cowleymanor.com,https://www.cowleymanor.com/contact/,verified
+UK,Cowley Manor Experimental,Cowley,United Kingdom,Reservations,reservation@cowleymanor.com,,https://www.cowleymanor.com,https://www.cowleymanor.com/contact/,verified
+UK,Cowley Manor Experimental,Cowley,United Kingdom,Sales,events@cowleymanor.com,,https://www.cowleymanor.com,https://www.cowleymanor.com/contact/,verified
+UK,Crewe Hall,Crewe,United Kingdom,Property,crewehallhotelspa@theqhotelscollection.co.uk,,https://www.crewehallcheshire.co.uk,https://www.crewehallcheshire.co.uk/,verified
+UK,Crewe Hall,Crewe,United Kingdom,Sales,events@crewehallcheshire.co.uk,,https://www.crewehallcheshire.co.uk,https://www.crewehallcheshire.co.uk/,verified
+UK,The Westerwood Hotel,Cumbernauld,United Kingdom,Property,glasgowwesterwoodhotelspagolfresort@theqhotelscollection.co.uk,,https://www.thewesterwoodhotel.co.uk,https://www.thewesterwoodhotel.co.uk/,verified
+UK,The Westerwood Hotel,Cumbernauld,United Kingdom,Sales,events@thewesterwoodhotel.co.uk,,https://www.thewesterwoodhotel.co.uk,https://www.thewesterwoodhotel.co.uk/,verified
+UK,Leonardo Hotel Derby,Derby,United Kingdom,Property,derby@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/derby/leonardo-hotel-derby/faq,verified
+UK,Loch Ness Lodge,Drumnadrochit,United Kingdom,Property,escape@loch-ness-lodge.com,+44 1456 459469,https://lochnesslodge.cobbshotels.com,https://lochnesslodge.cobbshotels.com/contact,verified
+UK,Apex Dunblane Hydro,Dunblane,United Kingdom,Property,dunblane.reservations@apexhotels.co.uk,01786 822551,https://www.apexhotels.co.uk,https://www.apexhotels.co.uk/contact-us,verified
+UK,Apex City Quay Hotel & Spa,Dundee,United Kingdom,Property,dundee.reservations@apexhotels.co.uk,+44 1382 202 404,https://www.apexhotels.co.uk,https://www.apexhotels.co.uk/contact-us,verified
+UK,Malmaison Dundee,Dundee,United Kingdom,Property,reservations.dundee@malmaison.com,+44 1382 339 715,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Gravetye Manor,East Grinstead,United Kingdom,Reservations,info@gravetyemanor.co.uk,,https://www.gravetyemanor.co.uk,https://www.gravetyemanor.co.uk/contact/,verified
+UK,Gravetye Manor,East Grinstead,United Kingdom,Sales,events@gravetyemanor.co.uk,,https://www.gravetyemanor.co.uk,https://www.gravetyemanor.co.uk/contact/,verified
+UK,Leonardo Hotel East Midlands Airport,East Midlands,United Kingdom,Property,eastmidlands@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/east-midlands/leonardo-hotel-east-midlands-airport/faq,verified
+UK,100 Princes Street,Edinburgh,United Kingdom,Decision maker,malcolm@100princes-street.com,+44 131 287 3100,https://100princes-street.com,https://100princes-street.com/contact,verified
+UK,100 Princes Street,Edinburgh,United Kingdom,Property,bookps@100princes-street.com,+44 131 287 3100,https://100princes-street.com,https://100princes-street.com/contact,verified
+UK,Apex City of Edinburgh Hotel,Edinburgh,United Kingdom,Property,edinburgh.reservations@apexhotels.co.uk,+44 131 243 3456,https://www.apexhotels.co.uk,https://www.apexhotels.co.uk/contact-us,verified
+UK,Dakota Hotel Edinburgh,Edinburgh,United Kingdom,Decision maker,reservations@edb.dakotahotels.co.uk,+44 131 319 3690,https://dakotahotels.co.uk,https://dakotahotels.co.uk/edinburgh/faqs,verified
+UK,Eden Locke,Edinburgh,United Kingdom,Decision maker,askeden@lockeliving.com,+44 131 526 4190,https://www.lockeliving.com,https://www.lockeliving.com/en/help/property-information/how-do-i-contact-locke-hotels,verified
+UK,Fingal,Edinburgh,United Kingdom,Property,reservations@fingal.co.uk,,https://www.fingal.co.uk,https://www.fingal.co.uk/contact-us,verified
+UK,Fraser Suites Edinburgh,Edinburgh,United Kingdom,Sales,sales.edinburgh@frasershospitality.com,,https://www.frasershospitality.com,https://www.frasershospitality.com/en/united-kingdom/edinburgh/fraser-suites-edinburgh/,verified
+UK,Hotel du Vin Edinburgh,Edinburgh,United Kingdom,Property,reception.edinburgh@hotelduvin.com,+44 131 285 1479,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,KM Hotel,Edinburgh,United Kingdom,Property,reservations@ed.ac.uk,,https://www.uoecollection.com,https://www.uoecollection.com/hotels/km-hotel/contact-us/,verified
+UK,Leonardo Hotel Edinburgh City,Edinburgh,United Kingdom,Property,edinburghcityreservations@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/edinburgh/leonardo-hotel-edinburgh-city/faq,verified
+UK,Leonardo Hotel Edinburgh Haymarket,Edinburgh,United Kingdom,Property,reservations@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/edinburgh/leonardo-hotel-edinburgh-haymarket/faq,verified
+UK,Leonardo Hotel Edinburgh Murrayfield,Edinburgh,United Kingdom,Property,edinburghmurrayfieldreservations@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/edinburgh/leonardo-hotel-edinburgh-murrayfield/faq,verified
+UK,Leonardo Royal Hotel Edinburgh,Edinburgh,United Kingdom,Property,edinburghroyal@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/edinburgh/leonardo-royal-hotel-edinburgh/faq,verified
+UK,Malmaison Edinburgh,Edinburgh,United Kingdom,Property,edinburgh@malmaison.com,+44 131 285 1478,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Motel One Edinburgh Princes,Edinburgh,United Kingdom,Property,edinburgh-princes@motel-one.com,,https://www.motel-one.com,https://www.motel-one.com/en/hotels/edinburgh/hotel-edinburgh-princes/,verified
+UK,Motel One Edinburgh Royal,Edinburgh,United Kingdom,Property,edinburgh-royal@motel-one.com,,https://www.motel-one.com,https://www.motel-one.com/en/hotels/edinburgh/hotel-edinburgh-royal/,verified
+UK,Point A Edinburgh Haymarket,Edinburgh,United Kingdom,Property,edinburgh@pointahotels.com,+44131 526 4500,https://www.pointahotels.com/our-hotels/edinburgh/,https://www.pointahotels.com/our-hotels/edinburgh/,verified
+UK,Point A Edinburgh St Andrew Square,Edinburgh,United Kingdom,Property,edinburgh.standrew@pointahotels.com,0131 363 0050,https://www.pointahotels.com/our-hotels/st-andrew-square/,https://www.pointahotels.com/our-hotels/st-andrew-square/,verified
+UK,Prestonfield Edinburgh,Edinburgh,United Kingdom,Property,events@prestonfield.com,,https://www.prestonfield.com,https://www.prestonfield.com/,verified
+UK,Prestonfield House Hotel,Edinburgh,United Kingdom,Property,info@prestonfield.com,,https://www.prestonfield.com,https://www.prestonfield.com/contact-us,verified
+UK,Roomzzz Edinburgh,Edinburgh,United Kingdom,Property,edinburgh@roomzzz.com,,https://roomzzz.com,https://roomzzz.com/contact,verified
+UK,Simpson's Townhouse Edinburgh,Edinburgh,United Kingdom,Property,simpsontownhouseedinburghreservations@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/edinburgh/leonardo-hotel-edinburgh-city/faq,verified
+UK,Ten Hill Place Hotel,Edinburgh,United Kingdom,Property,reservations@tenhillplace.com,+44 131 662 2080,https://www.tenhillplace.com,https://www.tenhillplace.com/contact,verified
+UK,The Bonham,Edinburgh,United Kingdom,Reservations,reservations@thebonham.com,,https://thebonham.com,https://thebonham.com/contact/,verified
+UK,The Bonham,Edinburgh,United Kingdom,Sales,events@thebonham.com,,https://thebonham.com,https://thebonham.com/contact/,verified
+UK,The Bonham Hotel,Edinburgh,United Kingdom,Property,reception@thebonham.com,,https://www.thebonham.com,https://www.thebonham.com/contact,verified
+UK,The Bruntsfield Hotel,Edinburgh,United Kingdom,Decision maker,reservations@thebruntsfield.co.uk,+44 131 230 0822,https://www.thebruntsfield.co.uk,https://www.thebruntsfield.co.uk/frequently-asked-questions,verified
+UK,"The Hoxton, Edinburgh",Edinburgh,United Kingdom,Decision maker,events.edinburgh@thehox.com,+44 131 297 2840,https://thehoxton.com,https://thehoxton.com/edinburgh/house/,verified
+UK,"The Hoxton, Edinburgh",Edinburgh,United Kingdom,Property,hello.edinburgh@thehox.com,+44 131 297 2840,https://thehoxton.com,https://thehoxton.com/edinburgh/house/,verified
+UK,"The Hoxton, Edinburgh",Edinburgh,United Kingdom,Reservations,book.edinburgh@thehox.com,+44 131 297 2840,https://thehoxton.com,https://thehoxton.com/edinburgh/house/,verified
+UK,The Witchery by the Castle,Edinburgh,United Kingdom,Property,info@thewitchery.com,,https://www.thewitchery.com,https://www.thewitchery.com/,verified
+UK,UOE Collection,Edinburgh,United Kingdom,Reservations,uoecollection@ed.ac.uk,,https://www.uoecollection.com,https://www.uoecollection.com/contact-us/,verified
+UK,UOE Collection,Edinburgh,United Kingdom,Sales,events@ed.ac.uk,,https://www.uoecollection.com,https://www.uoecollection.com/contact-us/,verified
+UK,Virgin Hotels Edinburgh,Edinburgh,United Kingdom,Property,info.edinburgh@virginhotels.com,0131 526 4810,https://virginhotels.com,https://virginhotels.com/edinburgh/contact-us/,verified
+UK,Virgin Hotels Edinburgh,Edinburgh,United Kingdom,Reservations,stay.edinburgh@virginhotels.com,0131 526 4810,https://virginhotels.com,https://virginhotels.com/edinburgh/contact-us/,verified
+UK,Virgin Hotels Edinburgh,Edinburgh,United Kingdom,Sales,sales.edinburgh@virginhotels.com,0131 526 4810,https://virginhotels.com,https://virginhotels.com/edinburgh/contact-us/,verified
+UK,YOTEL Edinburgh,Edinburgh,United Kingdom,Reservations,edi.reservations@yotel.com,0131 526 4950,https://www.yotel.com,https://www.yotel.com/en/hotels/yotel-edinburgh,verified
+UK,YOTEL Edinburgh,Edinburgh,United Kingdom,Sales,edi.groups@yotel.com,0131 526 4950,https://www.yotel.com,https://www.yotel.com/en/hotels/yotel-edinburgh,verified
+UK,Hotel du Vin Exeter,Exeter,United Kingdom,Property,reception.exeter@hotelduvin.com,+44 1392 790 120,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Leonardo Hotel Exeter,Exeter,United Kingdom,Property,exeter@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/exeter/leonardo-hotel-exeter/faq,verified
+UK,Leonardo Hotel Exeter,Exeter,United Kingdom,Sales,leonardomeetings@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/exeter/leonardo-hotel-exeter/faq,verified
+UK,Southernhay House Hotel,Exeter,United Kingdom,Property,home@southernhayhouse.com,01392 439000,https://www.southernhayhouse.com,https://www.southernhayhouse.com/about-us,verified
+UK,Apex City of Glasgow Hotel,Glasgow,United Kingdom,Property,glasgow.reservations@apexhotels.co.uk,+44 141 375 3333,https://www.apexhotels.co.uk,https://www.apexhotels.co.uk/contact-us,verified
+UK,Dakota Hotel Glasgow,Glasgow,United Kingdom,Decision maker,reservations@gla.dakotahotels.co.uk,,https://dakotahotels.co.uk,https://dakotahotels.co.uk/glasgow/faqs,verified
+UK,Fraser Suites Glasgow,Glasgow,United Kingdom,Sales,sales.glasgow@frasershospitality.com,,https://www.frasershospitality.com,https://www.frasershospitality.com/en/united-kingdom/glasgow/fraser-suites-glasgow/,verified
+UK,Hotel du Vin Glasgow,Glasgow,United Kingdom,Property,reception.glasgow@hotelduvin.com,+44 141 378 0385,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Leonardo Inn Glasgow West End,Glasgow,United Kingdom,Property,glasgowwestendreservations@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/glasgow/leonardo-inn-hotel-glasgow-west-end/faq,verified
+UK,Leonardo Royal Hotel Glasgow,Glasgow,United Kingdom,Property,glasgow@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/glasgow/leonardo-royal-hotel-glasgow/faq,verified
+UK,Malmaison Glasgow,Glasgow,United Kingdom,Property,glasgow@malmaison.com,+44 141 572 1000,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Motel One Glasgow,Glasgow,United Kingdom,Property,glasgow@motel-one.com,+44 141 468 0450,https://www.motel-one.com,https://www.motel-one.com/en/hotels/glasgow/,verified
+UK,Native Glasgow,Glasgow,United Kingdom,Property,enquiries@nativeplaces.com,0141 288 7730,https://nativeplaces.com,https://nativeplaces.com/contact/,verified
+UK,Point A Glasgow,Glasgow,United Kingdom,Property,glasgow@pointahotels.com,+44141 352 2650,https://www.pointahotels.com/our-hotels/glasgow/,https://www.pointahotels.com/our-hotels/glasgow/,verified
+UK,The Z Hotel Glasgow,Glasgow,United Kingdom,Property,glasgow@thezhotels.com,+44 (0) 141 212 4550,https://www.thezhotels.com/hotels/glasgow/,https://www.thezhotels.com/hotels/glasgow/,verified
+UK,YOTEL Glasgow,Glasgow,United Kingdom,Sales,gla.groups@yotel.com,,https://www.yotel.com,https://www.yotel.com/en/hotels/yotel-glasgow,verified
+UK,Hotel du Vin Harrogate,Harrogate,United Kingdom,Property,reception.harrogate@hotelduvin.com,+44 1423 608 121,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Feversham Arms Hotel,Helmsley,United Kingdom,Property,stay@fevershamarmshotel.com,,https://www.fevershamarmshotel.com,https://www.fevershamarmshotel.com/,verified
+UK,Hotel du Vin Henley-on-Thames,Henley-on-Thames,United Kingdom,Property,info.henley@hotelduvin.com,+44 1491 877 579,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Slaley Hall,Hexham,United Kingdom,Property,slaleyhallhotelspagolfresort@theqhotelscollection.co.uk,,https://www.slaleyhallhotel.com,https://www.slaleyhallhotel.com/,verified
+UK,Slaley Hall,Hexham,United Kingdom,Sales,events@slaleyhallhotel.com,,https://www.slaleyhallhotel.com,https://www.slaleyhallhotel.com/,verified
+UK,Leonardo Hotel Hinckley Island,Hinckley,United Kingdom,Property,hinckleyisland@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/hinckley/leonardo-hotel-and-conference-venue-hinckley-island/faq,verified
+UK,Leonardo Hotel Hinckley Island,Hinckley,United Kingdom,Sales,hinckleyisland_conference@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/hinckley/leonardo-hotel-and-conference-venue-hinckley-island/faq,verified
+UK,The Black Swan Hollins Green,Hollins Green,United Kingdom,Property,reception@theblackswan.co.uk,+44 161 222 4444,https://www.theblackswan.co.uk,https://www.theblackswan.co.uk/contact/,verified
+UK,South Lodge,Horsham,United Kingdom,Property,southlodge@exclusive.co.uk,,https://www.exclusive.co.uk/south-lodge/,https://www.exclusive.co.uk/south-lodge/,verified
+UK,Heathmount Hotel,Inverness,United Kingdom,Property,info@heathmounthotel.com,01463 235877,https://heathmounthotel.com,https://heathmounthotel.com/,verified
+UK,Leonardo Hotel Inverness,Inverness,United Kingdom,Property,inverness@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/inverness/leonardo-hotel-inverness/faq,verified
+UK,Ness Walk Inverness,Inverness,United Kingdom,Property,angus.macleod@nesswalk.com,01463215215,https://www.nesswalk.com,https://www.nesswalk.com/,verified
+UK,Rocpool Reserve Hotel,Inverness,United Kingdom,Property,info@rocpool.com,+44 1463 240089,https://www.rocpool.com,https://www.rocpool.com/contact,verified
+UK,Beaverbrook,Leatherhead,United Kingdom,Property,info@beaverbrook.co.uk,,https://www.beaverbrook.co.uk,https://www.beaverbrook.co.uk/contact/,verified
+UK,Dakota Hotel Leeds,Leeds,United Kingdom,Decision maker,events@lds.dakotahotels.co.uk,+44 113 322 6261,https://dakotahotels.co.uk,https://dakotahotels.co.uk/leeds/faqs,verified
+UK,Dakota Hotel Leeds,Leeds,United Kingdom,Property,reservations@lds.dakotahotels.co.uk,+44 113 322 6261,https://dakotahotels.co.uk,https://dakotahotels.co.uk/leeds/faqs,verified
+UK,Dakota Leeds,Leeds,United Kingdom,Property,reception@lds.dakotahotels.co.uk,,https://dakotahotels.co.uk/leeds/faqs,https://dakotahotels.co.uk/leeds/faqs,verified
+UK,Haley's Hotel,Leeds,United Kingdom,Decision maker,info@haleys.co.uk,+44 113 278 4446,https://haleys.co.uk,https://haleys.co.uk/contact,verified
+UK,Leonardo Hotel Leeds,Leeds,United Kingdom,Property,leeds@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/leeds/leonardo-hotel-leeds/faq,verified
+UK,Oulton Hall,Leeds,United Kingdom,Property,oultonhallhotelspagolfresort@theqhotelscollection.co.uk,,https://www.oultonhallhotel.co.uk,https://www.oultonhallhotel.co.uk/,verified
+UK,Oulton Hall,Leeds,United Kingdom,Sales,events@oultonhallhotel.co.uk,,https://www.oultonhallhotel.co.uk,https://www.oultonhallhotel.co.uk/,verified
+UK,Roomzzz,Leeds,United Kingdom,Reservations,reservations@roomzzz.com,,https://www.roomzzz.com,https://www.roomzzz.com/contact/,verified
+UK,Roomzzz Leeds City,Leeds,United Kingdom,Property,leedscity@roomzzz.com,,https://roomzzz.com,https://roomzzz.com/contact,verified
+UK,Roomzzz Leeds City West,Leeds,United Kingdom,Property,leedscitywest@roomzzz.com,,https://roomzzz.com,https://roomzzz.com/contact,verified
+UK,Roomzzz Leeds Headingley,Leeds,United Kingdom,Property,leedsheadingley@roomzzz.com,,https://roomzzz.com,https://roomzzz.com/contact,verified
+UK,Central Station Hotel Liverpool,Liverpool,United Kingdom,Decision maker,info@centralstationhotel.co.uk,+44 151 317 9060,https://www.centralstationhotel.co.uk,https://www.centralstationhotel.co.uk/,verified
+UK,Cove Paradise Street,Liverpool,United Kingdom,Decision maker,ask.paradisestreet@staycove.com,+44 151 245 2329,https://www.lockeliving.com,https://www.lockeliving.com/en/contact-us,verified
+UK,Leonardo Hotel Liverpool,Liverpool,United Kingdom,Property,liverpool@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/liverpool/leonardo-hotel-liverpool/faq,verified
+UK,Malmaison Liverpool,Liverpool,United Kingdom,Property,liverpool@malmaison.com,+44 151 363 3640,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,The Z Hotel Liverpool,Liverpool,United Kingdom,Property,liverpool@thezhotels.com,+44 (0) 151 556 1770,https://www.thezhotels.com/hotels/liverpool/,https://www.thezhotels.com/hotels/liverpool/,verified
+UK,Cameron House,Loch Lomond,United Kingdom,Property,reservations@cameronhouse.co.uk,,https://www.cameronhouse.co.uk,https://www.cameronhouse.co.uk/,verified
+UK,11 Cadogan Gardens,London,United Kingdom,Reservations,reservations@11cadogangardens.com,,https://www.iconichotelsresorts.com,https://www.11cadogangardens.com/contact/,verified
+UK,11 Cadogan Gardens,London,United Kingdom,Sales,sales@11cadogangardens.com,,https://www.iconichotelsresorts.com,https://www.11cadogangardens.com/contact/,verified
+UK,37GS Residences,London,United Kingdom,Decision maker,stay@37gsresidences.com,+44 20 8158 3244,https://booking.37gsresidences.com,https://booking.37gsresidences.com/,verified
+UK,41 Hotel London,London,United Kingdom,Property,book41@41hotel.com,,https://www.41hotel.com,https://www.41hotel.com/,verified
+UK,Ampersand Hotel,London,United Kingdom,Reservations,stay@ampersandhotel.com,+44 (0) 207 589 5895,https://www.ampersandhotel.com,https://www.ampersandhotel.com/contact/,verified
+UK,Ampersand Hotel,London,United Kingdom,Sales,events@ampersandhotel.com,+44 (0) 207 589 5895,https://www.ampersandhotel.com,https://www.ampersandhotel.com/contact/,verified
+UK,Apex City of London Hotel,London,United Kingdom,Property,london.reservations@apexhotels.co.uk,+44 20 7702 2020,https://www.apexhotels.co.uk,https://www.apexhotels.co.uk/contact-us,verified
+UK,Artist Residence London,London,United Kingdom,Property,london@artistresidence.co.uk,020 3019 8610,https://www.artistresidence.co.uk,https://www.artistresidence.co.uk/termsandconditions,verified
+UK,Bankside Hotel,London,United Kingdom,Property,reception@banksidehotel.com,,https://www.banksidehotel.com,https://www.banksidehotel.com/contact/,verified
+UK,Batty Langley's,London,United Kingdom,Property,reservations@battylangleys.co.uk,,https://www.battylangleys.com,https://www.battylangleys.com/contact,verified
+UK,Bermonds Locke,London,United Kingdom,Decision maker,askbermonds@lockeliving.com,+44 20 7052 7170,https://www.lockeliving.com,https://www.lockeliving.com/en/help/property-information/how-do-i-contact-locke-hotels,verified
+UK,Blakes Hotel,London,United Kingdom,Property,enquiries@blakeslondon.com,,https://www.blakeslondon.com,https://www.blakeslondon.com/contact/,verified
+UK,Buckle Street Studios by Locke,London,United Kingdom,Decision maker,askbucklestreet@lockeliving.com,+44 20 3327 7142,https://www.lockeliving.com,https://www.lockeliving.com/en/help/property-information/how-do-i-contact-locke-hotels,verified
+UK,Charlotte Street Hotel,London,United Kingdom,Decision maker,sabinealtschaeffl@firmdale.com,+44 (0)20 7806 2000,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/charlotte-street-hotel/contacts-faqs,verified
+UK,Charlotte Street Hotel,London,United Kingdom,Property,reservations@charlottestreethotel.com,+44 (0)20 7806 2000,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/charlotte-street-hotel/contacts-faqs,verified
+UK,Charlotte Street Hotel,London,United Kingdom,Sales,sales@firmdale.com,+44 (0)20 7806 2000,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/charlotte-street-hotel/contacts-faqs,verified
+UK,Cheval Collection (central),London,United Kingdom,Decision maker,reservations@chevalcollection.com,+44 20 7341 7052,https://www.chevalcollection.com,https://www.chevalcollection.com/contact-us/,verified
+UK,Cheval Collection (central),London,United Kingdom,Property,info@chevalcollection.com,+44 20 7341 7052,https://www.chevalcollection.com,https://www.chevalcollection.com/contact-us/,verified
+UK,Cheval Knightsbridge,London,United Kingdom,Decision maker,frontoffice.ck@chevalresidences.com,+44 20 7225 3325,https://www.chevalcollection.com/cheval-knightsbridge/,https://www.chevalcollection.com/cheval-knightsbridge/contact-us/,verified
+UK,Cheval Thorney Court,London,United Kingdom,Decision maker,frontoffice.ctc@chevalresidences.com,+44 20 7581 5324,https://www.chevalcollection.com/cheval-thorney-court/,https://www.chevalcollection.com/cheval-thorney-court/contact-us/,verified
+UK,Cheval Three Quays,London,United Kingdom,Decision maker,frontoffice.ctq@chevalresidences.com,+44 20 3725 5333,https://www.chevalcollection.com/cheval-three-quays/,https://www.chevalcollection.com/cheval-three-quays/contact-us/,verified
+UK,Claridge's (Maybourne),London,United Kingdom,Decision maker,tkochs@claridges.co.uk,+44 20 7629 8860,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+UK,Claridge's (Maybourne),London,United Kingdom,Property,info@claridges.co.uk,+44 20 7629 8860,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+UK,Claridge's (Maybourne),London,United Kingdom,Reservations,claridges.reservations@maybourne.com,+44 20 7629 8860,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+UK,Corinthia London,London,United Kingdom,Property,london@corinthia.com,+44 20 7930 8181,https://www.corinthia.com,https://www.corinthia.com/en/hotels/london/,verified
+UK,Corinthia London,London,United Kingdom,Reservations,reservations.london@corinthia.com,+44 20 7930 8181,https://www.corinthia.com,https://www.corinthia.com/en/hotels/london/,verified
+UK,Corinthia London,London,United Kingdom,Sales,events.london@corinthia.com,+44 20 7930 8181,https://www.corinthia.com,https://www.corinthia.com/en/hotels/london/,verified
+UK,Cove Cannon Street,London,United Kingdom,Decision maker,ask.cannonstreet@staycove.com,+44 20 3327 4710,https://www.lockeliving.com,https://www.lockeliving.com/en/contact-us,verified
+UK,Cove Huntingdon House,London,United Kingdom,Decision maker,ask.huntingdonhouse@staycove.com,+44 20 7269 6550,https://www.lockeliving.com,https://www.lockeliving.com/en/contact-us,verified
+UK,Cove Landmark Pinnacle,London,United Kingdom,Decision maker,ask.landmarkpinnacle@staycove.com,+44 20 3972 4169,https://www.lockeliving.com,https://www.lockeliving.com/en/contact-us,verified
+UK,Covent Garden Hotel,London,United Kingdom,Decision maker,hellejensen@firmdale.com,+44 (0)20 7806 1000,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/covent-garden-hotel/contacts-faqs,verified
+UK,Covent Garden Hotel,London,United Kingdom,Property,reservations@coventgardenhotel.co.uk,+44 (0)20 7806 1000,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/covent-garden-hotel/contacts-faqs,verified
+UK,Dorset Square Hotel,London,United Kingdom,Decision maker,lucaperletti@firmdale.com,,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/dorset-square-hotel/contacts-faqs,verified
+UK,Dorset Square Hotel,London,United Kingdom,Property,reservations@dorsetsquarehotel.com,,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/dorset-square-hotel/contacts-faqs,verified
+UK,Durrants Hotel,London,United Kingdom,Property,enquiries@durrantshotel.co.uk,,https://www.durrantshotel.co.uk,https://www.durrantshotel.co.uk/contact/,verified
+UK,Eccleston Square Hotel,London,United Kingdom,Property,stay@ecclestonsquarehotel.com,,https://www.ecclestonsquarehotel.com,https://www.ecclestonsquarehotel.com/contact/,verified
+UK,Egerton House Hotel,London,United Kingdom,Property,bookeg@egertonhousehotel.com,,https://www.egertonhousehotel.com,https://www.egertonhousehotel.com/contact/,verified
+UK,Ember Locke,London,United Kingdom,Decision maker,askember@lockeliving.com,+44 20 7052 7175,https://www.lockeliving.com,https://www.lockeliving.com/en/help/property-information/how-do-i-contact-locke-hotels,verified
+UK,Fraser Place Queen's Gate,London,United Kingdom,Property,queensgate@frasershospitality.com,,https://www.frasershospitality.com,https://www.frasershospitality.com/en/contact-us/,verified
+UK,Fraser Residence Canary Wharf,London,United Kingdom,Property,canarywharf@frasershospitality.com,,https://www.frasershospitality.com,https://www.frasershospitality.com/en/contact-us/,verified
+UK,Fraser Suites Kensington,London,United Kingdom,Property,kensington@frasershospitality.com,,https://www.frasershospitality.com,https://www.frasershospitality.com/en/contact-us/,verified
+UK,Frasers Hospitality UK,London,United Kingdom,Property,reservations.uk@frasershospitality.com,,https://www.frasershospitality.com,https://www.frasershospitality.com/en/contact-us/,verified
+UK,Grand Plaza Serviced Apartments,London,United Kingdom,Decision maker,reservations@grandplazaemail.co.uk,+44 20 7985 8000,https://grand-plaza.co.uk,https://grand-plaza.co.uk/faq/,verified
+UK,Great Northern Hotel,London,United Kingdom,Property,reservations@greatnorthernhotel.com,,https://www.greatnorthernhotel.com,https://www.greatnorthernhotel.com/,verified
+UK,Ham Yard Hotel,London,United Kingdom,Decision maker,julielesauvage-barry@firmdale.com,+44 (0)20 3642 2000,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/ham-yard-hotel/contacts-faqs,verified
+UK,Ham Yard Hotel,London,United Kingdom,Property,reservations@hamyardhotel.com,+44 (0)20 3642 2000,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/ham-yard-hotel/contacts-faqs,verified
+UK,Haymarket Hotel,London,United Kingdom,Decision maker,rachaelrussell@firmdale.com,+44 (0)20 7470 4000,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/haymarket-hotel/contacts-faqs,verified
+UK,Haymarket Hotel,London,United Kingdom,Property,reservations@haymarkethotel.co.uk,+44 (0)20 7470 4000,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/haymarket-hotel/contacts-faqs,verified
+UK,Hazlitt's Hotel,London,United Kingdom,Decision maker,reservations@hazlitts.co.uk,+44 7700 101475,https://www.hazlittshotel.com,https://www.hazlittshotel.com/contact/,verified
+UK,Hotel 41,London,United Kingdom,Decision maker,malcolm41@41hotel.com,+44 20 7300 0041,https://41hotel.com,https://41hotel.com/contact,verified
+UK,Hotel 41,London,United Kingdom,Property,lobby@41hotel.com,+44 20 7300 0041,https://41hotel.com,https://41hotel.com/contact,verified
+UK,Hotel Café Royal,London,United Kingdom,Property,enquiries@hotelcaferoyal.com,,https://www.hotelcaferoyal.com,https://www.hotelcaferoyal.com/contact/,verified
+UK,Hotel Café Royal,London,United Kingdom,Reservations,reservations@hotelcaferoyal.com,,https://www.hotelcaferoyal.com,https://www.hotelcaferoyal.com/contact/,verified
+UK,Hotel Café Royal,London,United Kingdom,Sales,eventsandgroups@hotelcaferoyal.com,,https://www.hotelcaferoyal.com,https://www.hotelcaferoyal.com/contact/,verified
+UK,Hotel du Vin,London,United Kingdom,Sales,eventsdesk@hotelduvin.com,,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Hotel du Vin Wimbledon,London,United Kingdom,Property,reception.wimbledon@hotelduvin.com,+44 20 8194 5109,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Jumeirah Group – UK / Europe Sales,London,United Kingdom,Decision maker,uksales@jumeirah.com,+44 20 7858 7555,https://www.jumeirah.com,https://www.jumeirah.com/en/jumeirah-group/contact-us,verified
+UK,Kimpton Fitzroy London,London,United Kingdom,Property,hello@kimptonfitzroylondon.com,+442075201800,https://www.kimptonfitzroylondon.com,https://www.kimptonfitzroylondon.com/contact/,verified
+UK,Knightsbridge Hotel,London,United Kingdom,Decision maker,jenniriley@firmdale.com,,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/knightsbridge-hotel/contacts-faqs,verified
+UK,Knightsbridge Hotel,London,United Kingdom,Property,reservations@knightsbridgehotel.com,,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/knightsbridge-hotel/contacts-faqs,verified
+UK,Leman Locke,London,United Kingdom,Decision maker,askleman@lockeliving.com,+44 20 3327 7140,https://www.lockeliving.com,https://www.lockeliving.com/en/help/property-information/how-do-i-contact-locke-hotels,verified
+UK,Leonardo Hotel London Aldgate,London,United Kingdom,Property,lla_reservations@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/london/leonardo-hotel-london-aldgate/faq,verified
+UK,Leonardo Hotel London Croydon,London,United Kingdom,Property,croydon@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/london/leonardo-hotel-london-croydon/faq,verified
+UK,Leonardo Hotel London Heathrow Airport,London,United Kingdom,Property,londonheathrowreservations@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/london/leonardo-hotel-london-heathrow-airport/faq,verified
+UK,Leonardo Royal Hotel London City,London,United Kingdom,Property,londonres@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/london/leonardo-royal-hotel-london-city/faq,verified
+UK,Leonardo Royal Hotel London St Paul's,London,United Kingdom,Property,londonres@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/london/leonardo-royal-hotel-london-st-pauls/faq,verified
+UK,Leonardo Royal Hotel London Tower Bridge,London,United Kingdom,Property,towerbridgeenquiries@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/london/leonardo-royal-hotel-london-tower-bridge/faq,verified
+UK,Locke London Canary Wharf,London,United Kingdom,Decision maker,askcanarywharf@lockeliving.com,,https://www.lockeliving.com,https://www.lockeliving.com/en/london/locke-london-canary-wharf,verified
+UK,Locke at Beckett Locke,London,United Kingdom,Property,askbeckett@lockeliving.com,,https://www.lockeliving.com,https://www.lockeliving.com/en/contact,verified
+UK,Locke at Broken Wharf,London,United Kingdom,Decision maker,askbrokenwharf@lockeliving.com,+44 20 3976 7200,https://www.lockeliving.com,https://www.lockeliving.com/en/help/property-information/how-do-i-contact-locke-hotels,verified
+UK,Malmaison,London,United Kingdom,Property,theteam@malmaison.com,,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Malmaison,London,United Kingdom,Sales,eventsdesk@malmaison.com,,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Malmaison London,London,United Kingdom,Property,london@malmaison.com,+44 20 3750 9402,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Mandarin Oriental Hyde Park London,London,United Kingdom,Property,molon-info@mohg.com,,https://www.mandarinoriental.com,https://www.mandarinoriental.com/en/london/hyde-park/contact-us,verified
+UK,Mandarin Oriental Hyde Park London,London,United Kingdom,Reservations,molon-reservations@mohg.com,,https://www.mandarinoriental.com,https://www.mandarinoriental.com/en/london/hyde-park/contact-us,verified
+UK,Mandarin Oriental Hyde Park London,London,United Kingdom,Sales,molon-events@mohg.com,,https://www.mandarinoriental.com,https://www.mandarinoriental.com/en/london/hyde-park/contact-us,verified
+UK,Mayfair House Apartments,London,United Kingdom,Decision maker,reservations@mayfairhouselondon.co.uk,+44 20 7491 0000,https://mayfairhouselondon.co.uk,https://mayfairhouselondon.co.uk/contact/,verified
+UK,Mitre House Hotel,London,United Kingdom,Decision maker,reservations@mitrehousehotel.com,+44 20 7723 8040,https://www.mitrehousehotel.com,https://www.mitrehousehotel.com/hotel-contacts,verified
+UK,Motel One London Tower Hill,London,United Kingdom,Property,london-towerhill@motel-one.com,,https://www.motel-one.com,https://www.motel-one.com/en/hotels/london/hotel-london-tower-hill/,verified
+UK,Nobu Hotel London Portman Square,London,United Kingdom,Reservations,reserve-portmansquare@nobuhotels.com,,https://www.iconichotelsresorts.com,https://www.iconichotelsresorts.com/,verified
+UK,Nobu Hotel London Portman Square,London,United Kingdom,Sales,events-portmansquare@nobuhotels.com,,https://www.iconichotelsresorts.com,https://www.iconichotelsresorts.com/,verified
+UK,Number Sixteen,London,United Kingdom,Decision maker,charlottecramptonsmith@firmdale.com,+44 (0)20 7589 5232,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/number-sixteen/contacts-faqs,verified
+UK,Number Sixteen,London,United Kingdom,Property,reservations@numbersixteenhotel.co.uk,+44 (0)20 7589 5232,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/number-sixteen/contacts-faqs,verified
+UK,Pan Pacific London,London,United Kingdom,Property,enquiry.pplon@panpacific.com,,https://www.panpacific.com/en/hotels-and-resorts/pp-london.html,https://www.panpacific.com/en/hotels-and-resorts/pp-london.html,verified
+UK,Point A London Canary Wharf,London,United Kingdom,Property,canarywharf@pointahotels.com,+4420 7531 8100,https://www.pointahotels.com/our-hotels/canary-wharf/,https://www.pointahotels.com/our-hotels/canary-wharf/,verified
+UK,Point A London Kensington,London,United Kingdom,Property,kensington@pointahotels.com,+4420 7370 2700,https://www.pointahotels.com/our-hotels/kensington/,https://www.pointahotels.com/our-hotels/kensington/,verified
+UK,Point A London Kings Cross,London,United Kingdom,Property,kingsx@pointahotels.com,+4420 7713 0428,https://www.pointahotels.com/our-hotels/kings-cross/,https://www.pointahotels.com/our-hotels/kings-cross/,verified
+UK,Point A London Liverpool Street,London,United Kingdom,Property,liverpoolstreet@pointahotels.com,+4420 7456 0400,https://www.pointahotels.com/our-hotels/liverpool-street/,https://www.pointahotels.com/our-hotels/liverpool-street/,verified
+UK,Point A London Paddington,London,United Kingdom,Property,paddington@pointahotels.com,+4420 7258 3140,https://www.pointahotels.com/our-hotels/paddington/,https://www.pointahotels.com/our-hotels/paddington/,verified
+UK,Point A London Shoreditch,London,United Kingdom,Property,shoreditch@pointahotels.com,+4420 7655 1720,https://www.pointahotels.com/our-hotels/shoreditch/,https://www.pointahotels.com/our-hotels/shoreditch/,verified
+UK,Point A London Waterloo,London,United Kingdom,Property,waterloo@pointahotels.com,+4420 7633 9317,https://www.pointahotels.com/our-hotels/waterloo/,https://www.pointahotels.com/our-hotels/waterloo/,verified
+UK,Premier Inn,London,United Kingdom,Sales,business@premierinn.com,,https://www.premierinn.com,https://www.premierinn.com/gb/en/hub.html,verified
+UK,Premier Inn / Hub,London,United Kingdom,Sales,group.enquiries@whitbread.com,,https://www.premierinn.com,https://www.premierinn.com/gb/en/hub.html,verified
+UK,QHotels Collection,London,United Kingdom,Property,customer-relations@theqhotelscollection.co.uk,,https://www.qhotels.co.uk,https://www.qhotels.co.uk/contact-us/,verified
+UK,Raffles London at The OWO,London,United Kingdom,Property,london@raffles.com,+44 20 3907 7500,https://www.raffles.com,https://www.raffles.com/contact-us/,verified
+UK,Raffles London at The OWO,London,United Kingdom,Sales,events.london@raffles.com,+44 20 3907 7500,https://www.raffles.com,https://www.raffles.com/contact-us/,verified
+UK,Red Carnation Hotels – UK Reservations,London,United Kingdom,Decision maker,uksales@rchmail.com,+44 808 196 8893,https://redcarnationhotels.com,https://redcarnationhotels.com/contact,verified
+UK,Red Carnation Hotels – UK Reservations,London,United Kingdom,Property,reservations@redcarnationhotels.com,+44 808 196 8893,https://redcarnationhotels.com,https://redcarnationhotels.com/contact,verified
+UK,Room2,London,United Kingdom,Property,reservations@staysecondnature.com,0260722155410,https://www.room2.com,https://www.room2.com/contact,verified
+UK,Roomzzz London Stratford,London,United Kingdom,Property,stratford@roomzzz.com,,https://www.roomzzz.com,https://www.roomzzz.com/contact/,verified
+UK,Rosewood London,London,United Kingdom,Property,london@rosewoodhotels.com,+44 20 7781 8888,https://www.rosewoodhotels.com,https://www.rosewoodhotels.com/en/london/contact,verified
+UK,SACO Holborn,London,United Kingdom,Decision maker,holborn@sacoapartments.com,+44 20 7269 9930,https://www.lockeliving.com,https://www.lockeliving.com/en/contact-us,verified
+UK,Sea Containers London,London,United Kingdom,Property,guestservices@seacontainerslondon.com,,https://www.seacontainerslondon.com,https://www.seacontainerslondon.com/,verified
+UK,"Shangri-La The Shard, London",London,United Kingdom,Property,london@shangri-la.com,+44 20 7234 8000,https://www.shangri-la.com,https://www.shangri-la.com/london/shangrila/about/,verified
+UK,"Shangri-La The Shard, London",London,United Kingdom,Sales,events.slln@shangri-la.com,+44 20 7234 8000,https://www.shangri-la.com,https://www.shangri-la.com/london/shangrila/about/,verified
+UK,South Place Hotel,London,United Kingdom,Property,frontdesk@southplacehotel.com,,https://www.southplacehotel.com,https://www.southplacehotel.com/contact-us/,verified
+UK,St. Pancras London Autograph Collection,London,United Kingdom,Property,concierge.stpancras@autographhotels.com,,https://www.stpancraslondon.com,https://www.stpancraslondon.com/,verified
+UK,St. Pancras London Autograph Collection,London,United Kingdom,Reservations,guestservices.stpancras@autographhotels.com,,https://www.stpancraslondon.com,https://www.stpancraslondon.com/,verified
+UK,St. Pancras London Autograph Collection,London,United Kingdom,Sales,events.stpancras@autographhotels.com,,https://www.stpancraslondon.com,https://www.stpancraslondon.com/,verified
+UK,Stattons Boutique Hotel,London,United Kingdom,Decision maker,info@stattonshotel.co.uk,,https://www.stattonshotel.co.uk,https://www.stattonshotel.co.uk/,verified
+UK,Strand Palace Hotel,London,United Kingdom,Property,info@strandpalacehotel.co.uk,,https://www.iconichotelsresorts.com,https://www.strandpalacehotel.co.uk/contact/,verified
+UK,Strand Palace Hotel,London,United Kingdom,Reservations,reservations@strandpalacehotel.co.uk,,https://www.iconichotelsresorts.com,https://www.strandpalacehotel.co.uk/contact/,verified
+UK,Strand Palace Hotel,London,United Kingdom,Sales,meetings@strandpalacehotel.co.uk,,https://www.iconichotelsresorts.com,https://www.strandpalacehotel.co.uk/contact/,verified
+UK,The Academy Hotel,London,United Kingdom,Decision maker,saleshq@ytlhotels.co.uk,+44 20 7631 4115,https://theacademyhotel.co.uk,https://theacademyhotel.co.uk/pages/contact-us.html,verified
+UK,The Academy Hotel,London,United Kingdom,Property,reservations@theacademyhotel.co.uk,+44 20 7631 4115,https://theacademyhotel.co.uk,https://theacademyhotel.co.uk/pages/contact-us.html,verified
+UK,The Ampersand Hotel,London,United Kingdom,Decision maker,sales@ampersandhotel.com,+44 20 7589 5895,https://ampersandhotel.com,https://ampersandhotel.com/contact/,verified
+UK,The Ampersand Hotel,London,United Kingdom,Property,info@ampersandhotel.com,+44 20 7589 5895,https://ampersandhotel.com,https://ampersandhotel.com/contact/,verified
+UK,The Bailey's Hotel London Kensington,London,United Kingdom,Decision maker,sales.baileys@millenniumhotels.co.uk,+44 20 7373 6000,https://millenniumhotels.com/en/london/the-baileys-hotel-london,https://millenniumhotels.com/en/london/the-baileys-hotel-london,verified
+UK,The Bailey's Hotel London Kensington,London,United Kingdom,Property,reservations.baileys@millenniumhotels.co.uk,+44 20 7373 6000,https://millenniumhotels.com/en/london/the-baileys-hotel-london,https://millenniumhotels.com/en/london/the-baileys-hotel-london,verified
+UK,The Beaumont,London,United Kingdom,Property,info@thebeaumont.com,,https://www.thebeaumont.com,https://www.thebeaumont.com/contact/,verified
+UK,The Beaumont,London,United Kingdom,Reservations,reservations@thebeaumont.com,,https://www.thebeaumont.com,https://www.thebeaumont.com/contact/,verified
+UK,The Beaumont,London,United Kingdom,Sales,events@thebeaumont.com,,https://www.thebeaumont.com,https://www.thebeaumont.com/contact/,verified
+UK,The Berkeley (Maybourne),London,United Kingdom,Decision maker,ksfaltos@maybourne.com,+44 20 7235 6000,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+UK,The Berkeley (Maybourne),London,United Kingdom,Property,info@the-berkeley.co.uk,+44 20 7235 6000,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+UK,The Berkeley (Maybourne),London,United Kingdom,Reservations,berkeley.reservations@maybourne.com,+44 20 7235 6000,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+UK,The Capital Hotel,London,United Kingdom,Property,reception.capital@warwickhotels.com,,https://www.capitalhotel.co.uk,https://www.capitalhotel.co.uk/contact/,verified
+UK,The Chelsea Townhouse,London,United Kingdom,Property,reservations@thechelseatownhouse.com,,https://www.iconichotelsresorts.com,https://www.thechelseatownhouse.com/contact/,verified
+UK,The Chesterfield Mayfair,London,United Kingdom,Decision maker,alake@chesterfieldmayfair.com,+44 20 7491 2622,https://chesterfieldmayfair.com,https://chesterfieldmayfair.com/contact-us,verified
+UK,The Chesterfield Mayfair,London,United Kingdom,Property,reception@chesterfieldmayfair.com,+44 20 7491 2622,https://chesterfieldmayfair.com,https://chesterfieldmayfair.com/contact-us,verified
+UK,The Chesterfield Mayfair,London,United Kingdom,Reservations,bookch@chesterfieldmayfair.com,+44 20 7491 2622,https://chesterfieldmayfair.com,https://chesterfieldmayfair.com/contact-us,verified
+UK,The Chesterfield Mayfair,London,United Kingdom,Sales,meet@chesterfieldmayfair.com,+44 20 7491 2622,https://chesterfieldmayfair.com,https://chesterfieldmayfair.com/contact-us,verified
+UK,The Connaught (Maybourne),London,United Kingdom,Decision maker,sbhalla@the-connaught.co.uk,+44 20 7499 7070,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+UK,The Connaught (Maybourne),London,United Kingdom,Property,info@the-connaught.co.uk,+44 20 7499 7070,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+UK,The Connaught (Maybourne),London,United Kingdom,Reservations,connaught.reservations@maybourne.com,+44 20 7499 7070,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+UK,The Egerton House Hotel,London,United Kingdom,Decision maker,bookeg@rchmail.com,+44 20 7589 2412,https://egertonhousehotel.com,https://egertonhousehotel.com/about/group-accommodation,verified
+UK,The Egerton House Hotel,London,United Kingdom,Sales,groupreservations@rchmail.com,+44 20 7589 2412,https://egertonhousehotel.com,https://egertonhousehotel.com/about/group-accommodation,verified
+UK,The Emory (Maybourne),London,United Kingdom,Property,info@the-emory.co.uk,+44 20 7862 5200,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+UK,The Emory (Maybourne),London,United Kingdom,Reservations,emory.reservations@maybourne.com,+44 20 7862 5200,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+UK,The Gate London,London,United Kingdom,Decision maker,reservations@thegate-london.com,,https://www.thegate-london.com,https://www.thegate-london.com/faqs,verified
+UK,The Goring,London,United Kingdom,Property,reservations@thegoring.com,,https://www.thegoring.com,https://www.thegoring.com/contact/,verified
+UK,"The Hoxton, Holborn",London,United Kingdom,Decision maker,sales.holborn@thehox.com,+44 20 7661 3000,https://thehoxton.com,https://thehoxton.com/london/holborn/contact/,verified
+UK,"The Hoxton, Holborn",London,United Kingdom,Property,hello.holborn@thehox.com,+44 20 7661 3000,https://thehoxton.com,https://thehoxton.com/london/holborn/contact/,verified
+UK,"The Hoxton, Holborn",London,United Kingdom,Reservations,book.holborn@thehox.com,+44 20 7661 3000,https://thehoxton.com,https://thehoxton.com/london/holborn/contact/,verified
+UK,"The Hoxton, Shepherd's Bush",London,United Kingdom,Decision maker,sales.shebu@thehox.com,+44 20 3540 3140,https://thehoxton.com,https://thehoxton.com/london/shepherds-bush/contact/,verified
+UK,"The Hoxton, Shepherd's Bush",London,United Kingdom,Property,hello.shebu@thehox.com,+44 20 3540 3140,https://thehoxton.com,https://thehoxton.com/london/shepherds-bush/contact/,verified
+UK,"The Hoxton, Shepherd's Bush",London,United Kingdom,Reservations,book.shebu@thehox.com,+44 20 3540 3140,https://thehoxton.com,https://thehoxton.com/london/shepherds-bush/contact/,verified
+UK,"The Hoxton, Shoreditch",London,United Kingdom,Decision maker,sales.shoreditch@thehox.com,+44 20 7550 1000,https://thehoxton.com,https://thehoxton.com/london/shoreditch/contact/,verified
+UK,"The Hoxton, Shoreditch",London,United Kingdom,Property,hello.shoreditch@thehox.com,+44 20 7550 1000,https://thehoxton.com,https://thehoxton.com/london/shoreditch/contact/,verified
+UK,"The Hoxton, Shoreditch",London,United Kingdom,Reservations,book.shoreditch@thehox.com,+44 20 7550 1000,https://thehoxton.com,https://thehoxton.com/london/shoreditch/contact/,verified
+UK,"The Hoxton, Southwark",London,United Kingdom,Decision maker,sales.southwark@thehox.com,+44 20 7903 3000,https://thehoxton.com,https://thehoxton.com/london/southwark/contact/,verified
+UK,"The Hoxton, Southwark",London,United Kingdom,Property,hello.southwark@thehox.com,+44 20 7903 3000,https://thehoxton.com,https://thehoxton.com/london/southwark/contact/,verified
+UK,"The Hoxton, Southwark",London,United Kingdom,Reservations,book.southwark@thehox.com,+44 20 7903 3000,https://thehoxton.com,https://thehoxton.com/london/southwark/contact/,verified
+UK,The Langham London,London,United Kingdom,Property,tllon.concierge@langhamhotels.com,,https://www.langhamhotels.com,https://www.langhamhotels.com/en/the-langham/london/contact-us/,verified
+UK,The Langham London,London,United Kingdom,Reservations,tllon.reservations@langhamhotels.com,,https://www.langhamhotels.com,https://www.langhamhotels.com/en/the-langham/london/contact-us/,verified
+UK,The Langham London,London,United Kingdom,Sales,tllon.events@langhamhotels.com,,https://www.langhamhotels.com,https://www.langhamhotels.com/en/the-langham/london/contact-us/,verified
+UK,The London EDITION,London,United Kingdom,Decision maker,walid.saighi@editionhotels.com,+44 20 7908 7900,https://www.editionhotels.com/london/,https://www.editionhotels.com/contact/,verified
+UK,The London EDITION,London,United Kingdom,Property,concierge.london@editionhotels.com,+44 20 7908 7900,https://www.editionhotels.com/london/,https://www.editionhotels.com/contact/,verified
+UK,The London EDITION,London,United Kingdom,Reservations,reservations.london@editionhotels.com,+44 20 7908 7900,https://www.editionhotels.com/london/,https://www.editionhotels.com/contact/,verified
+UK,The London EDITION – Group Rates,London,United Kingdom,Decision maker,stephanie.harrell@editionhotels.com,+44 20 7908 7981,https://www.editionhotels.com/london/,https://www.editionhotels.com/contact/,verified
+UK,The London EDITION – Group Rates,London,United Kingdom,Sales,victoria.sullivan@editionhotels.com,+44 20 7908 7981,https://www.editionhotels.com/london/,https://www.editionhotels.com/contact/,verified
+UK,The Mandeville Hotel,London,United Kingdom,Decision maker,reservations@mandeville.co.uk,+44 20 7935 5599,https://www.mandeville.co.uk,https://www.mandeville.co.uk/contact-us,verified
+UK,The Mandeville Hotel,London,United Kingdom,Property,info@mandeville.co.uk,+44 20 7935 5599,https://www.mandeville.co.uk,https://www.mandeville.co.uk/contact-us,verified
+UK,The Mayfair Townhouse,London,United Kingdom,Property,concierge@themayfairtownhouse.com,,https://www.iconichotelsresorts.com,https://www.iconichotelsresorts.com/,verified
+UK,The Mayfair Townhouse,London,United Kingdom,Sales,events@themayfairtownhouse.com,,https://www.iconichotelsresorts.com,https://www.iconichotelsresorts.com/,verified
+UK,The Mercer Collection,London,United Kingdom,Property,info@themercercollection.co.uk,,https://www.themercercollection.co.uk,https://www.themercercollection.co.uk/book-direct.html,verified
+UK,The Milestone Hotel,London,United Kingdom,Property,reception@milestonehotel.com,+442079171000,https://www.milestonehotel.com,https://www.milestonehotel.com/contact,verified
+UK,The Milestone Hotel & Residences Kensington,London,United Kingdom,Decision maker,apike@milestonehotel.com,+44 20 7917 1000,https://milestonehotel.com,https://milestonehotel.com/contact,verified
+UK,The Milestone Hotel & Residences Kensington,London,United Kingdom,Property,bookms@milestonehotel.com,+44 20 7917 1000,https://milestonehotel.com,https://milestonehotel.com/contact,verified
+UK,The Milestone Hotel & Residences Kensington,London,United Kingdom,Sales,meetms@milestonehotel.com,+44 20 7917 1000,https://milestonehotel.com,https://milestonehotel.com/contact,verified
+UK,The Montague on the Gardens,London,United Kingdom,Decision maker,dirk@montaguehotel.com,+44 20 7637 1001,https://montaguehotel.com,https://montaguehotel.com/contact,verified
+UK,The Montague on the Gardens,London,United Kingdom,Property,bookmt@montaguehotel.com,+44 20 7637 1001,https://montaguehotel.com,https://montaguehotel.com/contact,verified
+UK,The Montague on the Gardens,London,United Kingdom,Sales,meetmt@montaguehotel.com,+44 20 7637 1001,https://montaguehotel.com,https://montaguehotel.com/contact,verified
+UK,The Moorgate by Cove,London,United Kingdom,Decision maker,ask.themoorgate@staycove.com,+44 20 3327 4710,https://www.lockeliving.com,https://www.lockeliving.com/en/contact-us,verified
+UK,The Ned,London,United Kingdom,Property,enquiries@thened.com,+44 20 3828 2000,https://www.thened.com,https://www.thened.com/london/contact,verified
+UK,The Ned,London,United Kingdom,Reservations,reservations@thened.com,+44 20 3828 2000,https://www.thened.com,https://www.thened.com/london/contact,verified
+UK,The Ritz London,London,United Kingdom,Reservations,reservations@theritzlondon.com,,https://www.theritzlondon.com,https://www.theritzlondon.com/contact/,verified
+UK,The Ritz London,London,United Kingdom,Sales,groups@theritzlondon.com,,https://www.theritzlondon.com,https://www.theritzlondon.com/contact/,verified
+UK,The Rookery Hotel,London,United Kingdom,Decision maker,reservations@rookery.co.uk,+44 20 7336 0931,https://rookeryhotel.com,https://rookeryhotel.com/contact,verified
+UK,The Rubens at the Palace,London,United Kingdom,Decision maker,bookrb@rchmail.com,+44 20 7834 6600,https://rubenshotel.com,https://redcarnationhotels.com/our-hotels/london/the-rubens-at-the-palace,verified
+UK,The Rubens at the Palace,London,United Kingdom,Property,bookrb@rubenshotel.com,+44 20 7834 6600,https://rubenshotel.com,https://redcarnationhotels.com/our-hotels/london/the-rubens-at-the-palace,verified
+UK,The Savoy,London,United Kingdom,Property,savoy@fairmont.com,,https://www.thesavoylondon.com,https://www.thesavoylondon.com/contact/,verified
+UK,The Savoy,London,United Kingdom,Reservations,svy.reservations@fairmont.com,,https://www.thesavoylondon.com,https://www.thesavoylondon.com/contact/,verified
+UK,The Savoy,London,United Kingdom,Sales,svy.events@fairmont.com,,https://www.thesavoylondon.com,https://www.thesavoylondon.com/contact/,verified
+UK,The Soho Hotel,London,United Kingdom,Decision maker,jasonphillips@firmdale.com,,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/the-soho-hotel/contacts-faqs,verified
+UK,The Soho Hotel,London,United Kingdom,Property,reservations@sohohotel.com,,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/the-soho-hotel/contacts-faqs,verified
+UK,The Stafford London,London,United Kingdom,Property,concierge@thestaffordlondon.com,,https://www.thestaffordlondon.com,https://www.thestaffordlondon.com/,verified
+UK,The Stafford London,London,United Kingdom,Reservations,reservations@thestaffordlondon.com,,https://www.thestaffordlondon.com,https://www.thestaffordlondon.com/,verified
+UK,The Z Hotel City,London,United Kingdom,Property,city@thezhotels.com,+44 (0) 20 3551 3718,https://www.thezhotels.com/hotels/city/,https://www.thezhotels.com/hotels/city/,verified
+UK,The Z Hotel Covent Garden,London,United Kingdom,Property,coventgarden@thezhotels.com,+44 (0) 20 3837 6304,https://www.thezhotels.com/hotels/covent-garden/,https://www.thezhotels.com/hotels/covent-garden/,verified
+UK,The Z Hotel Gloucester Place,London,United Kingdom,Property,gloucesterplace@thezhotels.com,+44 (0) 20 3551 3719,https://www.thezhotels.com/hotels/gloucester-place/,https://www.thezhotels.com/hotels/gloucester-place/,verified
+UK,The Z Hotel Holborn,London,United Kingdom,Property,holborn@thezhotels.com,020 3841 0870,https://www.thezhotels.com/hotels/holborn/,https://www.thezhotels.com/hotels/holborn/,verified
+UK,The Z Hotel Leicester Square,London,United Kingdom,Property,leicestersquare@thezhotels.com,+44 (0) 20 8024 7970,https://www.thezhotels.com/hotels/leicester-square/,https://www.thezhotels.com/hotels/leicester-square/,verified
+UK,The Z Hotel Piccadilly,London,United Kingdom,Property,piccadilly@thezhotels.com,+44 (0) 20 3551 3720,https://www.thezhotels.com/hotels/piccadilly/,https://www.thezhotels.com/hotels/piccadilly/,verified
+UK,The Z Hotel Shoreditch,London,United Kingdom,Property,shoreditch@thezhotels.com,+44 (0) 20 3551 3702,https://www.thezhotels.com/hotels/shoreditch/,https://www.thezhotels.com/hotels/shoreditch/,verified
+UK,The Z Hotel Soho,London,United Kingdom,Property,soho@thezhotels.com,+44 (0)20 3551 3701,https://www.thezhotels.com/hotels/soho/,https://www.thezhotels.com/hotels/soho/,verified
+UK,The Z Hotel Strand,London,United Kingdom,Property,strand@thezhotels.com,+44 (0) 20 3841 0873,https://www.thezhotels.com/hotels/strand/,https://www.thezhotels.com/hotels/strand/,verified
+UK,The Z Hotel Tottenham Court Road,London,United Kingdom,Property,tcr@thezhotels.com,+44 (0) 203 837 6306,https://www.thezhotels.com/hotels/tottenham-court-road/,https://www.thezhotels.com/hotels/tottenham-court-road/,verified
+UK,The Z Hotel Trafalgar,London,United Kingdom,Property,trafalgar@thezhotels.com,+44 (0) 20 3841 0872,https://www.thezhotels.com/hotels/trafalgar/,https://www.thezhotels.com/hotels/trafalgar/,verified
+UK,The Z Hotel Victoria,London,United Kingdom,Property,victoria@thezhotels.com,+44 (0) 20 3589 3990,https://www.thezhotels.com/hotels/victoria/,https://www.thezhotels.com/hotels/victoria/,verified
+UK,The Zetter Clerkenwell,London,United Kingdom,Property,info@thezetter.com,,https://www.thezetter.com,https://www.thezetter.com/contact-us,verified
+UK,Travelodge,London,United Kingdom,Sales,groupbookings@travelodge.co.uk,,https://www.travelodge.co.uk,https://www.travelodge.co.uk/help/contact-us,verified
+UK,Vintry and Mercer,London,United Kingdom,Property,info@vintryandmercer.com,+44 (0)20 3908 8088,https://www.vintryandmercer.com,https://www.vintryandmercer.com/,verified
+UK,Virgin Hotels London Shoreditch,London,United Kingdom,Property,info.londonshoreditch@virginhotels.com,+44 203 988 4455,https://virginhotels.com,https://virginhotels.com/london-shoreditch/contact-us/,verified
+UK,Virgin Hotels London Shoreditch,London,United Kingdom,Reservations,reservations.londonshoreditch@virginhotels.com,+44 203 988 4455,https://virginhotels.com,https://virginhotels.com/london-shoreditch/contact-us/,verified
+UK,Virgin Hotels London Shoreditch,London,United Kingdom,Sales,sales.londonshoreditch@virginhotels.com,+44 203 988 4455,https://virginhotels.com,https://virginhotels.com/london-shoreditch/contact-us/,verified
+UK,Viridian Apartments,London,United Kingdom,Decision maker,sales@viridianapartments.com,+44 20 3743 0331,https://viridianapartments.com,https://www.viridianapartments.com/contact,verified
+UK,Viridian Apartments,London,United Kingdom,Property,reservations@viridianapartments.com,+44 20 3743 0331,https://viridianapartments.com,https://www.viridianapartments.com/contact,verified
+UK,Warren Street Hotel,London,United Kingdom,Property,reservations@warrenstreethotel.com,,https://www.firmdalehotels.com,https://www.firmdalehotels.com/hotels/warren-street-hotel/contacts-faqs,verified
+UK,Lime Wood,Lyndhurst,United Kingdom,Property,reservations@limewood.co.uk,,https://www.limewoodhotel.co.uk,https://www.limewoodhotel.co.uk/,verified
+UK,Whatley Manor,Malmesbury,United Kingdom,Property,reservations@whatleymanor.com,,https://www.whatleymanor.com,https://www.whatleymanor.com/contact/,verified
+UK,ABode Manchester,Manchester,United Kingdom,Property,info@abodemanchester.co.uk,0161 247 7744,https://www.abodemanchester.co.uk,https://www.abodemanchester.co.uk/contact,verified
+UK,Cove Minshull Street,Manchester,United Kingdom,Decision maker,ask.minshullstreet@staycove.com,+44 161 870 1909,https://www.lockeliving.com,https://www.lockeliving.com/en/contact-us,verified
+UK,Dakota Hotel Manchester,Manchester,United Kingdom,Decision maker,reservations@mcr.dakotahotels.co.uk,+44 161 674 9180,https://dakotahotels.co.uk,https://dakotahotels.co.uk/manchester/faqs,verified
+UK,Dakota Hotel Manchester Airport,Manchester,United Kingdom,Property,reservations@man.dakotahotels.co.uk,,https://dakotahotels.co.uk,https://dakotahotels.co.uk/manchester-airport/faqs,verified
+UK,Dakota Manchester,Manchester,United Kingdom,Property,concierge@mcr.dakotahotels.co.uk,,https://www.dakotahotels.co.uk,https://www.dakotahotels.co.uk/manchester/,verified
+UK,King Street Townhouse,Manchester,United Kingdom,Decision maker,reservations@kingstreettownhouse.co.uk,+44 161 667 0707,https://www.kingstreettownhouse.co.uk,https://www.kingstreettownhouse.co.uk/contact,verified
+UK,King Street Townhouse,Manchester,United Kingdom,Property,hello@kingstreettownhouse.co.uk,+44 161 667 0707,https://www.kingstreettownhouse.co.uk,https://www.kingstreettownhouse.co.uk/contact,verified
+UK,King Street Townhouse,Manchester,United Kingdom,Sales,stay@kingstreettownhouse.co.uk,+44 161 667 0707,https://www.kingstreettownhouse.co.uk,https://www.kingstreettownhouse.co.uk/contact,verified
+UK,Leonardo Hotel Manchester Central,Manchester,United Kingdom,Property,manchester@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/manchester/leonardo-hotel-manchester-central/faq,verified
+UK,Leonardo Hotel Manchester Piccadilly,Manchester,United Kingdom,Property,manchesterpiccadilly_reservations@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/manchester/leonardo-hotel-manchester-piccadilly/faq,verified
+UK,Malmaison Manchester,Manchester,United Kingdom,Property,manchester@malmaison.com,,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Malmaison Manchester Deansgate,Manchester,United Kingdom,Property,manchester.deansgate@malmaison.com,+44 161 509 9160,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Mercure Manchester Piccadilly,Manchester,United Kingdom,Property,info@mercuremanchester.co.uk,,https://www.mercuremanchester.co.uk,https://www.mercuremanchester.co.uk/contact/,verified
+UK,Mercure Manchester Piccadilly,Manchester,United Kingdom,Sales,events@mercuremanchester.co.uk,,https://www.mercuremanchester.co.uk,https://www.mercuremanchester.co.uk/contact/,verified
+UK,Motel One Manchester Piccadilly,Manchester,United Kingdom,Property,manchester-piccadilly@motel-one.com,,https://www.motel-one.com,https://www.motel-one.com/en/hotels/manchester/hotel-manchester-piccadilly/,verified
+UK,Motel One Manchester Royal Exchange,Manchester,United Kingdom,Property,manchester-royalexchange@motel-one.com,,https://www.motel-one.com,https://www.motel-one.com/en/hotels/manchester/hotel-manchester-royal-exchange/,verified
+UK,Motel One Manchester St Peters Square,Manchester,United Kingdom,Property,manchester-stpeterssquare@motel-one.com,,https://www.motel-one.com,https://www.motel-one.com/en/hotels/manchester/hotel-manchester-st-peters-square/,verified
+UK,Roomzzz Manchester City,Manchester,United Kingdom,Property,manchestercity@roomzzz.com,,https://roomzzz.com,https://roomzzz.com/contact,verified
+UK,Roomzzz Manchester Victoria,Manchester,United Kingdom,Property,manchestervictoria@roomzzz.com,,https://roomzzz.com,https://roomzzz.com/contact,verified
+UK,The Midland Hotel Manchester,Manchester,United Kingdom,Decision maker,guestrelations@themidlandmanchester.co.uk,+44 161 774 7051,https://www.themidlandhotel.co.uk,https://www.themidlandhotel.co.uk/contact,verified
+UK,Whitworth Locke,Manchester,United Kingdom,Decision maker,askwhitworth@lockeliving.com,+44 161 823 0530,https://www.lockeliving.com,https://www.lockeliving.com/en/help/property-information/how-do-i-contact-locke-hotels,verified
+UK,No. 42 Margate by GuestHouse,Margate,United Kingdom,Decision maker,no42.reception@guesthousehotels.co.uk,,https://guesthousehotels.co.uk,https://guesthousehotels.co.uk/no-42-margate/,verified
+UK,No. 42 Margate by GuestHouse,Margate,United Kingdom,Property,no42.reservations@guesthousehotels.co.uk,,https://guesthousehotels.co.uk,https://guesthousehotels.co.uk/no-42-margate/,verified
+UK,Swinton Country Club,Masham,United Kingdom,Property,countryclub@swintonestate.com,,https://www.swintonestate.com,https://www.swintonestate.com/contact/,verified
+UK,Swinton Park Hotel,Masham,United Kingdom,Reservations,guestservices@swintonestate.com,,https://www.swintonestate.com,https://www.swintonestate.com/contact/,verified
+UK,Swinton Park Hotel,Masham,United Kingdom,Sales,events@swintonestate.com,,https://www.swintonestate.com,https://www.swintonestate.com/contact/,verified
+UK,Leonardo Hotel Middlesbrough,Middlesbrough,United Kingdom,Property,middlesbrough@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/middlesbrough/leonardo-hotel-middlesbrough/faq,verified
+UK,Leonardo Hotel Milton Keynes,Milton Keynes,United Kingdom,Property,miltonkeynes@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/milton-keynes/leonardo-hotel-milton-keynes/faq,verified
+UK,Dakota Hotel Eurocentral,Motherwell,United Kingdom,Property,reservations@eur.dakotahotels.co.uk,,https://dakotahotels.co.uk,https://dakotahotels.co.uk/eurocentral/faqs,verified
+UK,Dakota Hotel Eurocentral,Motherwell,United Kingdom,Sales,events@eur.dakotahotels.co.uk,,https://dakotahotels.co.uk,https://dakotahotels.co.uk/eurocentral/faqs,verified
+UK,Macdonald Hotels,Multiple,United Kingdom,Reservations,enquiries@macdonald-hotels.co.uk,,https://www.macdonaldhotels.co.uk,https://www.macdonaldhotels.co.uk/contact/,verified
+UK,Macdonald Hotels,Multiple,United Kingdom,Sales,conference@macdonald-hotels.co.uk,,https://www.macdonaldhotels.co.uk,https://www.macdonaldhotels.co.uk/contact/,verified
+UK,Chewton Glen,New Milton,United Kingdom,Property,spa@chewtonglen.com,,https://www.iconichotelsresorts.com,https://www.chewtonglen.com/contact/,verified
+UK,Chewton Glen,New Milton,United Kingdom,Reservations,reservations@chewtonglen.com,,https://www.iconichotelsresorts.com,https://www.chewtonglen.com/contact/,verified
+UK,Chewton Glen,New Milton,United Kingdom,Sales,sales@chewtonglen.com,,https://www.iconichotelsresorts.com,https://www.chewtonglen.com/contact/,verified
+UK,The Vineyard,Newbury,United Kingdom,Property,info@the-vineyard.co.uk,,https://www.the-vineyard.co.uk,https://www.the-vineyard.co.uk/faqs/,verified
+UK,Dakota Hotel Newcastle,Newcastle,United Kingdom,Decision maker,events@ncl.dakotahotels.co.uk,,https://dakotahotels.co.uk,https://dakotahotels.co.uk/newcastle/faqs,verified
+UK,Dakota Hotel Newcastle,Newcastle,United Kingdom,Property,reservations@ncl.dakotahotels.co.uk,,https://dakotahotels.co.uk,https://dakotahotels.co.uk/newcastle/faqs,verified
+UK,Dakota Newcastle,Newcastle,United Kingdom,Property,concierge@ncl.dakotahotels.co.uk,,https://dakotahotels.co.uk/newcastle/faqs,https://dakotahotels.co.uk/newcastle/faqs,verified
+UK,Dorset Arms Hotel,Newcastle,United Kingdom,Decision maker,info@dorsetarmshotel.co.uk,+44 191 209 9754,https://www.dorsetarmshotel.co.uk,https://www.dorsetarmshotel.co.uk/contact,verified
+UK,Hotel du Vin Newcastle,Newcastle,United Kingdom,Property,info.newcastle@hotelduvin.com,+44 191 389 8628,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Leonardo Hotel Newcastle,Newcastle,United Kingdom,Property,newcastle@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/newcastle/leonardo-hotel-newcastle/faq,verified
+UK,Leonardo Hotel Newcastle Quayside,Newcastle,United Kingdom,Property,newcastlequayside@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/newcastle/leonardo-hotel-newcastle-quayside/faq,verified
+UK,Malmaison Newcastle,Newcastle,United Kingdom,Property,newcastle@malmaison.com,+44 191 389 8627,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Motel One Newcastle,Newcastle,United Kingdom,Property,newcastle@motel-one.com,+44 191 2111090,https://www.motel-one.com,https://www.motel-one.com/en/hotels/newcastle/,verified
+UK,Roomzzz Newcastle,Newcastle,United Kingdom,Property,newcastle@roomzzz.com,,https://roomzzz.com,https://roomzzz.com/contact,verified
+UK,Dunston Hall,Norwich,United Kingdom,Property,dunstonhallhotelspagolfresort@theqhotelscollection.co.uk,,https://www.dunstonhallhotel.co.uk,https://www.dunstonhallhotel.co.uk/,verified
+UK,Dunston Hall,Norwich,United Kingdom,Sales,events@dunstonhallhotel.co.uk,,https://www.dunstonhallhotel.co.uk,https://www.dunstonhallhotel.co.uk/,verified
+UK,St Giles House Hotel,Norwich,United Kingdom,Property,reservations@stgileshousenorwich.com,,https://stgileshousehotel.co.uk,https://stgileshousehotel.co.uk/contact,verified
+UK,Leonardo Hotel Nottingham,Nottingham,United Kingdom,Property,nottingham@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/nottingham/leonardo-hotel-nottingham/faq,verified
+UK,Roomzzz Nottingham City,Nottingham,United Kingdom,Property,nottinghamcity@roomzzz.com,,https://roomzzz.com,https://roomzzz.com/contact,verified
+UK,Artist Residence Oxford,Oxford,United Kingdom,Property,oxford@artistresidence.co.uk,,https://www.artistresidence.co.uk,https://www.artistresidence.co.uk/termsandconditions,verified
+UK,Leonardo Royal Hotel Oxford,Oxford,United Kingdom,Property,oxfordroyal@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/oxford/leonardo-royal-hotel-oxford/faq,verified
+UK,Malmaison Oxford,Oxford,United Kingdom,Property,reception.oxford@malmaison.com,+44 1865 689 944,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Artist Residence Penzance,Penzance,United Kingdom,Property,penzance@artistresidence.co.uk,,https://www.artistresidence.co.uk,https://www.artistresidence.co.uk/termsandconditions,verified
+UK,Leonardo Boutique Hotel Huntingtower Perth,Perth,United Kingdom,Property,huntingtowerperthreservations@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/perth/leonardo-boutique-hotel-huntingtower-perth/faq,verified
+UK,Fonab Castle Hotel & Spa,Pitlochry,United Kingdom,Property,reservations@fonabcastlehotel.com,,https://www.fonabcastlehotel.com,https://www.fonabcastlehotel.com/contact/,verified
+UK,Leonardo Hotel Plymouth,Plymouth,United Kingdom,Property,plymouth@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/plymouth/leonardo-hotel-plymouth/faq,verified
+UK,Hotel du Vin Poole,Poole,United Kingdom,Property,info.poole@hotelduvin.com,+44 1305 819 027,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Malmaison Reading,Reading,United Kingdom,Property,reading@malmaison.com,+44 118 334 1331,https://www.malmaison.com,https://www.malmaison.com/contact-us/,verified
+UK,Grantley Hall,Ripon,United Kingdom,Reservations,hello@grantleyhall.co.uk,,https://www.grantleyhall.co.uk,https://www.grantleyhall.co.uk/,verified
+UK,Grantley Hall,Ripon,United Kingdom,Sales,events@grantleyhall.co.uk,,https://www.grantleyhall.co.uk,https://www.grantleyhall.co.uk/,verified
+UK,Leonardo Hotel Sheffield,Sheffield,United Kingdom,Property,sheffield@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/sheffield/leonardo-hotel-sheffield/faq,verified
+UK,The Devonshire Arms Hotel Bolton Abbey,Skipton,United Kingdom,Property,reception@thedevonshirearms.co.uk,,https://www.thedevonshirearms.co.uk,https://www.thedevonshirearms.co.uk/contact/,verified
+UK,Leonardo Hotel Southampton,Southampton,United Kingdom,Property,southampton@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/southampton/leonardo-hotel-southampton/faq,verified
+UK,Leonardo Royal Hotel Southampton Grand Harbour,Southampton,United Kingdom,Property,southamptongrandharbour@leonardohotels.co.uk,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/southampton/leonardo-royal-hotel-southampton-grand-harbour/faq,verified
+UK,Thyme,Southrop,United Kingdom,Property,enquire@thyme.co.uk,,https://www.thyme.co.uk,https://www.thyme.co.uk/,verified
+UK,Hotel du Vin St Andrews,St Andrews,United Kingdom,Property,reservations.standrews@hotelduvin.com,+44 1334 845 313,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Marine & Lawn Hotels,St Andrews,United Kingdom,Property,info@marineandlawn.co.uk,,https://www.marineandlawn.com,https://www.marineandlawn.com/contact/,verified
+UK,Stratford Manor,Stratford-upon-Avon,United Kingdom,Property,stratfordmanorhotel@theqhotelscollection.co.uk,,https://www.stratfordmanor.co.uk,https://www.stratfordmanor.co.uk/,verified
+UK,Stratford Manor,Stratford-upon-Avon,United Kingdom,Sales,events@stratfordmanor.co.uk,,https://www.stratfordmanor.co.uk,https://www.stratfordmanor.co.uk/,verified
+UK,The Stratford Hotel,Stratford-upon-Avon,United Kingdom,Property,doubletreebyhiltonstratforduponavon@theqhotelscollection.co.uk,,https://www.thestratford-hotel.co.uk,https://www.thestratford-hotel.co.uk/,verified
+UK,The Stratford Hotel,Stratford-upon-Avon,United Kingdom,Sales,events@thestratford-hotel.co.uk,,https://www.thestratford-hotel.co.uk,https://www.thestratford-hotel.co.uk/,verified
+UK,The Mole Resort,Surrey,United Kingdom,Sales,events@themoleresort.co.uk,,https://www.iconichotelsresorts.com,https://www.iconichotelsresorts.com/,verified
+UK,Leonardo Hotel Swindon,Swindon,United Kingdom,Property,swindon@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/swindon/leonardo-hotel-swindon/faq,verified
+UK,Cliveden House,Taplow,United Kingdom,Property,club@clivedenhouse.co.uk,,https://www.iconichotelsresorts.com,https://www.clivedenhouse.co.uk/contact/,verified
+UK,Cliveden House,Taplow,United Kingdom,Reservations,reservations@clivedenhouse.co.uk,,https://www.iconichotelsresorts.com,https://www.clivedenhouse.co.uk/contact/,verified
+UK,Cliveden House,Taplow,United Kingdom,Sales,special.events@clivedenhouse.co.uk,,https://www.iconichotelsresorts.com,https://www.clivedenhouse.co.uk/contact/,verified
+UK,Lensbury,Teddington,United Kingdom,Property,hotel.reception@lensbury.com,,https://www.iconichotelsresorts.com,https://www.iconichotelsresorts.com/,verified
+UK,Lensbury,Teddington,United Kingdom,Sales,functions@lensbury.com,,https://www.iconichotelsresorts.com,https://www.iconichotelsresorts.com/,verified
+UK,Telford Hotel & Golf Resort,Telford,United Kingdom,Property,telfordhotelspagolfresort@theqhotelscollection.co.uk,,https://www.telfordhotelgolfresort.co.uk,https://www.telfordhotelgolfresort.co.uk/,verified
+UK,Telford Hotel & Golf Resort,Telford,United Kingdom,Sales,events@telfordhotelgolfresort.co.uk,,https://www.telfordhotelgolfresort.co.uk,https://www.telfordhotelgolfresort.co.uk/,verified
+UK,Calcot & Spa,Tetbury,United Kingdom,Property,reservations@calcot.co,,https://www.calcot.co,https://www.calcot.co/contact/,verified
+UK,The Oxford Belfry,Thame,United Kingdom,Property,oxfordbelfryhotelspa@theqhotelscollection.co.uk,,https://www.theoxfordbelfry.co.uk,https://www.theoxfordbelfry.co.uk/,verified
+UK,The Oxford Belfry,Thame,United Kingdom,Sales,events@theoxfordbelfry.co.uk,,https://www.theoxfordbelfry.co.uk,https://www.theoxfordbelfry.co.uk/,verified
+UK,Hotel du Vin Tunbridge Wells,Tunbridge Wells,United Kingdom,Property,reception.tunbridgewells@hotelduvin.com,+44 1892 320 749,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Fanhams Hall,Ware,United Kingdom,Property,fanhamshall@exclusive.co.uk,,https://www.exclusive.co.uk/fanhams-hall/,https://www.exclusive.co.uk/fanhams-hall/,verified
+UK,Leonardo Hotel London Watford,Watford,United Kingdom,Property,watford@leonardohotels.com,,https://www.leonardo-hotels.com,https://www.leonardo-hotels.com/london/leonardo-hotel-london-watford/faq,verified
+UK,The Grove,Watford,United Kingdom,Reservations,info@thegrove.co.uk,+44 1923 807807,https://www.thegrove.co.uk,https://www.thegrove.co.uk/contact/,verified
+UK,The Grove,Watford,United Kingdom,Sales,events@thegrove.co.uk,+44 1923 807807,https://www.thegrove.co.uk,https://www.thegrove.co.uk/contact/,verified
+UK,Hotel du Vin Winchester,Winchester,United Kingdom,Property,info.winchester@hotelduvin.com,+44 1962 896 329,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Lainston House,Winchester,United Kingdom,Property,lainstonhouse@exclusive.co.uk,,https://www.exclusive.co.uk/lainston-house/,https://www.exclusive.co.uk/lainston-house/,verified
+UK,Norton Park Hotel,Winchester,United Kingdom,Property,nortonparkhotelsparesort@theqhotelscollection.co.uk,,https://www.nortonparkhotel.com,https://www.nortonparkhotel.com/,verified
+UK,Norton Park Hotel,Winchester,United Kingdom,Sales,events@nortonparkhotel.com,,https://www.nortonparkhotel.com,https://www.nortonparkhotel.com/,verified
+UK,The Feathers Hotel,Woodstock,United Kingdom,Property,reception@feathers.co.uk,,https://www.feathers.co.uk,https://www.feathers.co.uk/contact/,verified
+UK,Hotel du Vin York,York,United Kingdom,Property,info.york@hotelduvin.com,+44 1904 405 260,https://www.hotelduvin.com,https://www.hotelduvin.com/contact-us/,verified
+UK,Middlethorpe Hall & Spa,York,United Kingdom,Property,spa@middlethorpe.com,,https://www.middlethorpe.com,https://www.middlethorpe.com/contact/,verified
+UK,Middlethorpe Hall & Spa,York,United Kingdom,Reservations,info@middlethorpe.com,,https://www.middlethorpe.com,https://www.middlethorpe.com/contact/,verified
+UK,No. 1 York by GuestHouse,York,United Kingdom,Decision maker,no1.reservations@guesthousehotels.co.uk,,https://guesthousehotels.co.uk/no-1-york/,https://guesthousehotels.co.uk/no-1-york/,verified
+UK,Roomzzz York,York,United Kingdom,Property,york@roomzzz.com,,https://roomzzz.com,https://roomzzz.com/contact,verified
+UK,Staycity,York,United Kingdom,Property,info@staycity.com,,https://www.staycitylive.com,https://www.staycitylive.com/contact,verified
+UK,The Milner York,York,United Kingdom,Property,reservations@themilneryork.com,,https://www.themilneryork.com,https://www.themilneryork.com/contact-us/,verified
+UK,The Milner York (formerly Principal York),York,United Kingdom,Property,reservations@theprincipalyork.com,,https://www.themilneryork.com,https://www.themilneryork.com/contact-us/,verified
