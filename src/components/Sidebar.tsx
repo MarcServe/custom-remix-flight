@@ -47,6 +47,7 @@ const navigation: NavigationItem[] = [
     children: [
       { name: "Autopilot", href: "/autopilot", icon: Brain },
       { name: "Lead Finder", href: "/lead-finder", icon: Sparkles },
+      { name: "Hospitality Leads", href: "/hospitality-leads", icon: Building2 },
       { name: "Research Chat", href: "#", icon: MessageSquare, opensResearchPanel: true },
       { name: "Enrichment", href: "/enrichment", icon: Wand2 },
       { name: "Lead Inbox", href: "/lead-inbox", icon: Inbox },
@@ -121,6 +122,7 @@ const ROUTE_TIER: Record<string, PlanTier> = {
   '/newsletters':           'individual',
   // Pro tier
   '/lead-finder':           'pro',
+  '/hospitality-leads':     'pro',
   '/lead-inbox':            'pro',
   '/sequences':             'pro',
   '/company-sequences':     'pro',
