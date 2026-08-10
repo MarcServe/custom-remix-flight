@@ -20,6 +20,8 @@ export type CuratedHospitalityLead = {
   reservationsEmail?: string;
   emailVerified?: boolean;
   emailSource?: string;
+  verificationStatus?: string;
+  verificationMethod?: string;
 };
 
 export type CuratedHospitalityLeadsFile = {

@@ -1,19 +1,31 @@
-# Hospitality verified leads
+# Hospitality verified leads — UK + US
 
 Hand-researched contacts from **official hotel / serviced-apartment websites**.
 
-- `verified-leads.json` — structured source of truth
-- `verified-leads.csv` — ready for TalkStay / campaign import
+## Are these verified?
 
-## Verification rule
+**Yes.** Every row is marked `Verification Status = verified` because the email was found **published on the property’s official contact page**.
 
-Only emails published on the property’s own contact page (or official group contact page) are included. No SMTP guessing, no Airbnb scraping, no LinkedIn scraping.
+| Column | Meaning |
+|---|---|
+| `Verification Status` | `verified` |
+| `Verification Method` | Published on official website contact page |
+| `Verification Source URL` | Exact page where the email was observed |
+| `Email Source` | `official_website` |
 
-## Markets in this batch
+This is **not** SMTP guessing, Airbnb scraping, or LinkedIn scraping.
 
-London, Lagos, Cape Town, Dubai, Brussels, Berlin (28 properties).
+## Counts
 
-## App path
+- **54 properties** total  
+- **35 UK** (London, Edinburgh, Brighton, Manchester, Bath, York)  
+- **19 US** (New York, Brooklyn, Los Angeles, Miami, Austin, Santa Monica, Beverly Hills, West Hollywood, …)
 
-Loaded in-app at `/hospitality-leads` → **Curated verified** tab.
-Also served at `/data/hospitality-leads/verified-leads.csv`.
+## Files
+
+- `verified-leads.json` — source of truth  
+- `verified-leads.csv` — campaign-ready (includes verification columns + source URL)
+
+## App
+
+`/hospitality-leads` → **Curated verified** (shows source link per lead)

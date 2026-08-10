@@ -67,6 +67,8 @@ type HospitalityLead = {
   email?: string;
   emailVerified?: boolean;
   emailSource?: "website" | "maps" | "getprospect" | "unknown";
+  sourceUrl?: string;
+  verificationMethod?: string;
   address?: string;
   city?: string;
   rating?: number;
@@ -188,6 +190,8 @@ export default function HospitalityLeads() {
           email: best?.email || raw.propertyEmail || raw.decisionMakerEmail,
           emailVerified: true,
           emailSource: "website",
+          sourceUrl: raw.sourceUrl,
+          verificationMethod: raw.verificationMethod || "Published on official website contact page",
           address: raw.address,
           city: [raw.city, raw.country].filter(Boolean).join(", "),
           category: raw.propertyType,
@@ -572,6 +576,8 @@ export default function HospitalityLeads() {
         email: lead.email,
         emailVerified: lead.emailVerified,
         emailSource: lead.emailSource,
+        sourceUrl: lead.sourceUrl,
+        verificationMethod: lead.verificationMethod,
         contactName: best?.name,
         contactTitle: best?.title,
         contactPhone: best?.phone,
@@ -715,13 +721,13 @@ export default function HospitalityLeads() {
         <AlertTitle>Website-verified research batch included</AlertTitle>
         <AlertDescription className="text-sm space-y-1">
           <p>
-            A starter list of <strong>UK website-verified</strong> hotels &amp; short-stay properties
-            (London, Edinburgh, Brighton, Manchester, Bath, York) was researched from{" "}
-            <strong>official contact pages</strong> — GM / MD / sales emails where published. Open the{" "}
-            <strong>Curated verified</strong> tab to load, export, or add them to CRM.
+            <strong>Verified leads:</strong> every curated email was found published on the property&apos;s{" "}
+            <strong>official contact page</strong>. Each row includes a <strong>Verification Source URL</strong> you can
+            open to confirm. Scope: United Kingdom + United States.
           </p>
           <p className="text-muted-foreground">
-            Scope for this batch is United Kingdom only. Airbnb host profiles and LinkedIn scraping are not used.
+            Not SMTP-guessed. Not Airbnb or LinkedIn scraped. Open <strong>Curated verified</strong> to load, export, or
+            add to CRM.
           </p>
         </AlertDescription>
       </Alert>
@@ -747,7 +753,7 @@ export default function HospitalityLeads() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Hand-researched verified leads</CardTitle>
               <CardDescription>
-                Emails taken from official hotel / serviced-apartment contact pages (not guessed). File:{" "}
+                Emails taken from official contact pages — each lead includes a verification source URL. File:{" "}
                 <code className="text-xs">data/hospitality-leads/verified-leads.csv</code>
               </CardDescription>
             </CardHeader>
@@ -1085,6 +1091,17 @@ export default function HospitalityLeads() {
                                 ? ` (+${lead.contacts.length - 1} more)`
                                 : ""}
                             </p>
+                          )}
+                          {lead.sourceUrl && (
+                            <a
+                              href={lead.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 hover:underline"
+                            >
+                              <ShieldCheck className="h-3 w-3" />
+                              Source: {lead.verificationMethod || "official contact page"}
+                            </a>
                           )}
                         </div>
                       </li>

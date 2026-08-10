@@ -12,6 +12,8 @@ export interface HospitalityLeadExportRow {
   email?: string;
   emailVerified?: boolean;
   emailSource?: string;
+  sourceUrl?: string;
+  verificationMethod?: string;
   contactName?: string;
   contactTitle?: string;
   contactPhone?: string;
@@ -30,6 +32,9 @@ function escapeCSV(value: string): string {
 
 export function generateHospitalityLeadsCSV(rows: HospitalityLeadExportRow[]): string {
   const headers = [
+    "Verification Status",
+    "Verification Method",
+    "Verification Source URL",
     "Property Name",
     "Property Type",
     "Website",
@@ -50,6 +55,9 @@ export function generateHospitalityLeadsCSV(rows: HospitalityLeadExportRow[]): s
 
   const lines = rows.map((r) =>
     [
+      r.emailVerified ? "verified" : "unverified",
+      escapeCSV(r.verificationMethod || (r.emailSource === "website" ? "Published on official website contact page" : r.emailSource || "")),
+      escapeCSV(r.sourceUrl || ""),
       escapeCSV(r.propertyName || ""),
       escapeCSV(r.propertyType || ""),
       escapeCSV(r.website || ""),

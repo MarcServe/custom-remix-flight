@@ -1,15 +1,26 @@
 {
   "generatedAt": "2026-08-10",
-  "marketFocus": "United Kingdom",
-  "method": "Manual web research of official UK hotel / serviced-apartment contact pages. Emails are website-published (not SMTP-guessed, not Airbnb-scraped, not LinkedIn-scraped).",
-  "verificationStandard": "email_source=official_website_contact_page",
+  "marketFocus": "United Kingdom + United States",
+  "method": "Manual web research of official hotel / serviced-apartment contact pages. VERIFIED = email published on official contact page (source URL included). Not SMTP-guessed. Not Airbnb/LinkedIn scraped.",
+  "verificationStandard": "official_website_contact_page",
+  "verificationNote": "Verification Status = verified means the email was observed on the Verification Source URL (official website).",
   "markets": [
     "London",
     "Edinburgh",
     "Brighton",
     "Manchester",
     "Bath",
-    "York"
+    "York",
+    "New York",
+    "Miami Beach",
+    "West Hollywood",
+    "Beverly Hills",
+    "Los Angeles",
+    "Brooklyn",
+    "United States",
+    "Miami",
+    "Santa Monica",
+    "Austin"
   ],
   "leads": [
     {
@@ -28,7 +39,9 @@
       "salesEmail": "meet@chesterfieldmayfair.com",
       "reservationsEmail": "bookch@chesterfieldmayfair.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Milestone Hotel & Residences Kensington",
@@ -46,7 +59,9 @@
       "salesEmail": "meetms@milestonehotel.com",
       "reservationsEmail": "bookms@milestonehotel.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Montague on the Gardens",
@@ -64,7 +79,9 @@
       "salesEmail": "meetmt@montaguehotel.com",
       "reservationsEmail": "bookmt@montaguehotel.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Claridge's (Maybourne)",
@@ -80,7 +97,9 @@
       "decisionMakerEmail": "tkochs@claridges.co.uk",
       "reservationsEmail": "Claridges.reservations@maybourne.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Connaught (Maybourne)",
@@ -96,7 +115,9 @@
       "decisionMakerEmail": "sbhalla@the-connaught.co.uk",
       "reservationsEmail": "Connaught.reservations@maybourne.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Berkeley (Maybourne)",
@@ -112,7 +133,9 @@
       "decisionMakerEmail": "ksfaltos@maybourne.com",
       "reservationsEmail": "Berkeley.reservations@maybourne.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Emory (Maybourne)",
@@ -128,7 +151,9 @@
       "decisionMakerEmail": "ksfaltos@maybourne.com",
       "reservationsEmail": "Emory.reservations@maybourne.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Ampersand Hotel",
@@ -145,7 +170,9 @@
       "salesEmail": "sales@ampersandhotel.com",
       "reservationsEmail": "stay@ampersandhotel.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The London EDITION",
@@ -163,7 +190,9 @@
       "salesEmail": "walid.saighi@editionhotels.com",
       "reservationsEmail": "reservations.london@editionhotels.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Hotel 41",
@@ -180,7 +209,9 @@
       "decisionMakerEmail": "Malcolm41@41hotel.com",
       "reservationsEmail": "book41@41hotel.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Egerton House Hotel",
@@ -197,7 +228,9 @@
       "salesEmail": "groupreservations@rchmail.com",
       "reservationsEmail": "bookeg@rchmail.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Rubens at the Palace",
@@ -213,7 +246,9 @@
       "decisionMakerTitle": "Reservations",
       "reservationsEmail": "bookrb@rchmail.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Hazlitt's Hotel",
@@ -229,7 +264,9 @@
       "decisionMakerTitle": "Reservations",
       "reservationsEmail": "reservations@hazlitts.co.uk",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Rookery Hotel",
@@ -245,7 +282,9 @@
       "decisionMakerTitle": "Reservations",
       "reservationsEmail": "reservations@rookery.co.uk",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Academy Hotel",
@@ -262,7 +301,9 @@
       "salesEmail": "saleshq@ytlhotels.co.uk",
       "reservationsEmail": "reservations@theacademyhotel.co.uk",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Bailey's Hotel London Kensington",
@@ -279,7 +320,9 @@
       "salesEmail": "sales.baileys@millenniumhotels.co.uk",
       "reservationsEmail": "reservations.baileys@millenniumhotels.co.uk",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Mitre House Hotel",
@@ -295,7 +338,9 @@
       "decisionMakerTitle": "Reservations",
       "reservationsEmail": "reservations@mitrehousehotel.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Cheval Collection (central)",
@@ -312,7 +357,9 @@
       "decisionMakerEmail": "reservations@chevalcollection.com",
       "decisionMakerTitle": "Central Reservations",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Cheval Three Quays",
@@ -329,7 +376,9 @@
       "decisionMakerEmail": "frontoffice.ctq@chevalresidences.com",
       "reservationsEmail": "reservations@chevalcollection.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Cheval Knightsbridge",
@@ -345,7 +394,9 @@
       "decisionMakerTitle": "Front Office / Property",
       "reservationsEmail": "reservations@chevalcollection.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Cheval Thorney Court",
@@ -362,7 +413,9 @@
       "decisionMakerEmail": "frontoffice.ctc@chevalresidences.com",
       "reservationsEmail": "reservations@chevalcollection.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Mayfair House Apartments",
@@ -378,7 +431,9 @@
       "decisionMakerTitle": "Reservations",
       "reservationsEmail": "reservations@mayfairhouselondon.co.uk",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Viridian Apartments",
@@ -395,7 +450,9 @@
       "salesEmail": "sales@viridianapartments.com",
       "reservationsEmail": "reservations@viridianapartments.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Grand Plaza Serviced Apartments",
@@ -410,7 +467,9 @@
       "decisionMakerTitle": "Reservations",
       "reservationsEmail": "reservations@grandplazaemail.co.uk",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Gate London",
@@ -425,7 +484,9 @@
       "decisionMakerTitle": "Reservations",
       "reservationsEmail": "reservations@thegate-london.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "37GS Residences",
@@ -441,7 +502,9 @@
       "decisionMakerTitle": "Reservations",
       "reservationsEmail": "stay@37gsresidences.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Jumeirah Group – UK / Europe Sales",
@@ -457,7 +520,9 @@
       "decisionMakerEmail": "uksales@jumeirah.com",
       "decisionMakerTitle": "Europe Global Sales Office",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Red Carnation Hotels – UK Reservations",
@@ -473,7 +538,9 @@
       "salesEmail": "uksales@rchmail.com",
       "reservationsEmail": "reservations@redcarnationhotels.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "100 Princes Street",
@@ -491,7 +558,9 @@
       "salesEmail": "uksales@rchmail.com",
       "reservationsEmail": "bookps@100princes-street.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "Drakes Hotel Brighton",
@@ -509,7 +578,9 @@
       "salesEmail": "sales@curioushotels.com",
       "reservationsEmail": "stay@drakeshotel.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Midland Hotel Manchester",
@@ -525,7 +596,9 @@
       "decisionMakerTitle": "Guest Relations",
       "reservationsEmail": "guestrelations@themidlandmanchester.co.uk",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The Gainsborough Bath Spa",
@@ -541,7 +614,9 @@
       "decisionMakerTitle": "Reservations",
       "reservationsEmail": "reservations@thegainsboroughbathspa.co.uk",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "No. 15 Bath by GuestHouse",
@@ -558,7 +633,9 @@
       "salesEmail": "marketing@guesthousehotels.co.uk",
       "reservationsEmail": "no15.reservations@guesthousehotels.co.uk",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "No. 1 York by GuestHouse",
@@ -574,7 +651,9 @@
       "decisionMakerTitle": "Reservations",
       "reservationsEmail": "no1.reservations@guesthousehotels.co.uk",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     },
     {
       "propertyName": "The London EDITION – Group Rates",
@@ -592,7 +671,356 @@
       "salesEmail": "victoria.sullivan@editionhotels.com",
       "reservationsEmail": "reservations.london@editionhotels.com",
       "emailVerified": true,
-      "emailSource": "official_website"
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "The New York EDITION",
+      "propertyType": "Luxury hotel",
+      "city": "New York",
+      "address": "5 Madison Avenue / Midtown, New York, NY",
+      "website": "https://www.editionhotels.com/new-york/",
+      "sourceUrl": "https://www.editionhotels.com/contact/",
+      "phone": "+1 212 413 4200",
+      "propertyEmail": "NYEDITIONinfo@editionhotels.com",
+      "decisionMakerName": "Mary Cristina Cole",
+      "decisionMakerTitle": "Corporate Negotiated Rates",
+      "decisionMakerEmail": "mary.cole@editionhotels.com",
+      "salesEmail": "gabrielle.harrison@editionhotels.com",
+      "reservationsEmail": "NYEDITIONinfo@editionhotels.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "The New York EDITION – Group Sales",
+      "propertyType": "Luxury hotel (group sales)",
+      "city": "New York",
+      "website": "https://www.editionhotels.com/new-york/",
+      "sourceUrl": "https://www.editionhotels.com/contact/",
+      "phone": "+1 212 413 4179",
+      "propertyEmail": "gabrielle.harrison@editionhotels.com",
+      "decisionMakerName": "Gabrielle Harrison",
+      "decisionMakerTitle": "Group Sales Inquiries",
+      "decisionMakerEmail": "gabrielle.harrison@editionhotels.com",
+      "salesEmail": "gabrielle.harrison@editionhotels.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "Times Square EDITION",
+      "propertyType": "Luxury hotel",
+      "city": "New York",
+      "address": "Times Square, New York, NY",
+      "website": "https://www.editionhotels.com/times-square/",
+      "sourceUrl": "https://www.editionhotels.com/contact/",
+      "phone": "+1 212 398 7017",
+      "propertyEmail": "reservations.tmsq@editionhotels.com",
+      "decisionMakerEmail": "sales.tmsq@editionhotels.com",
+      "decisionMakerTitle": "Sales & Marketing",
+      "salesEmail": "sales.tmsq@editionhotels.com",
+      "reservationsEmail": "reservations.tmsq@editionhotels.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "Miami Beach EDITION",
+      "propertyType": "Luxury hotel",
+      "city": "Miami Beach",
+      "address": "Miami Beach, FL",
+      "website": "https://www.editionhotels.com/miami-beach/",
+      "sourceUrl": "https://www.editionhotels.com/contact/",
+      "phone": "+1 786 257 4500",
+      "propertyEmail": "reservations.miamibeach@editionhotels.com",
+      "decisionMakerEmail": "reservations.miamibeach@editionhotels.com",
+      "decisionMakerTitle": "Reservations",
+      "reservationsEmail": "reservations.miamibeach@editionhotels.com",
+      "salesEmail": "mbeditionsales@editionhotels.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "West Hollywood EDITION",
+      "propertyType": "Luxury hotel",
+      "city": "West Hollywood",
+      "address": "West Hollywood, CA",
+      "website": "https://www.editionhotels.com/west-hollywood/",
+      "sourceUrl": "https://www.editionhotels.com/contact/",
+      "phone": "+1 310 953 9899",
+      "propertyEmail": "info.weho@editionhotels.com",
+      "decisionMakerName": "Alexis Kagan",
+      "decisionMakerTitle": "Marketing",
+      "decisionMakerEmail": "marketing.weho@editionhotels.com",
+      "salesEmail": "weho.catering@editionhotels.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "The Maybourne Beverly Hills",
+      "propertyType": "Luxury hotel",
+      "city": "Beverly Hills",
+      "address": "Beverly Hills, CA",
+      "website": "https://www.maybourne.com",
+      "sourceUrl": "https://www.maybourne.com/en/about-us/contact",
+      "phone": "+1 310 860 7800",
+      "propertyEmail": "info@maybournebeverlyhills.com",
+      "decisionMakerName": "Sam Jagger",
+      "decisionMakerTitle": "Managing Director",
+      "decisionMakerEmail": "sjagger@maybournebeverlyhills.com",
+      "reservationsEmail": "Beverlyhills.reservations@maybourne.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "The LINE LA",
+      "propertyType": "Boutique hotel",
+      "city": "Los Angeles",
+      "address": "3515 Wilshire Blvd, Los Angeles, CA 90005",
+      "website": "https://www.thelinehotel.com/los-angeles/",
+      "sourceUrl": "https://www.thelinehotel.com/los-angeles/faq/",
+      "phone": "+1 213 381 7411",
+      "propertyEmail": "reservations.la@thelinehotel.com",
+      "decisionMakerEmail": "sales.la@thelinehotel.com",
+      "decisionMakerTitle": "Group Sales",
+      "salesEmail": "sales.la@thelinehotel.com",
+      "reservationsEmail": "reservations.la@thelinehotel.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "MADE Hotel NoMad",
+      "propertyType": "Boutique hotel",
+      "city": "New York",
+      "address": "44 W 29th St, New York, NY 10001",
+      "website": "https://madehotels.com",
+      "sourceUrl": "https://madehotels.com/contact-us/",
+      "phone": "+1 212 213 4429",
+      "propertyEmail": "hello@madehotels.com",
+      "decisionMakerEmail": "sales@madehotels.com",
+      "decisionMakerTitle": "Groups & Corporate Rates",
+      "salesEmail": "sales@madehotels.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "Pod Brooklyn Hotel",
+      "propertyType": "Hotel",
+      "city": "Brooklyn",
+      "address": "247 Metropolitan Avenue, Brooklyn, NY 11211",
+      "website": "https://www.thepodhotel.com",
+      "sourceUrl": "https://www.thepodhotel.com/contact-us",
+      "phone": "+1 718 963 3060",
+      "propertyEmail": "reservations@podhotelbk.com",
+      "decisionMakerEmail": "reservations@podhotelbk.com",
+      "decisionMakerTitle": "Reservations",
+      "reservationsEmail": "reservations@podhotelbk.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "Pod 39 Hotel",
+      "propertyType": "Hotel",
+      "city": "New York",
+      "address": "145 East 39th Street, New York, NY 10016",
+      "website": "https://www.thepodhotel.com",
+      "sourceUrl": "https://www.thepodhotel.com/contact-us",
+      "phone": "+1 212 865 5700",
+      "propertyEmail": "reservations@podhotel39.com",
+      "decisionMakerEmail": "reservations@podhotel39.com",
+      "decisionMakerTitle": "Reservations",
+      "reservationsEmail": "reservations@podhotel39.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "Pod 51 Hotel",
+      "propertyType": "Hotel",
+      "city": "New York",
+      "address": "230 East 51st Street, New York, NY 10022",
+      "website": "https://www.thepodhotel.com",
+      "sourceUrl": "https://www.thepodhotel.com/contact-us",
+      "phone": "+1 212 355 0300",
+      "propertyEmail": "reservations@podhotel51.com",
+      "decisionMakerEmail": "reservations@podhotel51.com",
+      "decisionMakerTitle": "Reservations",
+      "reservationsEmail": "reservations@podhotel51.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "Pod Times Square",
+      "propertyType": "Hotel",
+      "city": "New York",
+      "address": "400 West 42nd Street, New York, NY 10036",
+      "website": "https://www.thepodhotel.com",
+      "sourceUrl": "https://www.thepodhotel.com/contact-us",
+      "phone": "+1 212 273 9222",
+      "propertyEmail": "reservations@podhotel42.com",
+      "decisionMakerEmail": "reservations@podhotel42.com",
+      "decisionMakerTitle": "Reservations",
+      "reservationsEmail": "reservations@podhotel42.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "Pod Pads NYC (extended stay)",
+      "propertyType": "Serviced apartments / extended stay",
+      "city": "New York",
+      "address": "Pod Times Square, New York, NY",
+      "website": "https://www.thepodhotel.com",
+      "sourceUrl": "https://www.thepodhotel.com/contact-us",
+      "phone": "+1 646 973 4831",
+      "propertyEmail": "info@podpadsnyc.com",
+      "decisionMakerEmail": "info@podpadsnyc.com",
+      "decisionMakerTitle": "Extended stay / Pod Pads",
+      "reservationsEmail": "info@podpadsnyc.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "PUBLIC Hotel New York",
+      "propertyType": "Boutique hotel",
+      "city": "New York",
+      "website": "https://www.publichotels.com/newyork",
+      "sourceUrl": "https://www.publichotels.com/newyork/contact",
+      "phone": "+1 212 735 6000",
+      "propertyEmail": "reservationsny@publichotels.com",
+      "decisionMakerEmail": "reservationsny@publichotels.com",
+      "decisionMakerTitle": "Room Reservations",
+      "reservationsEmail": "reservationsny@publichotels.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "Trump Hotels – Global Sales",
+      "propertyType": "Hotel group sales office",
+      "city": "United States",
+      "website": "https://www.trumphotels.com",
+      "sourceUrl": "https://www.trumphotels.com/contact-us",
+      "phone": "+1 855 878 6700",
+      "propertyEmail": "globalsales@trumphotels.com",
+      "decisionMakerEmail": "globalsales@trumphotels.com",
+      "decisionMakerTitle": "Global Sales Office",
+      "salesEmail": "globalsales@trumphotels.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "Trump National Doral Miami",
+      "propertyType": "Resort hotel",
+      "city": "Miami",
+      "address": "4400 NW 87th Avenue, Miami, FL 33178",
+      "website": "https://www.trumphotels.com",
+      "sourceUrl": "https://www.booktrump.com/miami",
+      "phone": "+1 305 592 2000",
+      "propertyEmail": "doral.reservations@trumphotels.com",
+      "decisionMakerEmail": "doral.reservations@trumphotels.com",
+      "decisionMakerTitle": "Reservations",
+      "reservationsEmail": "doral.reservations@trumphotels.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "Santa Monica Proper Hotel – Sales",
+      "propertyType": "Luxury hotel",
+      "city": "Santa Monica",
+      "address": "700 Wilshire Boulevard, Santa Monica, CA 90401",
+      "website": "https://www.properhotel.com/santa-monica/",
+      "sourceUrl": "https://www.properhotel.com/wp-content/uploads/2025/05/SMP_Meeting-and-Event-Brochure_042425.pdf",
+      "phone": "+1 310 620 9990",
+      "propertyEmail": "smp.sales@properhotel.com",
+      "decisionMakerEmail": "smp.sales@properhotel.com",
+      "decisionMakerTitle": "Meetings & Events Sales",
+      "salesEmail": "smp.sales@properhotel.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "Austin Proper Hotel",
+      "propertyType": "Luxury hotel",
+      "city": "Austin",
+      "address": "600 W 2nd Street, Austin, TX 78701",
+      "website": "https://www.properhotel.com/austin/",
+      "sourceUrl": "https://www.northstarmeetingsgroup.com/Meeting-Event-Venues/Austin/Convention-Hotel/Austin-Proper-Hotel-p53205326",
+      "phone": "+1 512 628 1500",
+      "propertyEmail": "atxp.info@properhotel.com",
+      "decisionMakerEmail": "atxp.info@properhotel.com",
+      "decisionMakerTitle": "Hotel / Sales info",
+      "reservationsEmail": "atxp.info@properhotel.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
+    },
+    {
+      "propertyName": "Furnished Quarters (NYC HQ)",
+      "propertyType": "Serviced apartments / short stay",
+      "city": "New York",
+      "address": "104 West 27th Street, 4th Floor, New York, NY 10001",
+      "website": "https://www.furnishedquarters.com",
+      "sourceUrl": "https://www.furnishedquarters.com/contact",
+      "phone": "+1 212 367 9400",
+      "propertyEmail": "guestservices@furnishedquarters.com",
+      "decisionMakerEmail": "guestservices@furnishedquarters.com",
+      "decisionMakerTitle": "Guest Services",
+      "salesEmail": "press@furnishedquarters.com",
+      "country": "United States",
+      "emailVerified": true,
+      "emailSource": "official_website",
+      "verificationStatus": "verified",
+      "verificationMethod": "Published on official website contact page"
     }
   ]
 }
