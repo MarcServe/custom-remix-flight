@@ -17,13 +17,16 @@ This is **not** SMTP guessing, Airbnb scraping, or LinkedIn scraping.
 
 ## Counts
 
-- **54 properties** total  
-- **35 UK** (London, Edinburgh, Brighton, Manchester, Bath, York)  
-- **19 US** (New York, Brooklyn, Los Angeles, Miami, Austin, Santa Monica, Beverly Hills, West Hollywood, …)
+- **~241 properties** total (see `counts` in JSON)  
+- **115 UK** across London and major UK cities (Birmingham, Bristol, Manchester, Edinburgh, Glasgow, Liverpool, Leeds, Brighton, Oxford, Cambridge, Bath, York, Newcastle, Cardiff, Belfast, and more)  
+- **126 US** (expanded US market set)
+
+UK brands/groups covered include Apex Hotels, Dakota Hotels, Locke / Cove / SACO, The Hoxton, GuestHouse Hotels, Malmaison, Hotel du Vin, Cheval, Maybourne, Red Carnation, YTL (Gainsborough / Academy / Monkey Island), plus independents.
 
 ## Files
 
-- `verified-leads.json` — source of truth  
+- `verified-leads.json` — source of truth (UK + US)  
+- `uk-verified-leads.json` — UK-only array for campaigns  
 - `verified-leads.csv` — campaign-ready (includes verification columns + source URL)
 
 ## App
