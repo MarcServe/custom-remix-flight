@@ -17,17 +17,22 @@ This is **not** SMTP guessing, Airbnb scraping, or LinkedIn scraping.
 
 ## Counts
 
-- **~241 properties** total (see `counts` in JSON)  
-- **115 UK** across London and major UK cities (Birmingham, Bristol, Manchester, Edinburgh, Glasgow, Liverpool, Leeds, Brighton, Oxford, Cambridge, Bath, York, Newcastle, Cardiff, Belfast, and more)  
-- **126 US** (expanded US market set)
+- **563 properties** total (`counts.total` in JSON)
+- **320 UK** across London and major UK cities
+- **243 US**
+- **759 unique emails** across property / sales / reservations / decision-maker fields
 
-UK brands/groups covered include Apex Hotels, Dakota Hotels, Locke / Cove / SACO, The Hoxton, GuestHouse Hotels, Malmaison, Hotel du Vin, Cheval, Maybourne, Red Carnation, YTL (Gainsborough / Academy / Monkey Island), plus independents.
+UK coverage includes Apex Hotels, Roomzzz, Malmaison, Hotel du Vin, Locke / Cove / SACO, The Hoxton, Dakota, GuestHouse, Firmdale, Leonardo, Motel One, Z Hotels, QHotels, Exclusive Collection, and independents.
+
+US coverage includes Ace Hotel, The Standard, The Hoxton, YOTEL, Edition, Proper, Freehand, Graduate, 1 Hotels, Arlo, Viceroy, and independents across major US cities.
 
 ## Files
 
-- `verified-leads.json` — source of truth (UK + US)  
-- `uk-verified-leads.json` — UK-only array for campaigns  
-- `verified-leads.csv` — campaign-ready (includes verification columns + source URL)
+- `verified-leads.json` — source of truth (UK + US)
+- `uk-verified-leads.json` — UK-only for campaigns
+- `us-focus-verified-leads.json` — US-only for campaigns
+- `verified-leads.csv` — campaign-ready (verification columns + source URL)
+- `raw/` — research batch inputs used to build the merged file
 
 ## App
 
