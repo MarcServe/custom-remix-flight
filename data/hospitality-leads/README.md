@@ -51,3 +51,14 @@ From **Hospitality Leads → Campaign & newsletter ingest**:
 Edge function: `supabase/functions/ingest-hospitality-leads`  
 CLI example: `mcp-server/examples/hospitality-ingest.sh`  
 API also supports `api-campaigns` action `create_group` for custom automation.
+
+
+## Desktop export
+
+Generate a well-named **Hospitality leads** folder (UK/US properties + unique emails):
+
+```bash
+python3 scripts/export-hospitality-desktop.py
+# or explicitly to your Desktop:
+python3 scripts/export-hospitality-desktop.py --dest "$HOME/Desktop/Hospitality leads"
+```
