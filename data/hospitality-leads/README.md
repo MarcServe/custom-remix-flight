@@ -17,10 +17,10 @@ This is **not** SMTP guessing, Airbnb scraping, or LinkedIn scraping.
 
 ## Counts
 
-- **563 properties** total (`counts.total` in JSON)
-- **320 UK** across London and major UK cities
-- **243 US**
-- **759 unique emails** across property / sales / reservations / decision-maker fields
+- **679 properties** total (`counts.total` in JSON)
+- **398 UK** across London and major UK cities
+- **281 US**
+- **885 unique emails** across property / sales / reservations / decision-maker fields
 
 UK coverage includes Apex Hotels, Roomzzz, Malmaison, Hotel du Vin, Locke / Cove / SACO, The Hoxton, Dakota, GuestHouse, Firmdale, Leonardo, Motel One, Z Hotels, QHotels, Exclusive Collection, and independents.
 
