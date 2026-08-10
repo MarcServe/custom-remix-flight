@@ -45,6 +45,7 @@ import {
   downloadHospitalityLeadsCSV,
   type HospitalityLeadExportRow,
 } from "@/lib/utils/hospitality-leads-export";
+import { loadCuratedHospitalityLeads } from "@/lib/data/curated-hospitality-leads";
 import { useLeadFinderStream } from "@/hooks/use-lead-finder-stream";
 import { cn } from "@/lib/utils";
 
@@ -134,9 +135,102 @@ export default function HospitalityLeads() {
   const [leads, setLeads] = useState<HospitalityLead[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"maps" | "ai">("maps");
+  const [activeTab, setActiveTab] = useState<"curated" | "maps" | "ai">("curated");
+  const [curatedMeta, setCuratedMeta] = useState<{ generatedAt?: string; markets?: string[]; count?: number }>({});
+  const [isLoadingCurated, setIsLoadingCurated] = useState(false);
 
   const isRunning = pipelineStep !== "idle" && pipelineStep !== "done";
+
+  const loadCuratedIntoResults = async () => {
+    setIsLoadingCurated(true);
+    try {
+      const file = await loadCuratedHospitalityLeads();
+      const mapped: HospitalityLead[] = file.leads.map((raw) => {
+        const contacts: Contact[] = [];
+        if (raw.decisionMakerEmail || raw.decisionMakerName) {
+          contacts.push({
+            name: raw.decisionMakerName || "Decision maker",
+            email: raw.decisionMakerEmail,
+            emailVerified: true,
+            title: raw.decisionMakerTitle,
+            phone: raw.phone,
+            source: "official_website",
+          });
+        }
+        if (raw.salesEmail && raw.salesEmail !== raw.decisionMakerEmail) {
+          contacts.push({
+            name: "Sales",
+            email: raw.salesEmail,
+            emailVerified: true,
+            title: "Sales",
+            source: "official_website",
+          });
+        }
+        if (
+          raw.reservationsEmail &&
+          raw.reservationsEmail !== raw.decisionMakerEmail &&
+          raw.reservationsEmail !== raw.salesEmail
+        ) {
+          contacts.push({
+            name: "Reservations",
+            email: raw.reservationsEmail,
+            emailVerified: true,
+            title: "Reservations",
+            source: "official_website",
+          });
+        }
+        const best = pickBestContact(contacts);
+        return {
+          id: leadKey(raw.propertyName, raw.website, raw.phone),
+          name: raw.propertyName,
+          website: raw.website,
+          phone: raw.phone,
+          email: best?.email || raw.propertyEmail || raw.decisionMakerEmail,
+          emailVerified: true,
+          emailSource: "website",
+          address: raw.address,
+          city: [raw.city, raw.country].filter(Boolean).join(", "),
+          category: raw.propertyType,
+          propertyType: raw.propertyType,
+          contacts,
+          source: "google_maps" as const,
+        };
+      });
+      setLeads(mapped);
+      setSelectedIds(new Set(mapped.map((l) => l.id)));
+      setCuratedMeta({
+        generatedAt: file.generatedAt,
+        markets: file.markets,
+        count: mapped.length,
+      });
+      setPipelineStep("done");
+      setProgress(100);
+      setStatusMessage(
+        `Loaded ${mapped.length} website-verified hospitality leads (${file.markets?.join(", ") || "multi-market"}).`
+      );
+      toast({
+        title: "Curated leads loaded",
+        description: `${mapped.length} properties with emails published on official contact pages.`,
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        title: "Could not load curated leads",
+        description: err?.message || "Missing verified-leads.json",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingCurated(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "curated" && leads.length === 0) {
+      void loadCuratedIntoResults();
+    }
+    // intentionally only on first curated view
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
@@ -618,22 +712,26 @@ export default function HospitalityLeads() {
 
       <Alert>
         <Info className="h-4 w-4" />
-        <AlertTitle>How this works (and what we don&apos;t do)</AlertTitle>
+        <AlertTitle>Website-verified research batch included</AlertTitle>
         <AlertDescription className="text-sm space-y-1">
           <p>
-            We search <strong>public Google Maps / directory listings</strong> and each property&apos;s{" "}
-            <strong>own website</strong>, then resolve decision makers via GetProspect with{" "}
-            <strong>provider-verified</strong> emails (not SMTP-guessed patterns).
+            A starter list of <strong>28 hotels &amp; short-stay properties</strong> (London, Lagos, Cape Town, Dubai,
+            Brussels, Berlin) was researched from <strong>official contact pages</strong> — GM / MD / sales emails where
+            published. Open the <strong>Curated verified</strong> tab to load, export, or add them to CRM.
           </p>
           <p className="text-muted-foreground">
-            Airbnb marketplace host profiles are not scraped — that violates Airbnb&apos;s terms. Licensed hotels and
-            short-stay businesses that publish their own contact details are fair game for B2B outreach.
+            Airbnb host profiles and LinkedIn scraping are not used. Expand the list by market with Maps/AI search when
+            you have enrichment APIs configured.
           </p>
         </AlertDescription>
       </Alert>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "maps" | "ai")}>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "curated" | "maps" | "ai")}>
         <TabsList>
+          <TabsTrigger value="curated" className="gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Curated verified
+          </TabsTrigger>
           <TabsTrigger value="maps" className="gap-1.5">
             <MapPin className="h-3.5 w-3.5" />
             Maps &amp; websites
@@ -643,6 +741,45 @@ export default function HospitalityLeads() {
             AI hospitality search
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="curated" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Hand-researched verified leads</CardTitle>
+              <CardDescription>
+                Emails taken from official hotel / serviced-apartment contact pages (not guessed). File:{" "}
+                <code className="text-xs">data/hospitality-leads/verified-leads.csv</code>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {curatedMeta.count ? (
+                <div className="flex flex-wrap gap-2 text-sm">
+                  <Badge variant="secondary">{curatedMeta.count} properties</Badge>
+                  {curatedMeta.markets?.map((m) => (
+                    <Badge key={m} variant="outline">
+                      {m}
+                    </Badge>
+                  ))}
+                  {curatedMeta.generatedAt && (
+                    <Badge variant="outline">Researched {curatedMeta.generatedAt}</Badge>
+                  )}
+                </div>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => void loadCuratedIntoResults()} disabled={isLoadingCurated} className="gap-2">
+                  {isLoadingCurated ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                  {isLoadingCurated ? "Loading…" : "Load curated leads"}
+                </Button>
+                <Button variant="outline" asChild>
+                  <a href="/data/hospitality-leads/verified-leads.csv" download>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download CSV
+                  </a>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="maps" className="mt-4 space-y-4">
           <Card>
