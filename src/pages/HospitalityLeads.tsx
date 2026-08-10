@@ -715,13 +715,13 @@ export default function HospitalityLeads() {
         <AlertTitle>Website-verified research batch included</AlertTitle>
         <AlertDescription className="text-sm space-y-1">
           <p>
-            A starter list of <strong>28 hotels &amp; short-stay properties</strong> (London, Lagos, Cape Town, Dubai,
-            Brussels, Berlin) was researched from <strong>official contact pages</strong> — GM / MD / sales emails where
-            published. Open the <strong>Curated verified</strong> tab to load, export, or add them to CRM.
+            A starter list of <strong>UK website-verified</strong> hotels &amp; short-stay properties
+            (London, Edinburgh, Brighton, Manchester, Bath, York) was researched from{" "}
+            <strong>official contact pages</strong> — GM / MD / sales emails where published. Open the{" "}
+            <strong>Curated verified</strong> tab to load, export, or add them to CRM.
           </p>
           <p className="text-muted-foreground">
-            Airbnb host profiles and LinkedIn scraping are not used. Expand the list by market with Maps/AI search when
-            you have enrichment APIs configured.
+            Scope for this batch is United Kingdom only. Airbnb host profiles and LinkedIn scraping are not used.
           </p>
         </AlertDescription>
       </Alert>
