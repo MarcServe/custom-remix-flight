@@ -214,6 +214,48 @@ Deno.serve(async (req) => {
       return json({ groups: (groups || []).map((g: any) => ({ id: g.id, name: g.name, description: g.description, members: counts[g.id] || 0 })) });
     }
 
+    if (action === "create_group") {
+      const groupName = String(body.name || body.group_name || body.groupName || "").trim();
+      const description = String(body.description || "").trim() || null;
+      const recipientsIn = Array.isArray(body.recipients) ? body.recipients : Array.isArray(body.members) ? body.members : [];
+      if (!groupName) return json({ error: "name is required" }, 400);
+      if (!recipientsIn.length) return json({ error: "recipients (or members) array is required" }, 400);
+
+      const seen = new Set<string>();
+      const members = [];
+      for (const r of recipientsIn) {
+        const email = String(r?.email || "").trim().toLowerCase();
+        if (!EMAIL_RE.test(email) || seen.has(email)) continue;
+        seen.add(email);
+        members.push({
+          email,
+          first_name: r.first_name || r.firstName || null,
+          last_name: r.last_name || r.lastName || null,
+          company: r.company || null,
+          person_id: r.person_id || r.personId || null,
+        });
+      }
+      if (!members.length) return json({ error: "No valid recipient emails" }, 400);
+
+      const { data: grp, error: gErr } = await db.from("recipient_groups").insert({
+        user_id: userId, name: groupName, description,
+      }).select("id, name").single();
+      if (gErr || !grp) return json({ error: gErr?.message || "Failed to create group" }, 500);
+
+      for (let i = 0; i < members.length; i += 500) {
+        const slice = members.slice(i, i + 500).map((m) => ({ ...m, group_id: grp.id }));
+        const { error: mErr } = await db.from("recipient_group_members").insert(slice);
+        if (mErr) return json({ error: mErr.message, group_id: grp.id }, 500);
+      }
+
+      return json({
+        group_id: grp.id,
+        name: grp.name,
+        members: members.length,
+        message: `Created group "${grp.name}" with ${members.length} members.`,
+      });
+    }
+
     if (action === "status") {
       if (!body.campaign_id) return json({ error: "campaign_id required" }, 400);
       const { data } = await db.from("email_campaigns")
@@ -419,7 +461,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, sent_to: toEmail, provider: "sendgrid", from: conn.from_email, message: `Test email sent to ${toEmail}.` });
     }
 
-    return json({ error: "Unknown action. Use create | create_newsletter | send_test | list | status." }, 400);
+    return json({ error: "Unknown action. Use create | create_group | create_newsletter | send_test | list | list_groups | status." }, 400);
   } catch (e: any) {
     return json({ error: e?.message || "Failed" }, 500);
   }

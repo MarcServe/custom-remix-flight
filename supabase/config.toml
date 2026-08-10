@@ -111,3 +111,7 @@ verify_jwt = true
 # Service role (cron) or user JWT; auth enforced inside the function
 [functions.process-newsletter-series]
 verify_jwt = false
+
+# JWT / API key / service role checked inside the function
+[functions.ingest-hospitality-leads]
+verify_jwt = false

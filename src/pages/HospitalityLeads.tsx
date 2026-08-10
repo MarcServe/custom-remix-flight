@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Building2,
   CheckCircle2,
@@ -9,7 +10,10 @@ import {
   Loader2,
   Mail,
   MapPin,
+  Megaphone,
+  Newspaper,
   Phone,
+  Rocket,
   Search,
   ShieldCheck,
   Sparkles,
@@ -140,8 +144,27 @@ export default function HospitalityLeads() {
   const [activeTab, setActiveTab] = useState<"curated" | "maps" | "ai">("curated");
   const [curatedMeta, setCuratedMeta] = useState<{ generatedAt?: string; markets?: string[]; count?: number }>({});
   const [isLoadingCurated, setIsLoadingCurated] = useState(false);
+  const [isIngesting, setIsIngesting] = useState(false);
+  const [dailyAutomationOn, setDailyAutomationOn] = useState(false);
+  const [ingestOpts, setIngestOpts] = useState({
+    createCrm: true,
+    createCampaigns: true,
+    createNewsletters: true,
+    createSeries: true,
+  });
+  const [lastIngestSummary, setLastIngestSummary] = useState<string | null>(null);
 
   const isRunning = pipelineStep !== "idle" && pipelineStep !== "done";
+
+  useEffect(() => {
+    if (!user) return;
+    void (async () => {
+      const { data, error } = await supabase.functions.invoke("ingest-hospitality-leads", {
+        body: { action: "status" },
+      });
+      if (!error && data?.settings?.enabled) setDailyAutomationOn(true);
+    })();
+  }, [user]);
 
   const loadCuratedIntoResults = async () => {
     setIsLoadingCurated(true);
@@ -592,6 +615,93 @@ export default function HospitalityLeads() {
     toast({ title: "Exported", description: `${rows.length} leads downloaded as CSV.` });
   };
 
+  const handleIngestPipeline = async (markets: Array<"US" | "UK"> = ["US", "UK"]) => {
+    if (!user) {
+      toast({ title: "Sign in required", variant: "destructive" });
+      return;
+    }
+    setIsIngesting(true);
+    setLastIngestSummary(null);
+    try {
+      const file = await loadCuratedHospitalityLeads();
+      const { data, error } = await supabase.functions.invoke("ingest-hospitality-leads", {
+        body: {
+          action: "ingest",
+          markets,
+          leads: file.leads,
+          create_crm: ingestOpts.createCrm,
+          create_campaigns: ingestOpts.createCampaigns,
+          create_newsletters: ingestOpts.createNewsletters,
+          create_newsletter_series: ingestOpts.createSeries,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const us = data?.markets?.US;
+      const uk = data?.markets?.UK;
+      const parts = [
+        us ? `US: ${us.recipients || 0} emails` : null,
+        uk ? `UK: ${uk.recipients || 0} emails` : null,
+      ].filter(Boolean);
+      const summary = `${parts.join(" · ")}. Groups, ${ingestOpts.createCampaigns ? "campaigns" : "no campaigns"}, ${
+        ingestOpts.createNewsletters || ingestOpts.createSeries ? "newsletters" : "no newsletters"
+      }.`;
+      setLastIngestSummary(summary);
+      queryClient.invalidateQueries({ queryKey: ["companies"] });
+      queryClient.invalidateQueries({ queryKey: ["recipient-groups"] });
+      toast({
+        title: "Ingest complete",
+        description: summary,
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        title: "Ingest failed",
+        description: err?.message || "Could not create campaigns/groups from verified leads.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const handleToggleDailyAutomation = async (enabled: boolean) => {
+    if (!user) {
+      toast({ title: "Sign in required", variant: "destructive" });
+      return;
+    }
+    setDailyAutomationOn(enabled);
+    try {
+      const { data, error } = await supabase.functions.invoke("ingest-hospitality-leads", {
+        body: {
+          action: enabled ? "enable_daily" : "disable_daily",
+          markets: ["US", "UK"],
+          leads_base_url: typeof window !== "undefined" ? window.location.origin : null,
+          create_crm: ingestOpts.createCrm,
+          create_campaigns: ingestOpts.createCampaigns,
+          create_newsletters: ingestOpts.createNewsletters,
+          create_newsletter_series: ingestOpts.createSeries,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({
+        title: enabled ? "Daily automation on" : "Daily automation off",
+        description: enabled
+          ? "Verified hospitality leads will be ingested daily into US/UK groups and campaign-ready drafts."
+          : "Daily hospitality ingest disabled.",
+      });
+    } catch (err: any) {
+      setDailyAutomationOn(!enabled);
+      toast({
+        title: "Could not update automation",
+        description: err?.message || "Try again after deploying the ingest function.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSaveToCrm = async () => {
     if (!user) {
       toast({ title: "Sign in required", variant: "destructive" });
@@ -783,6 +893,117 @@ export default function HospitalityLeads() {
                   </a>
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-primary/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Rocket className="h-4 w-4 text-primary" />
+                Campaign &amp; newsletter ingest
+              </CardTitle>
+              <CardDescription>
+                Automatically create US and UK recipient groups, draft campaigns with modern templates, and daily
+                newsletter series — verified website emails only.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-4 text-sm">
+                <label className="flex items-center gap-2">
+                  <Checkbox
+                    checked={ingestOpts.createCrm}
+                    onCheckedChange={(v) => setIngestOpts((o) => ({ ...o, createCrm: !!v }))}
+                  />
+                  Save to CRM
+                </label>
+                <label className="flex items-center gap-2">
+                  <Checkbox
+                    checked={ingestOpts.createCampaigns}
+                    onCheckedChange={(v) => setIngestOpts((o) => ({ ...o, createCampaigns: !!v }))}
+                  />
+                  Create US + UK campaigns
+                </label>
+                <label className="flex items-center gap-2">
+                  <Checkbox
+                    checked={ingestOpts.createNewsletters}
+                    onCheckedChange={(v) => setIngestOpts((o) => ({ ...o, createNewsletters: !!v }))}
+                  />
+                  Create newsletter drafts
+                </label>
+                <label className="flex items-center gap-2">
+                  <Checkbox
+                    checked={ingestOpts.createSeries}
+                    onCheckedChange={(v) => setIngestOpts((o) => ({ ...o, createSeries: !!v }))}
+                  />
+                  Daily newsletter series
+                </label>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => void handleIngestPipeline(["US", "UK"])} disabled={isIngesting} className="gap-2">
+                  {isIngesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
+                  {isIngesting ? "Ingesting…" : "Ingest US + UK"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => void handleIngestPipeline(["US"])}
+                  disabled={isIngesting}
+                  className="gap-2"
+                >
+                  US only
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => void handleIngestPipeline(["UK"])}
+                  disabled={isIngesting}
+                  className="gap-2"
+                >
+                  UK only
+                </Button>
+              </div>
+
+              <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">Daily automatic scans</p>
+                  <p className="text-xs text-muted-foreground">
+                    When on, a morning cron re-ingests verified leads into fresh groups and campaign-ready drafts.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={dailyAutomationOn} onCheckedChange={(v) => void handleToggleDailyAutomation(!!v)} />
+                  <span className="text-sm text-muted-foreground">{dailyAutomationOn ? "On" : "Off"}</span>
+                </div>
+              </div>
+
+              {lastIngestSummary && (
+                <Alert>
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertTitle>Ready for outreach</AlertTitle>
+                  <AlertDescription className="space-y-2 text-sm">
+                    <p>{lastIngestSummary}</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" asChild>
+                        <Link to="/campaigns">
+                          <Megaphone className="h-3.5 w-3.5 mr-1.5" />
+                          Open Campaigns
+                        </Link>
+                      </Button>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link to="/recipient-groups">
+                          <Users className="h-3.5 w-3.5 mr-1.5" />
+                          Recipient groups
+                        </Link>
+                      </Button>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link to="/newsletters">
+                          <Newspaper className="h-3.5 w-3.5 mr-1.5" />
+                          Newsletters
+                        </Link>
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

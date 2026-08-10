@@ -23,6 +23,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
  * - POST { action: "sync-inbound-from-resend" } - Pulls received emails from Resend into CRM (backup to webhook)
  * - POST { action: "sync-gmail-replies" } - Syncs Gmail replies for all connected users (runs hourly via pg_cron)
  * - POST { action: "update-deliverability" } - Updates email deliverability metrics for all users
+ * - POST { action: "hospitality-ingest" } - Daily verified hospitality lead ingest → groups/campaigns/newsletters
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -486,6 +487,27 @@ Deno.serve(async (req) => {
           action: 'update-deliverability',
           result,
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      case 'hospitality-ingest': {
+        console.log('[cron-trigger] Triggering ingest-hospitality-leads daily');
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/ingest-hospitality-leads`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action: 'daily' }),
+        });
+        const result = await response.json().catch(() => ({}));
+        console.log('[cron-trigger] Hospitality ingest result:', result);
+        return new Response(JSON.stringify({
+          success: response.ok,
+          action: 'hospitality-ingest',
+          result,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       default:

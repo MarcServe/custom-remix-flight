@@ -37,3 +37,17 @@ US coverage includes Ace Hotel, The Standard, The Hoxton, YOTEL, Edition, Proper
 ## App
 
 `/hospitality-leads` → **Curated verified** (shows source link per lead)
+
+## Ingest pipeline (campaigns + newsletters)
+
+From **Hospitality Leads → Campaign & newsletter ingest**:
+
+1. Creates **US** and **UK** `recipient_groups` (verified emails only)
+2. Saves companies/contacts to CRM
+3. Creates draft **email campaigns** with modern TalkStay-style HTML
+4. Creates newsletter drafts + **daily newsletter series** (rotating modern/elegant/minimal templates)
+5. Optional **Daily automatic scans** — opts into `hospitality_automation_settings`; cron calls `ingest-hospitality-leads` each morning
+
+Edge function: `supabase/functions/ingest-hospitality-leads`  
+CLI example: `mcp-server/examples/hospitality-ingest.sh`  
+API also supports `api-campaigns` action `create_group` for custom automation.
