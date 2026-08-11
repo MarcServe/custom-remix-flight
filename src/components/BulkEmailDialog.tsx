@@ -79,6 +79,17 @@ function previewBodyToHtml(text: string): string {
 }
 
 /**
+ * Variant B is edited as plain text. Always bake HTML from that text so inbox
+ * content matches the textarea (stale ab_body_html_b previously dropped URLs
+ * and other edits added after the last HTML bake).
+ */
+function variantBBodyHtml(textB: string, htmlBFallback = ''): string {
+  const text = (textB || '').trim();
+  if (text) return previewBodyToHtml(textB);
+  return (htmlBFallback || '').trim();
+}
+
+/**
  * Default scheduling timezone. UK-first product: default to Europe/London, which
  * auto-handles BST/GMT, so scheduled sends land at the exact London wall-clock time
  * regardless of the browser/VPN-reported zone (which can resolve to a fixed GMT+1
@@ -1299,7 +1310,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     const bodyHtmlA =
       bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
     const bodyTextB = abBodyTextB || bodyText;
-    const bodyHtmlB = abBodyHtmlB || (bodyTextB ? previewBodyToHtml(bodyTextB) : bodyHtmlA);
+    const bodyHtmlB = variantBBodyHtml(abBodyTextB, abBodyHtmlB) || (bodyTextB ? previewBodyToHtml(bodyTextB) : bodyHtmlA);
     const useAb =
       !usePersonalizedEmails &&
       abTestEnabled &&
@@ -2055,7 +2066,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           updated_at: new Date().toISOString(),
           ab_test_enabled: abTestEnabled,
           ab_subject_b: abSubjectB?.trim() || null,
-          ab_body_html_b: (abBodyTextB?.trim() || abBodyHtmlB?.trim()) ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : null)) : null,
+          ab_body_html_b: variantBBodyHtml(abBodyTextB, abBodyHtmlB) || null,
           ab_body_text_b: abBodyTextB?.trim() || null,
           ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
           ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
@@ -2080,7 +2091,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           const useAb = !usePersonalizedEmails && abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
           const bodyHtmlA = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
           const bodyTextB = abBodyTextB || bodyText;
-          const bodyHtmlB = abBodyHtmlB || (bodyTextB ? previewBodyToHtml(bodyTextB) : '');
+          const bodyHtmlB = variantBBodyHtml(abBodyTextB, abBodyHtmlB) || (bodyTextB ? previewBodyToHtml(bodyTextB) : '');
           const recipients = recipientsToUse
             .filter(person => person.email)
             .map((person: any) =>
@@ -2143,7 +2154,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             follow_up_sequence_id: followUpSequenceId || null,
             ab_test_enabled: abTestEnabled,
             ab_subject_b: abSubjectB?.trim() || null,
-            ab_body_html_b: (abBodyTextB?.trim() || abBodyHtmlB?.trim()) ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : null)) : null,
+            ab_body_html_b: variantBBodyHtml(abBodyTextB, abBodyHtmlB) || null,
             ab_body_text_b: abBodyTextB?.trim() || null,
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
@@ -2158,7 +2169,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         const useAbDraft = !usePersonalizedEmails && abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
         const bodyHtmlADraft = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
         const bodyTextBDraft = abBodyTextB || bodyText;
-        const bodyHtmlBDraft = abBodyHtmlB || (bodyTextBDraft ? previewBodyToHtml(bodyTextBDraft) : '');
+        const bodyHtmlBDraft = variantBBodyHtml(abBodyTextB, abBodyHtmlB) || (bodyTextBDraft ? previewBodyToHtml(bodyTextBDraft) : '');
         const recipients = recipientsToUse
           .filter(person => person.email)
           .map((person: any) =>
@@ -2992,7 +3003,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         testBodyText = personalizeText(bodyTextForTest, testPerson);
         // Same mechanism for A and B: send HTML + text so server uses same path (Variant A mechanism for both)
         const bodyHtmlForTest = useVariantB
-          ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : '') || bodyText)
+          ? (variantBBodyHtml(abBodyTextB, abBodyHtmlB) || bodyText)
           : (bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`);
         testBodyHtml = personalizeText(bodyHtmlForTest, testPerson);
       }
@@ -3216,7 +3227,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           updated_at: new Date().toISOString(),
           ab_test_enabled: abTestEnabled,
           ab_subject_b: abSubjectB?.trim() || null,
-          ab_body_html_b: (abBodyTextB?.trim() || abBodyHtmlB?.trim()) ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : null)) : null,
+          ab_body_html_b: variantBBodyHtml(abBodyTextB, abBodyHtmlB) || null,
           ab_body_text_b: abBodyTextB?.trim() || null,
           ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
           ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
@@ -3284,7 +3295,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             updated_at: new Date().toISOString(),
             ab_test_enabled: abTestEnabled,
             ab_subject_b: abSubjectB?.trim() || null,
-            ab_body_html_b: (abBodyTextB?.trim() || abBodyHtmlB?.trim()) ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : null)) : null,
+            ab_body_html_b: variantBBodyHtml(abBodyTextB, abBodyHtmlB) || null,
             ab_body_text_b: abBodyTextB?.trim() || null,
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
@@ -3325,7 +3336,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             follow_up_sequence_id: followUpSequenceId || null,
             ab_test_enabled: abTestEnabled,
             ab_subject_b: abSubjectB?.trim() || null,
-            ab_body_html_b: (abBodyTextB?.trim() || abBodyHtmlB?.trim()) ? (abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : null)) : null,
+            ab_body_html_b: variantBBodyHtml(abBodyTextB, abBodyHtmlB) || null,
             ab_body_text_b: abBodyTextB?.trim() || null,
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
@@ -3341,7 +3352,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       const useAbSend = !usePersonalizedEmails && abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
       const bodyHtmlASend = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
       const bodyTextBSend = abBodyTextB || bodyText;
-      const bodyHtmlBSend = abBodyHtmlB || (bodyTextBSend ? previewBodyToHtml(bodyTextBSend) : '');
+      const bodyHtmlBSend = variantBBodyHtml(abBodyTextB, abBodyHtmlB) || (bodyTextBSend ? previewBodyToHtml(bodyTextBSend) : '');
       const recipients = recipientsToUse
         .filter(person => person.email)
         .map((person: any) =>
@@ -3982,7 +3993,12 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                   <Label>Variant B — Body</Label>
                   <Textarea
                     value={abBodyTextB}
-                    onChange={(e) => setAbBodyTextB(e.target.value)}
+                    onChange={(e) => {
+                      const text = e.target.value;
+                      setAbBodyTextB(text);
+                      // Keep HTML in sync with the textarea (source of truth for Variant B).
+                      setAbBodyHtmlB(text.trim() ? previewBodyToHtml(text) : '');
+                    }}
                     placeholder="Alternative email body (same placeholders: {{firstName}}, {{companyName}}, etc.)"
                     className="min-h-[120px] bg-background"
                   />
@@ -4772,7 +4788,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             const previewBodyA = usePersonalizedEmails
               ? (bodyHtml || previewBodyToHtml(bodyText) || '<p>Your email body will appear here...</p>')
               : personalizeText(bodyHtml || previewBodyToHtml(bodyText), previewPerson) || '<p>Your email body will appear here...</p>';
-            const bodyHtmlB = abBodyHtmlB || (abBodyTextB ? previewBodyToHtml(abBodyTextB) : '');
+            const bodyHtmlB = variantBBodyHtml(abBodyTextB, abBodyHtmlB);
             const previewSubjectB = personalizeText(abSubjectB || subject, previewPerson) || 'No subject';
             const previewBodyB = personalizeText(bodyHtmlB || previewBodyA, previewPerson) || '<p>Variant B body...</p>';
             const showAbPreviews =
