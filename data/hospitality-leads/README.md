@@ -17,10 +17,10 @@ This is **not** SMTP guessing, Airbnb scraping, or LinkedIn scraping.
 
 ## Counts
 
-- **679 properties** total (`counts.total` in JSON)
-- **398 UK** across London and major UK cities
-- **281 US**
-- **885 unique emails** across property / sales / reservations / decision-maker fields
+- **830 properties** total (`counts.total` in JSON)
+- **451 UK** across London and major UK cities
+- **379 US**
+- **1101 unique emails** across property / sales / reservations / decision-maker fields
 
 UK coverage includes Apex Hotels, Roomzzz, Malmaison, Hotel du Vin, Locke / Cove / SACO, The Hoxton, Dakota, GuestHouse, Firmdale, Leonardo, Motel One, Z Hotels, QHotels, Exclusive Collection, and independents.
 
@@ -62,3 +62,9 @@ python3 scripts/export-hospitality-desktop.py
 # or explicitly to your Desktop:
 python3 scripts/export-hospitality-desktop.py --dest "$HOME/Desktop/Hospitality leads"
 ```
+
+
+## Batch 2 (2026-08-11)
+
+- `batch2-2026-08-11-verified-leads.json` / `.csv`
+- UK/US splits under `public/downloads/Hospitality leads/batch2-2026-08-11/`
