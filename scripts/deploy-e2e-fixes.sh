@@ -29,6 +29,7 @@ fi
 FUNCTIONS=(
   autonomous-lead-discovery
   send-sequence-email
+  send-sequence-emails
   send-bulk-emails
   process-inbound-emails
   send-crm-email

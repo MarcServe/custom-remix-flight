@@ -34,8 +34,8 @@ Deno.serve(async (req) => {
       throw new Error('Company sequence not found');
     }
 
-    // Get verified contact
-    const { data: contacts } = await supabase
+    // Get verified contact — create from people if missing (same as send-sequence-email)
+    let { data: contacts } = await supabase
       .from('contacts')
       .select('*')
       .eq('company_id', companySequence.company_id)
@@ -44,7 +44,46 @@ Deno.serve(async (req) => {
       .limit(1);
 
     if (!contacts || contacts.length === 0) {
-      throw new Error('No verified contact found for this company');
+      const { data: people } = await supabase
+        .from('people')
+        .select('id, email, first_name, last_name')
+        .eq('company_id', companySequence.company_id)
+        .not('email', 'is', null)
+        .limit(1);
+      const person = people?.[0];
+      if (!person?.email) {
+        throw new Error('No verified contact found for this company');
+      }
+      const fullName = [person.first_name, person.last_name].filter(Boolean).join(' ') || person.email;
+      const { data: existing } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('company_id', companySequence.company_id)
+        .eq('email', person.email)
+        .maybeSingle();
+      if (existing) {
+        if (!existing.email_verified) {
+          await supabase.from('contacts').update({ email_verified: true }).eq('id', existing.id);
+          existing.email_verified = true;
+        }
+        contacts = [existing];
+      } else {
+        const { data: created, error: createErr } = await supabase
+          .from('contacts')
+          .insert({
+            company_id: companySequence.company_id,
+            name: fullName,
+            email: person.email,
+            email_verified: true,
+            is_primary_contact: true,
+          })
+          .select('*')
+          .single();
+        if (createErr || !created) {
+          throw new Error('No verified contact found for this company');
+        }
+        contacts = [created];
+      }
     }
 
     const contact = contacts[0];
@@ -321,7 +360,7 @@ Deno.serve(async (req) => {
           emailMessageId = resendData.id || null;
         }
 
-        // Record email activity with detailed tracking metadata
+        // Record email activity with detailed tracking metadata (+ to_email for inbound match)
         await supabase
           .from('email_activities')
           .insert({
@@ -333,17 +372,57 @@ Deno.serve(async (req) => {
             status: 'sent',
             sent_at: new Date().toISOString(),
             external_message_id: emailMessageId,
+            thread_id: emailMessageId,
             metadata: {
+              to: contact.email,
+              to_email: contact.email,
+              recipient_email: contact.email,
               provider: emailProvider,
               sending_method: connection.sending_method,
               tracking_enabled: connection.tracking_enabled,
               can_track_opens: connection.capabilities?.opens || false,
               can_track_clicks: connection.capabilities?.clicks || false,
-              can_track_replies: connection.capabilities?.replies || false,
+              can_track_replies: true,
               sequence_name: companySequence.email_sequences?.name,
               company_name: companySequence.companies?.name,
             },
           });
+
+        // Also write email_threads so Conversations shows outbound sequence mail
+        try {
+          const threadHtml = branding
+            ? renderEmailTemplate(branding.templateStyle, {
+                body: emailData.body,
+                senderName: branding.senderName || senderName,
+                signatureName: branding.signatureName ?? undefined,
+                senderEmail: branding.senderEmail || fromEmail,
+                senderTitle: branding.senderTitle ?? undefined,
+                companyName: branding.companyName ?? undefined,
+                headerName: branding.headerName ?? undefined,
+                logoUrl: branding.logoUrl ?? undefined,
+                brandColor: branding.brandColor,
+                footerText: branding.footerText ?? undefined,
+                footerImageUrl: branding.footerImageUrl ?? undefined,
+                signature: branding.signature ?? undefined,
+                senderImageUrl: branding.senderImageUrl ?? undefined,
+                websiteUrl: branding.websiteUrl ?? undefined,
+              })
+            : emailData.body.replace(/\n/g, '<br>');
+          await supabase.from('email_threads').insert({
+            company_sequence_id: companySequenceId,
+            from_email: fromEmail,
+            to_email: contact.email,
+            subject: emailData.subject,
+            body_text: emailData.body,
+            body_html: threadHtml,
+            direction: 'outbound',
+            thread_id: emailMessageId,
+            message_id: emailMessageId,
+            received_at: new Date().toISOString(),
+          });
+        } catch (threadErr) {
+          console.error('Failed to create email_threads row:', threadErr);
+        }
 
         sentEmails.push({
           stepNumber: i + 1,
@@ -351,18 +430,20 @@ Deno.serve(async (req) => {
           sentAt: new Date().toISOString(),
         });
 
-        // Update sequence metadata
+        // Update sequence metadata — keep active on last step when repeat_sequence is set
         const metadata = companySequence.metadata || {};
         if (i === 0) {
           metadata.first_email_sent_at = new Date().toISOString();
         }
         metadata.last_email_sent_at = new Date().toISOString();
+        const isLast = i === personalizedEmails.length - 1;
+        const shouldRepeat = !!metadata.repeat_sequence;
 
         await supabase
           .from('company_sequences')
           .update({
             current_step: i,
-            status: i === personalizedEmails.length - 1 ? 'completed' : 'active',
+            status: isLast && !shouldRepeat ? 'completed' : 'active',
             metadata,
           })
           .eq('id', companySequenceId);

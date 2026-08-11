@@ -146,11 +146,46 @@ export const companySequencesApi = {
       }>;
     }
   ) {
+    // Also stamp enabled per-step rules onto personalized_emails[].automation_rule
+    // so process-sequence-steps can prefer nextStep.automation_rule directly.
+    const { data: existing, error: loadErr } = await apiClient.supabase
+      .from('company_sequences')
+      .select('personalized_emails')
+      .eq('id', id)
+      .maybeSingle();
+    if (loadErr) return { data: null, error: loadErr };
+
+    let personalizedEmails = (existing?.personalized_emails as any[]) || [];
+    const stepRules = automationRules.step_rules || {};
+    if (personalizedEmails.length > 0 && Object.keys(stepRules).length > 0) {
+      personalizedEmails = personalizedEmails.map((email: any, idx: number) => {
+        // Template step index is usually personalized stepNumber - 1 when step 0 is campaign stub
+        const stepNumber = typeof email?.stepNumber === 'number' ? email.stepNumber : idx;
+        const rule =
+          stepRules[String(stepNumber)] ||
+          stepRules[String(Math.max(0, stepNumber - 1))] ||
+          stepRules[String(idx)] ||
+          null;
+        if (!rule?.enabled) {
+          const { automation_rule: _drop, ...rest } = email || {};
+          return rest;
+        }
+        return {
+          ...email,
+          automation_rule: {
+            type: rule.type,
+            wait_hours: rule.wait_hours ?? 24,
+          },
+        };
+      });
+    }
+
     const { data, error } = await apiClient.supabase
       .from('company_sequences')
       .update({
         auto_respond_enabled: autoRespondEnabled,
         automation_rules: automationRules,
+        personalized_emails: personalizedEmails,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
