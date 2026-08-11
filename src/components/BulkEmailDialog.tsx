@@ -1177,6 +1177,179 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     };
   };
 
+  /**
+   * True when recipient personalized_* content is just the campaign template(s)
+   * with {{firstName}} / etc. filled in — not unique per-row imported copy.
+   * Prevents wrongly entering per-recipient edit mode (which then only saves
+   * edits for one recipient while send keeps stale personalized_* for the rest).
+   */
+  const recipientRowsMatchTemplates = (
+    rows: any[],
+    peopleMap: Record<string, any>,
+    templates: {
+      subject: string;
+      bodyHtml: string;
+      bodyText: string;
+      subjectB?: string | null;
+      bodyHtmlB?: string | null;
+      bodyTextB?: string | null;
+    }
+  ): boolean => {
+    if (!rows.length) return false;
+    const hasShared =
+      !!(templates.subject || '').trim() ||
+      !!(templates.bodyText || '').trim() ||
+      !!(templates.bodyHtml || '').trim();
+    if (!hasShared) return false;
+
+    const personFromRow = (r: any) => {
+      if (r.person_id && peopleMap[r.person_id]) {
+        const p = peopleMap[r.person_id];
+        return {
+          first_name: p.first_name ?? '',
+          last_name: p.last_name ?? '',
+          email: p.email ?? r.email ?? '',
+        };
+      }
+      const parts = (r.name || '').trim().split(/\s+/);
+      return {
+        first_name: parts[0] || '',
+        last_name: parts.slice(1).join(' ') || '',
+        email: r.email || '',
+      };
+    };
+
+    const matchesOne = (
+      r: any,
+      person: { first_name: string; last_name: string; email: string },
+      subj: string,
+      text: string,
+      html: string
+    ) => {
+      const expSubj = personalizeText(subj || '', person);
+      const expText = personalizeText(text || '', person);
+      const expHtml = personalizeText(html || '', person);
+      const gotSubj = r.personalized_subject ?? '';
+      const gotText = r.personalized_body_text ?? '';
+      const gotHtml = r.personalized_body_html ?? '';
+      const subjOk = !(subj || '').trim() || gotSubj === expSubj;
+      const textOk = !(text || '').trim() || gotText === expText;
+      // HTML can drift slightly after strip/sign-off; require text or html match
+      const htmlOk = !(html || '').trim() || gotHtml === expHtml || textOk;
+      return subjOk && textOk && htmlOk;
+    };
+
+    let matchCount = 0;
+    for (const r of rows) {
+      const person = personFromRow(r);
+      const matchA = matchesOne(r, person, templates.subject, templates.bodyText, templates.bodyHtml);
+      const matchB =
+        !!(templates.subjectB || templates.bodyTextB || templates.bodyHtmlB) &&
+        matchesOne(
+          r,
+          person,
+          templates.subjectB || templates.subject,
+          templates.bodyTextB || templates.bodyText,
+          templates.bodyHtmlB || templates.bodyHtml
+        );
+      if (matchA || matchB) matchCount++;
+    }
+    return matchCount / rows.length >= 0.8;
+  };
+
+  /**
+   * Re-bake personalized_* for pending/failed recipients from the current editor.
+   * Send always prefers personalized_* over campaign templates, so template-only
+   * updates would otherwise leave the old body going out.
+   */
+  const syncPendingRecipientPersonalizedContent = async (campaignId: string): Promise<number> => {
+    const pending: any[] = [];
+    const PAGE = 1000;
+    let page = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('email_campaign_recipients')
+        .select('id, person_id, email, name, status, ab_variant')
+        .eq('campaign_id', campaignId)
+        .in('status', ['pending', 'failed'])
+        .range(page * PAGE, (page + 1) * PAGE - 1);
+      if (error) throw error;
+      if (data?.length) pending.push(...data);
+      if (!data || data.length < PAGE) break;
+      page++;
+    }
+    if (!pending.length) return 0;
+
+    const bodyHtmlA =
+      bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
+    const bodyTextB = abBodyTextB || bodyText;
+    const bodyHtmlB = abBodyHtmlB || (bodyTextB ? previewBodyToHtml(bodyTextB) : bodyHtmlA);
+    const useAb =
+      !usePersonalizedEmails &&
+      abTestEnabled &&
+      !!(abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
+    const peMap = personalizedEmailsEffective;
+
+    const peopleById = new Map<string, any>();
+    for (const p of recipientsToUse) {
+      peopleById.set(p.id, p);
+      if (p.email) peopleById.set(`email:${p.email.toLowerCase()}`, p);
+    }
+
+    const updates = pending.map((r) => {
+      const key = r.person_id || `rec-${r.id}`;
+      const person =
+        (r.person_id && peopleById.get(r.person_id)) ||
+        peopleById.get(key) ||
+        peopleById.get(`email:${(r.email || '').toLowerCase()}`) || {
+          id: key,
+          first_name: (r.name || '').trim().split(/\s+/)[0] || '',
+          last_name: (r.name || '').trim().split(/\s+/).slice(1).join(' ') || '',
+          email: r.email || '',
+        };
+
+      if (usePersonalizedEmails) {
+        const pe =
+          peMap[r.person_id] ||
+          peMap[key] ||
+          peMap[`rec-${r.id}`] ||
+          (r.email ? peMap[Object.keys(peMap).find((k) => peopleById.get(k)?.email === r.email) || ''] : undefined);
+        if (pe?.subject?.trim() && (pe.bodyText?.trim() || pe.bodyHtml?.trim())) {
+          return {
+            id: r.id,
+            personalized_subject: pe.subject,
+            personalized_body_html: pe.bodyHtml || previewBodyToHtml(pe.bodyText || ''),
+            personalized_body_text: pe.bodyText || '',
+          };
+        }
+      }
+
+      const useB = useAb && r.ab_variant === 'B';
+      const subj = useB ? abSubjectB || subject : subject;
+      const text = useB ? bodyTextB : bodyText;
+      const html = useB ? bodyHtmlB : bodyHtmlA;
+      return {
+        id: r.id,
+        personalized_subject: personalizeText(subj, person),
+        personalized_body_html: personalizeText(html, person),
+        personalized_body_text: personalizeText(text, person),
+      };
+    });
+
+    const CONCURRENCY = 40;
+    for (let i = 0; i < updates.length; i += CONCURRENCY) {
+      const slice = updates.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(
+        slice.map(({ id, ...fields }) =>
+          supabase.from('email_campaign_recipients').update(fields).eq('id', id)
+        )
+      );
+      const firstErr = results.find((res) => res.error)?.error;
+      if (firstErr) throw firstErr;
+    }
+    return updates.length;
+  };
+
   const applyImportedCampaignRows = async (
     ok: CsvImportRow[],
     errors: string[],
@@ -1885,10 +2058,11 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
         if (!contentOnly) {
           // Update recipients - delete old ones and add new ones (draft/scheduled only)
-          await supabase
+          const { error: deleteRecipientsError } = await supabase
             .from('email_campaign_recipients')
             .delete()
             .eq('campaign_id', draftId);
+          if (deleteRecipientsError) throw deleteRecipientsError;
 
           const useAb = !usePersonalizedEmails && abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
           const bodyHtmlA = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
@@ -1929,9 +2103,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             description: `Draft "${campaignName}" has been saved with ${recipients.length} recipients`,
           });
         } else {
+          const synced = await syncPendingRecipientPersonalizedContent(draftId);
           toast({
             title: "Content updated",
-            description: `Campaign "${campaignName}" subject and body saved. Use Reschedule in Campaigns to set a new send time.`,
+            description:
+              synced > 0
+                ? `Campaign "${campaignName}" subject and body saved for ${synced} pending recipient(s). Resume or send to use the new content.`
+                : `Campaign "${campaignName}" subject and body saved. Use Reschedule in Campaigns to set a new send time.`,
           });
         }
       } else {
@@ -2238,9 +2416,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         console.warn('[BulkEmailDialog] Campaign has total_recipients =', draft.total_recipients, 'but email_campaign_recipients returned 0 rows for campaign_id', draft.id, '- possible RLS or data mismatch');
       }
       const emailsFromDb: Record<string, { subject: string; bodyHtml: string; bodyText: string }> = {};
+      let peopleMap: Record<string, any> = {};
       if (recipientRows && recipientRows.length > 0) {
         const personIds = [...new Set((recipientRows as any[]).map((r: any) => r.person_id).filter(Boolean))];
-        let peopleMap: Record<string, any> = {};
         if (personIds.length > 0) {
           // Batch the people lookup to handle >1000 person IDs
           const PEOPLE_BATCH = 500;
@@ -2289,10 +2467,18 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       }
 
       const rowsArr = (recipientRows as any[]) || [];
-      const subjSet = new Set(rowsArr.map((r: any) => r.personalized_subject ?? ""));
-      const textSet = new Set(rowsArr.map((r: any) => r.personalized_body_text ?? ""));
-      const htmlSet = new Set(rowsArr.map((r: any) => r.personalized_body_html ?? ""));
-      const hasEmailOnlyRecipient = rowsArr.some((r: any) => !r.person_id);
+      // Bodies differ across recipients when {{firstName}} etc. were baked at save time.
+      // That must NOT force per-recipient mode — otherwise edits only update one row and
+      // send keeps the original personalized_* for everyone else.
+      // Match against stored templates (pre-strip) — recipients were baked from those.
+      const looksLikeSharedTemplate = recipientRowsMatchTemplates(rowsArr, peopleMap, {
+        subject: draft.subject_template || '',
+        bodyHtml: draft.body_html_template || loadedBodyHtml,
+        bodyText: draft.body_text_template || loadedBodyText,
+        subjectB: (draft as any).ab_subject_b,
+        bodyHtmlB: (draft as any).ab_body_html_b,
+        bodyTextB: (draft as any).ab_body_text_b,
+      });
       const firstRow = rowsArr[0];
       const recipientsContentDiffers =
         rowsArr.length > 1 &&
@@ -2302,13 +2488,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             (r.personalized_body_text ?? "") !== (firstRow?.personalized_body_text ?? "") ||
             (r.personalized_body_html ?? "") !== (firstRow?.personalized_body_html ?? ""),
         );
+      // True per-recipient campaigns: imported unique copy that does not match templates.
+      // Email-only recipients alone are not enough — group/CSV adds often lack person_id
+      // but still use the shared template.
       const usePer =
         rowsArr.length > 0 &&
-        (hasEmailOnlyRecipient ||
-          recipientsContentDiffers ||
-          subjSet.size > 1 ||
-          textSet.size > 1 ||
-          htmlSet.size > 1);
+        !looksLikeSharedTemplate &&
+        recipientsContentDiffers;
       if (usePer) {
         setPersonalizedEmails(emailsFromDb);
         setUsePersonalizedEmails(true);
@@ -3032,6 +3218,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           .eq('id', draftId);
         if (contentUpdateError) throw contentUpdateError;
 
+        // Send reads personalized_* on each recipient — push editor edits onto pending rows.
+        const synced = await syncPendingRecipientPersonalizedContent(draftId);
+
         if (scheduleEnabled && scheduledAt && scheduledDateTime) {
           const formattedDate = scheduledDateTime.toLocaleString('en-US', {
             timeZone: scheduledTimezone,
@@ -3044,15 +3233,19 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           });
           toast({
             title: "Content saved & scheduled",
-            description: `Campaign will resume sending at ${formattedDate}. No new campaign created—same recipients.`,
+            description: `Updated ${synced} pending recipient(s). Campaign will resume sending at ${formattedDate}.`,
           });
         } else {
           toast({
             title: "Content saved",
-            description: "Close this dialog and click Resume on the campaign to continue sending to remaining recipients.",
+            description:
+              synced > 0
+                ? `Updated ${synced} pending recipient(s) with your edits. Close and click Resume to send the new content.`
+                : "Close this dialog and click Resume on the campaign to continue sending to remaining recipients.",
           });
         }
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+        queryClient.invalidateQueries({ queryKey: ['campaign-recipients', draftId] });
         onOpenChange(false);
         setSending(false);
         return;
@@ -3094,10 +3287,11 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         campaign = updatedCampaign;
 
         // Update recipients - delete old ones and add new ones
-        await supabase
+        const { error: deleteRecipientsError } = await supabase
           .from('email_campaign_recipients')
           .delete()
           .eq('campaign_id', draftId);
+        if (deleteRecipientsError) throw deleteRecipientsError;
       } else {
         // Create new campaign
         const { data: newCampaign, error: campaignError } = await supabase
