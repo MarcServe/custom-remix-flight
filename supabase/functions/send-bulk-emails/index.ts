@@ -183,11 +183,41 @@ async function enrollFollowUp(
       },
     }).select('id').single();
     if (!csErr && newCs?.id) {
+      // Ensure a verified contacts row so send-sequence-email can deliver follow-ups
+      const recipientEmail = String(recipient.email || '').toLowerCase().trim();
+      if (recipientEmail) {
+        const { data: ec } = await supabaseClient
+          .from('contacts')
+          .select('id, email_verified')
+          .eq('company_id', companyId)
+          .eq('email', recipientEmail)
+          .maybeSingle();
+        if (ec?.id) {
+          if (!ec.email_verified) {
+            await supabaseClient.from('contacts').update({ email_verified: true }).eq('id', ec.id);
+          }
+        } else {
+          await supabaseClient.from('contacts').insert({
+            company_id: companyId,
+            name: recipient.name || recipientEmail,
+            email: recipientEmail,
+            email_verified: true,
+            is_primary_contact: true,
+          });
+        }
+      }
+
       await supabaseClient.from('email_activities').insert({
         company_sequence_id: newCs.id, contact_id: null, step_number: 0,
         subject: recipient.personalized_subject, body: recipient.personalized_body_text,
         status: 'sent', sent_at: sentAt, external_message_id: messageId,
-        metadata: { campaign_id: campaignId, campaign_recipient_id: recipient.id },
+        metadata: {
+          campaign_id: campaignId,
+          campaign_recipient_id: recipient.id,
+          to: recipientEmail || undefined,
+          to_email: recipientEmail || undefined,
+          recipient_email: recipientEmail || undefined,
+        },
       });
     }
   } catch (err) {

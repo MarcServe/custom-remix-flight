@@ -423,7 +423,7 @@ export default function Conversations() {
     try {
       setIsGenerating(true);
 
-      const lastInbound = threads?.reverse().find(t => t.direction === 'inbound');
+      const lastInbound = threads?.slice().reverse().find(t => t.direction === 'inbound');
       if (!lastInbound) {
         toast({
           title: "No inbound email",
@@ -471,7 +471,7 @@ export default function Conversations() {
     try {
       setIsGenerating(true);
 
-      const lastInbound = threads?.reverse().find(t => t.direction === 'inbound');
+      const lastInbound = threads?.slice().reverse().find(t => t.direction === 'inbound');
       if (!lastInbound) {
         toast({
           title: "Error",
@@ -573,6 +573,11 @@ export default function Conversations() {
       });
     } catch (error: any) {
       console.error('Error sending manual reply:', error);
+      toast({
+        title: "Failed to send reply",
+        description: error?.message || "Something went wrong while sending your reply",
+        variant: "destructive",
+      });
     }
   };
 
@@ -890,7 +895,22 @@ export default function Conversations() {
         )}
 
         {/* Conversations List with Tabs */}
-        <Tabs value={conversationType} onValueChange={(v) => setConversationType(v as "sequences" | "personal")} className="w-full">
+        <Tabs
+          value={conversationType}
+          onValueChange={(v) => {
+            const next = v as "sequences" | "personal";
+            setConversationType(next);
+            // Clear the other tab's selection so replies don't use a stale sequence id
+            if (next === 'personal') {
+              setSelectedSequence(null);
+            } else {
+              setSelectedPersonalThread(null);
+            }
+            setGeneratedResponse(null);
+            setComposeMode(next === 'personal' ? 'manual' : composeMode);
+          }}
+          className="w-full"
+        >
           <TabsList className="mb-4 w-full sm:w-auto">
             <TabsTrigger value="sequences" className="flex-1 sm:flex-initial">
               <span className="mr-2">Sequences</span>
@@ -1198,11 +1218,13 @@ export default function Conversations() {
                         </TabsList>
                       </Tabs>
                     )}
+                    {selectedSeqData?.auto_respond_enabled && conversationType === 'sequences' && (
+                      <Badge variant="secondary" className="text-xs">Auto-respond on — you can still reply manually</Badge>
+                    )}
                   </div>
 
-                  {!selectedSeqData?.auto_respond_enabled && (
-                    <>
-                      {conversationType === 'sequences' && composeMode === "ai" ? (
+                  <>
+                      {conversationType === 'sequences' && composeMode === "ai" && !selectedSeqData?.auto_respond_enabled ? (
                         <div className="space-y-4">
                           {!generatedResponse && (
                             <Button
@@ -1337,8 +1359,7 @@ export default function Conversations() {
                           </div>
                         </div>
                       )}
-                    </>
-                  )}
+                  </>
                 </div>
               </div>
             )}

@@ -376,23 +376,30 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
       if (campaignError) throw campaignError;
 
       // Prepare recipients from companies and manual phones
-      // NOTE: email_campaign_recipients has no company_id column — including it
-      // makes the insert fail ("Could not find the 'company_id' column…").
+      // email_campaign_recipients requires email, name, personalized_* fields (NOT NULL).
+      const defaultSms = message || 'Hello from our team';
       const recipients = [
         ...selectedCompaniesData.map(company => ({
           campaign_id: campaign.id,
-          email: `phone:${company.company_phone}`, // Store phone in email field with prefix
+          email: `phone:${company.company_phone}`,
           name: company.name,
+          personalized_subject: campaignName || 'Phone campaign',
+          personalized_body_html: defaultSms,
+          personalized_body_text: defaultSms,
           status: 'pending' as const,
         })),
-        ...manualPhones.map(phone => ({
-          campaign_id: campaign.id,
-          email: `phone:${phone.phone}`,
-          name: phone.name || 'Manual Entry',
-          status: 'pending' as const,
-          // Per-recipient SMS text where the CSV provided one (falls back to the campaign message at send).
-          ...(phone.message ? { personalized_body_text: phone.message } : {}),
-        })),
+        ...manualPhones.map(phone => {
+          const sms = phone.message || defaultSms;
+          return {
+            campaign_id: campaign.id,
+            email: `phone:${phone.phone}`,
+            name: phone.name || 'Manual Entry',
+            personalized_subject: campaignName || 'Phone campaign',
+            personalized_body_html: sms,
+            personalized_body_text: sms,
+            status: 'pending' as const,
+          };
+        }),
       ];
 
       // Store phone recipients - use email field to store phone number with prefix

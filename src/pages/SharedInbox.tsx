@@ -112,6 +112,11 @@ export default function SharedInbox() {
       setInboxes(data || []);
     } catch (error: any) {
       console.error('Error loading inboxes:', error);
+      toast({
+        title: 'Failed to load shared inboxes',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -135,6 +140,11 @@ export default function SharedInbox() {
       setAssignments(data as any || []);
     } catch (error: any) {
       console.error('Error loading assignments:', error);
+      toast({
+        title: 'Failed to load assignments',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -262,6 +272,14 @@ export default function SharedInbox() {
             </AlertDescription>
           </Alert>
         )}
+
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Shared Inbox settings are saved, but inbound mail is not automatically routed or
+            auto-assigned yet. Use Conversations for CRM email threads meanwhile.
+          </AlertDescription>
+        </Alert>
 
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">

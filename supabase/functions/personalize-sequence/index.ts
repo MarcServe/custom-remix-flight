@@ -136,7 +136,13 @@ Deno.serve(async (req) => {
 
     // Personalize each email step using AI
     const personalizedEmails = [];
-    const steps = sequence.steps || [];
+    const rawSteps = sequence.steps || [];
+    const steps = rawSteps.map((raw: unknown) => {
+      if (typeof raw === 'string') {
+        try { return JSON.parse(raw); } catch { return {}; }
+      }
+      return raw || {};
+    });
 
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];

@@ -1584,6 +1584,55 @@ async function createAutoCampaigns(
         continue;
       }
 
+      // Get or create people records from contacts for email campaigns.
+      // email_campaign_recipients requires person_id, email, name, and personalized content —
+      // inserting contact_id / personalized_body (wrong columns) silently failed every send.
+      const peopleMap = new Map<string, any>(); // email -> person
+      for (const contact of contacts) {
+        if (!contact.email) continue;
+
+        const { data: existingPerson } = await supabase
+          .from('people')
+          .select('id, first_name, last_name, email, company_id')
+          .ilike('email', contact.email)
+          .maybeSingle();
+
+        if (existingPerson) {
+          peopleMap.set(contact.email.toLowerCase(), existingPerson);
+          if (contact.company_id && existingPerson.company_id !== contact.company_id) {
+            await supabase
+              .from('people')
+              .update({ company_id: contact.company_id })
+              .eq('id', existingPerson.id);
+          }
+        } else {
+          const nameParts = (contact.name || contact.email.split('@')[0]).trim().split(' ');
+          const firstName = nameParts[0] || contact.email.split('@')[0];
+          const lastName = nameParts.slice(1).join(' ') || '';
+
+          const { data: newPerson } = await supabase
+            .from('people')
+            .insert({
+              first_name: firstName,
+              last_name: lastName,
+              email: contact.email,
+              company_id: contact.company_id,
+              user_id: setting.user_id,
+            })
+            .select('id, first_name, last_name, email, company_id')
+            .single();
+
+          if (newPerson) {
+            peopleMap.set(contact.email.toLowerCase(), newPerson);
+          }
+        }
+      }
+
+      if (peopleMap.size === 0) {
+        console.log(`[super-discovery] No people records created/found for contacts`);
+        continue;
+      }
+
       // Create lead lookup map
       const leadsByCompanyId = new Map();
       for (const lead of leads) {
@@ -1631,7 +1680,7 @@ async function createAutoCampaigns(
             leads_count: leads.length,
           }
         })
-        .select('id')
+        .select('id, scheduled_at')
         .single();
 
       if (campaignError) {
@@ -1639,14 +1688,22 @@ async function createAutoCampaigns(
         continue;
       }
 
-      // Generate personalized content for each recipient if in full auto mode
-      if (setting.full_auto_mode && contacts.length <= 20) {
-        console.log(`[super-discovery] Generating personalized emails for ${contacts.length} recipients`);
-        
-        for (const contact of contacts) {
-          const lead = leadsByCompanyId.get(contact.company_id);
-          if (!lead) continue;
+      // Create recipients with required fields (email, name, personalized content)
+      const recipientInserts: any[] = [];
+      const shouldPersonalize = setting.full_auto_mode && contacts.length <= 20;
 
+      for (const contact of contacts) {
+        const person = peopleMap.get(contact.email.toLowerCase());
+        if (!person) continue;
+
+        const lead = leadsByCompanyId.get(contact.company_id);
+        const contactName = contact.name || `${person.first_name || ''} ${person.last_name || ''}`.trim() || contact.email.split('@')[0];
+
+        let personalizedSubject = subjectTemplate;
+        let personalizedBodyHtml = bodyHtmlTemplate;
+        let personalizedBodyText = bodyTemplate;
+
+        if (shouldPersonalize && lead) {
           const personalizedEmail = await generateAIEmailContent(
             lead,
             persona,
@@ -1656,39 +1713,50 @@ async function createAutoCampaigns(
           );
 
           if (personalizedEmail) {
-            // Store personalized content for this recipient
-            await supabase
-              .from('email_campaign_recipients')
-              .insert({
-                campaign_id: campaign.id,
-                contact_id: contact.id,
-                personalized_subject: personalizedEmail.subject,
-                personalized_body: personalizedEmail.body,
-                status: 'pending',
-              });
-          } else {
-            // Use campaign template
-            await supabase
-              .from('email_campaign_recipients')
-              .insert({
-                campaign_id: campaign.id,
-                contact_id: contact.id,
-                status: 'pending',
-              });
+            personalizedSubject = personalizedEmail.subject;
+            personalizedBodyHtml = `<p>${personalizedEmail.body.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`;
+            personalizedBodyText = personalizedEmail.body;
           }
         }
-      } else {
-        // Just add recipients without personalized content
-        const recipientInserts = contacts.map((c: any) => ({
-          campaign_id: campaign.id,
-          contact_id: c.id,
-          status: 'pending',
-        }));
 
+        personalizedSubject = personalizedSubject
+          .replace(/\{\{name\}\}/g, contactName.split(' ')[0])
+          .replace(/\{\{firstName\}\}/g, contactName.split(' ')[0])
+          .replace(/\{\{company\}\}/g, lead?.company_name || 'your company');
+
+        personalizedBodyHtml = personalizedBodyHtml
+          .replace(/\{\{name\}\}/g, contactName)
+          .replace(/\{\{firstName\}\}/g, contactName.split(' ')[0])
+          .replace(/\{\{company\}\}/g, lead?.company_name || 'your company');
+
+        personalizedBodyText = personalizedBodyText
+          .replace(/\{\{name\}\}/g, contactName)
+          .replace(/\{\{firstName\}\}/g, contactName.split(' ')[0])
+          .replace(/\{\{company\}\}/g, lead?.company_name || 'your company');
+
+        recipientInserts.push({
+          campaign_id: campaign.id,
+          person_id: person.id,
+          email: contact.email,
+          name: contactName,
+          personalized_subject: personalizedSubject,
+          personalized_body_html: personalizedBodyHtml,
+          personalized_body_text: personalizedBodyText,
+          status: 'pending',
+          email_period: 'new',
+        });
+      }
+
+      if (recipientInserts.length > 0) {
         await supabase
           .from('email_campaign_recipients')
           .insert(recipientInserts);
       }
+
+      await supabase
+        .from('email_campaigns')
+        .update({ total_recipients: recipientInserts.length })
+        .eq('id', campaign.id);
 
       // Link leads to campaign
       await supabase
@@ -1697,7 +1765,58 @@ async function createAutoCampaigns(
         .in('id', leads.map((l: any) => l.id));
 
       campaignsCreated++;
-      console.log(`[super-discovery] Created AI-powered campaign "${campaignName}" with ${contacts.length} recipients`);
+      console.log(`[super-discovery] Created AI-powered campaign "${campaignName}" with ${recipientInserts.length} recipients`);
+
+      // In full_auto_mode, trigger send when scheduled time is soon or already passed
+      if (setting.full_auto_mode && campaign.scheduled_at) {
+        const scheduledTime = new Date(campaign.scheduled_at);
+        const timeUntilSend = scheduledTime.getTime() - Date.now();
+
+        if (timeUntilSend <= 5 * 60 * 1000) {
+          console.log(`[super-discovery] Campaign scheduled for immediate send, triggering send-bulk-emails`);
+          try {
+            const { data: connections } = await supabase
+              .from('crm_connections')
+              .select('id')
+              .eq('user_id', setting.user_id)
+              .eq('status', 'active')
+              .in('provider', ['resend', 'sendgrid', 'gmail', 'gmail_direct', 'smtp'])
+              .order('created_at', { ascending: false })
+              .limit(1);
+
+            if (connections && connections.length > 0) {
+              await supabase
+                .from('email_campaigns')
+                .update({ sender_connection_id: connections[0].id })
+                .eq('id', campaign.id);
+
+              const sendResponse = await fetch(`${SUPABASE_URL}/functions/v1/send-bulk-emails`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  campaignId: campaign.id,
+                  triggeredByCron: true,
+                }),
+              });
+
+              if (sendResponse.ok) {
+                console.log(`[super-discovery] Successfully triggered campaign send for "${campaignName}"`);
+              } else {
+                console.error(`[super-discovery] Failed to trigger campaign send: ${sendResponse.status}`);
+              }
+            } else {
+              console.warn(`[super-discovery] No active email connections for user ${setting.user_id}; campaign waits for connection`);
+            }
+          } catch (sendError) {
+            console.error(`[super-discovery] Error triggering campaign send:`, sendError);
+          }
+        } else {
+          console.log(`[super-discovery] Campaign scheduled for ${scheduledTime.toISOString()}, will be sent by cron-trigger`);
+        }
+      }
 
     } catch (error) {
       console.error(`[super-discovery] Error creating campaign for persona ${personaId}:`, error);

@@ -6,6 +6,8 @@ export interface SendEmailRequest {
   subject: string;
   body: string;
   companySequenceId?: string;
+  /** Real companies.id when composing from People/Company (not a sequence id) */
+  companyId?: string;
   contactId?: string;
   sender_profile_id?: string | null;
 }
@@ -159,7 +161,9 @@ export const emailSendingApi = {
       toName: request.to.split('@')[0], // Use email prefix as fallback name
       subject: request.subject,
       body: request.body,
-      companyId: request.companySequenceId, // Edge function uses companyId
+      // Pass sequence id correctly — Conversations' companySequenceId is NOT a company_id
+      companySequenceId: request.companySequenceId,
+      companyId: request.companyId,
       contactId: request.contactId,
       sender_profile_id: request.sender_profile_id ?? undefined,
     };

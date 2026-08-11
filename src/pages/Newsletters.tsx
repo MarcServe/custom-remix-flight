@@ -1391,9 +1391,11 @@ Return ONLY the HTML body content.`,
           }
           const isTimeoutOrNetwork = /failed to send a request|timeout|network|edge function/i.test(msg);
           toast({
-            title: isTimeoutOrNetwork ? "Emails sent" : "Newsletter send failed",
-            description: isTimeoutOrNetwork ? "Check View recipients for who received it and tracking. Your Resend or Gmail dashboard also shows delivery status." : msg,
-            ...(isTimeoutOrNetwork ? {} : { variant: "destructive" as const }),
+            title: isTimeoutOrNetwork ? "Send status unclear" : "Newsletter send failed",
+            description: isTimeoutOrNetwork
+              ? "The request timed out. Check View recipients and your Resend/Gmail dashboard — some emails may still have been delivered."
+              : msg,
+            variant: "destructive" as const,
           });
           return;
         }

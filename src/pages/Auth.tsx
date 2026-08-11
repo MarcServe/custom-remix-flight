@@ -248,8 +248,17 @@ export default function Auth() {
     if (!error && invitationToken) {
       try {
         await new Promise(resolve => setTimeout(resolve, 500));
-        await supabase.rpc('accept_team_invitation', { invitation_token: invitationToken });
-      } catch {}
+        const { error: inviteErr } = await supabase.rpc('accept_team_invitation', { invitation_token: invitationToken });
+        if (inviteErr) throw inviteErr;
+        toast.success('Invitation accepted', {
+          description: 'You have joined the team.',
+        });
+      } catch (inviteError: any) {
+        console.error('Failed to accept team invitation:', inviteError);
+        toast.error('Could not accept invitation', {
+          description: inviteError?.message || 'You are signed in, but the team invite still needs to be accepted. Try the invite link again.',
+        });
+      }
     }
     setLoading(false);
   };
