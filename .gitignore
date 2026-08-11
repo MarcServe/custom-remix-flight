@@ -31,3 +31,4 @@ dist-ssr
 # Supabase local/generated
 supabase/.temp
 .vercel
+data/hospitality-leads/desktop-export/

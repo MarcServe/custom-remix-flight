@@ -155,6 +155,33 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+const SINGLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Expand a cell that may contain multiple business emails
+ * (comma / semicolon / whitespace separated) into one address each.
+ * Fixes campaign upload "invalid or missing email" when one company has several contacts.
+ */
+export function expandCampaignEmailCell(value: string | null | undefined): string[] {
+  if (!value || typeof value !== "string") return [];
+  const raw = value
+    .split(/[,;\n\r|/]+/)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw) {
+    // Also peel "Name <email@x.com>" wrappers
+    const angled = part.match(/<([^>]+)>/);
+    const candidate = (angled?.[1] || part).trim().toLowerCase();
+    if (!SINGLE_EMAIL_RE.test(candidate)) continue;
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    out.push(candidate);
+  }
+  return out;
+}
+
 export function parseCampaignCsvRows(
   rows: string[][],
   map: CsvColumnMap,
@@ -166,11 +193,14 @@ export function parseCampaignCsvRows(
   const dataRows = rows.slice(1).filter((r) => r.some((c) => String(c).trim() !== ""));
   const ok: CsvImportRow[] = [];
   const errors: string[] = [];
+  const seenEmails = new Set<string>();
   dataRows.forEach((row, lineIdx) => {
     const lineNum = lineIdx + 2;
-    const email = cell(row, map.email).toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.push(`Row ${lineNum}: invalid or missing email.`);
+    const emails = expandCampaignEmailCell(cell(row, map.email));
+    if (emails.length === 0) {
+      errors.push(
+        `Row ${lineNum}: invalid or missing email. Tip: put one email per row, or separate multiple business emails with commas (each becomes its own recipient).`
+      );
       return;
     }
     let first = cell(row, map.first_name);
@@ -193,19 +223,25 @@ export function parseCampaignCsvRows(
       bodyText = bodyHtmlRaw.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     }
     if (!bodyText.trim() && !bodyHtml.trim()) {
-      errors.push(`Row ${lineNum} (${email}): missing body (use "body" or "body_html" column).`);
+      errors.push(`Row ${lineNum} (${emails[0]}): missing body (use "body" or "body_html" column).`);
       return;
     }
     const rowFooter = cell(row, map.footer);
-    ok.push({
-      email,
-      first_name: first,
-      last_name: last,
-      subject: subject || "(No subject)",
-      bodyText: bodyText || bodyTextFromHtml(bodyHtml),
-      bodyHtml: bodyHtml || plainToEmailHtml(bodyText),
-      rowFooter,
-    });
+    const finalizedText = bodyText || bodyTextFromHtml(bodyHtml);
+    const finalizedHtml = bodyHtml || plainToEmailHtml(bodyText);
+    for (const email of emails) {
+      if (seenEmails.has(email)) continue;
+      seenEmails.add(email);
+      ok.push({
+        email,
+        first_name: first,
+        last_name: last,
+        subject: subject || "(No subject)",
+        bodyText: finalizedText,
+        bodyHtml: finalizedHtml,
+        rowFooter,
+      });
+    }
   });
   return { ok, errors };
 }

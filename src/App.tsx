@@ -22,6 +22,7 @@ import Companies from "./pages/Companies";
 import Deals from "./pages/Deals";
 import People from "./pages/People";
 import LeadFinder from "./pages/LeadFinder";
+import HospitalityLeads from "./pages/HospitalityLeads";
 import Autopilot from "./pages/Autopilot";
 import LeadInbox from "./pages/LeadInbox";
 import Enrichment from "./pages/Enrichment";
@@ -92,11 +93,11 @@ const App = () => (
                           <Route path="/people" element={<People />} />
                           {/* Pro tier routes */}
                           <Route path="/lead-finder" element={<PageErrorBoundary fallbackTitle="Lead Finder failed to load"><PlanGate requiredTier="pro" feature="Lead Finder"><LeadFinder /></PlanGate></PageErrorBoundary>} />
+                          <Route path="/hospitality-leads" element={<PageErrorBoundary fallbackTitle="Hospitality Leads failed to load"><PlanGate requiredTier="pro" feature="Hospitality Leads"><HospitalityLeads /></PlanGate></PageErrorBoundary>} />
                           <Route path="/lead-inbox" element={<PlanGate requiredTier="pro" feature="Lead Inbox"><LeadInbox /></PlanGate>} />
                           <Route path="/sequences" element={<PlanGate requiredTier="pro" feature="Email Sequences"><Sequences /></PlanGate>} />
                           <Route path="/company-sequences" element={<PlanGate requiredTier="pro" feature="Company Sequences"><CompanySequences /></PlanGate>} />
-                          {/* Newsletter Series retired — redirect old links to Newsletters. Component kept for easy restore. */}
-                          <Route path="/newsletter-series" element={<Navigate to="/newsletters" replace />} />
+                          <Route path="/newsletter-series" element={<PlanGate requiredTier="pro" feature="Newsletter Series"><NewsletterSeries /></PlanGate>} />
                           {/* More specific path first */}
                           <Route path="/campaigns/import-email" element={<PlanGate requiredTier="pro" feature="Per-recipient Personalised Email"><PersonalizedEmailCampaign /></PlanGate>} />
                           <Route path="/all-campaigns" element={<PlanGate requiredTier="pro" feature="Unified Campaigns"><UnifiedCampaigns /></PlanGate>} />

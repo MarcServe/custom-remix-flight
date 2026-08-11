@@ -9,6 +9,7 @@ export const COMPANY_SOURCE_TAGS = {
   AUTOPILOT: "Autopilot",
   CSV_IMPORT: "CSV Import",
   GOOGLE_MAPS: "Google Maps",
+  HOSPITALITY_LEADS: "Hospitality Leads",
 } as const;
 
 export const SOURCE_TAG_LIST = Object.values(COMPANY_SOURCE_TAGS);

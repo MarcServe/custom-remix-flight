@@ -1,0 +1,639 @@
+market,propertyName,city,country,contactRole,email,phone,website,sourceUrl,verificationStatus
+US,Graduate Ann Arbor,Ann Arbor,United States,Property,info@graduateannarbor.com,734 769 2200,https://graduatehotels.com/ann-arbor,https://info.graduatehotels.com/emails/live-at-ann-arbor,verified
+US,Graduate Ann Arbor,Ann Arbor,United States,Sales,sales@graduatehotels.com,734 769 2200,https://graduatehotels.com/ann-arbor,https://info.graduatehotels.com/emails/live-at-ann-arbor,verified
+US,Graduate Annapolis,Annapolis,United States,Property,info@graduateannapolis.com,410 263 7777,https://graduatehotels.com/annapolis,https://info.graduatehotels.com/emails/live-at-annapolis,verified
+US,Graduate Annapolis,Annapolis,United States,Sales,sales@graduatehotels.com,410 263 7777,https://graduatehotels.com/annapolis,https://info.graduatehotels.com/emails/live-at-annapolis,verified
+US,Graduate Athens,Athens,United States,Property,info@graduateathens.com,706 549 7020,https://graduatehotels.com/athens,https://info.graduatehotels.com/emails/live-at-athens,verified
+US,Graduate Athens,Athens,United States,Sales,sales@graduatehotels.com,706 549 7020,https://graduatehotels.com/athens,https://info.graduatehotels.com/emails/live-at-athens,verified
+US,Blueground Atlanta,Atlanta,United States,Property,cx-atl@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Hotel Clermont,Atlanta,United States,Decision maker,abigail@hotelclermont.com,470-485-0485,https://hotelclermont.com/,https://www.hotelclermont.com/hotel-policy,verified
+US,Hotel Clermont,Atlanta,United States,Property,frontdesk@hotelclermont.com,470-485-0485,https://hotelclermont.com/,https://www.hotelclermont.com/hotel-policy,verified
+US,The Georgian Terrace Hotel,Atlanta,United States,Sales,sales@thegeorgianterrace.com,404-897-1991,https://thegeorgianterrace.com/,https://thegeorgianterrace.com/weddings/,verified
+US,Arrive Austin,Austin,United States,Property,austin@arrivehotels.com,,https://www.arrivehotels.com/austin,https://www.arrivehotels.com/hotels/austin,verified
+US,Arrive Austin,Austin,United States,Sales,austinsales@arrivehotels.com,,https://www.arrivehotels.com/austin,https://www.arrivehotels.com/hotels/austin,verified
+US,Austin Motel,Austin,United States,Property,reservations@austinmotel.com,,https://www.austinmotel.com,https://www.bunkhousehotels.com/austin-motel/contact,verified
+US,Austin Proper Hotel,Austin,United States,Decision maker,atxp.info@properhotel.com,+1 512 628 1500,https://www.properhotel.com/austin/,https://www.northstarmeetingsgroup.com/Meeting-Event-Venues/Austin/Convention-Hotel/Austin-Proper-Hotel-p53205326,verified
+US,Blueground Austin,Austin,United States,Property,cx-austin@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground Austin,Austin,United States,Sales,sales-atx@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Carpenter Hotel,Austin,United States,Property,reservations@thecarpenterhotel.com,512-682-5300,https://thecarpenterhotel.com/,https://carpenterhotelshop.com/pages/contact-us,verified
+US,Frame Hotel Austin,Austin,United States,Property,info@framehotel.com,,https://framehotel.com,https://framehotel.com/contact,verified
+US,Frame Hotel Austin,Austin,United States,Reservations,stay@framehotel.com,,https://framehotel.com,https://framehotel.com/contact,verified
+US,Heywood Hotel,Austin,United States,Property,hey@heywoodhotel.com,,https://www.heywoodhotel.com,https://www.heywoodhotel.com/,verified
+US,Hotel Saint Cecilia,Austin,United States,Property,reservations@hotelsaintcecilia.com,,https://www.hotelsaintcecilia.com,https://www.bunkhousehotels.com/hotel-saint-cecilia/contact,verified
+US,Hotel Saint Cecilia,Austin,United States,Sales,sales@hotelsaintcecilia.com,,https://www.hotelsaintcecilia.com,https://www.bunkhousehotels.com/hotel-saint-cecilia/contact,verified
+US,Hotel San José,Austin,United States,Property,hsj.reservations@bunkhousegroup.com,,https://www.sanjosehotel.com,https://www.bunkhousehotels.com/hotel-san-jose/contact,verified
+US,Hotel San José,Austin,United States,Sales,sales@bunkhousegroup.com,,https://www.sanjosehotel.com,https://www.bunkhousehotels.com/hotel-san-jose/contact,verified
+US,Hotel Van Zandt,Austin,United States,Property,info@hotelvanzandt.com,512-542-5300,https://www.hotelvanzandt.com/,https://www.hotelvanzandt.com/faqs/,verified
+US,Hotel Van Zandt,Austin,United States,Reservations,frontdesk@hotelvanzandt.com,512-542-5300,https://www.hotelvanzandt.com/,https://www.hotelvanzandt.com/faqs/,verified
+US,Hotel ZaZa Austin,Austin,United States,Property,austin@hotelzaza.com,,https://www.hotelzaza.com/austin,https://www.hotelzaza.com/contact,verified
+US,Proper Austin,Austin,United States,Property,atxp.info@properhotel.com,,https://properhotel.com,https://properhotel.com/austin/,verified
+US,South Congress Hotel,Austin,United States,Property,info@southcongresshotel.com,512-920-6405,https://southcongresshotel.com/,https://southcongresshotel.com/contact,verified
+US,South Congress Hotel,Austin,United States,Reservations,reservations@southcongresshotel.com,512-920-6405,https://southcongresshotel.com/,https://southcongresshotel.com/contact,verified
+US,South Congress Hotel,Austin,United States,Sales,sales@southcongresshotel.com,512-920-6405,https://southcongresshotel.com/,https://southcongresshotel.com/contact,verified
+US,The LINE Austin,Austin,United States,Property,reservations.atx@thelinehotel.com,512-643-6609,https://www.thelinehotel.com/austin/,https://www.thelinehotel.com/contact/,verified
+US,The LINE Austin,Austin,United States,Sales,sales.austin@thelinehotel.com,512-643-6609,https://www.thelinehotel.com/austin/,https://www.thelinehotel.com/contact/,verified
+US,21c Museum Hotel Bentonville,Bentonville,United States,Property,bville.reservations@21chotels.com,,https://www.21cmuseumhotels.com/bentonville,https://21cmuseumhotels.com/contact-us/,verified
+US,AKA Beverly Hills,Beverly Hills,United States,Property,beverlyhills@stayaka.com,,https://www.stayaka.com/aka-beverly-hills,https://www.stayaka.com/aka-beverly-hills,verified
+US,The Maybourne Beverly Hills,Beverly Hills,United States,Decision maker,sjagger@maybournebeverlyhills.com,+1 310 860 7800,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+US,The Maybourne Beverly Hills,Beverly Hills,United States,Property,info@maybournebeverlyhills.com,+1 310 860 7800,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+US,The Maybourne Beverly Hills,Beverly Hills,United States,Reservations,beverlyhills.reservations@maybourne.com,+1 310 860 7800,https://www.maybourne.com,https://www.maybourne.com/en/about-us/contact,verified
+US,Graduate Bloomington,Bloomington,United States,Property,info@graduatebloomington.com,812 994 0500,https://graduatehotels.com/bloomington,https://info.graduatehotels.com/emails/live-at-bloomington,verified
+US,Graduate Bloomington,Bloomington,United States,Sales,sales@graduatehotels.com,812 994 0500,https://graduatehotels.com/bloomington,https://info.graduatehotels.com/emails/live-at-bloomington,verified
+US,Battery Wharf Hotel,Boston,United States,Property,bwbgsa@batterywharfhotel.com,0503107000000,https://www.batterywharfhotel.com,https://www.batterywharfhotel.com,verified
+US,Blueground Boston,Boston,United States,Property,cx-boston@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground Boston,Boston,United States,Sales,sales-bos@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Boston Harbor Hotel,Boston,United States,Property,concierge@bostonharborhotel.com,,https://www.bostonharborhotel.com,https://www.bostonharborhotel.com/contact-us,verified
+US,Boston Harbor Hotel,Boston,United States,Reservations,reservations@bostonharborhotel.com,,https://www.bostonharborhotel.com,https://www.bostonharborhotel.com/contact-us,verified
+US,Boston Harbor Hotel,Boston,United States,Sales,bhhsales@bostonharborhotel.com,,https://www.bostonharborhotel.com,https://www.bostonharborhotel.com/contact-us,verified
+US,"Club Quarters Hotel, Faneuil Hall",Boston,United States,Property,guestservices@clubquarters.com,,https://www.clubquartershotels.com/boston/faneuil-hall,https://www.clubquartershotels.com/boston/faneuil-hall,verified
+US,Harborside Inn,Boston,United States,Property,info@harborsideinnboston.com,,https://www.harborsideinnboston.com,https://www.harborsideinnboston.com/contact,verified
+US,Hotel Commonwealth,Boston,United States,Property,info@hotelcommonwealth.com,617-933-5000,https://www.hotelcommonwealth.com/,https://www.hotelcommonwealth.com/contact/,verified
+US,Hotel Commonwealth,Boston,United States,Reservations,allreservations@hotelcommonwealth.com,617-933-5000,https://www.hotelcommonwealth.com/,https://www.hotelcommonwealth.com/contact/,verified
+US,Hotel Commonwealth,Boston,United States,Sales,sales@hotelcommonwealth.com,617-933-5000,https://www.hotelcommonwealth.com/,https://www.hotelcommonwealth.com/contact/,verified
+US,Raffles Boston,Boston,United States,Property,boston@raffles.com,,https://www.raffles.com,https://www.raffles.com/contact-us/,verified
+US,Raffles Boston,Boston,United States,Reservations,reservations.boston@raffles.com,,https://www.raffles.com,https://www.raffles.com/contact-us/,verified
+US,Seaport Hotel Boston,Boston,United States,Property,info@seaportboston.com,617-385-4000,https://www.seaportboston.com,https://www.seaportboston.com/contact,verified
+US,The Godfrey Hotel Boston,Boston,United States,Property,info@godfreyhotelboston.com,,https://www.godfreyhotelboston.com,https://www.godfreyhotelboston.com/,verified
+US,The Lenox Hotel,Boston,United States,Property,reservations@lenoxhotel.com,,https://www.lenoxhotel.com,https://www.lenoxhotel.com/contact/,verified
+US,The Liberty Hotel,Boston,United States,Property,pr@libertyhotel.com,,https://www.libertyhotel.com,https://libertyhotel.com/contact-us/,verified
+US,The Liberty Hotel,Boston,United States,Sales,sales@libertyhotel.com,,https://www.libertyhotel.com,https://libertyhotel.com/contact-us/,verified
+US,The Verb Hotel,Boston,United States,Property,info@theverbhotel.com,(617) 566-4500,https://www.theverbhotel.com,https://www.theverbhotel.com,verified
+US,The Whitney Hotel Boston,Boston,United States,Property,info@whitneyhotelboston.com,888-673-3650,https://www.whitneyhotelboston.com/,https://www.whitneyhotelboston.com/faq,verified
+US,XV Beacon,Boston,United States,Property,reservations@xvbeacon.com,617-670-1500,https://xvbeacon.com/,https://xvbeacon.com/contact-directions/,verified
+US,XV Beacon,Boston,United States,Sales,sales@xvbeacon.com,617-670-1500,https://xvbeacon.com/,https://xvbeacon.com/contact-directions/,verified
+US,YOTEL Boston,Boston,United States,Property,boston.contact@yotel.com,+1 617-377-4747,https://www.yotel.com,https://www.yotel.com/en/hotels/yotel-boston,verified
+US,YOTEL Boston,Boston,United States,Sales,boston.sales@yotel.com,+1 617-377-4747,https://www.yotel.com,https://www.yotel.com/en/hotels/yotel-boston,verified
+US,1 Hotel Brooklyn Bridge,Brooklyn,United States,Property,1bb-guestexperience@1hotels.com,,https://www.1hotels.com,https://www.1hotels.com/contact,verified
+US,Ace Hotel Brooklyn,Brooklyn,United States,Property,frontdesk.bk@acehotel.com,718-313-3636,https://www.acehotel.com/brooklyn/,https://www.acehotel.com/contact/,verified
+US,Arlo Williamsburg,Brooklyn,United States,Sales,williamsburgevents@arlohotels.com,,https://www.arlohotels.com,https://www.arlohotels.com/williamsburg,verified
+US,Pod Brooklyn Hotel,Brooklyn,United States,Decision maker,reservations@podhotelbk.com,+1 718 963 3060,https://www.thepodhotel.com,https://www.thepodhotel.com/contact-us,verified
+US,The Hoxton Williamsburg,Brooklyn,United States,Property,hello.williamsburg@thehox.com,,https://thehoxton.com,https://thehoxton.com/contact,verified
+US,The Hoxton Williamsburg,Brooklyn,United States,Reservations,book.williamsburg@thehox.com,,https://thehoxton.com,https://thehoxton.com/contact,verified
+US,The Hoxton Williamsburg,Brooklyn,United States,Sales,sales.williamsburg@thehox.com,,https://thehoxton.com,https://thehoxton.com/contact,verified
+US,The William Vale,Brooklyn,United States,Property,info@thewilliamvale.com,,https://www.thewilliamvale.com,https://www.thewilliamvale.com/contact,verified
+US,Graduate Chapel Hill,Chapel Hill,United States,Property,info@graduatehotelchapelhill.com,919 442 9000,https://graduatehotels.com/chapel-hill,https://info.graduatehotels.com/emails/chapel-hill-opening,verified
+US,Graduate Chapel Hill,Chapel Hill,United States,Sales,sales@graduatehotels.com,919 442 9000,https://graduatehotels.com/chapel-hill,https://info.graduatehotels.com/emails/chapel-hill-opening,verified
+US,Charming Inns of Charleston,Charleston,United States,Decision maker,gsevers@charminginns.com,,https://charminginns.com,https://charminginns.com/contact-us/,verified
+US,Charming Inns of Charleston,Charleston,United States,Property,info@charminginns.com,,https://charminginns.com,https://charminginns.com/contact-us/,verified
+US,Fulton Lane Inn,Charleston,United States,Property,fli-concierge@charminginns.com,,https://fultonlaneinn.com,https://fultonlaneinn.com/contact-us/,verified
+US,HarbourView Inn,Charleston,United States,Decision maker,becky@harbourviewinn.com,,https://www.harbourviewinn.com,https://www.harbourviewinn.com/contact,verified
+US,HarbourView Inn,Charleston,United States,Property,info@harbourviewinn.com,,https://www.harbourviewinn.com,https://www.harbourviewinn.com/contact,verified
+US,Hotel Emeline,Charleston,United States,Property,hello@hotelemeline.com,,https://hotelemeline.com,https://hotelemeline.com/,verified
+US,John Rutledge House Inn,Charleston,United States,Property,jrh-concierge@charminginns.com,,https://johnrutledgehouseinn.com,https://johnrutledgehouseinn.com/contact-us/,verified
+US,Kings Courtyard Inn,Charleston,United States,Property,kci-concierge@charminginns.com,,https://kingscourtyardinn.com,https://kingscourtyardinn.com/contact-us/,verified
+US,Market Pavilion Hotel,Charleston,United States,Property,info@marketpavilion.com,,https://www.marketpavilion.com,https://www.marketpavilion.com/contact.cfm,verified
+US,Planters Inn Charleston,Charleston,United States,Property,reservations@plantersinn.com,,https://www.plantersinn.com,https://www.plantersinn.com/,verified
+US,The Dewberry Charleston,Charleston,United States,Property,guestservices@dewberryhotels.com,,https://www.thedewberrycharleston.com,https://www.thedewberrycharleston.com/contact,verified
+US,The Dewberry Charleston,Charleston,United States,Reservations,reservations@dewberryhotels.com,,https://www.thedewberrycharleston.com,https://www.thedewberrycharleston.com/contact,verified
+US,The Spectator Hotel,Charleston,United States,Property,info@thespectatorhotel.com,,https://www.thespectatorhotel.com,https://www.thespectatorhotel.com/contact,verified
+US,The Vendue,Charleston,United States,Property,info@thevendue.com,,https://www.thevendue.com,https://www.thevendue.com/contact/,verified
+US,The Vendue,Charleston,United States,Reservations,res@thevendue.com,,https://www.thevendue.com,https://www.thevendue.com/contact/,verified
+US,Graduate Charlottesville,Charlottesville,United States,Property,info@graduatecharlottesville.com,434 295 4333,https://graduatehotels.com/charlottesville,https://info.graduatehotels.com/emails/live-at-charlottesville,verified
+US,Graduate Charlottesville,Charlottesville,United States,Sales,sales@graduatehotels.com,434 295 4333,https://graduatehotels.com/charlottesville,https://info.graduatehotels.com/emails/live-at-charlottesville,verified
+US,ACME Hotel Company,Chicago,United States,Property,info@acmehotelcompany.com,312 894 0800,https://www.acmehotelcompany.com,https://www.acmehotelcompany.com/faqs,verified
+US,Arlo Chicago,Chicago,United States,Property,hellochicago@arlohotels.com,312.346.1200,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Chicago,Chicago,United States,Reservations,reservations@arlohotels.com,312.346.1200,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Chicago,Chicago,United States,Sales,chicagosales@arlohotels.com,312.346.1200,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Blueground Chicago,Chicago,United States,Property,cx-chicago@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground Chicago,Chicago,United States,Sales,sales-chi@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Chicago Athletic Association Hotel,Chicago,United States,Property,reservations@chicagoathletichotel.com,,https://www.chicagoathletichotel.com,https://www.chicagoathletichotel.com/,verified
+US,Chicago Hotel Collection - Ambassador Gold Coast,Chicago,United States,Property,ambassador@thechicagohotelcollection.com,312-748-1301,https://www.thechicagohotelcollection.com/,https://www.thechicagohotelcollection.com/contact,verified
+US,Chicago Hotel Collection - Magnificent Mile,Chicago,United States,Property,magmile@thechicagohotelcollection.com,312-787-6000,https://www.thechicagohotelcollection.com/,https://www.thechicagohotelcollection.com/contact,verified
+US,Chicago Hotel Collection - River North,Chicago,United States,Property,rivernorth@thechicagohotelcollection.com,312-447-9697,https://www.thechicagohotelcollection.com/,https://www.thechicagohotelcollection.com/contact,verified
+US,Chicago Hotel Collection - Wrigleyville,Chicago,United States,Property,wrigleyville@thechicagohotelcollection.com,312-447-9697,https://www.thechicagohotelcollection.com/,https://www.thechicagohotelcollection.com/contact,verified
+US,"Club Quarters Hotel, Central Loop",Chicago,United States,Property,guestservices@clubquarters.com,,https://www.clubquartershotels.com/chicago/central-loop,https://www.clubquartershotels.com/chicago/central-loop,verified
+US,"Club Quarters Hotel, Wacker at Michigan",Chicago,United States,Property,guestservices@clubquarters.com,,https://www.clubquartershotels.com/,https://www.clubquartershotels.com/contact-us,verified
+US,Freehand Chicago,Chicago,United States,Property,chicago@thefreehand.com,,https://freehandhotels.com/,https://freehandhotels.com/contact-us/,verified
+US,Freehand Chicago,Chicago,United States,Sales,sales.us@thefreehand.com,,https://freehandhotels.com/,https://freehandhotels.com/contact-us/,verified
+US,Godfrey Hotel Chicago,Chicago,United States,Property,godfrey@godfreyhotelchicago.com,,https://www.godfreyhotelchicago.com,https://www.godfreyhotelchicago.com/,verified
+US,Graduate Evanston,Chicago,United States,Property,info@graduateevanston.com,847-475-3300,https://graduatehotels.com/evanston,https://graduatehotels.com/evanston/contact,verified
+US,Graduate Evanston,Chicago,United States,Sales,sales@graduateevanston.com,847-475-3300,https://graduatehotels.com/evanston,https://graduatehotels.com/evanston/contact,verified
+US,Hotel EMC2,Chicago,United States,Property,info@hotelemc2.com,,https://www.hotelemc2.com,https://www.hotelemc2.com/contact,verified
+US,Hotel EMC2,Chicago,United States,Sales,sales@hotelemc2.com,,https://www.hotelemc2.com,https://www.hotelemc2.com/contact,verified
+US,Kimpton Gray Hotel,Chicago,United States,Property,info@grayhotelchicago.com,312-750-9012,https://www.grayhotelchicago.com/,https://www.grayhotelchicago.com/contact/,verified
+US,Publishing House Bed and Breakfast,Chicago,United States,Property,info@publishinghousebnb.com,,https://www.publishinghousebnb.com,https://www.publishinghousebnb.com/,verified
+US,Publishing House Bed and Breakfast,Chicago,United States,Sales,events@publishinghousebnb.com,,https://www.publishinghousebnb.com,https://www.publishinghousebnb.com/,verified
+US,The Gray Chicago,Chicago,United States,Property,info@grayhotelchicago.com,,https://www.grayhotelchicago.com,https://www.grayhotelchicago.com/contact,verified
+US,The Gwen,Chicago,United States,Property,info@thegwenhotel.com,,https://www.thegwenchicago.com,https://www.thegwenchicago.com/,verified
+US,The Hoxton Chicago,Chicago,United States,Property,hello.chicago@thehox.com,,https://thehoxton.com,https://thehoxton.com/contact,verified
+US,The Hoxton Chicago,Chicago,United States,Reservations,book.chicago@thehox.com,,https://thehoxton.com,https://thehoxton.com/contact,verified
+US,The Hoxton Chicago,Chicago,United States,Sales,sales.chicago@thehox.com,,https://thehoxton.com,https://thehoxton.com/contact,verified
+US,"The Hoxton, Chicago",Chicago,United States,Property,hello.chicago@thehox.com,312-761-1700,https://thehoxton.com/chicago/,https://thehoxton.com/downtown-la/contact/,verified
+US,"The Hoxton, Chicago",Chicago,United States,Reservations,book.chicago@thehox.com,312-761-1700,https://thehoxton.com/chicago/,https://thehoxton.com/downtown-la/contact/,verified
+US,"The Hoxton, Chicago",Chicago,United States,Sales,sales.chicago@thehox.com,312-761-1700,https://thehoxton.com/chicago/,https://thehoxton.com/downtown-la/contact/,verified
+US,The Langham Chicago,Chicago,United States,Property,tlchi.info@langhamhotels.com,,https://www.langhamhotels.com,https://www.langhamhotels.com/en/the-langham/chicago/contact-us/,verified
+US,The Langham Chicago,Chicago,United States,Sales,tlchi.weddings@langhamhotels.com,,https://www.langhamhotels.com,https://www.langhamhotels.com/en/the-langham/chicago/contact-us/,verified
+US,The Robey,Chicago,United States,Property,contact@therobey.com,,https://www.therobey.com,https://www.therobey.com/,verified
+US,Viceroy Chicago,Chicago,United States,Property,chicago@viceroy.com,+1 312 586 2000,https://www.viceroyhotelsandresorts.com,https://www.viceroyhotelsandresorts.com/chicago/contact,verified
+US,Viceroy Chicago,Chicago,United States,Sales,vchi-sales@viceroy.com,+1 312 586 2000,https://www.viceroyhotelsandresorts.com,https://www.viceroyhotelsandresorts.com/chicago/contact,verified
+US,Walton Residence,Chicago,United States,Property,info@waltonresidence.com,,https://waltonresidence.com/,https://waltonresidence.com/contact-us/,verified
+US,theWit Chicago,Chicago,United States,Decision maker,morgan.eagles@hilton.com,312-467-0200,https://thewithotel.com/,https://thewithotel.com/contact/,verified
+US,theWit Chicago,Chicago,United States,Sales,catering@thewithotel.com,312-467-0200,https://thewithotel.com/,https://thewithotel.com/contact/,verified
+US,21c Museum Hotel Cincinnati,Cincinnati,United States,Property,cincy.team@21chotels.com,,https://www.21cmuseumhotels.com/cincinnati,https://21cmuseumhotels.com/contact-us/,verified
+US,Graduate Cincinnati,Cincinnati,United States,Property,info@graduatecincinnati.com,513 487 3800,https://graduatehotels.com/cincinnati,https://info.graduatehotels.com/emails/cincinnati-opening,verified
+US,Graduate Cincinnati,Cincinnati,United States,Sales,sales@graduatehotels.com,513 487 3800,https://graduatehotels.com/cincinnati,https://info.graduatehotels.com/emails/cincinnati-opening,verified
+US,Graduate Columbia,Columbia,United States,Property,info@graduatecolumbia.com,803 779 7779,https://graduatehotels.com/columbia,https://info.graduatehotels.com/emails/live-at-columbia,verified
+US,Graduate Columbia,Columbia,United States,Sales,sales@graduatehotels.com,803 779 7779,https://graduatehotels.com/columbia,https://info.graduatehotels.com/emails/live-at-columbia,verified
+US,Graduate Columbus,Columbus,United States,Property,info@graduatecolumbus.com,614 484 1900,https://graduatehotels.com/columbus,https://info.graduatehotels.com/emails/live-at-columbus,verified
+US,Graduate Columbus,Columbus,United States,Sales,sales@graduatehotels.com,614 484 1900,https://graduatehotels.com/columbus,https://info.graduatehotels.com/emails/live-at-columbus,verified
+US,Blueground Dallas,Dallas,United States,Property,cx-dfw@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Hotel Swexan,Dallas,United States,Property,info@hotelswexan.com,,https://www.hotelswexan.com,https://hotelswexan.com/contact-us/,verified
+US,Hotel ZaZa Dallas,Dallas,United States,Property,dallasuptown@hotelzaza.com,,https://www.hotelzaza.com/dallas,https://www.hotelzaza.com/contact,verified
+US,Kimpton Pittman Hotel,Dallas,United States,Property,talktous@pittmanhoteldallas.com,,https://www.pittmanhoteldallas.com,https://www.pittmanhoteldallas.com/contact-us/,verified
+US,Kimpton Pittman Hotel,Dallas,United States,Reservations,frontdesk@pittmanhoteldallas.com,,https://www.pittmanhoteldallas.com,https://www.pittmanhoteldallas.com/contact-us/,verified
+US,Lorenzo Hotel,Dallas,United States,Property,info@lorenzohotel.com,,https://www.lorenzohotel.com,https://lorenzohotel.com/,verified
+US,The Joule Dallas,Dallas,United States,Property,reservations@thejouledallas.com,,https://www.thejouledallas.com,https://www.thejouledallas.com/contact,verified
+US,Virgin Hotels Dallas,Dallas,United States,Property,stay.dallas@virginhotels.com,469-359-7700,https://virginhotels.com/dallas/,https://virginhotels.com/dallas/contact-us/,verified
+US,Blueground Denver,Denver,United States,Property,cx-denver@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Hotel Teatro,Denver,United States,Property,reservations@hotelteatro.com,303-228-1100,https://hotelteatro.com/,https://hotelteatro.com/faq/,verified
+US,Limelight Hotel Denver,Denver,United States,Property,reservations@limelighthotels.com,,https://www.limelighthotels.com/denver,https://www.limelighthotels.com/denver,verified
+US,The Brown Palace Hotel,Denver,United States,Property,info@brownpalace.com,,https://www.brownpalace.com,https://www.brownpalace.com/contact,verified
+US,The Brown Palace Hotel,Denver,United States,Reservations,reservations@brownpalace.com,,https://www.brownpalace.com,https://www.brownpalace.com/contact,verified
+US,The Crawford Hotel,Denver,United States,Property,info@thecrawfordhotel.com,720-460-3924,https://www.thecrawfordhotel.com/,https://www.thecrawfordhotel.com/faq/,verified
+US,The Crawford Hotel,Denver,United States,Reservations,reservations@thecrawfordhotel.com,720-460-3924,https://www.thecrawfordhotel.com/,https://www.thecrawfordhotel.com/faq/,verified
+US,The Crawford Hotel,Denver,United States,Sales,sales@thecrawfordhotel.com,720-460-3924,https://www.thecrawfordhotel.com/,https://www.thecrawfordhotel.com/faq/,verified
+US,The Curtis Denver,Denver,United States,Property,info@thecurtis.com,,https://www.thecurtis.com,https://www.thecurtis.com/,verified
+US,The Maven Hotel,Denver,United States,Reservations,reservations@themavenhotel.com,,https://www.themavenhotel.com,https://www.themavenhotel.com/contact,verified
+US,The Maven Hotel,Denver,United States,Sales,sales@themavenhotel.com,,https://www.themavenhotel.com,https://www.themavenhotel.com/contact,verified
+US,The Maven Hotel at The Dairy Block,Denver,United States,Property,reservations@themavenhotel.com,,https://www.themavenhotel.com/,https://www.themavenhotel.com/contact-us,verified
+US,The Maven Hotel at The Dairy Block,Denver,United States,Sales,sales@themavenhotel.com,,https://www.themavenhotel.com/,https://www.themavenhotel.com/contact-us,verified
+US,The Oxford Hotel,Denver,United States,Property,reservations@theoxfordhotel.com,303-628-5400,https://www.theoxfordhotel.com/,https://www.theoxfordhotel.com/contact,verified
+US,The Ramble Hotel,Denver,United States,Property,explore@theramblehotel.com,720-996-6300,https://www.theramblehotel.com/,https://www.theramblehotel.com/contact-us/,verified
+US,The Ramble Hotel,Denver,United States,Reservations,reservations@theramblehotel.com,720-996-6300,https://www.theramblehotel.com/,https://www.theramblehotel.com/contact-us/,verified
+US,The Ramble Hotel,Denver,United States,Sales,bbenson@theramblehotel.com,720-996-6300,https://www.theramblehotel.com/,https://www.theramblehotel.com/contact-us/,verified
+US,Blueground Detroit,Detroit,United States,Property,cx-dtw@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Shinola Hotel,Detroit,United States,Property,reservations@shinolahotel.com,,https://www.shinolahotel.com,https://www.shinolahotel.com/contact,verified
+US,21c Museum Hotel Durham,Durham,United States,Property,dur.team@21chotels.com,,https://www.21cmuseumhotels.com/durham,https://21cmuseumhotels.com/contact-us/,verified
+US,1 Hotel Hanalei Bay,Hanalei,United States,Property,lih1hhb.conciergeservices@1hotels.com,,https://www.1hotels.com,https://www.1hotels.com/hanalei-bay,verified
+US,Kimpton Everly Hotel,Hollywood,United States,Property,talktous@everlyhotelhollywood.com,,https://www.kimptoneverlyhotel.com,https://www.kimptoneverlyhotel.com/contact,verified
+US,Hotel ZaZa Houston Memorial City,Houston,United States,Property,houstonmemorial@hotelzaza.com,,https://www.hotelzaza.com/houston,https://www.hotelzaza.com/contact,verified
+US,Hotel ZaZa Houston Museum District,Houston,United States,Property,houstonmuseumdistrict@hotelzaza.com,,https://www.hotelzaza.com/houston,https://www.hotelzaza.com/contact,verified
+US,Graduate Iowa City,Iowa City,United States,Property,info@graduateiowacity.com,319 337 4058,https://graduatehotels.com/iowa-city,https://info.graduatehotels.com/emails/iowa-city-opening-email-1-1,verified
+US,Graduate Iowa City,Iowa City,United States,Sales,sales@graduatehotels.com,319 337 4058,https://graduatehotels.com/iowa-city,https://info.graduatehotels.com/emails/iowa-city-opening-email-1-1,verified
+US,Blueground Kansas City,Kansas City,United States,Property,cx-mci@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Graduate Knoxville,Knoxville,United States,Property,info@graduateknoxville.com,865 437 5500,https://graduatehotels.com/knoxville,https://info.graduatehotels.com/emails/knoxville-opening,verified
+US,Graduate Knoxville,Knoxville,United States,Sales,sales@graduatehotels.com,865 437 5500,https://graduatehotels.com/knoxville,https://info.graduatehotels.com/emails/knoxville-opening,verified
+US,La Jolla Cove Hotel & Suites,La Jolla,United States,Property,reservations@lajollacove.com,,https://www.lajollacove.com,https://www.lajollacove.com/,verified
+US,Pantai Inn,La Jolla,United States,Property,stay@pantai.com,,https://www.pantai.com,https://pantai.com/,verified
+US,Pantai Inn,La Jolla,United States,Sales,events@pantai.com,,https://www.pantai.com,https://pantai.com/,verified
+US,Virgin Hotels Las Vegas,Las Vegas,United States,Property,info.lasvegas@vhlv.com,702-693-5000,https://www.virginhotelslv.com/,https://www.virginhotelslv.com/contact/,verified
+US,21c Museum Hotel Lexington,Lexington,United States,Property,lex.team@21chotels.com,,https://www.21cmuseumhotels.com/lexington,https://21cmuseumhotels.com/contact-us/,verified
+US,Graduate Lincoln,Lincoln,United States,Property,info@graduatelincoln.com,402 475 4011,https://graduatehotels.com/lincoln,https://info.graduatehotels.com/emails/live-at-lincoln,verified
+US,Graduate Lincoln,Lincoln,United States,Sales,sales@graduatehotels.com,402 475 4011,https://graduatehotels.com/lincoln,https://info.graduatehotels.com/emails/live-at-lincoln,verified
+US,1 Hotel West Hollywood,Los Angeles,United States,Property,1wh-concierge@1hotels.com,,https://www.1hotels.com/west-hollywood,https://www.1hotels.com/west-hollywood/faq,verified
+US,1 Hotel West Hollywood,Los Angeles,United States,Sales,1wh-sales@1hotels.com,,https://www.1hotels.com/west-hollywood,https://www.1hotels.com/west-hollywood/faq,verified
+US,Avalon Hotel Beverly Hills,Los Angeles,United States,Property,guestservices@avalonbeverlyhills.com,310-277-5221,https://www.properhotel.com/,https://www.properhotel.com/contact-us/,verified
+US,Avalon Hotel Beverly Hills,Los Angeles,United States,Sales,abh.sales@avalonbeverlyhills.com,310-277-5221,https://www.properhotel.com/,https://www.properhotel.com/contact-us/,verified
+US,Blueground Los Angeles,Los Angeles,United States,Property,cx-losangeles@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground Los Angeles,Los Angeles,United States,Sales,sales-lax@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Downtown L.A. Proper Hotel,Los Angeles,United States,Property,dtlap.info@properhotel.com,,https://www.properhotel.com/downtown-la/,https://www.properhotel.com/contact-us/,verified
+US,Downtown L.A. Proper Hotel,Los Angeles,United States,Sales,dtlap.sales@properhotel.com,,https://www.properhotel.com/downtown-la/,https://www.properhotel.com/contact-us/,verified
+US,Freehand Los Angeles,Los Angeles,United States,Property,losangeles@thefreehand.com,213-612-0021,https://freehandhotels.com/los-angeles/,https://freehandhotels.com/contact-us/,verified
+US,Freehand Los Angeles,Los Angeles,United States,Sales,sales.losangeles@thefreehand.com,213-612-0021,https://freehandhotels.com/los-angeles/,https://freehandhotels.com/contact-us/,verified
+US,Hotel Erwin,Los Angeles,United States,Property,sales@hotelerwin.com,,https://www.hotelerwin.com,https://www.hotelerwin.com/,verified
+US,Hotel Figueroa,Los Angeles,United States,Property,info@hotelfigueroa.com,,https://www.hotelfigueroa.com,https://www.hotelfigueroa.com/contact-us/,verified
+US,Hotel June Malibu,Los Angeles,United States,Property,hjm.info@thehoteljune.com,424-644-0517,https://www.thehoteljune.com/,https://www.properhotel.com/contact-us/,verified
+US,Hotel June Malibu,Los Angeles,United States,Sales,hjm.sales@thehoteljune.com,424-644-0517,https://www.thehoteljune.com/,https://www.properhotel.com/contact-us/,verified
+US,Hotel June West LA,Los Angeles,United States,Property,info@thehoteljune.com,310-645-0400,https://www.thehoteljune.com/,https://www.properhotel.com/contact-us/,verified
+US,Hotel June West LA,Los Angeles,United States,Sales,sales@thehoteljune.com,310-645-0400,https://www.thehoteljune.com/,https://www.properhotel.com/contact-us/,verified
+US,Hotel Per La,Los Angeles,United States,Property,info@hotelperla.com,,https://www.hotelperla.com,https://hotelperla.com/,verified
+US,Neighborhood Hotels,Los Angeles,United States,Property,info@nbhdhotels.com,,https://www.theneighborhoodhotel.com,https://www.theneighborhoodhotel.com/,verified
+US,PUBLIC Los Angeles,Los Angeles,United States,Reservations,reservationsla@publichotels.com,,https://www.publichotels.com,https://www.publichotels.com/contact,verified
+US,PUBLIC Los Angeles,Los Angeles,United States,Sales,salesla@publichotels.com,,https://www.publichotels.com,https://www.publichotels.com/contact,verified
+US,Palihotel Melrose,Los Angeles,United States,Property,info@pali-hotel.com,,https://www.palisociety.com/hotels/melrose,https://www.palisociety.com/hotels/melrose,verified
+US,Palihotel Melrose,Los Angeles,United States,Sales,socalsales@palisociety.com,,https://www.palisociety.com/hotels/melrose,https://www.palisociety.com/hotels/melrose,verified
+US,Proper Downtown LA,Los Angeles,United States,Property,dtlap.info@properhotel.com,,https://properhotel.com,https://properhotel.com/downtown-la/,verified
+US,Proper Downtown LA,Los Angeles,United States,Sales,dtlap.sales@properhotel.com,,https://properhotel.com,https://properhotel.com/downtown-la/,verified
+US,Proper Hotels,Los Angeles,United States,Property,info@properhotel.com,,https://properhotel.com,https://www.properhotel.com/contact/,verified
+US,Proper Hotels,Los Angeles,United States,Reservations,reservations@properhotel.com,,https://properhotel.com,https://www.properhotel.com/contact/,verified
+US,Proper Hotels,Los Angeles,United States,Sales,sales@properhotel.com,,https://properhotel.com,https://www.properhotel.com/contact/,verified
+US,Proper Hotels (US group reservations),Los Angeles,United States,Property,info@properhotel.com,,https://www.properhotel.com,https://www.properhotel.com/contact/,verified
+US,Proper Hotels (US group reservations),Los Angeles,United States,Reservations,reservations@properhotel.com,,https://www.properhotel.com,https://www.properhotel.com/contact/,verified
+US,Proper Hotels (US group reservations),Los Angeles,United States,Sales,sales@properhotel.com,,https://www.properhotel.com,https://www.properhotel.com/contact/,verified
+US,Santa Monica Proper Hotel,Los Angeles,United States,Property,smp.info@properhotel.com,310-620-9990,https://www.properhotel.com/santa-monica/,https://www.properhotel.com/contact-us/,verified
+US,Santa Monica Proper Hotel,Los Angeles,United States,Reservations,smp.reservations@properhotel.com,310-620-9990,https://www.properhotel.com/santa-monica/,https://www.properhotel.com/contact-us/,verified
+US,Santa Monica Proper Hotel,Los Angeles,United States,Sales,smp.sales@properhotel.com,310-620-9990,https://www.properhotel.com/santa-monica/,https://www.properhotel.com/contact-us/,verified
+US,The Culver Hotel,Los Angeles,United States,Property,info@theculverhotel.com,310-558-9400,https://www.theculverhotel.com/,https://www.properhotel.com/contact-us/,verified
+US,The Culver Hotel,Los Angeles,United States,Reservations,reservations@theculverhotel.com,310-558-9400,https://www.theculverhotel.com/,https://www.properhotel.com/contact-us/,verified
+US,The Culver Hotel,Los Angeles,United States,Sales,sales@theculverhotel.com,310-558-9400,https://www.theculverhotel.com/,https://www.properhotel.com/contact-us/,verified
+US,The Hoxton Downtown LA,Los Angeles,United States,Property,hello.dtla@thehox.com,,https://thehoxton.com,https://thehoxton.com/contact,verified
+US,The Hoxton Downtown LA,Los Angeles,United States,Reservations,book.dtla@thehox.com,,https://thehoxton.com,https://thehoxton.com/contact,verified
+US,The Hoxton Downtown LA,Los Angeles,United States,Sales,sales.dtla@thehox.com,,https://thehoxton.com,https://thehoxton.com/contact,verified
+US,"The Hoxton, Downtown LA",Los Angeles,United States,Property,hello.dtla@thehox.com,213-725-5900,https://thehoxton.com/downtown-la/,https://thehoxton.com/downtown-la/contact/,verified
+US,"The Hoxton, Downtown LA",Los Angeles,United States,Reservations,book.dtla@thehox.com,213-725-5900,https://thehoxton.com/downtown-la/,https://thehoxton.com/downtown-la/contact/,verified
+US,"The Hoxton, Downtown LA",Los Angeles,United States,Sales,sales.dtla@thehox.com,213-725-5900,https://thehoxton.com/downtown-la/,https://thehoxton.com/downtown-la/contact/,verified
+US,The LINE Hotels,Los Angeles,United States,Property,info@thelinehotel.com,,https://www.thelinehotel.com,https://www.thelinehotel.com/los-angeles/,verified
+US,The LINE LA,Los Angeles,United States,Decision maker,sales.la@thelinehotel.com,+1 213 381 7411,https://www.thelinehotel.com/los-angeles/,https://www.thelinehotel.com/los-angeles/faq/,verified
+US,The LINE LA,Los Angeles,United States,Property,reservations.la@thelinehotel.com,+1 213 381 7411,https://www.thelinehotel.com/los-angeles/,https://www.thelinehotel.com/los-angeles/faq/,verified
+US,The West Hollywood EDITION,Los Angeles,United States,Property,info.weho@editionhotels.com,310-953-9899,https://www.editionhotels.com/weho/,https://www.editionhotels.com/weho/contact/,verified
+US,The West Hollywood EDITION,Los Angeles,United States,Reservations,reservations.weho@editionhotels.com,310-953-9899,https://www.editionhotels.com/weho/,https://www.editionhotels.com/weho/contact/,verified
+US,The West Hollywood EDITION,Los Angeles,United States,Sales,sales.weho@editionhotels.com,310-953-9899,https://www.editionhotels.com/weho/,https://www.editionhotels.com/weho/contact/,verified
+US,21c Museum Hotel Louisville,Louisville,United States,Property,lou.team@21chotels.com,,https://www.21cmuseumhotels.com/louisville,https://21cmuseumhotels.com/contact-us/,verified
+US,Grand Hotel,Mackinac Island,United States,Property,reservations@grandhotel.com,+1 800 334 7263,https://www.grandhotel.com,https://www.grandhotel.com/contact,verified
+US,Graduate Madison,Madison,United States,Property,info@graduatemadison.com,608 257 4391,https://graduatehotels.com/madison,https://info.graduatehotels.com/emails/live-at-madison,verified
+US,Graduate Madison,Madison,United States,Sales,sales@graduatehotels.com,608 257 4391,https://graduatehotels.com/madison,https://info.graduatehotels.com/emails/live-at-madison,verified
+US,Blueground Memphis,Memphis,United States,Property,cx-mem@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,1 Hotel South Beach,Miami,United States,Property,mia1hsb-concierge@1hotels.com,305-604-1539,https://www.1hotels.com/south-beach,https://www.1hotels.com/south-beach/faq,verified
+US,Arlo Hotels Miami,Miami,United States,Sales,miamisales@arlohotels.com,,https://arlohotels.com,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Wynwood,Miami,United States,Property,hellowynwood@arlohotels.com,,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Wynwood,Miami,United States,Reservations,reservations@arlohotels.com,,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Wynwood,Miami,United States,Sales,miamisales@arlohotels.com,,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Blueground Miami,Miami,United States,Property,cx-miami@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground Miami,Miami,United States,Sales,sales-mia@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Four Ambassadors Apartments,Miami,United States,Property,reservations@fourambassadors.cc,786-593-3628,https://fourambassadors.cc/,https://fourambassadors.cc/contact-us,verified
+US,Freehand Miami,Miami,United States,Property,miami@thefreehand.com,,https://freehandhotels.com/,https://freehandhotels.com/contact-us/,verified
+US,Freehand Miami,Miami,United States,Sales,sales.us@thefreehand.com,,https://freehandhotels.com/,https://freehandhotels.com/contact-us/,verified
+US,The Miami Beach EDITION,Miami,United States,Property,concierge.mia@editionhotels.com,786-257-4500,https://www.editionhotels.com/miami-beach/,https://www.editionhotels.com/miami-beach/contact/,verified
+US,The Miami Beach EDITION,Miami,United States,Reservations,reservations.miamibeach@editionhotels.com,786-257-4500,https://www.editionhotels.com/miami-beach/,https://www.editionhotels.com/miami-beach/contact/,verified
+US,The Miami Beach EDITION,Miami,United States,Sales,mbeditionsales@editionhotels.com,786-257-4500,https://www.editionhotels.com/miami-beach/,https://www.editionhotels.com/miami-beach/contact/,verified
+US,The Shelborne by Proper,Miami,United States,Property,info@shelborne.com,305-531-1271,https://www.properhotel.com/,https://www.properhotel.com/contact-us/,verified
+US,The Shelborne by Proper,Miami,United States,Sales,sales@shelborne.com,305-531-1271,https://www.properhotel.com/,https://www.properhotel.com/contact-us/,verified
+US,"The Standard, Miami Beach",Miami,United States,Property,miami@standardmiami.com,305-673-1717,https://www.standardhotels.com/miami/properties/miami-beach,https://www.standardhotels.com/miami/properties/miami-beach,verified
+US,Trump National Doral Miami,Miami,United States,Decision maker,doral.reservations@trumphotels.com,+1 305 592 2000,https://www.trumphotels.com,https://www.booktrump.com/miami,verified
+US,YOTEL Miami,Miami,United States,Property,mia.contact@yotel.com,,https://www.yotel.com,https://www.yotel.com/en/hotels/yotel-miami,verified
+US,YOTEL Miami,Miami,United States,Reservations,miami.reservations@yotel.com,,https://www.yotel.com,https://www.yotel.com/en/hotels/yotel-miami,verified
+US,YOTEL Miami,Miami,United States,Sales,mia.sales@yotel.com,,https://www.yotel.com,https://www.yotel.com/en/hotels/yotel-miami,verified
+US,Casa Faena,Miami Beach,United States,Property,casareception@faena.com,,https://www.faena.com,https://www.faena.com/miami-beach/contact-us,verified
+US,Casa Faena,Miami Beach,United States,Reservations,reservations-casafaena@faena.com,,https://www.faena.com,https://www.faena.com/miami-beach/contact-us,verified
+US,Chesterfield Hotel South Beach,Miami Beach,United States,Property,bookings@miamibeachhotelgroup.com,,https://www.thechesterfieldhotel.com,https://www.thechesterfieldhotel.com/contact,verified
+US,Chesterfield Hotel South Beach,Miami Beach,United States,Sales,sales@miamibeachhotelgroup.com,,https://www.thechesterfieldhotel.com,https://www.thechesterfieldhotel.com/contact,verified
+US,Circa 39 Hotel,Miami Beach,United States,Property,info@circa39.com,,https://www.circa39.com,https://www.circa39.com/contact/,verified
+US,Circa 39 Hotel,Miami Beach,United States,Reservations,frontdesk@circa39.com,,https://www.circa39.com,https://www.circa39.com/contact/,verified
+US,Circa 39 Hotel,Miami Beach,United States,Sales,sales@circa39.com,,https://www.circa39.com,https://www.circa39.com/contact/,verified
+US,Faena Hotel Miami Beach,Miami Beach,United States,Reservations,reservations-miamibeach@faena.com,,https://www.faena.com,https://www.faena.com/miami-beach/contact-us,verified
+US,Faena Hotel Miami Beach,Miami Beach,United States,Sales,events-miamibeach@faena.com,,https://www.faena.com,https://www.faena.com/miami-beach/contact-us,verified
+US,Faena Hotels,Miami Beach,United States,Property,info@faenahotels.com,,https://www.faena.com,https://www.faena.com/miami-beach/contact-us,verified
+US,Faena Hotels,Miami Beach,United States,Reservations,reservations@faenahotels.com,,https://www.faena.com,https://www.faena.com/miami-beach/contact-us,verified
+US,Faena Hotels,Miami Beach,United States,Sales,specialevents@faenahotels.com,,https://www.faena.com,https://www.faena.com/miami-beach/contact-us,verified
+US,Miami Beach EDITION,Miami Beach,United States,Decision maker,reservations.miamibeach@editionhotels.com,+1 786 257 4500,https://www.editionhotels.com/miami-beach/,https://www.editionhotels.com/contact/,verified
+US,Miami Beach EDITION,Miami Beach,United States,Sales,mbeditionsales@editionhotels.com,+1 786 257 4500,https://www.editionhotels.com/miami-beach/,https://www.editionhotels.com/contact/,verified
+US,National Hotel,Miami Beach,United States,Property,info@nationalhotel.com,,https://www.nationalhotel.com,https://www.nationalhotel.com/contact,verified
+US,National Hotel,Miami Beach,United States,Reservations,reservations@nationalhotel.com,,https://www.nationalhotel.com,https://www.nationalhotel.com/contact,verified
+US,National Hotel,Miami Beach,United States,Sales,sales@nationalhotel.com,,https://www.nationalhotel.com,https://www.nationalhotel.com/contact,verified
+US,National Hotel Miami Beach,Miami Beach,United States,Property,reservations@mareva1939.com,,https://www.nationalhotel.com,https://www.nationalhotel.com/contact,verified
+US,Oceanside Hotel Miami Beach,Miami Beach,United States,Property,reception@oceansidehotelmiamibeach.com,,https://www.oceansidehotelmiamibeach.com,https://www.oceansidehotelmiamibeach.com/contact,verified
+US,Oceanside Hotel Miami Beach,Miami Beach,United States,Reservations,reservations@oceansidehotelmiamibeach.com,,https://www.oceansidehotelmiamibeach.com,https://www.oceansidehotelmiamibeach.com/contact,verified
+US,Oceanside Hotel Miami Beach,Miami Beach,United States,Sales,sales@oceansidehotelmiamibeach.com,,https://www.oceansidehotelmiamibeach.com,https://www.oceansidehotelmiamibeach.com/contact,verified
+US,Surfcomber by Marriott,Miami Beach,United States,Property,talktous@surfcomber.com,,https://www.surfcomber.com,https://www.surfcomber.com/contact,verified
+US,The Betsy Hotel,Miami Beach,United States,Property,info@thebetsyhotel.com,,https://www.thebetsyhotel.com,https://www.thebetsyhotel.com/contact,verified
+US,The Betsy Hotel,Miami Beach,United States,Reservations,reservations@thebetsyhotel.com,,https://www.thebetsyhotel.com,https://www.thebetsyhotel.com/contact,verified
+US,The Betsy Hotel,Miami Beach,United States,Sales,sales@thebetsyhotel.com,,https://www.thebetsyhotel.com,https://www.thebetsyhotel.com/contact,verified
+US,The Miami Beach EDITION,Miami Beach,United States,Sales,leisuresales.mia@editionhotels.com,,https://www.editionhotels.com,https://www.editionhotels.com/contact/,verified
+US,The Palms Hotel & Spa,Miami Beach,United States,Property,concierge@thepalmshotel.com,,https://www.thepalmshotel.com,https://www.thepalmshotel.com/contact-us,verified
+US,The Palms Hotel & Spa,Miami Beach,United States,Reservations,reservations@thepalmshotel.com,,https://www.thepalmshotel.com,https://www.thepalmshotel.com/contact-us,verified
+US,The Palms Hotel & Spa,Miami Beach,United States,Sales,sales@thepalmshotel.com,,https://www.thepalmshotel.com,https://www.thepalmshotel.com/contact-us,verified
+US,The Setai Miami Beach,Miami Beach,United States,Property,info@thesetaihotel.com,,https://www.thesetaihotel.com,https://www.thesetaihotel.com/contact,verified
+US,The Setai Miami Beach,Miami Beach,United States,Reservations,reservations@thesetaihotel.com,,https://www.thesetaihotel.com,https://www.thesetaihotel.com/contact,verified
+US,The Setai Miami Beach,Miami Beach,United States,Sales,sales@thesetaihotel.com,,https://www.thesetaihotel.com,https://www.thesetaihotel.com/contact,verified
+US,Whitelaw Hotel,Miami Beach,United States,Property,bookings@southbeachgroup.com,,https://www.whitelawhotel.com,https://www.whitelawhotel.com/contact,verified
+US,Whitelaw Hotel,Miami Beach,United States,Sales,sales@southbeachgroup.com,,https://www.whitelawhotel.com,https://www.whitelawhotel.com/contact,verified
+US,Blueground Minneapolis,Minneapolis,United States,Property,cx-msp@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Graduate Minneapolis,Minneapolis,United States,Property,info@graduateminneapolis.com,612 379 8888,https://graduatehotels.com/minneapolis,https://info.graduatehotels.com/emails/live-at-minneapolis,verified
+US,Graduate Minneapolis,Minneapolis,United States,Sales,sales@graduatehotels.com,612 379 8888,https://graduatehotels.com/minneapolis,https://info.graduatehotels.com/emails/live-at-minneapolis,verified
+US,1 Hotel Nashville,Nashville,United States,Property,bna1hna-concierge@1hotels.com,615-510-0400,https://www.1hotels.com/nashville,https://www.1hotels.com/nashville/faq,verified
+US,1 Hotel Nashville,Nashville,United States,Sales,bna1hna-sales@1hotels.com,615-510-0400,https://www.1hotels.com/nashville,https://www.1hotels.com/nashville/faq,verified
+US,Blueground Nashville,Nashville,United States,Property,cx-bna@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Graduate Nashville,Nashville,United States,Property,info@graduatenashville.com,615-551-2700,https://graduatehotels.com/nashville,https://info.graduatehotels.com/emails/live-at-nashville,verified
+US,Graduate Nashville,Nashville,United States,Sales,sales@graduatehotels.com,615-551-2700,https://graduatehotels.com/nashville,https://info.graduatehotels.com/emails/live-at-nashville,verified
+US,Hutton Hotel,Nashville,United States,Property,communications@huttonhotel.com,,https://www.huttonhotel.com,https://www.huttonhotel.com/contact,verified
+US,Hutton Hotel,Nashville,United States,Reservations,reservations@huttonhotel.com,,https://www.huttonhotel.com,https://www.huttonhotel.com/contact,verified
+US,Hutton Hotel,Nashville,United States,Sales,sales@huttonhotel.com,,https://www.huttonhotel.com,https://www.huttonhotel.com/contact,verified
+US,Noelle Nashville,Nashville,United States,Property,hello@noelle-nashville.com,,https://www.noelle-nashville.com,https://www.noelle-nashville.com/contact,verified
+US,Noelle Nashville,Nashville,United States,Sales,events@noelle-nashville.com,,https://www.noelle-nashville.com,https://www.noelle-nashville.com/contact,verified
+US,The Hermitage Hotel,Nashville,United States,Property,reservations@thehermitagehotel.com,,https://www.thehermitagehotel.com,https://thehermitagehotel.com/contact/,verified
+US,The Joseph Nashville,Nashville,United States,Property,info@thejosephnashville.com,,https://www.thejosephnashville.com,https://www.thejosephnashville.com/contact,verified
+US,The Joseph Nashville,Nashville,United States,Reservations,concierge@thejosephnashville.com,,https://www.thejosephnashville.com,https://www.thejosephnashville.com/contact,verified
+US,The Joseph Nashville,Nashville,United States,Sales,sales@thejosephnashville.com,,https://www.thejosephnashville.com,https://www.thejosephnashville.com/contact,verified
+US,Virgin Hotels Nashville,Nashville,United States,Property,info.nashville@virginhotels.com,615-667-8000,https://virginhotels.com/nashville/,https://virginhotels.com/nashville/contact-us/,verified
+US,Virgin Hotels Nashville,Nashville,United States,Reservations,stay.nashville@virginhotels.com,615-667-8000,https://virginhotels.com/nashville/,https://virginhotels.com/nashville/contact-us/,verified
+US,Virgin Hotels Nashville,Nashville,United States,Sales,sales.nashville@virginhotels.com,615-667-8000,https://virginhotels.com/nashville/,https://virginhotels.com/nashville/contact-us/,verified
+US,Graduate New Haven,New Haven,United States,Property,info@graduatenewhaven.com,475 207 7070,https://graduatehotels.com/new-haven,https://info.graduatehotels.com/emails/live-at-new-haven,verified
+US,Graduate New Haven,New Haven,United States,Sales,sales@graduatehotels.com,475 207 7070,https://graduatehotels.com/new-haven,https://info.graduatehotels.com/emails/live-at-new-haven,verified
+US,Columns Hotel,New Orleans,United States,Property,info@thecolumns.com,,https://www.thecolumns.com,https://thecolumns.com/contact/,verified
+US,Columns Hotel,New Orleans,United States,Reservations,reservations@thecolumns.com,,https://www.thecolumns.com,https://thecolumns.com/contact/,verified
+US,Columns Hotel,New Orleans,United States,Sales,events@thecolumns.com,,https://www.thecolumns.com,https://thecolumns.com/contact/,verified
+US,Henrietta New Orleans,New Orleans,United States,Property,sleep@henriettahotel.com,,https://www.henriettahotel.com,https://www.henriettahotel.com/contact,verified
+US,Henry Howard Hotel,New Orleans,United States,Decision maker,generalmanager@henryhowardhotel.com,,https://www.henryhowardhotel.com,https://www.henryhowardhotel.com/contact/,verified
+US,Henry Howard Hotel,New Orleans,United States,Property,info@henryhowardhotel.com,,https://www.henryhowardhotel.com,https://www.henryhowardhotel.com/contact/,verified
+US,Hotel Monteleone,New Orleans,United States,Property,info@hotelmonteleone.com,,https://www.hotelmonteleone.com,https://www.hotelmonteleone.com/contact/,verified
+US,International House Hotel,New Orleans,United States,Property,info@ihhotel.com,,https://www.ihhotel.com,https://www.ihhotel.com/contact,verified
+US,The Pontchartrain Hotel,New Orleans,United States,Property,customerservice@thepontchartrainhotel.com,,https://www.thepontchartrainhotel.com,https://thepontchartrainhotel.com/contact/,verified
+US,Virgin Hotels New Orleans,New Orleans,United States,Property,info.neworleans@virginhotels.com,504-603-8000,https://virginhotels.com/new-orleans/,https://virginhotels.com/new-orleans/contact-us/,verified
+US,Virgin Hotels New Orleans,New Orleans,United States,Sales,sales.neworleans@virginhotels.com,504-603-8000,https://virginhotels.com/new-orleans/,https://virginhotels.com/new-orleans/contact-us/,verified
+US,Mohonk Mountain House,New Paltz,United States,Property,info@mohonk.com,,https://www.mohonk.com,https://www.mohonk.com/contact-us,verified
+US,1 Hotel Brooklyn Bridge,New York,United States,Property,nyc1hbb-concierge@1hotels.com,347-696-2500,https://www.1hotels.com/brooklyn-bridge,https://www.1hotels.com/brooklyn-bridge/faq,verified
+US,1 Hotel Central Park,New York,United States,Property,1cp-concierge@1hotels.com,,https://www.1hotels.com/central-park,https://www.1hotels.com/central-park/faq,verified
+US,11 Howard,New York,United States,Property,contactus@11howard.com,,https://www.11howard.com/,https://www.11howard.com/about/faq,verified
+US,11 Howard,New York,United States,Reservations,reservations@11howard.com,,https://www.11howard.com/,https://www.11howard.com/about/faq,verified
+US,11 Howard,New York,United States,Sales,sales@11howard.com,,https://www.11howard.com/,https://www.11howard.com/about/faq,verified
+US,AKA Central Park,New York,United States,Property,centralpark@stayaka.com,,https://www.stayaka.com/aka-central-park,https://www.stayaka.com/aka-central-park,verified
+US,AKA Sutton Place,New York,United States,Property,suttonplace@stayaka.com,,https://www.stayaka.com/aka-sutton-place,https://www.stayaka.com/aka-sutton-place,verified
+US,AKA Times Square,New York,United States,Property,timessquare@stayaka.com,,https://www.stayaka.com/aka-times-square,https://www.stayaka.com/aka-times-square,verified
+US,Ace Hotel Brooklyn,New York,United States,Property,reservations.bk@acehotel.com,718-313-3636,https://acehotel.com/brooklyn,https://acehotel.com/contact/,verified
+US,Ace Hotel Brooklyn,New York,United States,Sales,sales.bk@acehotel.com,718-313-3636,https://acehotel.com/brooklyn,https://acehotel.com/contact/,verified
+US,Ace Hotel New York,New York,United States,Property,reservations@acehotelnyc.com,212-679-2222,https://acehotel.com/new-york,https://acehotel.com/contact/,verified
+US,Ace Hotel New York,New York,United States,Sales,sales@acehotelnyc.com,212-679-2222,https://acehotel.com/new-york,https://acehotel.com/contact/,verified
+US,Arlo Hotels,New York,United States,Property,hello@arlohotels.com,888.260.2756,https://arlohotels.com,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Hotels,New York,United States,Reservations,reservations@arlohotels.com,888.260.2756,https://arlohotels.com,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Hotels NYC,New York,United States,Sales,nycsales@arlohotels.com,,https://arlohotels.com,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Midtown,New York,United States,Property,hellomidtown@arlohotels.com,212-343-7000,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Midtown,New York,United States,Reservations,reservations@arlohotels.com,212-343-7000,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Midtown,New York,United States,Sales,nycsales@arlohotels.com,212-343-7000,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo NoMad,New York,United States,Property,hellonomad@arlohotels.com,212-806-7000,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo NoMad,New York,United States,Reservations,reservations@arlohotels.com,212-806-7000,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo NoMad,New York,United States,Sales,nycsales@arlohotels.com,212-806-7000,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo SoHo,New York,United States,Property,hellosoho@arlohotels.com,212-342-7000,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo SoHo,New York,United States,Reservations,reservations@arlohotels.com,212-342-7000,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo SoHo,New York,United States,Sales,nycsales@arlohotels.com,212-342-7000,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Williamsburg,New York,United States,Property,hellowilliamsburg@arlohotels.com,,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Williamsburg,New York,United States,Reservations,reservations@arlohotels.com,,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Williamsburg,New York,United States,Sales,williamsburgsales@arlohotels.com,,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Blueground New York,New York,United States,Property,cx-newyork@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground New York,New York,United States,Sales,sales-nyc@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground USA,New York,United States,Property,cx-usa@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground USA,New York,United States,Sales,sales-usa@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Bryant Park Hotel,New York,United States,Property,info@bryantparkhotel.com,,https://bryantparkhotel.com/,https://bryantparkhotel.com/faq/,verified
+US,Bryant Park Hotel,New York,United States,Reservations,reservations@bryantparkhotel.com,,https://bryantparkhotel.com/,https://bryantparkhotel.com/faq/,verified
+US,Bryant Park Hotel,New York,United States,Sales,sales@bryantparkhotel.com,,https://bryantparkhotel.com/,https://bryantparkhotel.com/faq/,verified
+US,Cassa NYC / Cassa Residences,New York,United States,Property,info@cassanyc.com,800-991-2772,https://cassanyc.com/,https://cassanyc.com/furnished-apartments-rentals/,verified
+US,"Club Quarters Hotel, Grand Central",New York,United States,Property,guestservices@clubquarters.com,212-986-6400,https://www.clubquartershotels.com/new-york-city/grand-central,https://www.clubquartershotels.com/new-york-city/grand-central,verified
+US,"Club Quarters Hotel, Midtown",New York,United States,Property,guestservices@clubquarters.com,,https://www.clubquartershotels.com/,https://www.clubquartershotels.com/contact-us,verified
+US,"Club Quarters Hotel, World Trade Center",New York,United States,Property,guestservices@clubquarters.com,212-577-1133,https://www.clubquartershotels.com/new-york-city/world-trade-center,https://www.clubquartershotels.com/new-york-city/world-trade-center,verified
+US,Club Quarters Hotels,New York,United States,Property,guestservices@clubquarters.com,,https://clubquarters.com,https://clubquarters.com/contact,verified
+US,Crosby Street Hotel,New York,United States,Decision maker,thomaswoynar@firmdale.com,,https://www.firmdalehotels.com/hotels/crosby-street-hotel/,https://www.firmdalehotels.com/hotels/crosby-street-hotel/contacts-faqs,verified
+US,Crosby Street Hotel,New York,United States,Property,crosby@firmdale.com,,https://www.firmdalehotels.com/hotels/crosby-street-hotel/,https://www.firmdalehotels.com/hotels/crosby-street-hotel/contacts-faqs,verified
+US,Crosby Street Hotel,New York,United States,Reservations,reservations@crosbystreethotel.com,,https://www.firmdalehotels.com/hotels/crosby-street-hotel/,https://www.firmdalehotels.com/hotels/crosby-street-hotel/contacts-faqs,verified
+US,Crosby Street Hotel,New York,United States,Sales,sales@firmdale.com,,https://www.firmdalehotels.com/hotels/crosby-street-hotel/,https://www.firmdalehotels.com/hotels/crosby-street-hotel/contacts-faqs,verified
+US,EDITION Hotels,New York,United States,Sales,gabrielle.harrison@editionhotels.com,,https://www.editionhotels.com,https://www.editionhotels.com/contact/,verified
+US,Equinox Hotel Hudson Yards,New York,United States,Property,guestrelations.hy@equinox-hotels.com,,https://www.equinox-hotels.com,https://www.equinox-hotels.com/contact/,verified
+US,Equinox Hotel Hudson Yards,New York,United States,Reservations,reservations.hy@equinox-hotels.com,,https://www.equinox-hotels.com,https://www.equinox-hotels.com/contact/,verified
+US,Equinox Hotel Hudson Yards,New York,United States,Sales,sales.hy@equinox-hotels.com,,https://www.equinox-hotels.com,https://www.equinox-hotels.com/contact/,verified
+US,Faena New York,New York,United States,Reservations,reservations-newyork@faena.com,,https://www.faena.com,https://www.faena.com/new-york/contact-us,verified
+US,Faena New York,New York,United States,Sales,events-newyork@faena.com,,https://www.faena.com,https://www.faena.com/new-york/contact-us,verified
+US,Freehand New York,New York,United States,Property,newyork@thefreehand.com,,https://freehandhotels.com/,https://freehandhotels.com/contact-us/,verified
+US,Freehand New York,New York,United States,Sales,sales.us@thefreehand.com,,https://freehandhotels.com/,https://freehandhotels.com/contact-us/,verified
+US,Furnished Quarters,New York,United States,Property,guestservices@furnishedquarters.com,,https://www.furnishedquarters.com,https://www.furnishedquarters.com/contact,verified
+US,Furnished Quarters,New York,United States,Sales,corporatesales@furnishedquarters.com,,https://www.furnishedquarters.com,https://www.furnishedquarters.com/contact,verified
+US,Furnished Quarters (NYC HQ),New York,United States,Decision maker,guestservices@furnishedquarters.com,+1 212 367 9400,https://www.furnishedquarters.com,https://www.furnishedquarters.com/contact,verified
+US,Hotel Chelsea,New York,United States,Property,reservations@hotelchelsea.com,,https://www.hotelchelsea.com,https://www.hotelchelsea.com/contact,verified
+US,Hotel Elysee,New York,United States,Property,info@elyseehotel.com,,https://www.elyseehotel.com,https://elyseehotel.com/,verified
+US,Hotel Hugo,New York,United States,Property,reservations@hotelhugony.com,,https://www.hotelhugony.com,https://www.hotelhugony.com/contact,verified
+US,Hotel Hugo,New York,United States,Reservations,frontdesk@hotelhugony.com,,https://www.hotelhugony.com,https://www.hotelhugony.com/contact,verified
+US,Hotel Hugo,New York,United States,Sales,sales@hotelhugony.com,,https://www.hotelhugony.com,https://www.hotelhugony.com/contact,verified
+US,Kimpton Hotel Eventi,New York,United States,Property,info@hoteleventi.com,212-564-4567,https://www.hoteleventi.com/,https://www.hoteleventi.com/contact-us/,verified
+US,Kimpton Theta New York - Times Square,New York,United States,Property,info@hoteltheta.com,,https://www.hoteltheta.com/,https://www.hoteltheta.com/contact-us/,verified
+US,MADE Hotel,New York,United States,Property,hello@madehotels.com,212-213-4429,https://madehotels.com/,https://madehotels.com/contact-us/,verified
+US,MADE Hotel,New York,United States,Reservations,reservations@madehotels.com,212-213-4429,https://madehotels.com/,https://madehotels.com/contact-us/,verified
+US,MADE Hotel,New York,United States,Sales,sales@madehotels.com,212-213-4429,https://madehotels.com/,https://madehotels.com/contact-us/,verified
+US,MADE Hotel New York,New York,United States,Property,hello@madehotels.com,,https://www.madehotels.com,https://www.madehotels.com/contact,verified
+US,MADE Hotel New York,New York,United States,Reservations,reservations@madehotels.com,,https://www.madehotels.com,https://www.madehotels.com/contact,verified
+US,MADE Hotel New York,New York,United States,Sales,sales@madehotels.com,,https://www.madehotels.com,https://www.madehotels.com/contact,verified
+US,MADE Hotel NoMad,New York,United States,Decision maker,sales@madehotels.com,+1 212 213 4429,https://madehotels.com,https://madehotels.com/contact-us/,verified
+US,MADE Hotel NoMad,New York,United States,Property,hello@madehotels.com,+1 212 213 4429,https://madehotels.com,https://madehotels.com/contact-us/,verified
+US,PUBLIC Hotel New York,New York,United States,Decision maker,reservationsny@publichotels.com,+1 212 735 6000,https://www.publichotels.com/newyork,https://www.publichotels.com/newyork/contact,verified
+US,PUBLIC Hotels,New York,United States,Sales,events@publichotels.com,,https://www.publichotels.com,https://www.publichotels.com/contact,verified
+US,PUBLIC New York,New York,United States,Reservations,reservationsny@publichotels.com,,https://www.publichotels.com,https://www.publichotels.com/contact,verified
+US,PUBLIC New York,New York,United States,Sales,salesny@publichotels.com,,https://www.publichotels.com,https://www.publichotels.com/contact,verified
+US,Pod 39 Hotel,New York,United States,Decision maker,reservations@podhotel39.com,+1 212 865 5700,https://www.thepodhotel.com,https://www.thepodhotel.com/contact-us,verified
+US,Pod 51 Hotel,New York,United States,Decision maker,reservations@podhotel51.com,+1 212 355 0300,https://www.thepodhotel.com,https://www.thepodhotel.com/contact-us,verified
+US,Pod Brooklyn,New York,United States,Property,reservations@podhotelbk.com,718-963-3060,https://www.thepodhotel.com/,https://www.thepodhotel.com/contact-us,verified
+US,Pod Pads NYC (extended stay),New York,United States,Decision maker,info@podpadsnyc.com,+1 646 973 4831,https://www.thepodhotel.com,https://www.thepodhotel.com/contact-us,verified
+US,Pod Pads at Pod Times Square,New York,United States,Property,info@podpadsnyc.com,646-973-4831,https://www.thepodhotel.com/,https://www.thepodhotel.com/contact-us,verified
+US,Pod Times Square,New York,United States,Decision maker,reservations@podhotel42.com,+1 212 273 9222,https://www.thepodhotel.com,https://www.thepodhotel.com/contact-us,verified
+US,The Beekman,New York,United States,Reservations,beekmanreservations@thompsonhotels.com,,https://www.thebeekman.com,https://www.thebeekman.com/,verified
+US,The Beekman,New York,United States,Sales,beekmansales@thompsonhotels.com,,https://www.thebeekman.com,https://www.thebeekman.com/,verified
+US,"The Beekman, a Thompson Hotel",New York,United States,Property,beekmanreservations@thompsonhotels.com,212-233-2300,https://www.thebeekman.com/,https://www.thebeekman.com/faq/,verified
+US,"The Beekman, a Thompson Hotel",New York,United States,Sales,beekmansales@thompsonhotels.com,212-233-2300,https://www.thebeekman.com/,https://www.thebeekman.com/faq/,verified
+US,The Bowery Hotel,New York,United States,Property,reservations@bohonyc.com,212-505-9100,https://theboweryhotel.com/,https://theboweryhotel.com/,verified
+US,The Carlyle,New York,United States,Property,thecarlyle@rosewoodhotels.com,012127441600,https://www.rosewoodhotels.com,https://www.rosewoodhotels.com/en/the-carlyle-new-york/contact,verified
+US,The Chatwal,New York,United States,Property,concierge@thechatwalny.com,,https://www.thechatwalny.com,https://www.thechatwalny.com/contact/,verified
+US,The Chatwal,New York,United States,Reservations,reservations@thechatwalny.com,,https://www.thechatwalny.com,https://www.thechatwalny.com/contact/,verified
+US,The Dominick Hotel,New York,United States,Property,hotel@thedominick.com,+1 212.842.5500,https://www.thedominickhotel.com,https://www.thedominickhotel.com/contact-us,verified
+US,The Dominick Hotel,New York,United States,Reservations,reservations@thedominick.com,+1 212.842.5500,https://www.thedominickhotel.com,https://www.thedominickhotel.com/contact-us,verified
+US,The High Line Hotel,New York,United States,Property,info@thehighlinehotel.com,,https://www.thehighlinehotel.com,https://thehighlinehotel.com/contact/,verified
+US,"The Hoxton, Williamsburg",New York,United States,Property,hello.williamsburg@thehox.com,,https://thehoxton.com/williamsburg/,https://thehoxton.com/williamsburg/contact/,verified
+US,"The Hoxton, Williamsburg",New York,United States,Reservations,book.williamsburg@thehox.com,,https://thehoxton.com/williamsburg/,https://thehoxton.com/williamsburg/contact/,verified
+US,"The Hoxton, Williamsburg",New York,United States,Sales,sales.williamsburg@thehox.com,,https://thehoxton.com/williamsburg/,https://thehoxton.com/williamsburg/contact/,verified
+US,The Lowell,New York,United States,Property,reservations@lowellhotel.com,,https://www.lowellhotel.com,https://www.lowellhotel.com/,verified
+US,The Lucerne Hotel,New York,United States,Property,reservations@thelucernehotel.com,,https://www.thelucernehotel.com,https://thelucernehotel.com/contact,verified
+US,The Lucerne Hotel,New York,United States,Sales,sales@thelucernehotel.com,,https://www.thelucernehotel.com,https://thelucernehotel.com/contact,verified
+US,The Ludlow Hotel,New York,United States,Property,info@ludlowhotel.com,212-432-1818,https://ludlowhotel.com/,https://ludlowhotel.com/contact/,verified
+US,The Mark Hotel,New York,United States,Property,reservations@themarkhotel.com,+12127444300,https://www.themarkhotel.com,https://www.themarkhotel.com/contact,verified
+US,The Marlton Hotel,New York,United States,Property,press@marltonhotel.com,,https://www.marltonhotel.com,https://www.marltonhotel.com/contact,verified
+US,The Marlton Hotel,New York,United States,Reservations,reservations@marltonhotel.com,,https://www.marltonhotel.com,https://www.marltonhotel.com/contact,verified
+US,The Michelangelo New York,New York,United States,Property,reservations@michelangelohotel.com,,https://www.michelangelohotel.com,https://www.michelangelohotel.com/contact,verified
+US,The Ned NoMad,New York,United States,Property,enquiries.nomad@thened.com,+1 212 722 0555,https://www.thened.com,https://www.thened.com/nomad/contact,verified
+US,The New York EDITION,New York,United States,Decision maker,mary.cole@editionhotels.com,+1 212 413 4200,https://www.editionhotels.com/new-york/,https://www.editionhotels.com/contact/,verified
+US,The New York EDITION,New York,United States,Property,nyeditioninfo@editionhotels.com,+1 212 413 4200,https://www.editionhotels.com/new-york/,https://www.editionhotels.com/contact/,verified
+US,The New York EDITION,New York,United States,Sales,gabrielle.harrison@editionhotels.com,+1 212 413 4200,https://www.editionhotels.com/new-york/,https://www.editionhotels.com/contact/,verified
+US,The New York EDITION – Group Sales,New York,United States,Decision maker,gabrielle.harrison@editionhotels.com,+1 212 413 4179,https://www.editionhotels.com/new-york/,https://www.editionhotels.com/contact/,verified
+US,The Shoreham Hotel,New York,United States,Property,frontoffice@shorehamhotel.com,,https://www.shorehamhotel.com,https://www.shorehamhotel.com/contact-us,verified
+US,The Shoreham Hotel,New York,United States,Reservations,reservations@shorehamhotelnyc.com,,https://www.shorehamhotel.com,https://www.shorehamhotel.com/contact-us,verified
+US,The Standard East Village,New York,United States,Property,reservations.ev@standardhotels.com,212-475-5700,https://www.standardhotels.com/east-village,https://www.standardhotels.com/east-village/contact,verified
+US,The Standard East Village,New York,United States,Sales,sev.sales@standardhotels.com,212-475-5700,https://www.standardhotels.com/east-village,https://www.standardhotels.com/east-village/contact,verified
+US,The Standard High Line,New York,United States,Property,hlguestservices@standardhotels.com,212-645-4646,https://www.standardhotels.com,https://www.standardhotels.com/new-york/properties/high-line/faqs,verified
+US,The Standard High Line,New York,United States,Reservations,hlreservations@standardhotels.com,212-645-4646,https://www.standardhotels.com,https://www.standardhotels.com/new-york/properties/high-line/faqs,verified
+US,The Standard High Line,New York,United States,Sales,hlsales@standardhotels.com,212-645-4646,https://www.standardhotels.com,https://www.standardhotels.com/new-york/properties/high-line/faqs,verified
+US,"The Standard, East Village",New York,United States,Property,reservations.ev@standardhotels.com,212-475-5700,https://www.standardhotels.com/new-york/properties/east-village,https://www.standardhotels.com/new-york/properties/east-village,verified
+US,"The Standard, East Village",New York,United States,Sales,sev.sales@standardhotels.com,212-475-5700,https://www.standardhotels.com/new-york/properties/east-village,https://www.standardhotels.com/new-york/properties/east-village,verified
+US,"The Standard, High Line",New York,United States,Property,hlreservations@standardhotels.com,212-645-4646,https://www.standardhotels.com/new-york/properties/high-line,https://www.standardhotels.com/new-york/properties/high-line,verified
+US,The Times Square EDITION,New York,United States,Decision maker,rachel.mcguirl@editionhotels.com,212-398-7017,https://www.editionhotels.com/times-square/,https://www.editionhotels.com/times-square/contact/,verified
+US,The Times Square EDITION,New York,United States,Property,gem.tmsq@editionhotels.com,212-398-7017,https://www.editionhotels.com/times-square/,https://www.editionhotels.com/times-square/contact/,verified
+US,The Times Square EDITION,New York,United States,Reservations,reservations.tmsq@editionhotels.com,212-398-7017,https://www.editionhotels.com/times-square/,https://www.editionhotels.com/times-square/contact/,verified
+US,The Times Square EDITION,New York,United States,Sales,sales.tmsq@editionhotels.com,212-398-7017,https://www.editionhotels.com/times-square/,https://www.editionhotels.com/times-square/contact/,verified
+US,The Wall Street Hotel,New York,United States,Property,info@thewallsthotel.com,,https://www.thewallsthotel.com/,https://www.thewallsthotel.com/faqs,verified
+US,The Wall Street Hotel,New York,United States,Reservations,reservations@thewallsthotel.com,,https://www.thewallsthotel.com/,https://www.thewallsthotel.com/faqs,verified
+US,The Wall Street Hotel,New York,United States,Sales,sales@thewallsthotel.com,,https://www.thewallsthotel.com/,https://www.thewallsthotel.com/faqs,verified
+US,The Whitby Hotel,New York,United States,Decision maker,kathrinapitz@firmdale.com,,https://www.firmdalehotels.com/hotels/the-whitby-hotel/,https://www.firmdalehotels.com/hotels/the-whitby-hotel/contacts-faqs,verified
+US,The Whitby Hotel,New York,United States,Property,whitby@firmdale.com,,https://www.firmdalehotels.com/hotels/the-whitby-hotel/,https://www.firmdalehotels.com/hotels/the-whitby-hotel/contacts-faqs,verified
+US,The Whitby Hotel,New York,United States,Reservations,reservations@thewhitbyhotel.com,,https://www.firmdalehotels.com/hotels/the-whitby-hotel/,https://www.firmdalehotels.com/hotels/the-whitby-hotel/contacts-faqs,verified
+US,The Whitby Hotel,New York,United States,Sales,sales@firmdale.com,,https://www.firmdalehotels.com/hotels/the-whitby-hotel/,https://www.firmdalehotels.com/hotels/the-whitby-hotel/contacts-faqs,verified
+US,Times Square EDITION,New York,United States,Decision maker,sales.tmsq@editionhotels.com,+1 212 398 7017,https://www.editionhotels.com/times-square/,https://www.editionhotels.com/contact/,verified
+US,Times Square EDITION,New York,United States,Property,reservations.tmsq@editionhotels.com,+1 212 398 7017,https://www.editionhotels.com/times-square/,https://www.editionhotels.com/contact/,verified
+US,Virgin Hotels New York,New York,United States,Property,info.newyork@virginhotels.com,212-213-0090,https://virginhotels.com/new-york/,https://virginhotels.com/new-york/contact-us/,verified
+US,Virgin Hotels New York,New York,United States,Reservations,stay.newyork@virginhotels.com,212-213-0090,https://virginhotels.com/new-york/,https://virginhotels.com/new-york/contact-us/,verified
+US,Virgin Hotels New York,New York,United States,Sales,sales.newyork@virginhotels.com,212-213-0090,https://virginhotels.com/new-york/,https://virginhotels.com/new-york/contact-us/,verified
+US,Walker Hotel Greenwich Village,New York,United States,Property,greenwich@walkerhotels.com,,https://www.walkerhotels.com,https://www.walkerhotels.com/contact/,verified
+US,Walker Hotel Tribeca,New York,United States,Property,tribeca@walkerhotels.com,,https://www.walkerhotels.com,https://www.walkerhotels.com/contact/,verified
+US,Walker Hotels,New York,United States,Sales,sales@walkerhotels.com,,https://www.walkerhotels.com,https://www.walkerhotels.com/contact/,verified
+US,Wall Street Hotel,New York,United States,Property,reservations@thewallsthotel.com,,https://www.thewallsthotel.com,https://www.thewallsthotel.com/,verified
+US,Warren Street Hotel,New York,United States,Decision maker,nickhamdy@firmdale.com,,https://www.firmdalehotels.com/hotels/warren-street-hotel/,https://www.firmdalehotels.com/hotels/warren-street-hotel/contacts-faqs,verified
+US,Warren Street Hotel,New York,United States,Property,warren@firmdale.com,,https://www.firmdalehotels.com/hotels/warren-street-hotel/,https://www.firmdalehotels.com/hotels/warren-street-hotel/contacts-faqs,verified
+US,Warren Street Hotel,New York,United States,Sales,sales@firmdale.com,,https://www.firmdalehotels.com/hotels/warren-street-hotel/,https://www.firmdalehotels.com/hotels/warren-street-hotel/contacts-faqs,verified
+US,Blueground Orlando,Orlando,United States,Property,cx-mco@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Ace Hotel & Swim Club Palm Springs,Palm Springs,United States,Property,frontdesk@acehotelpsp.com,760-325-9900,https://www.acehotel.com/palmsprings/,https://www.acehotel.com/contact/,verified
+US,Ace Hotel & Swim Club Palm Springs,Palm Springs,United States,Reservations,reservations.psp@acehotelpsp.com,760-325-9900,https://www.acehotel.com/palmsprings/,https://www.acehotel.com/contact/,verified
+US,Ace Hotel & Swim Club Palm Springs,Palm Springs,United States,Sales,sales@acehotelpsp.com,760-325-9900,https://www.acehotel.com/palmsprings/,https://www.acehotel.com/contact/,verified
+US,AKA Rittenhouse Square / AKA Philadelphia,Philadelphia,United States,Property,orsguestservices@stayaka.com,,https://www.stayaka.com/,https://www.stayaka.com/meetings-and-events,verified
+US,AKA Rittenhouse Square / AKA Philadelphia,Philadelphia,United States,Sales,phlsales@stayaka.com,,https://www.stayaka.com/,https://www.stayaka.com/meetings-and-events,verified
+US,"Club Quarters Hotel, Rittenhouse Square",Philadelphia,United States,Property,guestservices@clubquarters.com,,https://www.clubquartershotels.com/philadelphia/rittenhouse-square,https://www.clubquartershotels.com/philadelphia/rittenhouse-square,verified
+US,Morris House Hotel,Philadelphia,United States,Property,info@morrishousehotel.com,,https://www.morrishousehotel.com,https://www.morrishousehotel.com/location-contact,verified
+US,Penn's View Hotel,Philadelphia,United States,Property,reservations@pennsviewhotel.com,,https://www.pennsviewhotel.com,https://www.pennsviewhotel.com/contact,verified
+US,The Logan Philadelphia,Philadelphia,United States,Property,livelogan@theloganhotel.com,215-963-1500,https://www.theloganhotel.com/,https://www.theloganhotel.com/faqs,verified
+US,The Logan Philadelphia,Philadelphia,United States,Sales,sales@theloganhotel.com,215-963-1500,https://www.theloganhotel.com/,https://www.theloganhotel.com/faqs,verified
+US,The Rittenhouse,Philadelphia,United States,Property,info@rittenhousehotel.com,215-546-9000,https://www.rittenhousehotel.com/,https://www.rittenhousehotel.com/contact,verified
+US,The Rittenhouse,Philadelphia,United States,Reservations,reservations@rittenhousehotel.com,215-546-9000,https://www.rittenhousehotel.com/,https://www.rittenhousehotel.com/contact,verified
+US,Blueground Portland,Portland,United States,Property,cx-portland@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground Portland,Portland,United States,Sales,sales-pdx@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Hi-Lo Hotel,Portland,United States,Property,info@hi-lo-hotel.com,,https://www.hi-lo-hotel.com,https://www.hi-lo-hotel.com/contact-us,verified
+US,Hotel Lucia,Portland,United States,Property,info@hotellucia.com,,https://www.hotellucia.com,https://www.hotellucia.com/,verified
+US,Jupiter Hotel,Portland,United States,Property,info@jupiterhotel.com,,https://www.jupiterhotel.com,https://www.jupiterhotel.com/contact,verified
+US,Jupiter Hotel,Portland,United States,Sales,sales@jupiterhotel.com,,https://www.jupiterhotel.com,https://www.jupiterhotel.com/contact,verified
+US,KEX Hotel Portland,Portland,United States,Property,info@kexportland.com,,https://www.kexhotels.com/portland,https://www.kexhotels.com/contact-us,verified
+US,Sentinel Hotel,Portland,United States,Property,info@sentinelhotel.com,,https://www.sentinelhotel.com,https://www.sentinelhotel.com/contact,verified
+US,The Hoxton Portland,Portland,United States,Property,hello.portland@thehox.com,,https://thehoxton.com,https://thehoxton.com/contact,verified
+US,The Hoxton Portland,Portland,United States,Sales,sales.portland@thehox.com,,https://thehoxton.com,https://thehoxton.com/contact,verified
+US,"The Hoxton, Portland",Portland,United States,Property,hello.portland@thehox.com,503-770-0500,https://thehoxton.com/portland/,https://thehoxton.com/portland/contact/,verified
+US,"The Hoxton, Portland",Portland,United States,Sales,sales.portland@thehox.com,503-770-0500,https://thehoxton.com/portland/,https://thehoxton.com/portland/contact/,verified
+US,The Society Hotel Portland,Portland,United States,Property,portland@thesocietyhotel.com,,https://www.thesocietyhotel.com,https://thesocietyhotel.com/contact/,verified
+US,The Society Hotel Portland,Portland,United States,Reservations,frontdesk@thesocietyhotel.com,,https://www.thesocietyhotel.com,https://thesocietyhotel.com/contact/,verified
+US,Woodlark Hotel,Portland,United States,Property,hello@woodlarkhotel.com,,https://www.woodlarkhotel.com,https://www.woodlarkhotel.com/contact/,verified
+US,Woodlark Hotel,Portland,United States,Reservations,reservations@woodlarkhotel.com,,https://www.woodlarkhotel.com,https://www.woodlarkhotel.com/contact/,verified
+US,Woodlark Hotel,Portland,United States,Sales,sales@woodlarkhotel.com,,https://www.woodlarkhotel.com,https://www.woodlarkhotel.com/contact/,verified
+US,Graduate Richmond,Richmond,United States,Property,info@graduaterichmond.com,804 644 9871,https://graduatehotels.com/richmond,https://info.graduatehotels.com/emails/live-at-richmond,verified
+US,Graduate Richmond,Richmond,United States,Sales,sales@graduatehotels.com,804 644 9871,https://graduatehotels.com/richmond,https://info.graduatehotels.com/emails/live-at-richmond,verified
+US,Bahia Resort Hotel,San Diego,United States,Decision maker,bhirzel@bahiahotel.com,,https://www.bahiahotel.com/,https://www.bahiahotel.com/contact,verified
+US,Bahia Resort Hotel,San Diego,United States,Property,reservations@bahiahotel.com,,https://www.bahiahotel.com/,https://www.bahiahotel.com/contact,verified
+US,Bahia Resort Hotel,San Diego,United States,Sales,ibutler@bahiahotel.com,,https://www.bahiahotel.com/,https://www.bahiahotel.com/contact,verified
+US,Blueground San Diego,San Diego,United States,Property,cx-sandiego@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground San Diego,San Diego,United States,Sales,sales-san@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Horton Grand Hotel,San Diego,United States,Property,frontdesk@hortongrand.com,619-544-1886,https://www.hortongrand.com/,https://www.hortongrand.com/contact,verified
+US,Horton Grand Hotel,San Diego,United States,Reservations,res@hortongrand.com,619-544-1886,https://www.hortongrand.com/,https://www.hortongrand.com/contact,verified
+US,Horton Grand Hotel,San Diego,United States,Sales,sales@hortongrand.com,619-544-1886,https://www.hortongrand.com/,https://www.hortongrand.com/contact,verified
+US,Paradise Point Resort & Spa,San Diego,United States,Property,reservations@paradisepoint.com,858-274-4630,https://paradisepoint.com/,https://paradisepoint.com/contact-us/,verified
+US,Paradise Point Resort & Spa,San Diego,United States,Sales,sales@paradisepoint.com,858-274-4630,https://paradisepoint.com/,https://paradisepoint.com/contact-us/,verified
+US,The Dana on Mission Bay,San Diego,United States,Property,res@thedana.com,,https://thedana.com/,https://www.thedana.com/contact,verified
+US,The Dana on Mission Bay,San Diego,United States,Sales,sales@thedana.com,,https://thedana.com/,https://www.thedana.com/contact,verified
+US,The Guild Hotel San Diego,San Diego,United States,Property,info@theguildhotel.com,,https://www.theguildhotel.com,https://theguildhotel.com/contact/,verified
+US,The Guild Hotel San Diego,San Diego,United States,Sales,sales@theguildhotel.com,,https://www.theguildhotel.com,https://theguildhotel.com/contact/,verified
+US,The Lafayette Hotel Swim Club & Resort,San Diego,United States,Property,info@lafayettehotel.com,,https://www.lafayettehotel.com,https://www.lafayettehotel.com/contact,verified
+US,The Pearl Hotel,San Diego,United States,Property,info@thepearlsd.com,,https://www.thepearlsd.com,https://www.thepearlsd.com/contact,verified
+US,The Pines at La Jolla Cove,San Diego,United States,Property,reservations@lajollacove.com,858-459-2621,https://www.lajollacove.com/,https://www.lajollacove.com/contact-our-oceanfront-hotel,verified
+US,The Pines at La Jolla Cove,San Diego,United States,Sales,sales@lajollacove.com,858-459-2621,https://www.lajollacove.com/,https://www.lajollacove.com/contact-our-oceanfront-hotel,verified
+US,Tower23 Hotel,San Diego,United States,Property,reserve23@t23hotel.com,,https://www.t23hotel.com,https://www.t23hotel.com/,verified
+US,1 Hotel San Francisco,San Francisco,United States,Property,sanfrancisco-concierge@1hotels.com,,https://www.1hotels.com/san-francisco,https://www.1hotels.com/san-francisco/faq,verified
+US,1 Hotel San Francisco,San Francisco,United States,Sales,sanfrancisco-sales@1hotels.com,,https://www.1hotels.com/san-francisco,https://www.1hotels.com/san-francisco/faq,verified
+US,Argonaut Hotel,San Francisco,United States,Property,argonautconcierge@noblehousehotels.com,,https://www.argonauthotel.com,https://www.argonauthotel.com/contact/,verified
+US,Argonaut Hotel,San Francisco,United States,Reservations,bookargonaut@noblehousehotels.com,,https://www.argonauthotel.com,https://www.argonauthotel.com/contact/,verified
+US,Blueground San Francisco,San Francisco,United States,Property,cx-sanfrancisco@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground San Francisco,San Francisco,United States,Sales,sales-sfo@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Chancellor Hotel on Union Square,San Francisco,United States,Property,info@chancellorhotel.com,,https://www.chancellorhotel.com,https://www.chancellorhotel.com/contact,verified
+US,Chancellor Hotel on Union Square,San Francisco,United States,Reservations,reservations@chancellorhotel.com,,https://www.chancellorhotel.com,https://www.chancellorhotel.com/contact,verified
+US,"Club Quarters Hotel, Embarcadero",San Francisco,United States,Property,guestservices@clubquarters.com,,https://www.clubquartershotels.com/san-francisco/embarcadero,https://www.clubquartershotels.com/san-francisco/embarcadero,verified
+US,Fairmont San Francisco,San Francisco,United States,Property,saffrontdesk@fairmont.com,,https://www.fairmont.com/san-francisco,https://www.fairmont.com/san-francisco/contact/,verified
+US,Fairmont San Francisco,San Francisco,United States,Reservations,saf.reservations@fairmont.com,,https://www.fairmont.com/san-francisco,https://www.fairmont.com/san-francisco/contact/,verified
+US,Galleria Park Hotel,San Francisco,United States,Property,info@galleriapark.com,,https://www.galleriapark.com,https://www.galleriapark.com/contact-us,verified
+US,Galleria Park Hotel,San Francisco,United States,Reservations,guestservices@galleriapark.com,,https://www.galleriapark.com,https://www.galleriapark.com/contact-us,verified
+US,Hotel Drisco,San Francisco,United States,Property,reservations@hoteldrisco.com,,https://www.hoteldrisco.com,https://www.hoteldrisco.com/contact,verified
+US,Hotel Emblem San Francisco,San Francisco,United States,Property,sales@hotelemblem.com,,https://www.hotelemblem.com,https://www.hotelemblem.com/,verified
+US,Hotel Triton,San Francisco,United States,Property,reservations@hoteltriton.com,,https://www.hoteltriton.com,https://www.hoteltriton.com/contact-us,verified
+US,Hotel Triton,San Francisco,United States,Sales,sales@hoteltriton.com,,https://www.hoteltriton.com,https://www.hoteltriton.com/contact-us,verified
+US,Hotel Zelos,San Francisco,United States,Property,zelos.info@zhotelssf.com,,https://www.zhotelssf.com,https://www.zhotelssf.com/,verified
+US,Hotel Zelos,San Francisco,United States,Reservations,zelos.reservations@zhotelssf.com,,https://www.zhotelssf.com,https://www.zhotelssf.com/,verified
+US,Hotel Zelos San Francisco,San Francisco,United States,Property,zelos.info@zhotelssf.com,415-348-1111,https://www.zhotelssf.com/hotels/zelos,https://www.zhotelssf.com/hotels/zelos/faq,verified
+US,Hotel Zelos San Francisco,San Francisco,United States,Reservations,zelos.reservations@zhotelssf.com,415-348-1111,https://www.zhotelssf.com/hotels/zelos,https://www.zhotelssf.com/hotels/zelos/faq,verified
+US,Hotel Zelos San Francisco,San Francisco,United States,Sales,sfsales@zhotelssf.com,415-348-1111,https://www.zhotelssf.com/hotels/zelos,https://www.zhotelssf.com/hotels/zelos/faq,verified
+US,Hotel Zephyr,San Francisco,United States,Property,concierge@hotelzephyrsf.com,,https://www.hotelzephyrsf.com,https://www.hotelzephyrsf.com/contact,verified
+US,Hotel Zephyr,San Francisco,United States,Sales,sales@hotelzephyrsf.com,,https://www.hotelzephyrsf.com,https://www.hotelzephyrsf.com/contact,verified
+US,Hotel Zephyr San Francisco,San Francisco,United States,Property,zteam@hotelzephyrsf.com,415-617-6565,https://www.hotelzephyrsf.com/,https://www.hotelzephyrsf.com/contact/,verified
+US,Hotel Zephyr San Francisco,San Francisco,United States,Sales,sales@hotelzephyrsf.com,415-617-6565,https://www.hotelzephyrsf.com/,https://www.hotelzephyrsf.com/contact/,verified
+US,Hotel Zeppelin,San Francisco,United States,Property,zeppelin.info@zhotelssf.com,,https://www.zhotelssf.com,https://www.zhotelssf.com/,verified
+US,Hotel Zeppelin,San Francisco,United States,Reservations,zeppelin.reservations@zhotelssf.com,,https://www.zhotelssf.com,https://www.zhotelssf.com/,verified
+US,Hotel Zeppelin San Francisco,San Francisco,United States,Property,zeppelin.info@zhotelssf.com,415-563-0303,https://www.zhotelssf.com/hotels/zeppelin,https://www.zhotelssf.com/hotels/zeppelin/faq,verified
+US,Hotel Zeppelin San Francisco,San Francisco,United States,Reservations,zeppelin.reservations@zhotelssf.com,415-563-0303,https://www.zhotelssf.com/hotels/zeppelin,https://www.zhotelssf.com/hotels/zeppelin/faq,verified
+US,Hotel Zeppelin San Francisco,San Francisco,United States,Sales,sfsales@zhotelssf.com,415-563-0303,https://www.zhotelssf.com/hotels/zeppelin,https://www.zhotelssf.com/hotels/zeppelin/faq,verified
+US,Hotel Zetta,San Francisco,United States,Property,zetta.info@zhotelssf.com,,https://www.zhotelssf.com,https://www.zhotelssf.com/,verified
+US,Hotel Zetta,San Francisco,United States,Reservations,zetta.reservations@zhotelssf.com,,https://www.zhotelssf.com,https://www.zhotelssf.com/,verified
+US,Hotel Zetta San Francisco,San Francisco,United States,Property,zetta.info@zhotelssf.com,415-543-8555,https://www.zhotelssf.com/hotels/zetta,https://www.zhotelssf.com/hotels/zetta/faq,verified
+US,Hotel Zetta San Francisco,San Francisco,United States,Reservations,zetta.reservations@zhotelssf.com,415-543-8555,https://www.zhotelssf.com/hotels/zetta,https://www.zhotelssf.com/hotels/zetta/faq,verified
+US,Hotel Zetta San Francisco,San Francisco,United States,Sales,sfsales@zhotelssf.com,415-543-8555,https://www.zhotelssf.com/hotels/zetta,https://www.zhotelssf.com/hotels/zetta/faq,verified
+US,Hotel Zoe Fisherman's Wharf,San Francisco,United States,Property,info@hotelzoesf.com,,https://www.hotelzoesf.com,https://www.hotelzoesf.com/contact/,verified
+US,Kensington Park Hotel,San Francisco,United States,Property,frontdesk@kensingtonparkhotel.com,,https://www.kensingtonparkhotel.com,https://www.kensingtonparkhotel.com/contact,verified
+US,Kensington Park Hotel,San Francisco,United States,Sales,sales@kensingtonparkhotel.com,,https://www.kensingtonparkhotel.com,https://www.kensingtonparkhotel.com/contact,verified
+US,Proper San Francisco,San Francisco,United States,Property,sfp.frontdesk@properhotel.com,,https://properhotel.com,https://properhotel.com/san-francisco/,verified
+US,San Francisco Proper Hotel,San Francisco,United States,Property,sfp.frontdesk@properhotel.com,415-735-7777,https://www.properhotel.com/san-francisco/,https://www.properhotel.com/contact-us/,verified
+US,San Francisco Proper Hotel,San Francisco,United States,Sales,sfp.sales@properhotel.com,415-735-7777,https://www.properhotel.com/san-francisco/,https://www.properhotel.com/contact-us/,verified
+US,White Swan Inn,San Francisco,United States,Property,frontdesk@whiteswaninnsf.com,,https://www.whiteswaninnsf.com,https://www.whiteswaninnsf.com/contact,verified
+US,Hotel Casa del Mar,Santa Monica,United States,Property,customercare@casa-del-mar.com,,https://www.casa-del-mar.com,https://www.casa-del-mar.com/contact,verified
+US,Proper Santa Monica,Santa Monica,United States,Property,smp.info@properhotel.com,,https://properhotel.com,https://properhotel.com/santa-monica/,verified
+US,Santa Monica Proper Hotel – Sales,Santa Monica,United States,Decision maker,smp.sales@properhotel.com,+1 310 620 9990,https://www.properhotel.com/santa-monica/,https://www.properhotel.com/wp-content/uploads/2025/05/SMP_Meeting-and-Event-Brochure_042425.pdf,verified
+US,Shutters on the Beach,Santa Monica,United States,Property,reservations@shuttersonthebeach.com,,https://www.shuttersonthebeach.com,https://www.shuttersonthebeach.com/,verified
+US,Viceroy Santa Monica,Santa Monica,United States,Reservations,vsm.reservations@viceroy.com,,https://www.viceroyhotelsandresorts.com,https://www.viceroyhotelsandresorts.com/santa-monica/contact,verified
+US,Viceroy Santa Monica,Santa Monica,United States,Sales,vsm.sales@viceroy.com,,https://www.viceroyhotelsandresorts.com,https://www.viceroyhotelsandresorts.com/santa-monica/contact,verified
+US,1 Hotel Seattle,Seattle,United States,Property,sea1hse-guestservices@1hotels.com,206-264-8111,https://www.1hotels.com/seattle,https://www.1hotels.com/seattle/faq,verified
+US,Ace Hotel Seattle,Seattle,United States,Property,enquire.sea@acehotel.com,206-448-4721,https://acehotel.com/seattle,https://acehotel.com/contact/,verified
+US,Ace Hotel Seattle,Seattle,United States,Sales,sales.sea@acehotel.com,206-448-4721,https://acehotel.com/seattle,https://acehotel.com/contact/,verified
+US,Blueground Seattle,Seattle,United States,Property,cx-seattle@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground Seattle,Seattle,United States,Sales,sales-sea@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Graduate Seattle,Seattle,United States,Property,info@graduateseattle.com,206-634-2000,https://graduatehotels.com/seattle,https://graduatehotels.com/seattle/contact,verified
+US,Graduate Seattle,Seattle,United States,Sales,sales@graduateseattle.com,206-634-2000,https://graduatehotels.com/seattle,https://graduatehotels.com/seattle/contact,verified
+US,Hotel Ballard,Seattle,United States,Property,reservations@hotelballard.com,,https://www.hotelballardseattle.com,https://www.hotelballardseattle.com/contact,verified
+US,Hotel Ballard,Seattle,United States,Sales,sales@hotelballard.com,,https://www.hotelballardseattle.com,https://www.hotelballardseattle.com/contact,verified
+US,Hotel Sorrento,Seattle,United States,Property,info@hotelsorrento.com,,https://www.hotelsorrento.com,https://www.hotelsorrento.com/contact-us,verified
+US,Inn at the Market,Seattle,United States,Decision maker,swooten@innatthemarket.com,,https://www.innatthemarket.com,https://www.innatthemarket.com/pike-place-market-hotel/contact/,verified
+US,Inn at the Market,Seattle,United States,Property,info@innatthemarket.com,,https://www.innatthemarket.com,https://www.innatthemarket.com/pike-place-market-hotel/contact/,verified
+US,Inn at the Market,Seattle,United States,Sales,jbaty@innatthemarket.com,,https://www.innatthemarket.com,https://www.innatthemarket.com/pike-place-market-hotel/contact/,verified
+US,Kimpton Hotel Vintage Seattle,Seattle,United States,Property,ki-reservationspacificnorthwest@ihg.com,206-624-8000,https://www.hotelvintage-seattle.com/,https://www.hotelvintage-seattle.com/downtown-seattle-hotels/accessible-hotel-features/,verified
+US,MarQueen Hotel,Seattle,United States,Property,guestservices@marqueen.com,,https://www.marqueen.com,https://www.marqueen.com/contact,verified
+US,Mayflower Park Hotel,Seattle,United States,Property,mayflowerpark@mayflowerpark.com,,https://www.mayflowerpark.com,https://www.mayflowerpark.com/contact-us/,verified
+US,Mayflower Park Hotel,Seattle,United States,Reservations,frontdesk1@mayflowerpark.com,,https://www.mayflowerpark.com,https://www.mayflowerpark.com/contact-us/,verified
+US,Mayflower Park Hotel,Seattle,United States,Sales,salesstaff@mayflowerpark.com,,https://www.mayflowerpark.com,https://www.mayflowerpark.com/contact-us/,verified
+US,Palihotel Seattle,Seattle,United States,Property,info@palihotelseattle.com,,https://www.palisociety.com/hotels/seattle,https://www.palisociety.com/hotels/seattle,verified
+US,Palihotel Seattle,Seattle,United States,Sales,sales@palihotelseattle.com,,https://www.palisociety.com/hotels/seattle,https://www.palisociety.com/hotels/seattle,verified
+US,The Edgewater,Seattle,United States,Sales,edgecatering@edgewaterhotel.com,,https://www.edgewaterhotel.com,https://www.edgewaterhotel.com/contact-us/,verified
+US,The Edgewater Hotel,Seattle,United States,Property,edgdesk@edgewaterhotel.com,,https://www.edgewaterhotel.com,https://www.edgewaterhotel.com/contact,verified
+US,The Edgewater Hotel,Seattle,United States,Reservations,reservations@edgewaterhotel.com,,https://www.edgewaterhotel.com,https://www.edgewaterhotel.com/contact,verified
+US,The Edgewater Hotel,Seattle,United States,Sales,sales@edgewaterhotel.com,,https://www.edgewaterhotel.com,https://www.edgewaterhotel.com/contact,verified
+US,Viceroy Snowmass,Snowmass Village,United States,Property,reservations@viceroysnowmass.com,+1 970 923 8000,https://www.viceroyhotelsandresorts.com,https://www.viceroyhotelsandresorts.com/snowmass/contact,verified
+US,Blueground St. Louis,St. Louis,United States,Property,cx-stl@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Graduate State College,State College,United States,Property,info@graduatestatecollege.com,814 231 2100,https://graduatehotels.com/state-college,https://info.graduatehotels.com/emails/live-at-state-college,verified
+US,Graduate State College,State College,United States,Sales,sales@graduatehotels.com,814 231 2100,https://graduatehotels.com/state-college,https://info.graduatehotels.com/emails/live-at-state-college,verified
+US,Graduate Storrs,Storrs,United States,Property,info@graduatestorrs.com,860 427 7888,https://graduatehotels.com/storrs,https://info.graduatehotels.com/emails/storrs-opening,verified
+US,Graduate Storrs,Storrs,United States,Sales,sales@graduatehotels.com,860 427 7888,https://graduatehotels.com/storrs,https://info.graduatehotels.com/emails/storrs-opening,verified
+US,Blueground Tampa,Tampa,United States,Property,cx-tpa@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,The Tampa EDITION,Tampa,United States,Sales,sales.tpa@editionhotels.com,,https://www.editionhotels.com,https://www.editionhotels.com/contact/,verified
+US,Graduate Tempe,Tempe,United States,Property,info@graduatetempe.com,480 967 9431,https://graduatehotels.com/tempe,https://info.graduatehotels.com/emails/live-at-tempe,verified
+US,Graduate Tempe,Tempe,United States,Sales,sales@graduatehotels.com,480 967 9431,https://graduatehotels.com/tempe,https://info.graduatehotels.com/emails/live-at-tempe,verified
+US,Graduate Tucson,Tucson,United States,Property,info@graduatetucson.com,520 467 5900,https://graduatehotels.com/tucson,https://info.graduatehotels.com/emails/tucson-opening,verified
+US,Graduate Tucson,Tucson,United States,Sales,sales@graduatehotels.com,520 467 5900,https://graduatehotels.com/tucson,https://info.graduatehotels.com/emails/tucson-opening,verified
+US,Blueground Tulsa,Tulsa,United States,Property,cx-tul@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Mint House / Kasa,United States,United States,Property,reservations@kasa.com,,https://www.minthouse.com,https://kasa.com/get-help,verified
+US,Trump Hotels – Global Sales,United States,United States,Decision maker,globalsales@trumphotels.com,+1 855 878 6700,https://www.trumphotels.com,https://www.trumphotels.com/contact-us,verified
+US,Blueground Washington DC,Washington,United States,Property,cx-washingtondc@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,Blueground Washington DC,Washington,United States,Sales,sales-wdc@theblueground.com,,https://www.theblueground.com,https://www.theblueground.com/contact,verified
+US,YOTEL Washington DC,Washington,United States,Property,washington.contact@yotel.com,,https://www.yotel.com,https://www.yotel.com/en/hotels/yotel-washington-dc,verified
+US,YOTEL Washington DC,Washington,United States,Sales,washington.sales@yotel.com,,https://www.yotel.com,https://www.yotel.com/en/hotels/yotel-washington-dc,verified
+US,AKA White House,Washington DC,United States,Property,dc@stayaka.com,,https://www.stayaka.com/aka-white-house,https://www.stayaka.com/aka-white-house,verified
+US,Arlo Washington DC,Washington DC,United States,Property,hellodc@arlohotels.com,,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Washington DC,Washington DC,United States,Reservations,reservations@arlohotels.com,,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,Arlo Washington DC,Washington DC,United States,Sales,dcsales@arlohotels.com,,https://arlohotels.com/,https://arlohotels.com/about/contact-us/,verified
+US,"Club Quarters Hotel, White House",Washington DC,United States,Property,guestservices@clubquarters.com,,https://www.clubquartershotels.com/washington-dc/white-house,https://www.clubquartershotels.com/washington-dc/white-house,verified
+US,Eaton DC,Washington DC,United States,Property,eatondc@eatonworkshop.com,,https://www.eatonworkshop.com/dc,https://www.eatonworkshop.com/contact-us,verified
+US,Eaton DC,Washington DC,United States,Reservations,reservationsdc@eatonworkshop.com,,https://www.eatonworkshop.com/dc,https://www.eatonworkshop.com/contact-us,verified
+US,Eaton DC,Washington DC,United States,Sales,etwdc.sales@eatonworkshop.com,,https://www.eatonworkshop.com/dc,https://www.eatonworkshop.com/contact-us,verified
+US,Hotel Hive,Washington DC,United States,Property,info@hotelhive.com,202-849-8499,https://www.hotelhive.com/,https://www.hotelhive.com/contact-us,verified
+US,Hotel Lombardy,Washington DC,United States,Property,info@hotellombardy.com,202-828-2600,https://www.hotellombardy.com,https://www.hotellombardy.com/contact-us,verified
+US,Hotel Zena,Washington DC,United States,Property,dc.reservations@viceroy.com,+1 202 737 1200,https://www.hotelzena.com,https://www.hotelzena.com/contact,verified
+US,Melrose Georgetown Hotel,Washington DC,United States,Property,info@melrosehoteldc.com,202.955.6400,https://www.melrosehoteldc.com,https://www.melrosehoteldc.com/contact,verified
+US,Placemakr,Washington DC,United States,Property,info@placemakr.com,,https://www.placemakr.com,https://www.placemakr.com/contact-us,verified
+US,Riggs Washington DC,Washington DC,United States,Property,reservations@riggsdc.com,202-638-1800,https://www.riggsdc.com/,https://www.riggsdc.com/contact/,verified
+US,Riggs Washington DC,Washington DC,United States,Sales,sales@riggsdc.com,202-638-1800,https://www.riggsdc.com/,https://www.riggsdc.com/contact/,verified
+US,Tabard Inn,Washington DC,United States,Property,hotel@tabardinn.com,,https://www.tabardinn.com,https://www.tabardinn.com/contact/,verified
+US,The Darcy Hotel,Washington DC,United States,Property,frontoffice@thedarcyhotel.com,202-232-7000,https://www.thedarcyhotel.com/,https://www.thedarcyhotel.com/contact,verified
+US,The Darcy Hotel,Washington DC,United States,Reservations,reservations@thedarcyhotel.com,202-232-7000,https://www.thedarcyhotel.com/,https://www.thedarcyhotel.com/contact,verified
+US,The Darcy Hotel,Washington DC,United States,Sales,salesinquiries@thedarcyhotel.com,202-232-7000,https://www.thedarcyhotel.com/,https://www.thedarcyhotel.com/contact,verified
+US,The Hay-Adams,Washington DC,United States,Property,sales@hayadams.com,,https://www.hayadams.com,https://www.hayadams.com/contact,verified
+US,The LINE DC,Washington DC,United States,Property,reservations.dc@thelinehotel.com,202-588-0525,https://www.thelinehotel.com/dc/,https://www.thelinehotel.com/contact/,verified
+US,The LINE DC,Washington DC,United States,Sales,sales.dc@thelinehotel.com,202-588-0525,https://www.thelinehotel.com/dc/,https://www.thelinehotel.com/contact/,verified
+US,The LINE Hotel DC,Washington DC,United States,Property,info@thelinehotel.com,+12025880525,https://www.thelinehotel.com,https://www.thelinehotel.com/dc,verified
+US,The LINE Hotel DC,Washington DC,United States,Reservations,reservations.dc@thelinehotel.com,+12025880525,https://www.thelinehotel.com,https://www.thelinehotel.com/dc,verified
+US,Chateau Marmont,West Hollywood,United States,Property,concierge@chateaumarmont.com,,https://www.chateaumarmont.com,https://www.chateaumarmont.com/contact,verified
+US,Kimpton La Peer Hotel,West Hollywood,United States,Property,info@lapeerhotel.com,,https://www.lapeerhotel.com,https://www.lapeerhotel.com/contact/,verified
+US,Palihouse West Hollywood,West Hollywood,United States,Property,info@palihousewh.com,,https://www.palisociety.com/hotels/west-hollywood,https://www.palisociety.com/hotels/west-hollywood,verified
+US,Petit Ermitage,West Hollywood,United States,Property,reservations@petitermitage.com,,https://www.petitermitage.com,https://www.petitermitage.com/,verified
+US,Sunset Tower Hotel,West Hollywood,United States,Property,info@sunsettowerhotel.com,,https://www.sunsettowerhotel.com,https://www.sunsettowerhotel.com/contact,verified
+US,Sunset Tower Hotel,West Hollywood,United States,Reservations,reservations@sunsettowerhotel.com,,https://www.sunsettowerhotel.com,https://www.sunsettowerhotel.com/contact,verified
+US,Sunset Tower Hotel,West Hollywood,United States,Sales,events@sunsettowerhotel.com,,https://www.sunsettowerhotel.com,https://www.sunsettowerhotel.com/contact,verified
+US,West Hollywood EDITION,West Hollywood,United States,Decision maker,marketing.weho@editionhotels.com,+1 310 953 9899,https://www.editionhotels.com/west-hollywood/,https://www.editionhotels.com/contact/,verified
+US,West Hollywood EDITION,West Hollywood,United States,Property,info.weho@editionhotels.com,+1 310 953 9899,https://www.editionhotels.com/west-hollywood/,https://www.editionhotels.com/contact/,verified
+US,West Hollywood EDITION,West Hollywood,United States,Sales,weho.catering@editionhotels.com,+1 310 953 9899,https://www.editionhotels.com/west-hollywood/,https://www.editionhotels.com/contact/,verified
