@@ -44,6 +44,14 @@ import {
 import { cn } from "@/lib/utils";
 import { subscribeToRecipients } from "@/lib/recipient-broadcast";
 import { personalizeEmailTemplate, mergeContextFromPerson } from "@/lib/email-personalize";
+import {
+  EMAIL_CAMPAIGN_DRAFT_LIST_SELECT,
+  EMAIL_CAMPAIGN_EDIT_SELECT,
+  fetchCampaignMergeVars,
+  demoLinkFromMergeVars,
+  updateEmailCampaignResilient,
+  insertEmailCampaignResilient,
+} from "@/lib/campaign-db";
 
 export interface BulkEmailDialogHandle {
   addRecipientsFromSelection: () => Promise<void>;
@@ -622,7 +630,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
       const { data, error } = await supabase
         .from('email_campaigns')
-        .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric, header_image_url, merge_vars')
+        .select(EMAIL_CAMPAIGN_DRAFT_LIST_SELECT)
         .eq('user_id', user.id)
         .eq('status', 'draft')
         .order('updated_at', { ascending: false })
@@ -940,7 +948,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
           const { data: draftData, error } = await supabase
             .from('email_campaigns')
-            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, status, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric, header_image_url, merge_vars')
+            .select(EMAIL_CAMPAIGN_EDIT_SELECT)
             .eq('id', initialDraftId)
             .in('status', ['draft', 'scheduled', 'sending', 'paused', 'completed'])
             .single();
@@ -949,17 +957,23 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             console.error('Error fetching campaign:', error);
             toast({
               title: "Error",
-              description: "Failed to load campaign. It may have been deleted.",
+              description: error?.message
+                ? `Failed to load campaign: ${error.message}`
+                : "Failed to load campaign. It may have been deleted.",
               variant: "destructive",
             });
             return;
           }
 
+          // merge_vars is optional (migration may not be applied yet)
+          const mergeVars = await fetchCampaignMergeVars(supabase, initialDraftId);
+          const draftWithVars = { ...draftData, merge_vars: mergeVars };
+
           hasAutoLoadedDraft.current = true;
-          contentOnlyEditRef.current = ['sending', 'paused', 'completed'].includes((draftData as any).status?.toLowerCase?.() ?? '');
+          contentOnlyEditRef.current = ['sending', 'paused', 'completed'].includes((draftWithVars as any).status?.toLowerCase?.() ?? '');
           // Use setTimeout to ensure dialog is fully open before loading
           setTimeout(() => {
-            handleLoadDraft(draftData);
+            handleLoadDraft(draftWithVars);
           }, 150);
         } catch (error) {
           console.error('Error loading draft:', error);
@@ -2052,11 +2066,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           updatePayload.scheduled_at = scheduledAt;
           updatePayload.total_recipients = recipientsToUse.length;
         }
-        const { error: updateError } = await supabase
-          .from('email_campaigns')
-          .update(updatePayload as any)
-          .eq('id', draftId);
-
+        const { error: updateError } = await updateEmailCampaignResilient(supabase, draftId, updatePayload);
         if (updateError) throw updateError;
 
         if (!contentOnly) {
@@ -2117,9 +2127,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         }
       } else {
         // Create new draft
-        const { data: campaign, error: campaignError } = await supabase
-          .from('email_campaigns')
-          .insert({
+        const draftInsertPayload = {
             user_id: user.id,
             name: campaignName,
             subject_template: subject,
@@ -2140,12 +2148,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
             header_image_url: headerImageUrl.trim() || null,
-          merge_vars: demoLink.trim() ? { demoLink: demoLink.trim() } : null,
-          })
-          .select()
-          .single();
-
-        if (campaignError) throw campaignError;
+            merge_vars: demoLink.trim() ? { demoLink: demoLink.trim() } : null,
+          };
+        const { data: campaign, error: campaignError } = await insertEmailCampaignResilient(supabase, draftInsertPayload);
+        if (campaignError || !campaign) throw campaignError || new Error('Failed to create draft');
 
         setDraftId(campaign.id);
 
@@ -2359,10 +2365,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setSenderConnectionId(draft.sender_connection_id || '');
       setSenderProfileId(draft.sender_profile_id || '');
       setHeaderImageUrl((draft as any).header_image_url || '');
-      {
-        const mv = (draft as any).merge_vars;
-        setDemoLink(typeof mv?.demoLink === 'string' ? mv.demoLink : (typeof mv?.demo_link === 'string' ? mv.demo_link : ''));
-      }
+      setDemoLink(demoLinkFromMergeVars((draft as any).merge_vars));
       setDraftId(draft.id);
       
       if (draft.scheduled_at) {
@@ -3225,10 +3228,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           updatePayload.scheduled_at = scheduledAt;
         }
         // If not scheduling, keep status as paused so they can click Resume
-        const { error: contentUpdateError } = await supabase
-          .from('email_campaigns')
-          .update(updatePayload as any)
-          .eq('id', draftId);
+        const { error: contentUpdateError } = await updateEmailCampaignResilient(supabase, draftId, updatePayload);
         if (contentUpdateError) throw contentUpdateError;
 
         // Send reads personalized_* on each recipient — push editor edits onto pending rows.
@@ -3268,9 +3268,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       
       if (draftId) {
         // Update existing draft and change status
-        const { data: updatedCampaign, error: updateError } = await supabase
-          .from('email_campaigns')
-          .update({
+        const sendUpdatePayload = {
             name: campaignName,
             subject_template: subject,
             body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
@@ -3291,14 +3289,17 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
             header_image_url: headerImageUrl.trim() || null,
-          merge_vars: demoLink.trim() ? { demoLink: demoLink.trim() } : null,
-          })
-          .eq('id', draftId)
-          .select()
-          .single();
+            merge_vars: demoLink.trim() ? { demoLink: demoLink.trim() } : null,
+          };
+        const { data: updatedCampaign, error: updateError } = await updateEmailCampaignResilient(
+          supabase,
+          draftId,
+          sendUpdatePayload,
+          { select: true }
+        );
 
         if (updateError) throw updateError;
-        campaign = updatedCampaign;
+        campaign = updatedCampaign || { id: draftId };
 
         // Update recipients - delete old ones and add new ones
         const { error: deleteRecipientsError } = await supabase
@@ -3308,9 +3309,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         if (deleteRecipientsError) throw deleteRecipientsError;
       } else {
         // Create new campaign
-        const { data: newCampaign, error: campaignError } = await supabase
-          .from('email_campaigns')
-          .insert({
+        const sendInsertPayload = {
             user_id: user.id,
             name: campaignName,
             subject_template: subject,
@@ -3331,12 +3330,11 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
             header_image_url: headerImageUrl.trim() || null,
-          merge_vars: demoLink.trim() ? { demoLink: demoLink.trim() } : null,
-          })
-          .select()
-          .single();
+            merge_vars: demoLink.trim() ? { demoLink: demoLink.trim() } : null,
+          };
+        const { data: newCampaign, error: campaignError } = await insertEmailCampaignResilient(supabase, sendInsertPayload);
 
-        if (campaignError) throw campaignError;
+        if (campaignError || !newCampaign) throw campaignError || new Error('Failed to create campaign');
         campaign = newCampaign;
       }
 
