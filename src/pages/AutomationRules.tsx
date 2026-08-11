@@ -5,13 +5,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Clock, Zap, Play, Pause, Trash2, Edit, TrendingUp } from "lucide-react";
+import { Plus, Clock, Zap, Play, Pause, Trash2, Edit, TrendingUp, AlertTriangle } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface AutomationRule {
   id: string;
@@ -270,15 +271,22 @@ export default function AutomationRules() {
           <p className="text-muted-foreground mt-1">
             Create advanced automation with time-based triggers and conditional logic
           </p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Rules are saved to the backend and applied (e.g. sequence follow-up timing and send windows).
-          </p>
         </div>
         <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
           <Plus className="h-4 w-4 mr-2" />
           New Rule
         </Button>
       </div>
+
+      <Alert>
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Sequence automation lives on Active Campaigns / Sequences</AlertTitle>
+        <AlertDescription>
+          Rules saved here are stored, but there is not yet a backend runner for this table.
+          For follow-up timing (no-open / wait-for-reply / per-step rules), use the automation
+          settings on each sequence — those are what the hourly processor actually executes.
+        </AlertDescription>
+      </Alert>
 
       <Tabs defaultValue="rules" className="space-y-4">
         <TabsList>

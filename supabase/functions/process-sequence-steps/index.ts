@@ -258,16 +258,40 @@ serve(async (req) => {
           continue;
         }
 
-        // Check automation rules: per-step rule (nextStep.automation_rule) or global rules
+        // Check automation rules: per-step on next email, then step_rules map, then globals.
+        // Sequence Settings saves per-step config as automation_rules.step_rules["0"|"1"|...]
+        // (template step index). Campaign enrollments use personalized stepNumber = index + 1
+        // when step 0 is the campaign stub.
         const automationRules = sequence.automation_rules || { enabled: true, rules: [] };
         const nextStepRule = nextStep?.automation_rule as { type?: string; wait_hours?: number } | undefined;
-        const rulesToCheck = nextStepRule?.type && nextStepRule.type !== 'time_based'
-          ? [{ type: nextStepRule.type, wait_hours: nextStepRule.wait_hours ?? 24 }]
-          : (automationRules.rules || []);
+        const stepRulesMap = (automationRules.step_rules || {}) as Record<string, {
+          enabled?: boolean;
+          type?: string;
+          wait_hours?: number;
+        }>;
+        const fromStepRules =
+          stepRulesMap[String(nextStepNumber)] ||
+          stepRulesMap[String(Math.max(0, nextStepNumber - 1))] ||
+          null;
+
+        let rulesToCheck: Array<{ type: string; wait_hours?: number }> = [];
+        if (nextStepRule?.type && nextStepRule.type !== 'time_based' && nextStepRule.type !== 'none') {
+          rulesToCheck = [{ type: nextStepRule.type, wait_hours: nextStepRule.wait_hours ?? 24 }];
+        } else if (fromStepRules?.enabled && fromStepRules.type && fromStepRules.type !== 'time_based' && fromStepRules.type !== 'none') {
+          rulesToCheck = [{ type: fromStepRules.type, wait_hours: fromStepRules.wait_hours ?? 24 }];
+        } else {
+          rulesToCheck = automationRules.rules || [];
+        }
+
+        // Explicit "none" on the next step skips behavioral + time fallback for this tick
+        const skipAutomation =
+          nextStepRule?.type === 'none' ||
+          (fromStepRules?.enabled && fromStepRules.type === 'none');
+
         let shouldSendNext = false;
         let triggerReason = '';
 
-        if (automationRules.enabled && rulesToCheck.length > 0) {
+        if (!skipAutomation && automationRules.enabled && rulesToCheck.length > 0) {
           const hoursSinceLastEmail = (Date.now() - new Date(lastActivity.sent_at).getTime()) / (1000 * 60 * 60);
 
           for (const rule of rulesToCheck) {
@@ -301,14 +325,55 @@ serve(async (req) => {
                   triggerReason = `no_reply_after_open (${waitHours}h elapsed)`;
                 }
                 break;
+
+              // Legacy / Settings UI types: wait until engagement, then wait_hours after that event
+              case 'wait_for_open': {
+                if (lastActivity.opened_at) {
+                  const hoursSinceOpen =
+                    (Date.now() - new Date(lastActivity.opened_at).getTime()) / (1000 * 60 * 60);
+                  if (hoursSinceOpen >= waitHours) {
+                    shouldSendNext = true;
+                    triggerReason = `wait_for_open (${waitHours}h after open)`;
+                  }
+                }
+                break;
+              }
+
+              case 'wait_for_click': {
+                const clickedAt = lastActivity.metadata?.last_click || lastActivity.metadata?.clicked_at;
+                if (lastActivity.metadata?.clicked && clickedAt) {
+                  const hoursSinceClick =
+                    (Date.now() - new Date(clickedAt).getTime()) / (1000 * 60 * 60);
+                  if (hoursSinceClick >= waitHours) {
+                    shouldSendNext = true;
+                    triggerReason = `wait_for_click (${waitHours}h after click)`;
+                  }
+                } else if (lastActivity.metadata?.clicked && hoursSinceLastEmail >= waitHours) {
+                  // clicked flag without timestamp — fall back to hours since send
+                  shouldSendNext = true;
+                  triggerReason = `wait_for_click (${waitHours}h elapsed after click flag)`;
+                }
+                break;
+              }
             }
 
             if (shouldSendNext) break;
           }
         }
 
-        // Fallback to time-based delay if no behavioral rule triggered
-        if (!shouldSendNext) {
+        // Fallback to time-based delay if no behavioral rule triggered (and step isn't "none")
+        if (!shouldSendNext && !skipAutomation) {
+          // For wait_for_* rules that haven't engaged yet, do NOT fall through to delayDays
+          const waitingForEngagement = rulesToCheck.some(
+            (r) => r.type === 'wait_for_open' || r.type === 'wait_for_click'
+          );
+          if (waitingForEngagement) {
+            console.log(
+              `Sequence ${sequence.id}: waiting for engagement (${rulesToCheck.map((r) => r.type).join(',')}) before step ${nextStepNumber}`
+            );
+            continue;
+          }
+
           const daysSinceLastEmail = Math.floor(
             (Date.now() - new Date(lastActivity.sent_at).getTime()) / (1000 * 60 * 60 * 24)
           );

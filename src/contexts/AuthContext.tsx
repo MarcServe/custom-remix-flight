@@ -311,6 +311,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       if (error) {
         console.error('[AUTH] Error checking subscription:', error);
+        // Don't wipe a known good subscription on a transient failure, but surface it
+        toast.error('Could not refresh subscription status', {
+          description: typeof error === 'object' && error && 'message' in error
+            ? String((error as { message?: string }).message)
+            : 'Plan features may be out of date until this succeeds.',
+        });
         return;
       }
 
@@ -320,6 +326,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setSubscriptionEnd(data?.subscription_end || null);
     } catch (error) {
       console.error('[AUTH] Error in checkSubscription:', error);
+      toast.error('Could not refresh subscription status', {
+        description: error instanceof Error ? error.message : 'Please try again from Subscription settings.',
+      });
     }
   };
 
