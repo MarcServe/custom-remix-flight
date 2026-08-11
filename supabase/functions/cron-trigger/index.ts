@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
 
         const { data: scheduledCampaigns, error: scheduledError } = await supabase
           .from('email_campaigns')
-          .select('id, user_id, name, scheduled_at')
+          .select('id, user_id, name, scheduled_at, tags, subject_template')
           .eq('status', 'scheduled')
           .lte('scheduled_at', new Date().toISOString());
 
@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
         if (campaignIdsWithPending.length > 0) {
           const { data: rawSending, error: sendingError } = await supabase
             .from('email_campaigns')
-            .select('id, user_id, name, scheduled_at, sender_connection_id')
+            .select('id, user_id, name, scheduled_at, sender_connection_id, tags, subject_template')
             .eq('status', 'sending')
             .in('id', campaignIdsWithPending);
 
@@ -169,22 +169,27 @@ Deno.serve(async (req) => {
 
         for (const campaign of campaigns) {
           try {
-            // Get user's auth token or use service role for sending
-            const response = await fetch(`${SUPABASE_URL}/functions/v1/send-bulk-emails`, {
+            const tags = Array.isArray(campaign.tags) ? campaign.tags : [];
+            const isPhoneSms =
+              tags.includes('phone_sms') ||
+              String(campaign.name || '').startsWith('📞') ||
+              String(campaign.subject_template || '').toLowerCase().startsWith('phone campaign');
+            const sendFn = isPhoneSms ? 'send-bulk-sms' : 'send-bulk-emails';
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/${sendFn}`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify({ 
+              body: JSON.stringify({
                 campaignId: campaign.id,
-                triggeredByCron: true 
+                triggeredByCron: true,
               }),
             });
-            
+
             const result = await response.json().catch(() => ({}));
-            results.push({ campaignId: campaign.id, name: campaign.name, result });
-            console.log(`[cron-trigger] Campaign ${campaign.name} result:`, result);
+            results.push({ campaignId: campaign.id, name: campaign.name, sendFn, result });
+            console.log(`[cron-trigger] Campaign ${campaign.name} (${sendFn}) result:`, result);
           } catch (error) {
             console.error(`[cron-trigger] Error sending campaign ${campaign.id}:`, error);
             results.push({ campaignId: campaign.id, error: error instanceof Error ? error.message : 'Unknown error' });
@@ -384,7 +389,20 @@ Deno.serve(async (req) => {
                 .update({ status: 'sending' })
                 .eq('id', row.campaign_id);
             }
-            const resSend = await fetch(`${SUPABASE_URL}/functions/v1/send-bulk-emails`, {
+            const resSendFn = await (async () => {
+              const { data: camp } = await supabase
+                .from('email_campaigns')
+                .select('id, name, tags, subject_template')
+                .eq('id', row.campaign_id)
+                .maybeSingle();
+              const tags = Array.isArray(camp?.tags) ? camp.tags : [];
+              const isPhoneSms =
+                tags.includes('phone_sms') ||
+                String(camp?.name || '').startsWith('📞') ||
+                String(camp?.subject_template || '').toLowerCase().startsWith('phone campaign');
+              return isPhoneSms ? 'send-bulk-sms' : 'send-bulk-emails';
+            })();
+            const resSend = await fetch(`${SUPABASE_URL}/functions/v1/${resSendFn}`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,

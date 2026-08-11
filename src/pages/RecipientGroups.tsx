@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Trash2, Users, FolderOpen, Plus, Upload, Building2, UserCircle, ClipboardPaste, Inbox, Target, Megaphone, Send, Copy, Check, UserPlus, X } from "lucide-react";
+import { Phone, Loader2, Pencil, Trash2, Users, FolderOpen, Plus, Upload, Building2, UserCircle, ClipboardPaste, Inbox, Target, Megaphone, Send, Copy, Check, UserPlus, X } from "lucide-react";
 import { useCampaignDialog } from "@/contexts/CampaignDialogContext";
 import {
   Dialog,
@@ -35,9 +35,11 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
-import { parseRecipientRowsFromCSVText } from "@/lib/recipient-group-csv";
+import { parseRecipientRowsFromCSVText, parsePhoneRecipientRowsFromText } from "@/lib/recipient-group-csv";
+import { PhoneCampaignDialog } from "@/components/PhoneCampaignDialog";
 import { getCompanyResolvableEmail } from "@/lib/company-email";
 import { createRecipientGroupWithMembers } from "@/lib/recipient-group-mutations";
 
@@ -47,6 +49,7 @@ type RecipientGroup = {
   description: string | null;
   created_at: string;
   member_count?: number;
+  channel?: string | null;
 };
 
 type PeopleRow = {
@@ -61,6 +64,7 @@ type CompanyRow = {
   id: string;
   name: string | null;
   general_email: string | null;
+  company_phone?: string | null;
   contacts: { email: string | null; name: string | null }[] | null;
 };
 
@@ -117,6 +121,11 @@ export default function RecipientGroups() {
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [createChannel, setCreateChannel] = useState<"email" | "phone">("email");
+  const [phoneCampaignOpen, setPhoneCampaignOpen] = useState(false);
+  const [phoneCampaignGroupIds, setPhoneCampaignGroupIds] = useState<string[]>([]);
+  const [csvPhoneRows, setCsvPhoneRows] = useState<ReturnType<typeof parsePhoneRecipientRowsFromText>>([]);
+  const [manageChannel, setManageChannel] = useState<"email" | "phone" | "mixed">("email");
   const [createTab, setCreateTab] = useState<
     "csv" | "paste" | "people" | "companies" | "leads" | "deals" | "campaign"
   >("csv");
@@ -141,6 +150,10 @@ export default function RecipientGroups() {
     () => (pasteText.trim() ? parseRecipientRowsFromCSVText(pasteText) : []),
     [pasteText]
   );
+  const phonePasteRows = useMemo(
+    () => (pasteText.trim() ? parsePhoneRecipientRowsFromText(pasteText) : []),
+    [pasteText]
+  );
 
   const { data: groups = [], isLoading } = useQuery({
     queryKey: ["recipient-groups-page"],
@@ -151,7 +164,7 @@ export default function RecipientGroups() {
       if (!u) return [];
       const { data: groupsData, error: groupsError } = await supabase
         .from("recipient_groups")
-        .select("id, name, description, created_at")
+        .select("id, name, description, created_at, channel")
         .eq("user_id", u.id)
         .order("created_at", { ascending: false });
       if (groupsError) throw groupsError;
@@ -213,7 +226,7 @@ export default function RecipientGroups() {
       while (true) {
         const { data, error } = await supabase
           .from("companies")
-          .select("id, name, general_email, contacts(email, name)")
+          .select("id, name, general_email, company_phone, contacts(email, name)")
           .eq("user_id", u.user.id)
           .order("created_at", { ascending: false })
           .range(page * PAGE, (page + 1) * PAGE - 1);
@@ -325,25 +338,38 @@ export default function RecipientGroups() {
     return companiesPickList.filter((c) => getCompanyResolvableEmail(c) != null);
   }, [companiesPickList]);
 
+  const companiesWithPhone = useMemo(() => {
+    return companiesPickList.filter((c) => (c.company_phone || "").replace(/\D/g, "").length >= 7);
+  }, [companiesPickList]);
+
   const filteredCompanies = useMemo(() => {
     const q = companySearch.trim().toLowerCase();
-    const base = companiesWithEmail;
+    const base = createChannel === "phone" ? companiesWithPhone : companiesWithEmail;
     if (!q) return base;
     return base.filter((c) => (c.name || "").toLowerCase().includes(q));
-  }, [companiesWithEmail, companySearch]);
+  }, [companiesWithEmail, companiesWithPhone, companySearch, createChannel]);
 
   // Launch a new campaign pre-filled with this group's members — connects
   // recipient groups directly to the campaign composer.
   const handleCreateCampaignFromGroup = async (g: RecipientGroup) => {
     setLaunchingCampaignId(g.id);
     try {
-      const rows: { email: string; first_name: string | null; last_name: string | null; company: string | null; person_id: string | null }[] = [];
+      if (g.channel === "phone") {
+        setPhoneCampaignGroupIds([g.id]);
+        setPhoneCampaignOpen(true);
+        toast({
+          title: "Phone campaign",
+          description: `Group "${g.name}" selected. Add a message and create the SMS campaign.`,
+        });
+        return;
+      }
+      const rows: { email: string; first_name: string | null; last_name: string | null; company: string | null; person_id: string | null; phone: string | null }[] = [];
       const PAGE = 1000;
       let page = 0;
       while (true) {
         const { data, error } = await supabase
           .from("recipient_group_members")
-          .select("email, first_name, last_name, company, person_id")
+          .select("email, first_name, last_name, company, person_id, phone")
           .eq("group_id", g.id)
           .range(page * PAGE, (page + 1) * PAGE - 1);
         if (error) throw error;
@@ -351,8 +377,20 @@ export default function RecipientGroups() {
         if (!data || data.length < PAGE) break;
         page++;
       }
+      // If group is phone-heavy (no emails), open phone campaign
+      const phoneOnly = rows.filter((m) => m.phone && !(m.email || "").trim());
+      const withEmail = rows.filter((m) => (m.email || "").trim() && !(m.email || "").startsWith("phone:"));
+      if (withEmail.length === 0 && (phoneOnly.length > 0 || rows.some((m) => (m.email || "").startsWith("phone:")))) {
+        setPhoneCampaignGroupIds([g.id]);
+        setPhoneCampaignOpen(true);
+        toast({
+          title: "Phone campaign",
+          description: `Group "${g.name}" looks like a phone list. Opening SMS campaign.`,
+        });
+        return;
+      }
       const seen = new Set<string>();
-      const people = rows
+      const people = withEmail
         .filter((m) => {
           const e = (m.email || "").trim().toLowerCase();
           if (!e || seen.has(e)) return false;
@@ -388,8 +426,10 @@ export default function RecipientGroups() {
   const resetCreateForm = () => {
     setCreateName("");
     setCreateDescription("");
+    setCreateChannel("email");
     setCsvPreviewCount(0);
     setCsvRows([]);
+    setCsvPhoneRows([]);
     setPasteText("");
     setPeopleSearch("");
     setCompanySearch("");
@@ -411,8 +451,23 @@ export default function RecipientGroups() {
   const handleCsvFile = async (file: File | null) => {
     if (!file) return;
     const text = await file.text();
+    if (createChannel === "phone") {
+      const rows = parsePhoneRecipientRowsFromText(text);
+      setCsvPhoneRows(rows);
+      setCsvRows([]);
+      setCsvPreviewCount(rows.length);
+      if (rows.length === 0) {
+        toast({
+          title: "No phone numbers found",
+          description: "Use a header row with a Phone/Mobile column, or one number per row.",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
     const rows = parseRecipientRowsFromCSVText(text);
     setCsvRows(rows);
+    setCsvPhoneRows([]);
     setCsvPreviewCount(rows.length);
     if (rows.length === 0) {
       toast({
@@ -432,6 +487,106 @@ export default function RecipientGroups() {
     try {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth.user) throw new Error("Not authenticated");
+
+      // ── Phone / SMS groups (CSV or paste) ──
+      if (createChannel === "phone") {
+        let phoneMembers: Array<{
+          email: string | null;
+          phone: string;
+          first_name: string | null;
+          last_name: string | null;
+          company: string | null;
+          person_id: string | null;
+        }> = [];
+        if (createTab === "csv") {
+          if (csvPhoneRows.length === 0) {
+            toast({ title: "Add a CSV file", description: "Upload a file with at least one phone number.", variant: "destructive" });
+            setCreating(false);
+            return;
+          }
+          phoneMembers = csvPhoneRows.map((r) => ({
+            email: null,
+            phone: r.phone,
+            first_name: r.first_name,
+            last_name: r.last_name,
+            company: r.company,
+            person_id: null,
+          }));
+        } else if (createTab === "paste") {
+          if (phonePasteRows.length === 0) {
+            toast({ title: "Paste some phone numbers", description: "One number per line, or comma-separated.", variant: "destructive" });
+            setCreating(false);
+            return;
+          }
+          phoneMembers = phonePasteRows.map((r) => ({
+            email: null,
+            phone: r.phone,
+            first_name: r.first_name,
+            last_name: r.last_name,
+            company: r.company,
+            person_id: null,
+          }));
+        } else if (createTab === "companies") {
+          if (selectedCompanyIds.size === 0) {
+            toast({ title: "Select companies", description: "Choose companies that have a phone number.", variant: "destructive" });
+            setCreating(false);
+            return;
+          }
+          const { data: cos } = await supabase
+            .from("companies")
+            .select("id, name, company_phone")
+            .in("id", [...selectedCompanyIds])
+            .not("company_phone", "is", null);
+          const seen = new Set<string>();
+          for (const c of cos || []) {
+            const phone = (c.company_phone || "").trim();
+            const key = phone.replace(/\D/g, "");
+            if (!phone || key.length < 7 || seen.has(key)) continue;
+            seen.add(key);
+            phoneMembers.push({
+              email: null,
+              phone,
+              first_name: null,
+              last_name: null,
+              company: c.name || null,
+              person_id: null,
+            });
+          }
+          if (phoneMembers.length === 0) {
+            toast({ title: "No phones found", description: "Selected companies have no company_phone.", variant: "destructive" });
+            setCreating(false);
+            return;
+          }
+        } else {
+          toast({
+            title: "Use CSV, Paste, or Companies",
+            description: "Phone groups are built from phone numbers (CSV/paste) or company phones.",
+            variant: "destructive",
+          });
+          setCreating(false);
+          return;
+        }
+
+        await createRecipientGroupWithMembers(supabase, {
+          userId: auth.user.id,
+          name: createName.trim(),
+          description: createDescription.trim() || null,
+          channel: "phone",
+          members: phoneMembers,
+        });
+
+        queryClient.invalidateQueries({ queryKey: ["recipient-groups-page"] });
+        queryClient.invalidateQueries({ queryKey: ["recipient-groups"] });
+        queryClient.invalidateQueries({ queryKey: ["phone-recipient-groups"] });
+        setCreateOpen(false);
+        resetCreateForm();
+        toast({
+          title: "Phone group created",
+          description: `"${createName.trim()}" has ${phoneMembers.length} number(s). Use it in Phone Campaigns → Groups.`,
+        });
+        setCreating(false);
+        return;
+      }
 
       let members: Array<{
         email: string;
@@ -676,6 +831,7 @@ export default function RecipientGroups() {
         userId: auth.user.id,
         name: createName.trim(),
         description: createDescription.trim() || null,
+        channel: "email",
         members,
       });
 
@@ -742,9 +898,9 @@ export default function RecipientGroups() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("recipient_group_members")
-        .select("id, email, first_name, last_name, company")
+        .select("id, email, phone, first_name, last_name, company")
         .eq("group_id", manageId)
-        .order("email", { ascending: true });
+        .order("created_at", { ascending: true });
       if (error) throw error;
       return data || [];
     },
@@ -753,6 +909,7 @@ export default function RecipientGroups() {
   const openManage = (g: RecipientGroup) => {
     setManageId(g.id);
     setManageName(g.name);
+    setManageChannel((g.channel as "email" | "phone" | "mixed") || "email");
     setAddEmailsText("");
     setSelectedMemberIds(new Set());
   };
@@ -767,6 +924,41 @@ export default function RecipientGroups() {
     if (!manageId || !addEmailsText.trim()) return;
     setSavingMembers(true);
     try {
+      if (manageChannel === "phone") {
+        const phones = parsePhoneRecipientRowsFromText(addEmailsText);
+        const existing = new Set(
+          (manageMembers as any[])
+            .map((m) => (m.phone || "").replace(/\D/g, ""))
+            .filter(Boolean)
+        );
+        const toInsert: any[] = [];
+        const seen = new Set<string>();
+        for (const r of phones) {
+          const key = r.phone.replace(/\D/g, "");
+          if (!key || existing.has(key) || seen.has(key)) continue;
+          seen.add(key);
+          toInsert.push({
+            group_id: manageId,
+            email: null,
+            phone: r.phone,
+            first_name: r.first_name,
+            last_name: r.last_name,
+            company: r.company,
+          });
+        }
+        if (toInsert.length === 0) {
+          toast({ title: "Nothing to add", description: "No new valid phone numbers found.", variant: "destructive" });
+          return;
+        }
+        const { error } = await supabase.from("recipient_group_members").insert(toInsert);
+        if (error) throw error;
+        toast({ title: `Added ${toInsert.length} number${toInsert.length === 1 ? "" : "s"}` });
+        setAddEmailsText("");
+        refreshMembers();
+        queryClient.invalidateQueries({ queryKey: ["phone-recipient-groups"] });
+        return;
+      }
+
       // Forgiving: pull every email-looking token from the paste (comma/newline/space).
       const emails = (addEmailsText.match(/[^\s@,;<>()"']+@[^\s@,;<>()"']+\.[^\s@,;<>()"']+/g) || [])
         .map((e) => e.toLowerCase().trim());
@@ -819,15 +1011,15 @@ export default function RecipientGroups() {
             Recipient Groups
           </h1>
           <p className="text-muted-foreground mt-1">
-            Saved lists for{" "}
+            Saved lists for email{" "}
             <Link to="/campaigns" className="text-primary hover:underline">
               Campaigns
-            </Link>{" "}
-            and{" "}
+            </Link>
+            , phone/SMS campaigns, and{" "}
             <Link to="/newsletters" className="text-primary hover:underline">
               Newsletters
             </Link>
-            . Create a group from a CSV file, People, or Companies.
+            . Create email or phone groups from CSV, paste, People, or Companies.
           </p>
         </div>
         <Button onClick={openCreate} className="shrink-0">
@@ -866,6 +1058,7 @@ export default function RecipientGroups() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Channel</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead className="text-right">Members</TableHead>
                   <TableHead>Created</TableHead>
@@ -876,6 +1069,17 @@ export default function RecipientGroups() {
                 {groups.map((g) => (
                   <TableRow key={g.id}>
                     <TableCell className="font-medium">{g.name}</TableCell>
+                    <TableCell>
+                      {g.channel === "phone" ? (
+                        <Badge variant="secondary" className="gap-1">
+                          <Phone className="h-3 w-3" /> Phone
+                        </Badge>
+                      ) : g.channel === "mixed" ? (
+                        <Badge variant="outline">Mixed</Badge>
+                      ) : (
+                        <Badge variant="outline">Email</Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-muted-foreground max-w-[200px] truncate">
                       {g.description || "—"}
                     </TableCell>
@@ -960,10 +1164,45 @@ export default function RecipientGroups() {
           <DialogHeader>
             <DialogTitle>New recipient group</DialogTitle>
             <DialogDescription>
-              Members are stored for reuse. Duplicates are removed by email.
+              Choose email or phone. Members are stored for reuse in campaigns.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-1">
+            <div className="space-y-2">
+              <Label>Group type</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={createChannel === "email" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setCreateChannel("email");
+                    setCsvPreviewCount(0);
+                    setCsvRows([]);
+                    setCsvPhoneRows([]);
+                    setPasteText("");
+                  }}
+                >
+                  Email
+                </Button>
+                <Button
+                  type="button"
+                  variant={createChannel === "phone" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setCreateChannel("phone");
+                    setCreateTab("paste");
+                    setCsvPreviewCount(0);
+                    setCsvRows([]);
+                    setCsvPhoneRows([]);
+                    setPasteText("");
+                  }}
+                >
+                  <Phone className="h-3.5 w-3.5 mr-1" />
+                  Phone / SMS
+                </Button>
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="cg-name">Name *</Label>
               <Input
@@ -991,28 +1230,54 @@ export default function RecipientGroups() {
                   <ClipboardPaste className="h-3.5 w-3.5" />
                   Paste
                 </TabsTrigger>
-                <TabsTrigger value="people" className="gap-1 text-xs sm:text-sm">
-                  <UserCircle className="h-3.5 w-3.5" />
-                  People
-                </TabsTrigger>
+                {createChannel === "email" && (
+                  <TabsTrigger value="people" className="gap-1 text-xs sm:text-sm">
+                    <UserCircle className="h-3.5 w-3.5" />
+                    People
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="companies" className="gap-1 text-xs sm:text-sm">
                   <Building2 className="h-3.5 w-3.5" />
                   Companies
                 </TabsTrigger>
-                <TabsTrigger value="leads" className="gap-1 text-xs sm:text-sm">
-                  <Inbox className="h-3.5 w-3.5" />
-                  Lead Inbox
-                </TabsTrigger>
-                <TabsTrigger value="deals" className="gap-1 text-xs sm:text-sm">
-                  <Target className="h-3.5 w-3.5" />
-                  Deals
-                </TabsTrigger>
-                <TabsTrigger value="campaign" className="gap-1 text-xs sm:text-sm">
-                  <Megaphone className="h-3.5 w-3.5" />
-                  Campaign
-                </TabsTrigger>
+                {createChannel === "email" && (
+                  <>
+                    <TabsTrigger value="leads" className="gap-1 text-xs sm:text-sm">
+                      <Inbox className="h-3.5 w-3.5" />
+                      Lead Inbox
+                    </TabsTrigger>
+                    <TabsTrigger value="deals" className="gap-1 text-xs sm:text-sm">
+                      <Target className="h-3.5 w-3.5" />
+                      Deals
+                    </TabsTrigger>
+                    <TabsTrigger value="campaign" className="gap-1 text-xs sm:text-sm">
+                      <Megaphone className="h-3.5 w-3.5" />
+                      Campaign
+                    </TabsTrigger>
+                  </>
+                )}
               </TabsList>
               <TabsContent value="paste" className="space-y-3 mt-3">
+                {createChannel === "phone" ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      Paste phone numbers — one per line or comma-separated. Include country code when possible (e.g. +44…).
+                    </p>
+                    <Textarea
+                      placeholder={"+447700900123\n+1 555 010 2000, Jane Smith"}
+                      value={pasteText}
+                      onChange={(e) => setPasteText(e.target.value)}
+                      rows={6}
+                      className="font-mono text-xs"
+                    />
+                    {phonePasteRows.length > 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        <strong>{phonePasteRows.length}</strong> unique phone number(s) ready to import.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <>
                 <p className="text-xs text-muted-foreground">
                   Paste emails from anywhere — one per line, or comma-separated. Great for external lists.
                   Optional columns (Email, First, Last, Company) are detected if you paste a header row.
@@ -1028,6 +1293,8 @@ export default function RecipientGroups() {
                   <p className="text-sm text-muted-foreground">
                     <strong>{pasteRows.length}</strong> unique email(s) ready to import.
                   </p>
+                )}
+                  </>
                 )}
               </TabsContent>
               <TabsContent value="leads" className="space-y-3 mt-3">
@@ -1154,8 +1421,16 @@ export default function RecipientGroups() {
               </TabsContent>
               <TabsContent value="csv" className="space-y-3 mt-3">
                 <p className="text-xs text-muted-foreground">
-                  Comma-separated CSV with a header row. Include an <strong>email</strong> column (or put emails in the first
-                  column). Optional: first name, last name, company.
+                  {createChannel === "phone" ? (
+                    <>
+                      CSV with a <strong>phone</strong> / mobile column (or one number per row). Optional: name, company.
+                    </>
+                  ) : (
+                    <>
+                      Comma-separated CSV with a header row. Include an <strong>email</strong> column (or put emails in the first
+                      column). Optional: first name, last name, company.
+                    </>
+                  )}
                 </p>
                 <Input
                   type="file"
@@ -1164,7 +1439,7 @@ export default function RecipientGroups() {
                 />
                 {csvPreviewCount > 0 && (
                   <p className="text-sm text-muted-foreground">
-                    <strong>{csvPreviewCount}</strong> unique email(s) ready to import.
+                    <strong>{csvPreviewCount}</strong> unique {createChannel === "phone" ? "phone number(s)" : "email(s)"} ready to import.
                   </p>
                 )}
               </TabsContent>
@@ -1235,7 +1510,9 @@ export default function RecipientGroups() {
               </TabsContent>
               <TabsContent value="companies" className="space-y-3 mt-3">
                 <p className="text-xs text-muted-foreground">
-                  Includes people at selected companies plus company contact / general email when no person exists.
+                  {createChannel === "phone"
+                    ? "Adds company_phone from selected companies (companies without a phone are skipped)."
+                    : "Includes people at selected companies plus company contact / general email when no person exists."}
                 </p>
                 <Input
                   placeholder="Filter by company name…"
@@ -1245,8 +1522,13 @@ export default function RecipientGroups() {
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>
                     {filteredCompanies.length} shown · {selectedCompanyIds.size} selected
-                    {selectedCompanyIds.size > 0 && filteredCompanies.length !== companiesWithEmail.length && (
-                      <> · {companiesWithEmail.length} total</>
+                    {selectedCompanyIds.size > 0 &&
+                      filteredCompanies.length !==
+                        (createChannel === "phone" ? companiesWithPhone.length : companiesWithEmail.length) && (
+                      <>
+                        {" "}
+                        · {(createChannel === "phone" ? companiesWithPhone : companiesWithEmail).length} total
+                      </>
                     )}
                   </span>
                   <div className="flex gap-3">
@@ -1262,9 +1544,15 @@ export default function RecipientGroups() {
                     <button
                       type="button"
                       className="text-primary hover:underline font-medium"
-                      onClick={() => setSelectedCompanyIds(new Set(companiesWithEmail.map((c) => c.id)))}
+                      onClick={() =>
+                        setSelectedCompanyIds(
+                          new Set(
+                            (createChannel === "phone" ? companiesWithPhone : companiesWithEmail).map((c) => c.id)
+                          )
+                        )
+                      }
                     >
-                      Select all ({companiesWithEmail.length})
+                      Select all ({(createChannel === "phone" ? companiesWithPhone : companiesWithEmail).length})
                     </button>
                   </div>
                 </div>
@@ -1275,7 +1563,9 @@ export default function RecipientGroups() {
                     </div>
                   ) : filteredCompanies.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-4 text-center">
-                      No companies with a resolvable email. Add contacts or general email on the Companies page.
+                      {createChannel === "phone"
+                        ? "No companies with a phone number. Add company_phone on the Companies page."
+                        : "No companies with a resolvable email. Add contacts or general email on the Companies page."}
                     </p>
                   ) : (
                     filteredCompanies.map((c) => (
@@ -1358,18 +1648,25 @@ export default function RecipientGroups() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Manage members — {manageName}</DialogTitle>
-            <DialogDescription>Add or remove emails in this group. Changes save immediately.</DialogDescription>
+            <DialogDescription>
+              {manageChannel === "phone"
+                ? "Add or remove phone numbers in this group. Changes save immediately."
+                : "Add or remove emails in this group. Changes save immediately."}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-1">
-            {/* Add emails */}
             <div className="space-y-2">
-              <Label>Add emails</Label>
+              <Label>{manageChannel === "phone" ? "Add phone numbers" : "Add emails"}</Label>
               <Textarea
                 value={addEmailsText}
                 onChange={(e) => setAddEmailsText(e.target.value)}
                 rows={2}
-                placeholder="Paste emails — commas, spaces or new lines (e.g. jane@acme.com, john@beta.co)"
+                placeholder={
+                  manageChannel === "phone"
+                    ? "Paste numbers — commas or new lines (e.g. +447700900123, +15550102000)"
+                    : "Paste emails — commas, spaces or new lines (e.g. jane@acme.com, john@beta.co)"
+                }
               />
               <Button size="sm" onClick={addMembers} disabled={savingMembers || !addEmailsText.trim()}>
                 {savingMembers ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
@@ -1377,7 +1674,6 @@ export default function RecipientGroups() {
               </Button>
             </div>
 
-            {/* Members list */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>{(manageMembers as any[]).length} member{(manageMembers as any[]).length === 1 ? "" : "s"}</Label>
@@ -1400,7 +1696,7 @@ export default function RecipientGroups() {
                         onCheckedChange={(c) => setSelectedMemberIds((prev) => { const n = new Set(prev); c ? n.add(m.id) : n.delete(m.id); return n; })}
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate">{m.email}</div>
+                        <div className="truncate">{m.phone || m.email}</div>
                         {(m.first_name || m.last_name || m.company) && (
                           <div className="truncate text-xs text-muted-foreground">{[[m.first_name, m.last_name].filter(Boolean).join(" "), m.company].filter(Boolean).join(" · ")}</div>
                         )}
@@ -1441,6 +1737,15 @@ export default function RecipientGroups() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PhoneCampaignDialog
+        open={phoneCampaignOpen}
+        onOpenChange={(o) => {
+          setPhoneCampaignOpen(o);
+          if (!o) setPhoneCampaignGroupIds([]);
+        }}
+        initialGroupIds={phoneCampaignGroupIds}
+      />
     </div>
   );
 }

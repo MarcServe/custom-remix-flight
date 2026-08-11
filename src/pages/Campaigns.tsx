@@ -82,6 +82,17 @@ interface CampaignRecipient {
   ab_variant?: 'A' | 'B' | null;
 }
 
+
+function isPhoneSmsCampaign(c: { name?: string | null; tags?: string[] | null; subject_template?: string | null } | null | undefined): boolean {
+  if (!c) return false;
+  const tags = Array.isArray(c.tags) ? c.tags : [];
+  return (
+    tags.includes('phone_sms') ||
+    String(c.name || '').startsWith('📞') ||
+    String(c.subject_template || '').toLowerCase().startsWith('phone campaign')
+  );
+}
+
 export default function Campaigns() {
   const queryClient = useQueryClient();
   const location = useLocation();
@@ -186,6 +197,20 @@ export default function Campaigns() {
     },
     refetchInterval: 5000,
   });
+
+  const invokeCampaignSend = async (campaignId: string) => {
+    let campaign: Campaign | undefined = campaigns?.find((c) => c.id === campaignId);
+    if (!campaign) {
+      const { data } = await supabase
+        .from('email_campaigns')
+        .select('id, name, tags, subject_template')
+        .eq('id', campaignId)
+        .maybeSingle();
+      campaign = (data as Campaign | null) || undefined;
+    }
+    const fn = isPhoneSmsCampaign(campaign) ? 'send-bulk-sms' : 'send-bulk-emails';
+    return supabase.functions.invoke(fn, { body: { campaignId } });
+  };
 
   // Reset status filter and selection when switching campaign
   useEffect(() => {
@@ -1264,9 +1289,7 @@ export default function Campaigns() {
         queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
       ]);
-      const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
-        body: { campaignId: selectedCampaign },
-      });
+      const { error: sendError } = await invokeCampaignSend(selectedCampaign);
       if (sendError) console.error('Trigger send:', sendError);
       toast.success(`${failedRecipients.length} recipient(s) set to pending. Sending started.`);
     } catch (e: any) {
@@ -1295,9 +1318,7 @@ export default function Campaigns() {
         queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', campaignId] }),
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
       ]);
-      const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
-        body: { campaignId },
-      });
+      const { error: sendError } = await invokeCampaignSend(campaignId);
       if (sendError) console.error('Trigger send:', sendError);
       toast.success('Failed recipients set to pending. Sending started.');
     } catch (e: any) {
@@ -1313,9 +1334,7 @@ export default function Campaigns() {
       const { error } = await supabase.from('email_campaigns').update({ status: 'sending' }).eq('id', campaignId);
       if (error) throw error;
       await queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
-      const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
-        body: { campaignId },
-      });
+      const { error: sendError } = await invokeCampaignSend(campaignId);
       if (sendError) console.error('Trigger send:', sendError);
       toast.success('Campaign resumed. Sending will continue for pending recipients.');
     } catch (e: any) {
@@ -1328,9 +1347,7 @@ export default function Campaigns() {
   const handleSendPendingNowByCampaignId = async (campaignId: string) => {
     setListActionCampaignId(campaignId);
     try {
-      const { error } = await supabase.functions.invoke('send-bulk-emails', {
-        body: { campaignId },
-      });
+      const { error } = await invokeCampaignSend(campaignId);
       if (error) throw error;
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['campaign-recipients', campaignId] }),
@@ -1441,9 +1458,7 @@ export default function Campaigns() {
         queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
       ]);
-      const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
-        body: { campaignId: selectedCampaign },
-      });
+      const { error: sendError } = await invokeCampaignSend(selectedCampaign);
       if (sendError) console.error('Trigger send:', sendError);
       toast.success(`Resending to ${list.length} recipient(s) (Variant ${mode === 'all' ? 'A & B' : mode}). Sending started.`);
     } catch (e: any) {
@@ -1468,9 +1483,7 @@ export default function Campaigns() {
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
         queryClient.invalidateQueries({ queryKey: ['campaign-send-history'] }),
       ]);
-      const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
-        body: { campaignId: selectedCampaign },
-      });
+      const { error: sendError } = await invokeCampaignSend(selectedCampaign);
       if (sendError) console.error('Trigger send:', sendError);
       toast.success('Variants swapped and resend started. Only recipients who have not already received that variant will be sent to; no duplicate variant sends.');
     } catch (e: any) {
@@ -1502,9 +1515,7 @@ export default function Campaigns() {
       const { error } = await supabase.from('email_campaigns').update({ status: 'sending' }).eq('id', selectedCampaign);
       if (error) throw error;
       await queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
-      const { error: sendError } = await supabase.functions.invoke('send-bulk-emails', {
-        body: { campaignId: selectedCampaign },
-      });
+      const { error: sendError } = await invokeCampaignSend(selectedCampaign);
       if (sendError) console.error('Trigger send after resume:', sendError);
       toast.success('Campaign resumed. Sending all pending now (Resend/SendGrid sends all at once; Gmail sends up to 450/day).');
     } catch (e: any) {
@@ -1529,9 +1540,7 @@ export default function Campaigns() {
     }, 3000);
 
     try {
-      const { data, error } = await supabase.functions.invoke('send-bulk-emails', {
-        body: { campaignId: selectedCampaign },
-      });
+      const { data, error } = await invokeCampaignSend(selectedCampaign);
       if (error) {
         throw new Error(error.message || 'Send failed');
       }

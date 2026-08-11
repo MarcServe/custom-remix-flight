@@ -3308,32 +3308,35 @@ export type Database = {
         Row: {
           company: string | null
           created_at: string
-          email: string
+          email: string | null
           first_name: string | null
           group_id: string
           id: string
           last_name: string | null
           person_id: string | null
+          phone: string | null
         }
         Insert: {
           company?: string | null
           created_at?: string
-          email: string
+          email?: string | null
           first_name?: string | null
           group_id: string
           id?: string
           last_name?: string | null
           person_id?: string | null
+          phone?: string | null
         }
         Update: {
           company?: string | null
           created_at?: string
-          email?: string
+          email?: string | null
           first_name?: string | null
           group_id?: string
           id?: string
           last_name?: string | null
           person_id?: string | null
+          phone?: string | null
         }
         Relationships: [
           {
@@ -3354,6 +3357,7 @@ export type Database = {
       }
       recipient_groups: {
         Row: {
+          channel: string | null
           created_at: string
           description: string | null
           id: string
@@ -3362,6 +3366,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          channel?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -3370,6 +3375,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          channel?: string | null
           created_at?: string
           description?: string | null
           id?: string

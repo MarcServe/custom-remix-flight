@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,18 +10,22 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { Phone, Loader2, Users, Send, CheckCircle, Settings, AlertCircle, X, FlaskConical, Plus, Upload } from 'lucide-react';
+import { Phone, Loader2, Users, Send, CheckCircle, Settings, AlertCircle, X, FlaskConical, Plus, Upload, FolderOpen, Save } from 'lucide-react';
 import { parseCSV } from '@/lib/utils/csv-parser';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PhoneServiceDialog } from '@/components/integrations/PhoneServiceDialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { createRecipientGroupWithMembers } from '@/lib/recipient-group-mutations';
+import { Link } from 'react-router-dom';
 
 interface PhoneCampaignDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedCompanyIds?: string[];
+  /** Pre-select phone recipient groups when opening (e.g. from Recipient Groups page). */
+  initialGroupIds?: string[];
 }
 
 interface ManualPhoneNumber {
@@ -31,7 +35,7 @@ interface ManualPhoneNumber {
   message?: string; // optional per-recipient SMS text (from CSV), overrides the campaign message
 }
 
-export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [] }: PhoneCampaignDialogProps) {
+export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [], initialGroupIds = [] }: PhoneCampaignDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [campaignName, setCampaignName] = useState('');
@@ -45,7 +49,22 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
   const [newPhoneName, setNewPhoneName] = useState('');
   const [testPhoneNumber, setTestPhoneNumber] = useState('');
   const [isTestingSMS, setIsTestingSMS] = useState(false);
-  const [activeTab, setActiveTab] = useState<'companies' | 'manual'>('companies');
+  const [activeTab, setActiveTab] = useState<'companies' | 'manual' | 'groups'>('groups');
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
+  const [groupMemberPhones, setGroupMemberPhones] = useState<ManualPhoneNumber[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [saveAsGroupName, setSaveAsGroupName] = useState('');
+  const [isSavingGroup, setIsSavingGroup] = useState(false);
+
+  // Apply preselected groups when dialog opens
+  useEffect(() => {
+    if (!open) return;
+    if (initialGroupIds.length === 0) return;
+    setSelectedGroupIds(new Set(initialGroupIds));
+    setActiveTab('groups');
+    void loadPhonesFromGroups(initialGroupIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialGroupIds.join(',')]);
 
   // Fetch companies with phone numbers
   const { data: companies } = useQuery({
@@ -79,6 +98,89 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
     },
   });
 
+  // Recipient groups that have phone members (or phone/mixed channel)
+  const { data: phoneGroups = [] } = useQuery({
+    queryKey: ['phone-recipient-groups'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data: groups } = await supabase
+        .from('recipient_groups')
+        .select('id, name, description, channel')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (!groups?.length) return [];
+      const ids = groups.map((g) => g.id);
+      const { data: members } = await supabase
+        .from('recipient_group_members')
+        .select('group_id, phone')
+        .in('group_id', ids)
+        .not('phone', 'is', null);
+      const counts: Record<string, number> = {};
+      for (const m of members || []) {
+        if (m.phone) counts[m.group_id] = (counts[m.group_id] || 0) + 1;
+      }
+      return groups
+        .map((g) => ({ ...g, phoneCount: counts[g.id] || 0 }))
+        .filter((g) => g.phoneCount > 0 || g.channel === 'phone' || g.channel === 'mixed');
+    },
+    enabled: open,
+  });
+
+  const loadPhonesFromGroups = async (groupIds: string[]) => {
+    if (!groupIds.length) {
+      setGroupMemberPhones([]);
+      return;
+    }
+    setLoadingGroups(true);
+    try {
+      const PAGE = 1000;
+      const rows: { phone: string | null; first_name: string | null; last_name: string | null; company: string | null }[] = [];
+      for (const gid of groupIds) {
+        let page = 0;
+        while (true) {
+          const { data, error } = await supabase
+            .from('recipient_group_members')
+            .select('phone, first_name, last_name, company, email')
+            .eq('group_id', gid)
+            .range(page * PAGE, (page + 1) * PAGE - 1);
+          if (error) throw error;
+          if (data?.length) rows.push(...(data as any[]));
+          if (!data || data.length < PAGE) break;
+          page++;
+        }
+      }
+      const seen = new Set<string>();
+      const phones: ManualPhoneNumber[] = [];
+      for (const r of rows) {
+        let phone = (r.phone || '').trim();
+        // Back-compat: emails stored as phone:+...
+        if (!phone && r.email?.startsWith('phone:')) phone = r.email.slice(6).trim();
+        if (!phone) continue;
+        const key = phone.replace(/\D/g, '');
+        if (key.length < 7 || seen.has(key)) continue;
+        seen.add(key);
+        const name = [r.first_name, r.last_name].filter(Boolean).join(' ') || r.company || undefined;
+        phones.push({ id: `group_${key}`, phone, name });
+      }
+      setGroupMemberPhones(phones);
+    } catch (e: any) {
+      toast({ title: 'Could not load group', description: e?.message || 'Failed to load phones', variant: 'destructive' });
+    } finally {
+      setLoadingGroups(false);
+    }
+  };
+
+  const toggleGroup = (groupId: string) => {
+    setSelectedGroupIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      void loadPhonesFromGroups([...next]);
+      return next;
+    });
+  };
+
   const activePhoneServices = phoneConnections || [];
   const activePhoneService = selectedPhoneService 
     ? activePhoneServices.find(s => s.id === selectedPhoneService)
@@ -87,8 +189,8 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
   const companiesWithPhone = companies?.filter(c => c.company_phone) || [];
   const selectedCompaniesData = companiesWithPhone.filter(c => selectedCompanies.has(c.id));
   
-  // Calculate total recipients (companies + manual phones)
-  const totalRecipients = selectedCompanies.size + manualPhones.length;
+  // Calculate total recipients (companies + manual phones + group phones)
+  const totalRecipients = selectedCompanies.size + manualPhones.length + groupMemberPhones.length;
 
   const toggleCompany = (companyId: string) => {
     setSelectedCompanies(prev => {
@@ -369,36 +471,54 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
           failed_count: 0,
           opened_count: 0,
           sender_connection_id: activePhoneService.id, // Link to phone service
+          tags: ['phone_sms'],
         })
         .select('id')
         .single();
 
       if (campaignError) throw campaignError;
 
-      // Prepare recipients from companies and manual phones
-      // NOTE: email_campaign_recipients has no company_id column — including it
-      // makes the insert fail ("Could not find the 'company_id' column…").
-      const recipients = [
-        ...selectedCompaniesData.map(company => ({
+      // Dedupe phones across companies / manual / groups
+      const seen = new Set<string>();
+      const recipients: any[] = [];
+      const pushPhone = (phone: string, name: string, perMsg?: string) => {
+        const key = phone.replace(/\D/g, '');
+        if (key.length < 7 || seen.has(key)) return;
+        seen.add(key);
+        const body = perMsg || message;
+        recipients.push({
           campaign_id: campaign.id,
-          email: `phone:${company.company_phone}`, // Store phone in email field with prefix
-          name: company.name,
-          status: 'pending' as const,
-        })),
-        ...manualPhones.map(phone => ({
-          campaign_id: campaign.id,
-          email: `phone:${phone.phone}`,
-          name: phone.name || 'Manual Entry',
-          status: 'pending' as const,
-          // Per-recipient SMS text where the CSV provided one (falls back to the campaign message at send).
-          ...(phone.message ? { personalized_body_text: phone.message } : {}),
-        })),
-      ];
+          email: `phone:${phone}`,
+          name: name || 'Contact',
+          status: 'pending',
+          personalized_subject: `Phone Campaign: ${campaignName}`,
+          personalized_body_text: body,
+          personalized_body_html: `<p>${body.replace(/\n/g, '<br>')}</p>`,
+        });
+      };
 
-      // Store phone recipients - use email field to store phone number with prefix
+      for (const company of selectedCompaniesData) {
+        if (company.company_phone) pushPhone(company.company_phone, company.name);
+      }
+      for (const phone of manualPhones) {
+        pushPhone(phone.phone, phone.name || 'Manual Entry', phone.message);
+      }
+      for (const phone of groupMemberPhones) {
+        pushPhone(phone.phone, phone.name || 'Group member');
+      }
+
+      if (recipients.length === 0) {
+        throw new Error('No valid phone numbers to add');
+      }
+
+      // Update total if dedupe reduced count
+      if (recipients.length !== totalRecipients) {
+        await supabase.from('email_campaigns').update({ total_recipients: recipients.length }).eq('id', campaign.id);
+      }
+
       const { error: recipientsError } = await supabase
         .from('email_campaign_recipients')
-        .insert(recipients as any);
+        .insert(recipients);
 
       if (recipientsError) throw recipientsError;
 
@@ -406,7 +526,7 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
       
       toast({
         title: 'Success',
-        description: `Phone campaign "${campaignName}" created with ${totalRecipients} recipients`,
+        description: `Phone campaign "${campaignName}" created with ${recipients.length} recipients. Start it from Campaigns to send SMS.`,
       });
 
       // Reset form
@@ -414,9 +534,11 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
       setMessage('');
       setSelectedCompanies(new Set());
       setManualPhones([]);
+      setGroupMemberPhones([]);
+      setSelectedGroupIds(new Set());
       setNewPhoneNumber('');
       setNewPhoneName('');
-      setActiveTab('companies');
+      setActiveTab('groups');
       onOpenChange(false);
     } catch (error: any) {
       console.error('Error creating phone campaign:', error);
@@ -591,17 +713,110 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
           )}
 
           {/* Recipients Selection Tabs */}
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'companies' | 'manual')}>
-            <TabsList className="grid w-full grid-cols-2">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'companies' | 'manual' | 'groups')}>
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="groups">
+                <FolderOpen className="h-4 w-4 mr-2" />
+                Groups ({groupMemberPhones.length})
+              </TabsTrigger>
               <TabsTrigger value="companies">
                 <Users className="h-4 w-4 mr-2" />
                 Companies ({selectedCompanies.size})
               </TabsTrigger>
               <TabsTrigger value="manual">
                 <Phone className="h-4 w-4 mr-2" />
-                Manual Entry ({manualPhones.length})
+                Manual ({manualPhones.length})
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="groups" className="space-y-3 mt-4">
+              <div className="flex items-center justify-between gap-2">
+                <Label>Add from phone recipient groups</Label>
+                <Button variant="link" size="sm" className="h-auto p-0" asChild>
+                  <Link to="/recipient-groups">Manage groups</Link>
+                </Button>
+              </div>
+              {loadingGroups && (
+                <p className="text-sm text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading members…
+                </p>
+              )}
+              <ScrollArea className="h-[240px] border rounded-md p-3">
+                <div className="space-y-2">
+                  {(phoneGroups || []).length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No phone groups yet. Create one under Recipient Groups → paste/import phones, or save numbers from this dialog.
+                    </p>
+                  )}
+                  {(phoneGroups || []).map((g: any) => (
+                    <label key={g.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted cursor-pointer">
+                      <Checkbox
+                        checked={selectedGroupIds.has(g.id)}
+                        onCheckedChange={() => toggleGroup(g.id)}
+                        disabled={isCreating}
+                      />
+                      <span className="flex-1 truncate">{g.name}</span>
+                      <Badge variant="secondary">{g.phoneCount} phones</Badge>
+                    </label>
+                  ))}
+                </div>
+              </ScrollArea>
+              {groupMemberPhones.length > 0 && (
+                <p className="text-xs text-muted-foreground">{groupMemberPhones.length} unique phone numbers from selected groups.</p>
+              )}
+
+              <div className="rounded-lg border p-3 space-y-2 bg-muted/20">
+                <Label className="text-sm">Save current manual numbers as a phone group</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Group name e.g. Hospitality UK phones"
+                    value={saveAsGroupName}
+                    onChange={(e) => setSaveAsGroupName(e.target.value)}
+                    disabled={isSavingGroup || manualPhones.length === 0}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSavingGroup || !saveAsGroupName.trim() || manualPhones.length === 0}
+                    onClick={async () => {
+                      setIsSavingGroup(true);
+                      try {
+                        const { data: { user } } = await supabase.auth.getUser();
+                        if (!user) throw new Error('Sign in required');
+                        const { groupId, count } = await createRecipientGroupWithMembers(supabase, {
+                          userId: user.id,
+                          name: saveAsGroupName.trim(),
+                          description: 'Phone/SMS recipient group',
+                          channel: 'phone',
+                          members: manualPhones.map((p) => ({
+                            email: null,
+                            phone: p.phone,
+                            first_name: p.name || null,
+                            last_name: null,
+                            company: null,
+                            person_id: null,
+                          })),
+                        });
+                        queryClient.invalidateQueries({ queryKey: ['phone-recipient-groups'] });
+                        queryClient.invalidateQueries({ queryKey: ['recipient-groups'] });
+                        queryClient.invalidateQueries({ queryKey: ['recipient-groups-page'] });
+                        setSelectedGroupIds((prev) => new Set([...prev, groupId]));
+                        await loadPhonesFromGroups([...selectedGroupIds, groupId]);
+                        setSaveAsGroupName('');
+                        toast({ title: 'Phone group saved', description: `${count} numbers in "${saveAsGroupName.trim()}".` });
+                      } catch (e: any) {
+                        toast({ title: 'Save failed', description: e?.message || 'Could not save group', variant: 'destructive' });
+                      } finally {
+                        setIsSavingGroup(false);
+                      }
+                    }}
+                  >
+                    {isSavingGroup ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Uses numbers from the Manual tab ({manualPhones.length}).</p>
+              </div>
+            </TabsContent>
 
             <TabsContent value="companies" className="space-y-2 mt-4">
               <div className="flex items-center justify-between">
@@ -750,10 +965,19 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
         <div className="flex items-center justify-between pt-4 border-t">
           <div className="text-sm text-muted-foreground">
             {totalRecipients} recipient{totalRecipients !== 1 ? 's' : ''} total
-            {selectedCompanies.size > 0 && ` (${selectedCompanies.size} companies`}
-            {selectedCompanies.size > 0 && manualPhones.length > 0 && ', '}
-            {manualPhones.length > 0 && `${manualPhones.length} manual`}
-            {selectedCompanies.size > 0 && ')'}
+            {(selectedCompanies.size > 0 || manualPhones.length > 0 || groupMemberPhones.length > 0) && (
+              <>
+                {' '}(
+                {[
+                  selectedCompanies.size > 0 ? `${selectedCompanies.size} companies` : null,
+                  manualPhones.length > 0 ? `${manualPhones.length} manual` : null,
+                  groupMemberPhones.length > 0 ? `${groupMemberPhones.length} from groups` : null,
+                ]
+                  .filter(Boolean)
+                  .join(', ')}
+                )
+              </>
+            )}
           </div>
           <div className="flex gap-2">
             <Button
