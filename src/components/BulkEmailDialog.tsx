@@ -4126,9 +4126,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             {headerImageUrl ? (
               <div className="rounded border p-2 bg-muted/30">
                 <p className="text-xs text-muted-foreground mb-1">
-                  Banner preview (sent email shows the full image, not cropped):
+                  Banner preview (full image, scaled to width — not cropped):
                 </p>
-                <img src={headerImageUrl} alt="" className="w-full max-h-40 object-contain rounded bg-slate-900" onError={() => {}} />
+                <img src={headerImageUrl} alt="" className="w-full h-auto max-w-full rounded bg-slate-900" onError={() => {}} />
               </div>
             ) : null}
           </div>

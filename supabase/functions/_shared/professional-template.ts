@@ -22,10 +22,15 @@ export interface EmailTemplateProps {
   newsletterFooterHtml?: string;
 }
 
-/** Header image styles: banners show fully; logos keep a fixed cover crop. */
+/**
+ * Header image styles.
+ * Campaign banners: full width + natural height so the whole graphic is visible.
+ * (max-height + object-fit:contain was still clipping wide banners in clients/preview.)
+ * Logos: fixed cover crop.
+ */
 function headerImgStyle(headerBanner?: boolean, coverHeight = 180): string {
   if (headerBanner) {
-    return 'width:100%;height:auto;max-height:320px;display:block;object-fit:contain;background:#0f172a;';
+    return 'width:100%;max-width:100%;height:auto;display:block;border:0;outline:none;';
   }
   return `width:100%;height:${coverHeight}px;display:block;object-fit:cover;`;
 }
@@ -33,11 +38,11 @@ function headerImgStyle(headerBanner?: boolean, coverHeight = 180): string {
 function headerImgCss(headerBanner?: boolean, coverHeight = 180): string {
   if (headerBanner) {
     return `width: 100%;
+      max-width: 100%;
       height: auto;
-      max-height: 320px;
       display: block;
-      object-fit: contain;
-      background: #0f172a;`;
+      border: 0;
+      outline: none;`;
   }
   return `width: 100%;
       height: ${coverHeight}px;
@@ -169,6 +174,7 @@ export function renderProfessionalTemplate({
       background-color: #f5f5f5;
     }
     .email-container {
+      width: 100%;
       max-width: 600px;
       margin: 12px auto;
       background-color: #ffffff;
@@ -177,9 +183,10 @@ export function renderProfessionalTemplate({
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     .email-header {
-      background: linear-gradient(135deg, ${brandColor} 0%, ${brandColor}dd 100%);
+      background: ${headerBanner && logoUrl ? '#0f172a' : `linear-gradient(135deg, ${brandColor} 0%, ${brandColor}dd 100%)`};
       text-align: center;
       overflow: hidden;
+      line-height: 0;
     }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 20px 28px; }
@@ -194,6 +201,7 @@ export function renderProfessionalTemplate({
     .email-header .brand-name-bar {
       background: rgba(0,0,0,0.25);
       padding: 8px 28px;
+      line-height: 1.4;
     }
     .email-body {
       padding: 18px 24px;

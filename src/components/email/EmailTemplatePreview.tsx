@@ -8,8 +8,8 @@ interface EmailTemplatePreviewProps {
   brandColor: string;
   logoUrl?: string;
   /**
-   * Campaign header banner: show the full image (contain) instead of cropping
-   * with a fixed-height cover box (logos keep cover).
+   * Campaign header banner: scale to full email width at natural aspect ratio
+   * (no crop). Logos keep a fixed-height cover box.
    */
   headerBanner?: boolean;
   companyName?: string;
@@ -179,12 +179,13 @@ export function EmailTemplatePreview({
   const headerImgStyle = (coverHeight: number): React.CSSProperties =>
     headerBanner
       ? {
+          // Full-bleed campaign banner: scale to email width, keep natural
+          // aspect ratio so nothing is cropped (object-fit/max-height crop).
           width: '100%',
+          maxWidth: '100%',
           height: 'auto',
-          maxHeight: 320,
           display: 'block',
-          objectFit: 'contain',
-          background: '#0f172a',
+          verticalAlign: 'middle' as const,
         }
       : {
           width: '100%',
@@ -194,10 +195,17 @@ export function EmailTemplatePreview({
         };
 
   const renderHeader = (bg: string, nameColor: string, overlayBg?: string, coverHeight = 180) => (
-    <div style={{ background: headerBanner && logoUrl ? '#0f172a' : bg, padding: logoUrl ? '0' : '24px 28px', textAlign: 'center' as const, overflow: 'hidden' }}>
+    <div style={{
+      background: headerBanner && logoUrl ? '#0f172a' : bg,
+      padding: logoUrl ? '0' : '24px 28px',
+      textAlign: 'center' as const,
+      // Cover logos may overflow a fixed crop box; banners must not be clipped.
+      overflow: headerBanner ? 'visible' : 'hidden',
+      lineHeight: 0,
+    }}>
       {logoUrl && <img src={logoUrl} alt="" style={headerImgStyle(coverHeight)} />}
       {displayHeaderName && (
-        <div style={{ background: overlayBg || 'transparent', padding: '8px 28px' }}>
+        <div style={{ background: overlayBg || 'transparent', padding: '8px 28px', lineHeight: 1.4 }}>
           <span style={{ color: nameColor, fontSize: '22px', fontWeight: 600, margin: 0 }}>{displayHeaderName}</span>
         </div>
       )}
@@ -241,9 +249,12 @@ export function EmailTemplatePreview({
     );
   };
 
+  const shellOverflow = headerBanner ? 'visible' : 'hidden';
+  const headerOverflow = headerBanner ? 'visible' : 'hidden';
+
   // ── Professional ──
   const renderProfessional = () => (
-    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: '600px', margin: '0 auto', backgroundColor: '#ffffff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', width: '100%', maxWidth: '600px', margin: '0 auto', backgroundColor: '#ffffff', borderRadius: '8px', overflow: shellOverflow, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
       {renderHeader(`linear-gradient(135deg, ${brandColor} 0%, ${brandColor}dd 100%)`, '#ffffff', logoUrl ? 'rgba(0,0,0,0.25)' : undefined)}
       <div style={{ padding: '24px 32px' }}>
         {renderBody('#333333')}
@@ -255,11 +266,11 @@ export function EmailTemplatePreview({
 
   // ── Minimal ──
   const renderMinimal = () => (
-    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', width: '100%', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
       {(logoUrl || displayHeaderName) && (
-        <div style={{ borderBottom: '1px solid #e5e7eb', marginBottom: '24px', overflow: 'hidden', textAlign: 'center' as const, padding: logoUrl ? '0' : '12px 0 16px 0' }}>
+        <div style={{ borderBottom: '1px solid #e5e7eb', marginBottom: '24px', overflow: headerOverflow, textAlign: 'center' as const, padding: logoUrl ? '0' : '12px 0 16px 0', lineHeight: logoUrl ? 0 : undefined }}>
           {logoUrl && <img src={logoUrl} alt="" style={headerImgStyle(160)} />}
-          {displayHeaderName && <div style={{ padding: '6px 0' }}><span style={{ fontSize: '18px', fontWeight: 600, color: '#111827' }}>{displayHeaderName}</span></div>}
+          {displayHeaderName && <div style={{ padding: '6px 0', lineHeight: 1.4 }}><span style={{ fontSize: '18px', fontWeight: 600, color: '#111827' }}>{displayHeaderName}</span></div>}
         </div>
       )}
       {renderBody('#374151')}
@@ -270,10 +281,10 @@ export function EmailTemplatePreview({
 
   // ── Modern ──
   const renderModern = () => (
-    <div style={{ fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif', maxWidth: '640px', margin: '16px auto', backgroundColor: '#ffffff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-      <div style={{ background: `linear-gradient(135deg, ${brandColor}20 0%, ${brandColor}10 100%)`, padding: logoUrl ? '0' : '24px 28px', borderTop: `4px solid ${brandColor}`, textAlign: 'center' as const, overflow: 'hidden' }}>
+    <div style={{ fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif', width: '100%', maxWidth: '640px', margin: '16px auto', backgroundColor: '#ffffff', borderRadius: '12px', overflow: shellOverflow, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+      <div style={{ background: `linear-gradient(135deg, ${brandColor}20 0%, ${brandColor}10 100%)`, padding: logoUrl ? '0' : '24px 28px', borderTop: `4px solid ${brandColor}`, textAlign: 'center' as const, overflow: headerOverflow, lineHeight: logoUrl ? 0 : undefined }}>
         {logoUrl && <img src={logoUrl} alt="" style={headerImgStyle(180)} />}
-        {displayHeaderName && <div style={{ padding: '8px 28px' }}><span style={{ color: brandColor, fontSize: '22px', fontWeight: 700 }}>{displayHeaderName}</span></div>}
+        {displayHeaderName && <div style={{ padding: '8px 28px', lineHeight: 1.4 }}><span style={{ color: brandColor, fontSize: '22px', fontWeight: 700 }}>{displayHeaderName}</span></div>}
       </div>
       <div style={{ padding: '24px 32px' }}>
         {renderBody('#334155')}
@@ -285,11 +296,11 @@ export function EmailTemplatePreview({
 
   // ── Creative ──
   const renderCreative = () => (
-    <div style={{ fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif', maxWidth: '620px', margin: '20px auto', backgroundColor: '#ffffff', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
-      <div style={{ background: `linear-gradient(135deg, ${brandColor} 0%, #6366f1 50%, #8b5cf6 100%)`, padding: logoUrl ? '0' : '28px 32px', textAlign: 'center' as const, overflow: 'hidden' }}>
+    <div style={{ fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif', width: '100%', maxWidth: '620px', margin: '20px auto', backgroundColor: '#ffffff', borderRadius: '20px', overflow: shellOverflow, boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
+      <div style={{ background: `linear-gradient(135deg, ${brandColor} 0%, #6366f1 50%, #8b5cf6 100%)`, padding: logoUrl ? '0' : '28px 32px', textAlign: 'center' as const, overflow: headerOverflow, lineHeight: logoUrl ? 0 : undefined }}>
         {logoUrl && <img src={logoUrl} alt="" style={headerImgStyle(200)} />}
         {displayHeaderName && (
-          <div style={{ background: logoUrl ? 'rgba(0,0,0,0.3)' : 'transparent', padding: '10px 32px' }}>
+          <div style={{ background: logoUrl ? 'rgba(0,0,0,0.3)' : 'transparent', padding: '10px 32px', lineHeight: 1.4 }}>
             <span style={{ color: '#ffffff', fontSize: '24px', fontWeight: 700, textShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>{displayHeaderName}</span>
           </div>
         )}
@@ -304,11 +315,11 @@ export function EmailTemplatePreview({
 
   // ── Corporate ──
   const renderCorporate = () => (
-    <div style={{ fontFamily: 'Georgia, "Times New Roman", serif', maxWidth: '600px', margin: '24px auto', backgroundColor: '#ffffff', border: '1px solid #e0e0e0' }}>
-      <div style={{ background: '#1e3a5f', padding: logoUrl ? '0' : '24px 32px', textAlign: 'center' as const, overflow: 'hidden' }}>
+    <div style={{ fontFamily: 'Georgia, "Times New Roman", serif', width: '100%', maxWidth: '600px', margin: '24px auto', backgroundColor: '#ffffff', border: '1px solid #e0e0e0' }}>
+      <div style={{ background: '#1e3a5f', padding: logoUrl ? '0' : '24px 32px', textAlign: 'center' as const, overflow: headerOverflow, lineHeight: logoUrl ? 0 : undefined }}>
         {logoUrl && <img src={logoUrl} alt="" style={headerImgStyle(180)} />}
         {displayHeaderName && (
-          <div style={{ background: logoUrl ? 'rgba(0,0,0,0.3)' : 'transparent', padding: '8px 32px' }}>
+          <div style={{ background: logoUrl ? 'rgba(0,0,0,0.3)' : 'transparent', padding: '8px 32px', lineHeight: 1.4 }}>
             <span style={{ color: '#ffffff', fontSize: '22px', fontWeight: 600, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', letterSpacing: '0.02em' }}>{displayHeaderName}</span>
           </div>
         )}
@@ -323,11 +334,11 @@ export function EmailTemplatePreview({
 
   // ── Bold ──
   const renderBold = () => (
-    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: '600px', margin: '20px auto', backgroundColor: '#18181b', borderRadius: '4px', overflow: 'hidden' }}>
-      <div style={{ padding: logoUrl ? '0' : '24px 28px', borderBottom: `4px solid ${brandColor}`, textAlign: 'center' as const, overflow: 'hidden' }}>
+    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', width: '100%', maxWidth: '600px', margin: '20px auto', backgroundColor: '#18181b', borderRadius: '4px', overflow: shellOverflow }}>
+      <div style={{ padding: logoUrl ? '0' : '24px 28px', borderBottom: `4px solid ${brandColor}`, textAlign: 'center' as const, overflow: headerOverflow, lineHeight: logoUrl ? 0 : undefined }}>
         {logoUrl && <img src={logoUrl} alt="" style={headerImgStyle(180)} />}
         {displayHeaderName && (
-          <div style={{ background: logoUrl ? 'rgba(0,0,0,0.5)' : 'transparent', padding: '8px 28px' }}>
+          <div style={{ background: logoUrl ? 'rgba(0,0,0,0.5)' : 'transparent', padding: '8px 28px', lineHeight: 1.4 }}>
             <span style={{ color: '#ffffff', fontSize: '26px', fontWeight: 800, letterSpacing: '-0.02em' }}>{displayHeaderName}</span>
           </div>
         )}
@@ -342,11 +353,11 @@ export function EmailTemplatePreview({
 
   // ── Elegant ──
   const renderElegant = () => (
-    <div style={{ fontFamily: 'Georgia, "Times New Roman", serif', maxWidth: '580px', margin: '28px auto', backgroundColor: '#ffffff', border: '1px solid #e8e4df', boxShadow: '0 2px 12px rgba(107,91,79,0.08)' }}>
-      <div style={{ borderBottom: '1px solid #e8e4df', padding: logoUrl ? '0' : '28px 32px', textAlign: 'center' as const, overflow: 'hidden' }}>
+    <div style={{ fontFamily: 'Georgia, "Times New Roman", serif', width: '100%', maxWidth: '580px', margin: '28px auto', backgroundColor: '#ffffff', border: '1px solid #e8e4df', boxShadow: '0 2px 12px rgba(107,91,79,0.08)' }}>
+      <div style={{ borderBottom: '1px solid #e8e4df', padding: logoUrl ? '0' : '28px 32px', textAlign: 'center' as const, overflow: headerOverflow, lineHeight: logoUrl ? 0 : undefined }}>
         {logoUrl && <img src={logoUrl} alt="" style={headerImgStyle(180)} />}
         {displayHeaderName && (
-          <div style={{ padding: '8px 32px', background: '#faf9f7' }}>
+          <div style={{ padding: '8px 32px', background: '#faf9f7', lineHeight: 1.4 }}>
             <span style={{ fontSize: '22px', fontWeight: 600, color: '#6b5b4f', letterSpacing: '0.04em' }}>{displayHeaderName}</span>
           </div>
         )}
