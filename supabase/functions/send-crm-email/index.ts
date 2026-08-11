@@ -9,8 +9,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Resend inbound email for receiving replies — read from env, never hardcoded
-const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || '';
+// Resend inbound email for receiving replies
+const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || 'leadgenie@eldapgraaa.resend.app';
 
 function parseResendError(status: number, bodyText: string): string {
   try {
@@ -33,6 +33,8 @@ interface EmailRequest {
   bodyHtml?: string; // HTML content
   bodyText?: string; // Plain text version
   companyId?: string;
+  /** Prefer this when replying from Conversations — links the outbound to the open sequence thread */
+  companySequenceId?: string;
   contactId?: string;
   sender?: 'gmail' | 'gmail_direct' | 'resend' | 'smtp' | 'sendgrid';
   senderConnectionId?: string; // Specific connection ID to use (optional, will query if not provided)
@@ -102,7 +104,7 @@ serve(async (req) => {
       throw new Error('Invalid JSON in request body');
     }
     
-    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, senderConnectionId, sender_profile_id: requestSenderProfileId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, useInboundReplyTo = true, attachments = [] } = emailRequest;
+    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, companySequenceId, contactId, senderConnectionId, sender_profile_id: requestSenderProfileId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, useInboundReplyTo = true, attachments = [] } = emailRequest;
     
     // Fetch user profile for signature and business email
     const { data: userProfile } = await supabaseClient
@@ -773,10 +775,26 @@ serve(async (req) => {
       }
     }
 
-    // Check if company has an active sequence
+    // Check if company has an active sequence (or use explicit companySequenceId from Conversations)
     let linkedSequenceId: string | null = null;
-    
-    if (companyId) {
+
+    if (companySequenceId) {
+      // Conversations passes the company_sequences.id directly — don't treat it as company_id
+      const { data: seqById, error: seqByIdError } = await supabaseClient
+        .from('company_sequences')
+        .select('id, status, company_id')
+        .eq('id', companySequenceId)
+        .maybeSingle();
+      if (!seqByIdError && seqById) {
+        linkedSequenceId = seqById.id;
+        if (!companyId && seqById.company_id) companyId = seqById.company_id;
+        console.log(`Linking email to explicit sequence ${linkedSequenceId}`);
+      } else {
+        console.warn(`companySequenceId ${companySequenceId} not found; falling back to company lookup`);
+      }
+    }
+
+    if (!linkedSequenceId && companyId) {
       console.log(`Checking for active sequences for company ${companyId}`);
       const { data: activeSequences, error: seqError } = await supabaseClient
         .from('company_sequences')

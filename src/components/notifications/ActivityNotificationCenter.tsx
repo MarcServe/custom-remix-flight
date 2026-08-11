@@ -1,28 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-
-const STORAGE_KEY = 'activity-notifications-read';
-
-function getStoredReadIds(): Set<string> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw) as string[];
-    return new Set(Array.isArray(parsed) ? parsed : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function setStoredReadIds(ids: Set<string>) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
-  } catch {
-    /* ignore */
-  }
-}
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -36,6 +16,33 @@ import {
 } from '@/components/ui/popover';
 import { NotificationBadge } from './NotificationBadge';
 
+const STORAGE_KEY_PREFIX = 'activity-notifications-read';
+
+function storageKeyForUser(userId?: string | null) {
+  return userId ? `${STORAGE_KEY_PREFIX}:${userId}` : STORAGE_KEY_PREFIX;
+}
+
+function getStoredReadIds(userId?: string | null): Set<string> {
+  try {
+    const raw = localStorage.getItem(storageKeyForUser(userId));
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as string[];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function setStoredReadIds(ids: Set<string>, userId?: string | null) {
+  try {
+    // Cap growth so quota failures don't leave the badge stuck forever
+    const pruned = [...ids].slice(-200);
+    localStorage.setItem(storageKeyForUser(userId), JSON.stringify(pruned));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
 interface ActivityNotification {
   id: string;
   type: 'opened' | 'clicked' | 'replied' | 'bounced';
@@ -48,29 +55,34 @@ interface ActivityNotification {
 }
 
 export function ActivityNotificationCenter() {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const [readIds, setReadIds] = useState<Set<string>>(getStoredReadIds);
+  const [readIds, setReadIds] = useState<Set<string>>(() => getStoredReadIds(user?.id));
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setReadIds(getStoredReadIds(user?.id));
+  }, [user?.id]);
 
   const markAsRead = useCallback((id: string) => {
     setReadIds((prev) => {
       if (prev.has(id)) return prev;
       const next = new Set(prev);
       next.add(id);
-      setStoredReadIds(next);
+      setStoredReadIds(next, user?.id);
       return next;
     });
-  }, []);
+  }, [user?.id]);
 
   const markAllAsReadInState = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
     setReadIds((prev) => {
       const next = new Set(prev);
       ids.forEach((id) => next.add(id));
-      setStoredReadIds(next);
+      setStoredReadIds(next, user?.id);
       return next;
     });
-  }, []);
+  }, [user?.id]);
 
   const { data: notifications = [], refetch } = useQuery({
     queryKey: ['activity-notifications'],
@@ -90,9 +102,8 @@ export function ActivityNotificationCenter() {
             companies(name)
           )
         `)
-        .not('opened_at', 'is', null)
-        .or('replied_at.not.is.null,status.eq.bounced,metadata->>clicked.eq.true')
-        .order('opened_at', { ascending: false })
+        .or('replied_at.not.is.null,status.eq.bounced,metadata->>clicked.eq.true,opened_at.not.is.null')
+        .order('sent_at', { ascending: false })
         .limit(20);
 
       if (error) throw error;
@@ -100,17 +111,17 @@ export function ActivityNotificationCenter() {
       // Transform to notification format
       const notifs: ActivityNotification[] = (data || []).map((activity: any) => {
         let type: 'opened' | 'clicked' | 'replied' | 'bounced' = 'opened';
-        let timestamp = activity.opened_at;
+        let timestamp = activity.opened_at || activity.replied_at || new Date().toISOString();
 
         if (activity.replied_at) {
           type = 'replied';
           timestamp = activity.replied_at;
         } else if (activity.status === 'bounced') {
           type = 'bounced';
-          timestamp = activity.metadata?.bounced_at || activity.opened_at;
+          timestamp = activity.metadata?.bounced_at || activity.opened_at || timestamp;
         } else if (activity.metadata?.clicked) {
           type = 'clicked';
-          timestamp = activity.metadata?.last_click || activity.opened_at;
+          timestamp = activity.metadata?.last_click || activity.opened_at || timestamp;
         }
 
         return {
@@ -129,6 +140,13 @@ export function ActivityNotificationCenter() {
     },
     refetchInterval: 30000, // Refresh every 30 seconds
   });
+
+  // If the panel is already open when data arrives, mark the listed items read
+  useEffect(() => {
+    if (open && notifications.length > 0) {
+      markAllAsReadInState(notifications.map((n) => n.id));
+    }
+  }, [open, notifications, markAllAsReadInState]);
 
   const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length;
 
@@ -178,10 +196,8 @@ export function ActivityNotificationCenter() {
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
-    // Treat "viewed the panel and closed it" as read, like most notification
-    // centers — otherwise the badge only clears on an explicit click, which
-    // looks stuck if you just glance at the list without clicking each item.
-    if (!next && notifications.length > 0) {
+    // Mark currently listed notifications read when opening OR closing the panel
+    if (notifications.length > 0) {
       markAllAsReadInState(notifications.map((n) => n.id));
     }
   };
@@ -224,12 +240,11 @@ export function ActivityNotificationCenter() {
               )}
             </div>
           </CardHeader>
-          <CardContent className="p-0 flex-1 min-h-0 overflow-hidden">
-            <ScrollArea className="h-[min(400px,calc(100vh-14rem))] max-h-[50vh]">
+          <CardContent className="p-0 flex-1 min-h-0">
+            <ScrollArea className="h-[min(440px,calc(100vh-12rem))]">
               {notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Bell className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-sm text-muted-foreground">No recent activity</p>
+                <div className="p-6 text-center text-muted-foreground text-sm">
+                  No recent activity
                 </div>
               ) : (
                 <div className="divide-y">
@@ -238,37 +253,27 @@ export function ActivityNotificationCenter() {
                       key={notif.id}
                       type="button"
                       onClick={() => handleNotificationClick(notif)}
-                      className={`w-full text-left p-4 hover:bg-muted/50 transition-colors cursor-pointer ${
-                        !readIds.has(notif.id) ? 'bg-primary/5' : ''
+                      className={`w-full text-left p-4 hover:bg-muted/50 transition-colors ${
+                        !readIds.has(notif.id) ? 'bg-muted/30' : ''
                       }`}
                     >
-                      <div className="flex items-start gap-3">
-                        <div className="mt-1 shrink-0">{getIcon(notif.type)}</div>
+                      <div className="flex gap-3">
+                        <div className="mt-0.5">{getIcon(notif.type)}</div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <p className="font-medium text-sm">{getLabel(notif.type)}</p>
+                            <span className="font-medium text-sm truncate">{notif.companyName}</span>
                             {!readIds.has(notif.id) && (
-                              <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
+                              <Badge variant="default" className="h-5 text-[10px] px-1.5">New</Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground truncate" title={notif.companyName}>
-                            {notif.companyName}
-                          </p>
+                          <p className="text-xs text-muted-foreground mb-1">{getLabel(notif.type)}</p>
                           {notif.subject && (
-                            <p
-                              className="text-xs text-muted-foreground mt-1 line-clamp-3 break-words"
-                              title={notif.subject}
-                            >
-                              "{notif.subject}"
-                            </p>
+                            <p className="text-xs truncate text-muted-foreground/80">{notif.subject}</p>
                           )}
-                          {notif.type === 'clicked' && notif.metadata?.clicked_links?.[0] && (
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2 break-all" title={notif.metadata?.clicked_links?.[0]}>
-                              {notif.metadata.clicked_links[0]}
-                            </p>
-                          )}
-                          <p className="text-xs text-muted-foreground mt-2">
-                            {formatDistanceToNow(new Date(notif.timestamp), { addSuffix: true })}
+                          <p className="text-[11px] text-muted-foreground mt-1">
+                            {notif.timestamp
+                              ? formatDistanceToNow(new Date(notif.timestamp), { addSuffix: true })
+                              : ''}
                           </p>
                         </div>
                       </div>

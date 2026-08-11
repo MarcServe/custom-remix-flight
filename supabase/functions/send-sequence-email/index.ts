@@ -52,16 +52,64 @@ serve(async (req) => {
       throw new Error(`Step ${stepNumber} not found`);
     }
 
-    // Fetch contacts for this company
-    const { data: contacts, error: contactsError } = await supabase
+    // Fetch contacts for this company. Campaign enrollments often only create
+    // `people` rows — ensure a verified contacts row exists so auto-sequence can send.
+    let { data: contacts, error: contactsError } = await supabase
       .from('contacts')
       .select('*')
       .eq('company_id', companySequence.company_id)
       .eq('email_verified', true)
       .limit(1);
 
-    if (contactsError || !contacts || contacts.length === 0) {
-      throw new Error('No verified contacts found for this company');
+    if (contactsError) {
+      throw new Error(`Failed to load contacts: ${contactsError.message}`);
+    }
+
+    if (!contacts || contacts.length === 0) {
+      // Prefer person linked via campaign recipient / prior activity metadata
+      const { data: people } = await supabase
+        .from('people')
+        .select('id, email, first_name, last_name, company_id')
+        .eq('company_id', companySequence.company_id)
+        .not('email', 'is', null)
+        .limit(1);
+
+      const person = people?.[0];
+      if (!person?.email) {
+        throw new Error('No verified contacts found for this company');
+      }
+
+      const fullName = [person.first_name, person.last_name].filter(Boolean).join(' ') || person.email;
+      const { data: existingContact } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('company_id', companySequence.company_id)
+        .eq('email', person.email)
+        .maybeSingle();
+
+      if (existingContact) {
+        if (!existingContact.email_verified) {
+          await supabase.from('contacts').update({ email_verified: true }).eq('id', existingContact.id);
+          existingContact.email_verified = true;
+        }
+        contacts = [existingContact];
+      } else {
+        const { data: created, error: createErr } = await supabase
+          .from('contacts')
+          .insert({
+            company_id: companySequence.company_id,
+            name: fullName,
+            email: person.email,
+            email_verified: true,
+            is_primary_contact: true,
+          })
+          .select('*')
+          .single();
+        if (createErr || !created) {
+          throw new Error(`No verified contacts found for this company (${createErr?.message || 'create failed'})`);
+        }
+        contacts = [created];
+      }
     }
 
     const contact = contacts[0];
@@ -342,7 +390,20 @@ serve(async (req) => {
       externalMessageId = `simulated-${crypto.randomUUID()}`;
     }
 
-    // Record email activity
+    // Record email activity — include to_email so inbound matching can find the sequence
+    const activityMetadata = {
+      to: contact.email,
+      to_email: contact.email,
+      recipient_email: contact.email,
+      from: fromEmail,
+      provider: emailProvider,
+      sending_method: emailProvider === 'sendgrid' ? 'api' : 'api',
+      tracking_enabled: true,
+      can_track_opens: true,
+      can_track_clicks: true,
+      can_track_replies: true,
+    };
+
     const { error: activityError } = await supabase
       .from('email_activities')
       .insert({
@@ -354,20 +415,35 @@ serve(async (req) => {
         status: 'sent',
         sent_at: new Date().toISOString(),
         external_message_id: externalMessageId,
-        metadata: {
-          to: contact.email,
-          from: fromEmail,
-          provider: emailProvider,
-          sending_method: emailProvider === 'sendgrid' ? 'api' : 'api',
-          tracking_enabled: true,
-          can_track_opens: true,
-          can_track_clicks: true,
-          can_track_replies: emailProvider === 'sendgrid',
-        },
+        thread_id: externalMessageId,
+        metadata: activityMetadata,
       });
 
     if (activityError) {
       console.error('Failed to record email activity:', activityError);
+    }
+
+    // Also write email_threads so Conversations can show the outbound sequence email
+    try {
+      const { error: threadError } = await supabase
+        .from('email_threads')
+        .insert({
+          company_sequence_id: companySequenceId,
+          from_email: fromEmail,
+          to_email: contact.email,
+          subject: emailStep.subject,
+          body_text: emailStep.body,
+          body_html: null,
+          direction: 'outbound',
+          thread_id: externalMessageId,
+          message_id: externalMessageId,
+          received_at: new Date().toISOString(),
+        });
+      if (threadError) {
+        console.error('Failed to create email thread for sequence send:', threadError);
+      }
+    } catch (threadErr) {
+      console.error('email_threads insert error:', threadErr);
     }
 
     // Update company sequence current_step
@@ -383,9 +459,11 @@ serve(async (req) => {
       console.error('Failed to update company sequence:', updateError);
     }
 
-    // Check if this was the last step
+    // Complete only when this is the last step AND the sequence is not set to repeat.
+    // Leaving status=active lets process-sequence-steps schedule restart_after.
     const isLastStep = stepNumber >= (companySequence.personalized_emails?.length || 0) - 1;
-    if (isLastStep) {
+    const shouldRepeat = !!(companySequence.metadata as any)?.repeat_sequence;
+    if (isLastStep && !shouldRepeat) {
       await supabase
         .from('company_sequences')
         .update({ status: 'completed' })

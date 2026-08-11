@@ -1613,7 +1613,13 @@ export default function Campaigns() {
         .eq('id', sequenceId)
         .single();
       if (seqErr || !seqData) throw new Error('Sequence not found');
-      const steps = (Array.isArray(seqData.steps) ? seqData.steps : []) as any[];
+      const rawSteps = (Array.isArray(seqData.steps) ? seqData.steps : []) as any[];
+      const steps = rawSteps.map((raw) => {
+        if (typeof raw === 'string') {
+          try { return JSON.parse(raw); } catch { return {}; }
+        }
+        return raw || {};
+      });
       const personalizedEmails: { stepNumber: number; subject: string; body: string; delayDays: number }[] = [
         { stepNumber: 0, subject: '(Campaign)', body: '', delayDays: 0 },
       ];
@@ -1661,6 +1667,29 @@ export default function Campaigns() {
           .select('id')
           .single();
         if (!csErr && newCs?.id) {
+          // Ensure verified contact so hourly auto-sequence can send follow-ups
+          const recipientEmail = String(recipient.email || '').toLowerCase().trim();
+          if (recipientEmail) {
+            const { data: ec } = await supabase
+              .from('contacts')
+              .select('id, email_verified')
+              .eq('company_id', companyId)
+              .eq('email', recipientEmail)
+              .maybeSingle();
+            if (ec?.id) {
+              if (!ec.email_verified) {
+                await supabase.from('contacts').update({ email_verified: true }).eq('id', ec.id);
+              }
+            } else {
+              await supabase.from('contacts').insert({
+                company_id: companyId,
+                name: recipient.name || recipientEmail,
+                email: recipientEmail,
+                email_verified: true,
+                is_primary_contact: true,
+              });
+            }
+          }
           await supabase.from('email_activities').insert({
             company_sequence_id: newCs.id,
             contact_id: null,
@@ -1669,7 +1698,13 @@ export default function Campaigns() {
             body: recipient.personalized_body_text ?? null,
             status: 'sent',
             sent_at: recipient.sent_at || new Date().toISOString(),
-            metadata: { campaign_id: selectedCampaign, campaign_recipient_id: recipient.id },
+            metadata: {
+              campaign_id: selectedCampaign,
+              campaign_recipient_id: recipient.id,
+              to: recipientEmail || undefined,
+              to_email: recipientEmail || undefined,
+              recipient_email: recipientEmail || undefined,
+            },
           });
           enrolled++;
           existingCompanies.add(companyId);

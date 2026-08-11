@@ -181,6 +181,11 @@ export function PersonalizeSequenceDialog({
       setSelectedConnectionId("");
     } catch (error) {
       console.error('Error personalizing sequence:', error);
+      toast({
+        title: 'Personalization failed',
+        description: error instanceof Error ? error.message : 'Could not personalize this sequence. Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
