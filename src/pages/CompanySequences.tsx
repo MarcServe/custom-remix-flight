@@ -255,6 +255,28 @@ export default function CompanySequences() {
     await updateStatusMutation.mutateAsync({ id, status });
   };
 
+  /** Activate a draft and kick off step 0 immediately (don't wait for hourly cron). */
+  const handleActivateSequence = async (sequence: CompanySequence) => {
+    try {
+      await updateStatusMutation.mutateAsync({ id: sequence.id, status: 'active' });
+
+      const hasSentStep0 = (sequence.email_activities || []).some(
+        (a: any) => a.step_number === 0 && a.sent_at
+      );
+      if (!hasSentStep0) {
+        await sendEmailMutation.mutateAsync({
+          companySequenceId: sequence.id,
+          stepNumber: 0,
+        });
+        toast.success('Sequence activated — first email sent');
+      } else {
+        toast.success('Sequence activated');
+      }
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to activate sequence');
+    }
+  };
+
   const handleSendNext = async (sequence: CompanySequence) => {
     // After step 0 is sent, current_step is 0 — advance to the next unsent step
     const nextStep = typeof sequence.current_step === 'number' ? sequence.current_step + 1 : 0;
@@ -633,8 +655,8 @@ export default function CompanySequences() {
                         {sequence.status === 'draft' && (
                           <Button
                             size="sm"
-                            onClick={() => handleStatusChange(sequence.id, 'active')}
-                            disabled={updateStatusMutation.isPending}
+                            onClick={() => handleActivateSequence(sequence)}
+                            disabled={updateStatusMutation.isPending || sendEmailMutation.isPending}
                             className="bg-gradient-primary hover:opacity-90"
                           >
                             <Play className="h-4 w-4 mr-2" />
