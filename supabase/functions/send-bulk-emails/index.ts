@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { renderEmailTemplate } from "../_shared/professional-template.ts";
 import { stripTrailingDuplicateSignoffHtml } from "../_shared/strip-trailing-signoff.ts";
+import { personalizeEmailTemplate, mergeContextFromRecipient } from "../_shared/email-personalize.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,19 +31,33 @@ const GMAIL_DAILY_LIMIT = 450;
 // Resend batch API limit per call
 const RESEND_BATCH_SIZE = 100;
 
-/** Personalize a template string with recipient tokens */
-function personalizeText(template: string, recipient: any): string {
+function campaignMergeVars(campaign: any): { demoLink?: string; extras?: Record<string, string> } {
+  const raw = campaign?.merge_vars;
+  if (!raw || typeof raw !== 'object') return {};
+  const demoLink = typeof raw.demoLink === 'string' ? raw.demoLink : (typeof raw.demo_link === 'string' ? raw.demo_link : '');
+  const extras: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (k === 'demoLink' || k === 'demo_link') continue;
+    if (typeof v === 'string') extras[k] = v;
+  }
+  return { demoLink, extras };
+}
+
+/** Personalize a template string with recipient + campaign merge tokens */
+function personalizeText(template: string, recipient: any, campaign?: any): string {
   if (!template) return '';
-  const fullName = recipient.name || recipient.email || '';
-  const nameParts = fullName.split(' ');
-  const firstName = nameParts[0] || '';
-  const lastName = nameParts.slice(1).join(' ') || '';
-  return template
-    .replace(/\{\{firstName\}\}/gi, firstName)
-    .replace(/\{\{lastName\}\}/gi, lastName)
-    .replace(/\{\{fullName\}\}/gi, fullName)
-    .replace(/\{\{name\}\}/gi, fullName)
-    .replace(/\{\{email\}\}/gi, recipient.email || '');
+  const vars = campaignMergeVars(campaign);
+  return personalizeEmailTemplate(
+    template,
+    mergeContextFromRecipient(
+      {
+        name: recipient.name,
+        email: recipient.email,
+        company_name: recipient.company_name || recipient.company || null,
+      },
+      vars,
+    ),
+  );
 }
 
 /** Resolve subject/body for a recipient, falling back to campaign templates */
@@ -51,19 +66,22 @@ function resolveRecipientContent(recipient: any, campaign: any): {
   bodyText: string;
   bodyHtml: string;
 } {
+  // Re-run merge on personalized_* so leftover {{companyName}} / {{demoLink}} still resolve
+  const varsApplied = (s: string) => (s ? personalizeText(s, recipient, campaign) : s);
+
   const subject =
-    recipient.personalized_subject ||
-    (campaign.subject_template ? personalizeText(campaign.subject_template, recipient) : '') ||
+    varsApplied(recipient.personalized_subject) ||
+    (campaign.subject_template ? personalizeText(campaign.subject_template, recipient, campaign) : '') ||
     '(No subject)';
 
   const bodyText =
-    recipient.personalized_body_text ||
-    (campaign.body_text_template ? personalizeText(campaign.body_text_template, recipient) : '') ||
+    varsApplied(recipient.personalized_body_text) ||
+    (campaign.body_text_template ? personalizeText(campaign.body_text_template, recipient, campaign) : '') ||
     '';
 
   const bodyHtml =
-    recipient.personalized_body_html ||
-    (campaign.body_html_template ? personalizeText(campaign.body_html_template, recipient) : '') ||
+    varsApplied(recipient.personalized_body_html) ||
+    (campaign.body_html_template ? personalizeText(campaign.body_html_template, recipient, campaign) : '') ||
     bodyText;
 
   return { subject, bodyText, bodyHtml };
@@ -125,6 +143,7 @@ function buildWrappedHtml(
     companyName: branding.companyName,
     headerName: branding.headerName || undefined,
     logoUrl: branding.logoUrl,
+    headerBanner: !!branding.headerBanner,
     brandColor: branding.brandColor,
     footerText: branding.footerText,
     footerImageUrl: branding.footerImageUrl,
@@ -352,6 +371,7 @@ serve(async (req) => {
     if (campaign.header_image_url) {
       branding.logoUrl = campaign.header_image_url;
       branding.footerImageUrl = null;
+      branding.headerBanner = true; // full banner, not cropped logo cover
     }
     if (branding.logoUrl && !branding.companyName) branding.companyName = businessProfile?.company_name || 'Company';
 

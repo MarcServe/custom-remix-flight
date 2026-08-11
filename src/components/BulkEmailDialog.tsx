@@ -43,6 +43,7 @@ import {
 } from "@/lib/strip-trailing-signoff";
 import { cn } from "@/lib/utils";
 import { subscribeToRecipients } from "@/lib/recipient-broadcast";
+import { personalizeEmailTemplate, mergeContextFromPerson } from "@/lib/email-personalize";
 
 export interface BulkEmailDialogHandle {
   addRecipientsFromSelection: () => Promise<void>;
@@ -281,6 +282,8 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const [headerImageUrl, setHeaderImageUrl] = useState("");
   const [uploadingHeaderImage, setUploadingHeaderImage] = useState(false);
   const headerImageFileRef = useRef<HTMLInputElement>(null);
+  /** Campaign-level {{demoLink}} value */
+  const [demoLink, setDemoLink] = useState("");
   const campaignBodyEditorRef = useRef<RichTextEditorHandle | null>(null);
   const campaignBodyImgInputRef = useRef<HTMLInputElement>(null);
   const replaceBodyImageInputRef = useRef<HTMLInputElement>(null);
@@ -619,7 +622,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
       const { data, error } = await supabase
         .from('email_campaigns')
-        .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric, header_image_url')
+        .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric, header_image_url, merge_vars')
         .eq('user_id', user.id)
         .eq('status', 'draft')
         .order('updated_at', { ascending: false })
@@ -937,7 +940,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
           const { data: draftData, error } = await supabase
             .from('email_campaigns')
-            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, status, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric, header_image_url')
+            .select('id, name, created_at, updated_at, total_recipients, subject_template, body_html_template, body_text_template, sender_connection_id, sender_profile_id, scheduled_at, tags, auto_follow_up_enabled, follow_up_sequence_id, status, ab_test_enabled, ab_subject_b, ab_body_html_b, ab_body_text_b, ab_traffic_split, ab_winner_metric, header_image_url, merge_vars')
             .eq('id', initialDraftId)
             .in('status', ['draft', 'scheduled', 'sending', 'paused', 'completed'])
             .single();
@@ -1118,14 +1121,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
 
-  // Personalize text with variables (case-insensitive to match {{firstName}}, {{FirstName}}, etc.)
-  const personalizeText = (template: string, person: typeof selectedPeople[0]) => {
-    const full = escapeHtml(`${person.first_name} ${person.last_name}`.trim());
-    return template
-      .replace(/\{\{firstName\}\}/gi, escapeHtml(person.first_name || ''))
-      .replace(/\{\{lastName\}\}/gi, escapeHtml(person.last_name || ''))
-      .replace(/\{\{fullName\}\}/gi, full || '')
-      .replace(/\{\{email\}\}/gi, escapeHtml(person.email || ''));
+  // Personalize text with merge tokens ({{firstName}}, {{companyName}}, {{demoLink}}, …)
+  const personalizeText = (template: string, person: any) => {
+    return personalizeEmailTemplate(
+      template,
+      mergeContextFromPerson(person, { demoLink: demoLink.trim() || null }),
+      { escapeHtmlValues: true }
+    );
   };
 
   /** Build one DB row; when `usePersonalizedEmails` is set, per-recipient content wins and A/B is skipped. */
@@ -2044,6 +2046,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
           ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
           header_image_url: headerImageUrl.trim() || null,
+          merge_vars: demoLink.trim() ? { demoLink: demoLink.trim() } : null,
         };
         if (!contentOnly) {
           updatePayload.scheduled_at = scheduledAt;
@@ -2137,6 +2140,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
             header_image_url: headerImageUrl.trim() || null,
+          merge_vars: demoLink.trim() ? { demoLink: demoLink.trim() } : null,
           })
           .select()
           .single();
@@ -2355,6 +2359,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setSenderConnectionId(draft.sender_connection_id || '');
       setSenderProfileId(draft.sender_profile_id || '');
       setHeaderImageUrl((draft as any).header_image_url || '');
+      {
+        const mv = (draft as any).merge_vars;
+        setDemoLink(typeof mv?.demoLink === 'string' ? mv.demoLink : (typeof mv?.demo_link === 'string' ? mv.demo_link : ''));
+      }
       setDraftId(draft.id);
       
       if (draft.scheduled_at) {
@@ -2972,9 +2980,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
       if (hasPersonalizedEmail && !useVariantB) {
         const personalized = personalizedEmails[testPerson.id];
-        testSubject = personalized.subject;
-        testBodyHtml = personalized.bodyHtml;
-        testBodyText = personalized.bodyText;
+        // Re-apply merge tokens in case pe content still has {{companyName}} / {{demoLink}}
+        testSubject = personalizeText(personalized.subject, testPerson);
+        testBodyHtml = personalizeText(personalized.bodyHtml, testPerson);
+        testBodyText = personalizeText(personalized.bodyText, testPerson);
       } else {
         testSubject = personalizeText(subjectForTest, testPerson);
         testBodyText = personalizeText(bodyTextForTest, testPerson);
@@ -2994,6 +3003,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         senderConnectionId: senderConnectionId || undefined,
         sender_profile_id: senderProfileId || undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
+        ...(headerImageUrl.trim()
+          ? { headerImageUrl: headerImageUrl.trim(), headerBanner: true }
+          : {}),
       };
       if (testBodyHtml !== undefined) payload.bodyHtml = testBodyHtml;
 
@@ -3206,6 +3218,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
           ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
           header_image_url: headerImageUrl.trim() || null,
+          merge_vars: demoLink.trim() ? { demoLink: demoLink.trim() } : null,
         };
         if (scheduleEnabled && scheduledAt) {
           updatePayload.status = 'scheduled';
@@ -3278,6 +3291,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
             header_image_url: headerImageUrl.trim() || null,
+          merge_vars: demoLink.trim() ? { demoLink: demoLink.trim() } : null,
           })
           .eq('id', draftId)
           .select()
@@ -3317,6 +3331,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             ab_traffic_split: abTestEnabled ? abTrafficSplit : 50,
             ab_winner_metric: abTestEnabled ? abWinnerMetric : null,
             header_image_url: headerImageUrl.trim() || null,
+          merge_vars: demoLink.trim() ? { demoLink: demoLink.trim() } : null,
           })
           .select()
           .single();
@@ -3421,6 +3436,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setSenderConnectionId("");
       setSenderProfileId("");
       setHeaderImageUrl("");
+      setDemoLink("");
       setSelectedTags([]);
       setTemplate('blank');
       setAbTestEnabled(false);
@@ -4111,10 +4127,25 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             </div>
             {headerImageUrl ? (
               <div className="rounded border p-2 bg-muted/30">
-                <p className="text-xs text-muted-foreground mb-1">Preview (shown at top of email):</p>
-                <img src={headerImageUrl} alt="" className="max-h-16 w-auto object-contain rounded" onError={() => {}} />
+                <p className="text-xs text-muted-foreground mb-1">
+                  Banner preview (sent email shows the full image, not cropped):
+                </p>
+                <img src={headerImageUrl} alt="" className="w-full max-h-40 object-contain rounded bg-slate-900" onError={() => {}} />
               </div>
             ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="demo-link">Demo / CTA link (optional)</Label>
+            <Input
+              id="demo-link"
+              value={demoLink}
+              onChange={(e) => setDemoLink(e.target.value)}
+              placeholder="https://talkstay.talkweb.io/demo"
+            />
+            <p className="text-xs text-muted-foreground">
+              Fills {"{{demoLink}}"} in subject and body for every recipient when you save or send.
+            </p>
           </div>
 
           <Collapsible open={brandingQuickOpen} onOpenChange={setBrandingQuickOpen}>
@@ -4712,7 +4743,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             </TabsContent>
           </Tabs>
             <p className="text-xs text-muted-foreground">
-            Use variables like {'{{firstName}}'}, {'{{lastName}}'}, {'{{fullName}}'} to personalize emails. Signature will be added automatically.
+            Use {'{{firstName}}'}, {'{{lastName}}'}, {'{{fullName}}'}, {'{{companyName}}'} / {'{{company}}'}, {'{{email}}'}, and {'{{demoLink}}'} (set above). Signature is added automatically.
             </p>
 
           {previewPerson && (() => {
@@ -4774,6 +4805,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                           template={previewTemplate}
                           brandColor={previewBrandColor}
                           logoUrl={previewLogoUrl}
+                          headerBanner={!!headerImageUrl.trim()}
                           companyName={previewCompanyName}
                           headerName={previewHeaderName}
                           senderName={previewSenderName}
@@ -4804,6 +4836,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                           template={previewTemplate}
                           brandColor={previewBrandColor}
                           logoUrl={previewLogoUrl}
+                          headerBanner={!!headerImageUrl.trim()}
                           companyName={previewCompanyName}
                           headerName={previewHeaderName}
                           senderName={previewSenderName}
@@ -4838,6 +4871,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                         template={previewTemplate}
                         brandColor={previewBrandColor}
                         logoUrl={previewLogoUrl}
+                        headerBanner={!!headerImageUrl.trim()}
                         companyName={previewCompanyName}
                         headerName={previewHeaderName}
                         senderName={previewSenderName}

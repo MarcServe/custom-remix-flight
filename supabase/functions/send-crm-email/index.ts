@@ -102,7 +102,7 @@ serve(async (req) => {
       throw new Error('Invalid JSON in request body');
     }
     
-    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, senderConnectionId, sender_profile_id: requestSenderProfileId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, useInboundReplyTo = true, attachments = [] } = emailRequest;
+    let { toEmail, toName, subject, body, bodyHtml, bodyText, companyId, contactId, senderConnectionId, sender_profile_id: requestSenderProfileId, testConnection = false, enableAutoResponder = false, templateStyle = 'professional', invoiceHtml, invoiceNumber, attachInvoice = false, useInboundReplyTo = true, attachments = [], headerImageUrl = null, headerBanner = false } = emailRequest;
     
     // Fetch user profile for signature and business email
     const { data: userProfile } = await supabaseClient
@@ -123,6 +123,7 @@ serve(async (req) => {
       companyName: string | null;
       headerName: string | null;
       logoUrl: string | null;
+      headerBanner: boolean;
       brandColor: string;
       footerText: string | null;
       footerImageUrl: string | null;
@@ -138,6 +139,7 @@ serve(async (req) => {
       companyName: businessProfile?.company_name || null,
       headerName: businessProfile?.email_header_name || null,
       logoUrl: businessProfile?.email_logo_url ?? null,
+      headerBanner: false,
       brandColor: businessProfile?.email_brand_color || '#8b5cf6',
       footerText: businessProfile?.email_footer_text ?? null,
       footerImageUrl: businessProfile?.email_footer_logo_url ?? businessProfile?.email_logo_url ?? null,
@@ -162,6 +164,7 @@ serve(async (req) => {
           companyName: businessProfile?.company_name || null,
           headerName: senderProfile.display_name || businessProfile?.email_header_name || null,
           logoUrl: senderProfile.logo_url ?? null,
+          headerBanner: false,
           brandColor: senderProfile.brand_color || '#8b5cf6',
           footerText: senderProfile.footer_text ?? null,
           footerImageUrl: senderProfile.footer_logo_url ?? senderProfile.logo_url ?? null,
@@ -175,6 +178,12 @@ serve(async (req) => {
           websiteUrl: senderProfile.website_url ?? businessProfile?.website ?? null,
         };
       }
+    }
+    // Campaign header banner overrides logo and uses contain (full image, not cropped)
+    if (typeof headerImageUrl === 'string' && headerImageUrl.trim()) {
+      branding.logoUrl = headerImageUrl.trim();
+      branding.footerImageUrl = null;
+      branding.headerBanner = headerBanner !== false;
     }
 
     // Determine sender based on business profile preference
@@ -340,6 +349,7 @@ serve(async (req) => {
             companyName: branding.companyName,
             headerName: branding.headerName || undefined,
             logoUrl: branding.logoUrl,
+            headerBanner: !!branding.headerBanner,
             brandColor: branding.brandColor,
             footerText: branding.footerText,
             footerImageUrl: branding.footerImageUrl,
@@ -469,6 +479,7 @@ serve(async (req) => {
                 companyName: branding.companyName,
                 headerName: branding.headerName || undefined,
                 logoUrl: branding.logoUrl,
+            headerBanner: !!branding.headerBanner,
                 brandColor: branding.brandColor,
                 footerText: branding.footerText,
                 footerImageUrl: branding.footerImageUrl,
@@ -572,6 +583,7 @@ serve(async (req) => {
                 companyName: branding.companyName,
                 headerName: branding.headerName || undefined,
                 logoUrl: branding.logoUrl,
+            headerBanner: !!branding.headerBanner,
                 brandColor: branding.brandColor,
                 footerText: branding.footerText,
                 footerImageUrl: branding.footerImageUrl,
@@ -680,6 +692,7 @@ serve(async (req) => {
                 companyName: branding.companyName,
                 headerName: branding.headerName || undefined,
                 logoUrl: branding.logoUrl,
+            headerBanner: !!branding.headerBanner,
                 brandColor: branding.brandColor,
                 footerText: branding.footerText,
                 footerImageUrl: branding.footerImageUrl,

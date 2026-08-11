@@ -8,6 +8,11 @@ export interface EmailTemplateProps {
   companyName?: string;
   headerName?: string;
   logoUrl?: string;
+  /**
+   * When true, logoUrl is a full-width campaign banner: show the entire image
+   * (object-fit:contain / height:auto) instead of cropping with a fixed cover box.
+   */
+  headerBanner?: boolean;
   brandColor?: string;
   footerText?: string;
   signature?: string;
@@ -15,6 +20,29 @@ export interface EmailTemplateProps {
   senderImageUrl?: string;
   websiteUrl?: string;
   newsletterFooterHtml?: string;
+}
+
+/** Header image styles: banners show fully; logos keep a fixed cover crop. */
+function headerImgStyle(headerBanner?: boolean, coverHeight = 180): string {
+  if (headerBanner) {
+    return 'width:100%;height:auto;max-height:320px;display:block;object-fit:contain;background:#0f172a;';
+  }
+  return `width:100%;height:${coverHeight}px;display:block;object-fit:cover;`;
+}
+
+function headerImgCss(headerBanner?: boolean, coverHeight = 180): string {
+  if (headerBanner) {
+    return `width: 100%;
+      height: auto;
+      max-height: 320px;
+      display: block;
+      object-fit: contain;
+      background: #0f172a;`;
+  }
+  return `width: 100%;
+      height: ${coverHeight}px;
+      display: block;
+      object-fit: cover;`;
 }
 
 function renderFooterWithImage(footerImageUrl: string | undefined, footerText: string, brandColor: string, bgStyle: string, textColor: string, newsletterFooterHtml?: string): string {
@@ -117,6 +145,7 @@ export function renderProfessionalTemplate({
   senderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
+  headerBanner,
 }: EmailTemplateProps): string {
   const displayHeaderName = (typeof headerName === 'string' && headerName.trim() !== '') ? headerName.trim() : null;
   const safeBody = body || '';
@@ -154,12 +183,7 @@ export function renderProfessionalTemplate({
     }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 20px 28px; }
-    .email-header img {
-      width: 100%;
-      height: 180px;
-      display: block;
-      object-fit: cover;
-    }
+    .email-header img { ${headerImgCss(headerBanner, 180)} }
     .email-header h1,
     .email-header .header-brand-name {
       color: #ffffff;
@@ -227,7 +251,7 @@ export function renderProfessionalTemplate({
 <body>
   <div class="email-container">
     <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-      ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="width:100%;height:180px;display:block;object-fit:cover;">` : ''}
+      ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="${headerImgStyle(headerBanner, 180)}">` : ''}
       ${displayHeaderName ? `<div class="brand-name-bar" style="background:${logoUrl ? 'rgba(0,0,0,0.25)' : 'transparent'};padding:8px 28px;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
     </div>
     
@@ -262,6 +286,7 @@ export function renderMinimalTemplate({
   senderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
+  headerBanner,
 }: EmailTemplateProps): string {
   const displayHeaderName = (typeof headerName === 'string' && headerName.trim() !== '') ? headerName.trim() : null;
   // Ensure body is always a string to prevent errors
@@ -297,12 +322,7 @@ export function renderMinimalTemplate({
     }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 12px 0; }
-    .email-header img {
-      width: 100%;
-      height: 160px;
-      display: block;
-      object-fit: cover;
-    }
+    .email-header img { ${headerImgCss(headerBanner, 160)} }
     .email-header .header-brand-name { font-size: 18px; font-weight: 600; color: #111827; margin: 0; }
     .email-header .brand-name-bar { padding: 6px 0; }
     .email-body {
@@ -339,7 +359,7 @@ export function renderMinimalTemplate({
   <div class="email-container">
     ${logoUrl || displayHeaderName ? `
       <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-        ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="width:100%;height:160px;display:block;object-fit:cover;">` : ''}
+        ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="${headerImgStyle(headerBanner, 160)}">` : ''}
         ${displayHeaderName ? `<div class="brand-name-bar" style="padding:6px 0;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
       </div>
     ` : ''}
@@ -373,6 +393,7 @@ export function renderModernTemplate({
   senderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
+  headerBanner,
 }: EmailTemplateProps): string {
   const displayHeaderName = (typeof headerName === 'string' && headerName.trim() !== '') ? headerName.trim() : null;
   // Ensure body is always a string to prevent errors
@@ -413,12 +434,7 @@ export function renderModernTemplate({
     }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 24px 28px; }
-    .email-header img {
-      width: 100%;
-      height: 180px;
-      display: block;
-      object-fit: cover;
-    }
+    .email-header img { ${headerImgCss(headerBanner, 180)} }
     .email-header .header-brand-name { margin: 0; color: ${brandColor}; font-size: 22px; font-weight: 700; }
     .email-header .brand-name-bar { padding: 8px 28px; }
     .email-body {
@@ -473,7 +489,7 @@ export function renderModernTemplate({
 <body>
   <div class="email-container">
     <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-      ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="width:100%;height:180px;display:block;object-fit:cover;">` : ''}
+      ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="${headerImgStyle(headerBanner, 180)}">` : ''}
       ${displayHeaderName ? `<div class="brand-name-bar" style="padding:8px 28px;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
     </div>
     
@@ -509,6 +525,7 @@ export function renderCreativeTemplate({
   senderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
+  headerBanner,
 }: EmailTemplateProps): string {
   const displayHeaderName = (typeof headerName === 'string' && headerName.trim() !== '') ? headerName.trim() : null;
   const safeBody = body || '';
@@ -532,10 +549,7 @@ export function renderCreativeTemplate({
     }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 28px 32px; }
-    .email-header img { width: 100%;
-      height: 200px;
-      display: block;
-      object-fit: cover; }
+    .email-header img { ${headerImgCss(headerBanner, 200)} }
     .email-header .header-brand-name { color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
     .email-header .brand-name-bar { background: rgba(0,0,0,0.3); padding: 10px 32px; }
     .email-body { padding: 18px 24px; color: #1f2937; }
@@ -566,7 +580,7 @@ export function renderCreativeTemplate({
 <body>
   <div class="email-container">
     <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-      ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="width:100%;height:200px;display:block;object-fit:cover;">` : ''}
+      ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="${headerImgStyle(headerBanner, 200)}">` : ''}
       ${displayHeaderName ? `<div class="brand-name-bar" style="background:${logoUrl ? 'rgba(0,0,0,0.3)' : 'transparent'};padding:10px 32px;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
     </div>
     <div class="email-body">
@@ -597,6 +611,7 @@ export function renderCorporateTemplate({
   senderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
+  headerBanner,
 }: EmailTemplateProps): string {
   const displayHeaderName = (typeof headerName === 'string' && headerName.trim() !== '') ? headerName.trim() : null;
   const safeBody = body || '';
@@ -620,10 +635,7 @@ export function renderCorporateTemplate({
     }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 24px 32px; }
-    .email-header img { width: 100%;
-      height: 180px;
-      display: block;
-      object-fit: cover; }
+    .email-header img { ${headerImgCss(headerBanner, 180)} }
     .email-header .header-brand-name { color: #ffffff; margin: 0; font-size: 22px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; letter-spacing: 0.02em; }
     .email-header .brand-name-bar { background: rgba(0,0,0,0.3); padding: 8px 32px; }
     .email-body { padding: 18px 24px; font-size: 15px; line-height: 1.4; }
@@ -642,7 +654,7 @@ export function renderCorporateTemplate({
 <body>
   <div class="email-container">
     <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-      ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="width:100%;height:180px;display:block;object-fit:cover;">` : ''}
+      ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="${headerImgStyle(headerBanner, 180)}">` : ''}
       ${displayHeaderName ? `<div class="brand-name-bar" style="background:${logoUrl ? 'rgba(0,0,0,0.3)' : 'transparent'};padding:8px 32px;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
     </div>
     <div class="email-body">
@@ -673,6 +685,7 @@ export function renderBoldTemplate({
   senderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
+  headerBanner,
 }: EmailTemplateProps): string {
   const displayHeaderName = (typeof headerName === 'string' && headerName.trim() !== '') ? headerName.trim() : null;
   const safeBody = body || '';
@@ -695,10 +708,7 @@ export function renderBoldTemplate({
     }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 24px 28px; }
-    .email-header img { width: 100%;
-      height: 180px;
-      display: block;
-      object-fit: cover; }
+    .email-header img { ${headerImgCss(headerBanner, 180)} }
     .email-header .header-brand-name { color: #ffffff; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
     .email-header .brand-name-bar { background: rgba(0,0,0,0.5); padding: 8px 28px; }
     .email-body { padding: 18px 24px; }
@@ -717,7 +727,7 @@ export function renderBoldTemplate({
 <body>
   <div class="email-container">
     <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-      ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="width:100%;height:180px;display:block;object-fit:cover;">` : ''}
+      ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="${headerImgStyle(headerBanner, 180)}">` : ''}
       ${displayHeaderName ? `<div class="brand-name-bar" style="background:${logoUrl ? 'rgba(0,0,0,0.5)' : 'transparent'};padding:8px 28px;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
     </div>
     <div class="email-body">
@@ -748,6 +758,7 @@ export function renderElegantTemplate({
   senderImageUrl,
   websiteUrl,
   newsletterFooterHtml,
+  headerBanner,
 }: EmailTemplateProps): string {
   const displayHeaderName = (typeof headerName === 'string' && headerName.trim() !== '') ? headerName.trim() : null;
   const safeBody = body || '';
@@ -767,10 +778,7 @@ export function renderElegantTemplate({
     .email-header { border-bottom: 1px solid #e8e4df; text-align: center; overflow: hidden; }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 28px 32px; }
-    .email-header img { width: 100%;
-      height: 180px;
-      display: block;
-      object-fit: cover; }
+    .email-header img { ${headerImgCss(headerBanner, 180)} }
     .email-header .header-brand-name { margin: 0; font-size: 22px; font-weight: 600; color: ${sepia}; letter-spacing: 0.04em; }
     .email-header .brand-name-bar { padding: 8px 32px; background: #faf9f7; }
     .email-body { padding: 18px 24px; font-size: 15px; line-height: 1.4; }
@@ -789,7 +797,7 @@ export function renderElegantTemplate({
 <body>
   <div class="email-container">
     <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-      ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="width:100%;height:180px;display:block;object-fit:cover;">` : ''}
+      ${logoUrl ? `<img src="${logoUrl}" alt="${displayHeaderName || companyName || 'Company'}" style="${headerImgStyle(headerBanner, 180)}">` : ''}
       ${displayHeaderName ? `<div class="brand-name-bar" style="padding:8px 32px;background:#faf9f7;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
     </div>
     <div class="email-body">

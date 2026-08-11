@@ -43,6 +43,22 @@ import {
 } from "@/components/ui/dialog";
 import EmailDeliverability from "./EmailDeliverability";
 import AutomationRules from "./AutomationRules";
+import { personalizeEmailTemplate, mergeContextFromPerson } from "@/lib/email-personalize";
+
+function personalizeCampaignTemplate(
+  template: string,
+  person: {
+    first_name?: string | null;
+    last_name?: string | null;
+    email?: string | null;
+    name?: string | null;
+    companies?: { name?: string | null } | null;
+    company?: string | null;
+  },
+  campaignVars?: { demoLink?: string | null } | null,
+) {
+  return personalizeEmailTemplate(template, mergeContextFromPerson(person, campaignVars));
+}
 import ABTesting from "./ABTesting";
 
 interface Campaign {

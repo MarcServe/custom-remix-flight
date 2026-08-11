@@ -2048,6 +2048,7 @@ export type Database = {
           follow_up_sequence_id: string | null
           header_image_url: string | null
           id: string
+          merge_vars: Json | null
           name: string
           opened_count: number
           scheduled_at: string | null
@@ -2078,6 +2079,7 @@ export type Database = {
           follow_up_sequence_id?: string | null
           header_image_url?: string | null
           id?: string
+          merge_vars?: Json | null
           name: string
           opened_count?: number
           scheduled_at?: string | null
@@ -2108,6 +2110,7 @@ export type Database = {
           follow_up_sequence_id?: string | null
           header_image_url?: string | null
           id?: string
+          merge_vars?: Json | null
           name?: string
           opened_count?: number
           scheduled_at?: string | null
