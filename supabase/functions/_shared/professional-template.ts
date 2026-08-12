@@ -180,12 +180,46 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+const EMAIL_P_STYLE = 'margin:0 0 16px 0;line-height:1.6;';
+const EMAIL_UL_STYLE = 'margin:12px 0;padding-left:20px;';
+const EMAIL_LI_STYLE = 'margin:0 0 6px 0;';
+
 /** Linkify bare URLs inside already-escaped text (keeps &amp; query params). */
 function linkifyEscapedText(escaped: string): string {
   return escaped.replace(/(https?:\/\/[^\s<]+)/gi, (url) => {
     const href = url.replace(/&amp;/g, '&');
     return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${url}</a>`;
   });
+}
+
+/**
+ * Inline paragraph/list spacing — Gmail/Outlook often ignore <style> margins on <p>.
+ */
+function applyInlineEmailBodySpacing(html: string): string {
+  if (!html) return '';
+  let out = html;
+  out = out.replace(
+    /<p(\s[^>]*)?>\s*(?:<br\s*\/?>\s*)*<\/p>/gi,
+    `<p style="${EMAIL_P_STYLE}">&nbsp;</p>`,
+  );
+  out = out.replace(/<p\b([^>]*)>/gi, (_m, attrs: string) => {
+    const a = attrs || '';
+    if (/style\s*=/i.test(a)) {
+      if (/margin\s*:/i.test(a)) return `<p${a}>`;
+      return `<p${a.replace(/style\s*=\s*(['"])(.*?)\1/i, (_s: string, q: string, style: string) => `style=${q}${EMAIL_P_STYLE}${style}${q}`)}>`;
+    }
+    return `<p style="${EMAIL_P_STYLE}"${a}>`;
+  });
+  out = out.replace(/<ul\b([^>]*)>/gi, (m, attrs: string) =>
+    /style\s*=/i.test(attrs || '') ? m : `<ul style="${EMAIL_UL_STYLE}"${attrs || ''}>`,
+  );
+  out = out.replace(/<ol\b([^>]*)>/gi, (m, attrs: string) =>
+    /style\s*=/i.test(attrs || '') ? m : `<ol style="${EMAIL_UL_STYLE}"${attrs || ''}>`,
+  );
+  out = out.replace(/<li\b([^>]*)>/gi, (m, attrs: string) =>
+    /style\s*=/i.test(attrs || '') ? m : `<li style="${EMAIL_LI_STYLE}"${attrs || ''}>`,
+  );
+  return out;
 }
 
 function bodyTextToHtml(text: string): string {
@@ -195,13 +229,13 @@ function bodyTextToHtml(text: string): string {
   if (/&lt;/.test(raw) && !/<\s*[a-zA-Z]/.test(raw)) {
     raw = raw.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
   }
-  // Pass through any content that looks like HTML so it is never escaped —
-  // but still wrap bare URLs that were never turned into <a> tags (Variant B).
+  // Pass through HTML; linkify bare URLs + force inline paragraph spacing for clients.
   if (/<\s*[a-zA-Z]/.test(raw)) {
-    return raw.replace(/(^|[^"'>=])(https?:\/\/[^\s<]+)/gi, (full, prefix, url) => {
+    const linked = raw.replace(/(^|[^"'>=])(https?:\/\/[^\s<]+)/gi, (full, prefix, url) => {
       if (typeof prefix === 'string' && /href\s*=\s*$/i.test(prefix)) return full;
       return `${prefix}<a href="${escapeHtml(String(url).replace(/&amp;/g, '&'))}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${url}</a>`;
     });
+    return applyInlineEmailBodySpacing(linked);
   }
   const blocks = raw.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
   const out: string[] = [];
@@ -210,10 +244,10 @@ function bodyTextToHtml(text: string): string {
     const listMatch = lines.every((l) => /^(\s*)([-*•]\s*|(\d+\.)\s)/.test(l) || l === '');
     if (listMatch && lines.some(Boolean)) {
       const items = lines.filter(Boolean).map((l) => l.replace(/^(\s*)([-*•]\s*|(\d+\.)\s)/, '').trim());
-      if (items.length) out.push('<ul style="margin:12px 0;padding-left:20px;">' + items.map((i) => `<li style="margin-bottom:6px;">${linkifyEscapedText(escapeHtml(i))}</li>`).join('') + '</ul>');
+      if (items.length) out.push(`<ul style="${EMAIL_UL_STYLE}">` + items.map((i) => `<li style="${EMAIL_LI_STYLE}">${linkifyEscapedText(escapeHtml(i))}</li>`).join('') + '</ul>');
     } else {
       const para = lines.map((l) => linkifyEscapedText(escapeHtml(l))).join('<br>\n');
-      if (para) out.push(`<p style="margin:0 0 14px 0;line-height:1.5;">${para}</p>`);
+      if (para) out.push(`<p style="${EMAIL_P_STYLE}">${para}</p>`);
     }
   }
   return out.join('\n');
@@ -228,14 +262,14 @@ export function textHasUrlMissingFromHtml(text: string, html: string): boolean {
   return urls.some((u) => !normalizedHtml.includes(u));
 }
 
-/** Prefer HTML, but rebuild from text when Variant B stale HTML dropped bare URLs. */
+/** Prefer HTML, but rebuild from text when stale HTML dropped bare URLs; always inline spacing. */
 export function resolveRecipientBodyHtml(bodyHtml: string, bodyText: string): string {
   const html = (bodyHtml || '').trim();
   const text = (bodyText || '').trim();
   if (text && textHasUrlMissingFromHtml(text, html)) {
     return bodyTextToHtml(text);
   }
-  if (html) return html;
+  if (html) return bodyTextToHtml(html);
   if (text) return bodyTextToHtml(text);
   return '';
 }
@@ -321,10 +355,10 @@ export function renderProfessionalTemplate({
       font-size: 15px;
       line-height: 1.4;
     }
-    .email-content p, .email-content div { margin: 0 0 8px 0; }
-    .email-content p:last-child, .email-content div:last-child { margin-bottom: 0; }
-    .email-content ul, .email-content ol { margin: 8px 0; padding-left: 20px; }
-    .email-content li { margin-bottom: 4px; }
+    .email-content p, .email-content div { margin: 0 0 16px 0 !important; line-height: 1.6 !important; }
+    .email-content p:last-child, .email-content div:last-child { margin-bottom: 0 !important; }
+    .email-content ul, .email-content ol { margin: 12px 0 !important; padding-left: 20px !important; }
+    .email-content li { margin: 0 0 6px 0 !important; }
     .email-signature {
       margin-top: 16px;
       padding-top: 12px;
@@ -453,9 +487,9 @@ export function renderMinimalTemplate({
       line-height: 1.4;
       color: #374151;
     }
-    .email-body p, .email-body div { margin: 0 0 8px 0; }
-    .email-body ul, .email-body ol { margin: 8px 0; padding-left: 20px; }
-    .email-body li { margin-bottom: 4px; }
+    .email-body p, .email-body div { margin: 0 0 16px 0 !important; line-height: 1.6 !important; }
+    .email-body ul, .email-body ol { margin: 12px 0 !important; padding-left: 20px !important; }
+    .email-body li { margin: 0 0 6px 0 !important; }
     .email-signature {
       margin-top: 16px;
       padding-top: 12px;
@@ -575,9 +609,9 @@ export function renderModernTemplate({
       color: #334155;
       margin-bottom: 12px;
     }
-    .email-content p, .email-content div { margin: 0 0 8px 0; }
-    .email-content ul, .email-content ol { margin: 8px 0; padding-left: 20px; }
-    .email-content li { margin-bottom: 4px; }
+    .email-content p, .email-content div { margin: 0 0 16px 0 !important; line-height: 1.6 !important; }
+    .email-content ul, .email-content ol { margin: 12px 0 !important; padding-left: 20px !important; }
+    .email-content li { margin: 0 0 6px 0 !important; }
     .email-signature {
       background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
       padding: 16px 20px;
@@ -689,9 +723,9 @@ export function renderCreativeTemplate({
     .email-header .brand-name-bar { background: rgba(0,0,0,0.3); padding: 10px 32px; }
     .email-body { padding: 18px 24px; color: #1f2937; }
     .email-content { font-size: 15px; line-height: 1.5; margin-bottom: 20px; }
-    .email-content p, .email-content div { margin: 0 0 8px 0; }
-    .email-content ul, .email-content ol { margin: 8px 0; padding-left: 20px; }
-    .email-content li { margin-bottom: 4px; }
+    .email-content p, .email-content div { margin: 0 0 16px 0 !important; line-height: 1.6 !important; }
+    .email-content ul, .email-content ol { margin: 12px 0 !important; padding-left: 20px !important; }
+    .email-content li { margin: 0 0 6px 0 !important; }
     .email-signature {
       margin-top: 20px;
       padding: 18px 22px;
@@ -781,9 +815,9 @@ export function renderCorporateTemplate({
     .email-header .brand-name-bar { background: rgba(0,0,0,0.3); padding: 8px 32px; }
     .email-body { padding: 18px 24px; font-size: 15px; line-height: 1.4; }
     .email-content { margin-bottom: 20px; }
-    .email-content p, .email-content div { margin: 0 0 8px 0; }
-    .email-content ul, .email-content ol { margin: 8px 0; padding-left: 20px; }
-    .email-content li { margin-bottom: 4px; }
+    .email-content p, .email-content div { margin: 0 0 16px 0 !important; line-height: 1.6 !important; }
+    .email-content ul, .email-content ol { margin: 12px 0 !important; padding-left: 20px !important; }
+    .email-content li { margin: 0 0 6px 0 !important; }
     .email-signature { margin-top: 14px; padding-top: 14px; border-top: 2px solid #e5e7eb; }
     .signature-name { font-weight: 600; font-size: 15px; color: #111827; margin-bottom: 2px; }
     .signature-title { color: #6b7280; font-size: 13px; margin-bottom: 1px; }
@@ -860,9 +894,9 @@ export function renderBoldTemplate({
     .email-header .brand-name-bar { background: rgba(0,0,0,0.5); padding: 8px 28px; }
     .email-body { padding: 18px 24px; }
     .email-content { font-size: 15px; line-height: 1.4; color: #d4d4d8; margin-bottom: 12px; }
-    .email-content p, .email-content div { margin: 0 0 8px 0; }
-    .email-content ul, .email-content ol { margin: 8px 0; padding-left: 20px; }
-    .email-content li { margin-bottom: 4px; }
+    .email-content p, .email-content div { margin: 0 0 16px 0 !important; line-height: 1.6 !important; }
+    .email-content ul, .email-content ol { margin: 12px 0 !important; padding-left: 20px !important; }
+    .email-content li { margin: 0 0 6px 0 !important; }
     .email-signature { margin-top: 14px; padding-top: 14px; border-top: 2px solid #3f3f46; }
     .signature-name { font-weight: 700; font-size: 16px; color: #fff; margin-bottom: 2px; }
     .signature-title { color: #a1a1aa; font-size: 13px; margin-bottom: 1px; }
@@ -935,9 +969,9 @@ export function renderElegantTemplate({
     .email-header .brand-name-bar { padding: 8px 32px; background: #faf9f7; }
     .email-body { padding: 18px 24px; font-size: 15px; line-height: 1.4; }
     .email-content { margin-bottom: 24px; }
-    .email-content p, .email-content div { margin: 0 0 8px 0; }
-    .email-content ul, .email-content ol { margin: 8px 0; padding-left: 20px; }
-    .email-content li { margin-bottom: 4px; }
+    .email-content p, .email-content div { margin: 0 0 16px 0 !important; line-height: 1.6 !important; }
+    .email-content ul, .email-content ol { margin: 12px 0 !important; padding-left: 20px !important; }
+    .email-content li { margin: 0 0 6px 0 !important; }
     .email-signature { margin-top: 28px; padding-top: 20px; border-top: 1px solid #e8e4df; }
     .signature-name { font-weight: 600; font-size: 15px; color: #2d2d2d; margin-bottom: 2px; }
     .signature-title { color: #6b5b4f; font-size: 13px; font-style: italic; margin-bottom: 1px; }

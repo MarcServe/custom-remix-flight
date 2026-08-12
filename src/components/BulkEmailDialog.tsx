@@ -74,18 +74,56 @@ function linkifyEscapedText(escaped: string): string {
   });
 }
 
+const EMAIL_P_STYLE = 'margin:0 0 16px 0;line-height:1.6;';
+const EMAIL_UL_STYLE = 'margin:12px 0;padding-left:20px;';
+const EMAIL_LI_STYLE = 'margin:0 0 6px 0;';
+
+/**
+ * Gmail/Outlook often ignore <style> margins on <p>. Inline spacing so preview
+ * and sent mail match the editor's paragraphs / blank lines.
+ */
+function applyInlineEmailBodySpacing(html: string): string {
+  if (!html) return '';
+  let out = html;
+  // Empty / <br>-only paragraphs → visible blank line
+  out = out.replace(
+    /<p(\s[^>]*)?>\s*(?:<br\s*\/?>\s*)*<\/p>/gi,
+    `<p style="${EMAIL_P_STYLE}">&nbsp;</p>`
+  );
+  out = out.replace(/<p\b([^>]*)>/gi, (_m, attrs: string) => {
+    const a = attrs || '';
+    if (/style\s*=/i.test(a)) {
+      if (/margin\s*:/i.test(a)) return `<p${a}>`;
+      return `<p${a.replace(/style\s*=\s*(['"])(.*?)\1/i, (_s: string, q: string, style: string) => `style=${q}${EMAIL_P_STYLE}${style}${q}`)}>`;
+    }
+    return `<p style="${EMAIL_P_STYLE}"${a}>`;
+  });
+  out = out.replace(/<ul\b([^>]*)>/gi, (m, attrs: string) =>
+    /style\s*=/i.test(attrs || '') ? m : `<ul style="${EMAIL_UL_STYLE}"${attrs || ''}>`
+  );
+  out = out.replace(/<ol\b([^>]*)>/gi, (m, attrs: string) =>
+    /style\s*=/i.test(attrs || '') ? m : `<ol style="${EMAIL_UL_STYLE}"${attrs || ''}>`
+  );
+  out = out.replace(/<li\b([^>]*)>/gi, (m, attrs: string) =>
+    /style\s*=/i.test(attrs || '') ? m : `<li style="${EMAIL_LI_STYLE}"${attrs || ''}>`
+  );
+  return out;
+}
+
+function linkifyHtmlKeepStructure(html: string): string {
+  return html.replace(/(^|[^"'>=])(https?:\/\/[^\s<]+)/gi, (full, prefix, url) => {
+    if (typeof prefix === 'string' && /href\s*=\s*$/i.test(prefix)) return full;
+    if (/href\s*=\s*["']?https?:/i.test(full)) return full;
+    const href = String(url).replace(/&amp;/g, '&');
+    return `${prefix}<a href="${href.replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${url}</a>`;
+  });
+}
+
 function previewBodyToHtml(text: string): string {
   const raw = (text || '').trim();
   if (!raw) return '';
   if (raw.includes('<p>') || raw.includes('<div') || raw.includes('<ul') || raw.includes('<ol') || raw.includes('<a ')) {
-    // Still linkify bare URLs that were never wrapped in <a>
-    return raw.replace(/(^|[^"'>=])(https?:\/\/[^\s<]+)/gi, (full, prefix, url) => {
-      if (typeof prefix === 'string' && /href\s*=\s*$/i.test(prefix)) return full;
-      // Skip if this URL is already inside an href="..."
-      if (/href\s*=\s*["']?https?:/i.test(full)) return full;
-      const href = String(url).replace(/&amp;/g, '&');
-      return `${prefix}<a href="${href.replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${url}</a>`;
-    });
+    return applyInlineEmailBodySpacing(linkifyHtmlKeepStructure(raw));
   }
   const blocks = raw.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
   const out: string[] = [];
@@ -96,14 +134,14 @@ function previewBodyToHtml(text: string): string {
       const items = lines.filter(Boolean).map((l) => l.replace(/^(\s*)([-*•]\s*|(\d+\.)\s)/, '').trim());
       if (items.length) {
         out.push(
-          '<ul style="margin:12px 0;padding-left:20px;">' +
-            items.map((i) => `<li style="margin-bottom:6px;">${linkifyEscapedText(escapeHtmlText(i))}</li>`).join('') +
+          `<ul style="${EMAIL_UL_STYLE}">` +
+            items.map((i) => `<li style="${EMAIL_LI_STYLE}">${linkifyEscapedText(escapeHtmlText(i))}</li>`).join('') +
             '</ul>'
         );
       }
     } else {
       const para = lines.map((l) => linkifyEscapedText(escapeHtmlText(l))).join('<br>');
-      if (para) out.push(`<p style="margin:0 0 12px 0;line-height:1.5;">${para}</p>`);
+      if (para) out.push(`<p style="${EMAIL_P_STYLE}">${para}</p>`);
     }
   }
   return out.join('');
@@ -129,7 +167,7 @@ function resolveBodyHtml(text: string, htmlFallback = ''): string {
     return previewBodyToHtml(text);
   }
   if (html) {
-    // Ensure bare URLs inside existing HTML become clickable anchors.
+    // Linkify bare URLs + inline paragraph spacing for preview/send parity.
     return previewBodyToHtml(html);
   }
   if (t) return previewBodyToHtml(text);
@@ -4863,8 +4901,8 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             const bodyHtmlB = variantBBodyHtml(abBodyTextB, abBodyHtmlB);
             const previewSubjectB = personalizeText(abSubjectB || subject, previewPerson, false) || 'No subject';
             const previewBodyB = personalizeText(bodyHtmlB || previewBodyA, previewPerson, true) || '<p>Variant B body...</p>';
-            const showAbPreviews =
-              !usePersonalizedEmails && !!(abSubjectB?.trim() || abBodyTextB?.trim());
+            // Always show A/B preview tabs when A/B testing is ON (B may still be draft).
+            const showAbPreviews = !!abTestEnabled;
 
             return (
               <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
@@ -4882,6 +4920,11 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                       <TabsTrigger value="previewA">Variant A</TabsTrigger>
                       <TabsTrigger value="previewB">Variant B</TabsTrigger>
                     </TabsList>
+                    {!(abSubjectB?.trim() || abBodyTextB?.trim() || abBodyHtmlB?.trim()) && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Variant B still uses Variant A content until you add a B subject or body in the A/B section above.
+                      </p>
+                    )}
                     <TabsContent value="previewA" className="mt-3 space-y-2">
                       <div className="text-sm">
                         <strong>Subject:</strong> {previewSubjectA}

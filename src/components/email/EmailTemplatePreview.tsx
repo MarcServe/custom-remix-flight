@@ -145,13 +145,14 @@ export function EmailTemplatePreview({
       const bodyContent = (
         <div className="lb-preview-body" style={{ color, fontSize: '15px', lineHeight: '1.6' }}>
           <style>{`
-            .lb-preview-body p, .lb-preview-body div { margin: 0 0 12px 0; }
-            .lb-preview-body p:last-child, .lb-preview-body div:last-child { margin-bottom: 0; }
-            .lb-preview-body ul, .lb-preview-body ol { margin: 12px 0; padding-left: 20px; }
-            .lb-preview-body li { margin-bottom: 6px; }
-            .lb-preview-body h1, .lb-preview-body h2, .lb-preview-body h3 { margin: 16px 0 8px 0; line-height: 1.3; }
+            .lb-preview-body p, .lb-preview-body div { margin: 0 0 16px 0 !important; line-height: 1.6 !important; }
+            .lb-preview-body p:last-child, .lb-preview-body div:last-child { margin-bottom: 0 !important; }
+            .lb-preview-body ul, .lb-preview-body ol { margin: 12px 0 !important; padding-left: 20px !important; }
+            .lb-preview-body li { margin: 0 0 6px 0 !important; }
+            .lb-preview-body h1, .lb-preview-body h2, .lb-preview-body h3 { margin: 16px 0 8px 0 !important; line-height: 1.3; }
             .lb-preview-body img { max-width: 100%; height: auto; border-radius: 8px; }
             .lb-preview-body br { line-height: 1.6; }
+            .lb-preview-body a { color: #2563eb; text-decoration: underline; word-break: break-all; }
           `}</style>
           <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
         </div>

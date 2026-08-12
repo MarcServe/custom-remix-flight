@@ -36,7 +36,15 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle | null, RichTextEd
 ) {
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        // Inline paragraph spacing so getHTML() matches preview/sent email
+        // (Gmail ignores stylesheet margins on <p>).
+        paragraph: {
+          HTMLAttributes: {
+            style: 'margin:0 0 16px 0;line-height:1.6;',
+          },
+        },
+      }),
       Placeholder.configure({
         placeholder,
       }),
@@ -66,7 +74,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle | null, RichTextEd
     editable: !disabled,
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
-      const text = editor.getText();
+      // Keep blank lines between paragraphs in plain-text twin (double newline).
+      const text = editor.getText({ blockSeparator: '\n\n' });
       onChange(html, text);
     },
     editorProps: {
