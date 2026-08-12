@@ -371,7 +371,9 @@ serve(async (req) => {
     if (campaign.header_image_url) {
       branding.logoUrl = campaign.header_image_url;
       branding.footerImageUrl = null;
-      branding.headerBanner = true; // full banner, not cropped logo cover
+      // Always full-bleed banner (never logo cover crop). Mobile Gmail often
+      // ignores fixed-height/object-fit; iPad/web honor them and clip.
+      branding.headerBanner = true;
     }
     if (branding.logoUrl && !branding.companyName) branding.companyName = businessProfile?.company_name || 'Company';
 
