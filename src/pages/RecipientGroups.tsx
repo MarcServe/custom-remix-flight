@@ -42,6 +42,7 @@ import { parseRecipientRowsFromCSVText, parsePhoneRecipientRowsFromText } from "
 import { PhoneCampaignDialog } from "@/components/PhoneCampaignDialog";
 import { getCompanyResolvableEmail } from "@/lib/company-email";
 import { createRecipientGroupWithMembers } from "@/lib/recipient-group-mutations";
+import { fetchRecipientGroupsResilient, fetchRecipientGroupMembersResilient } from "@/lib/recipient-group-db";
 
 type RecipientGroup = {
   id: string;
@@ -155,35 +156,23 @@ export default function RecipientGroups() {
     [pasteText]
   );
 
-  const { data: groups = [], isLoading } = useQuery({
+  const {
+    data: groups = [],
+    isLoading,
+    isError: groupsError,
+    error: groupsErrorObj,
+    refetch: refetchGroups,
+  } = useQuery({
     queryKey: ["recipient-groups-page"],
     queryFn: async () => {
       const {
         data: { user: u },
       } = await supabase.auth.getUser();
       if (!u) return [];
-      const { data: groupsData, error: groupsError } = await supabase
-        .from("recipient_groups")
-        .select("id, name, description, created_at, channel")
-        .eq("user_id", u.id)
-        .order("created_at", { ascending: false });
-      if (groupsError) throw groupsError;
-      if (!groupsData?.length) return [];
-      const ids = groupsData.map((g) => g.id);
-      const { data: countsData } = await supabase
-        .from("recipient_group_members")
-        .select("group_id")
-        .in("group_id", ids);
-      const countByGroup: Record<string, number> = {};
-      ids.forEach((id) => (countByGroup[id] = 0));
-      (countsData || []).forEach((r: { group_id: string }) => {
-        countByGroup[r.group_id] = (countByGroup[r.group_id] || 0) + 1;
-      });
-      return (groupsData || []).map((g) => ({
-        ...g,
-        member_count: countByGroup[g.id] ?? 0,
-      })) as RecipientGroup[];
+      // Resilient to missing channel column (phone-groups migration not applied yet).
+      return fetchRecipientGroupsResilient(supabase, u.id) as Promise<RecipientGroup[]>;
     },
+    retry: 1,
   });
 
   const { data: peoplePickList = [], isLoading: loadingPeoplePick } = useQuery({
@@ -364,18 +353,17 @@ export default function RecipientGroups() {
         return;
       }
       const rows: { email: string; first_name: string | null; last_name: string | null; company: string | null; person_id: string | null; phone: string | null }[] = [];
-      const PAGE = 1000;
-      let page = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from("recipient_group_members")
-          .select("email, first_name, last_name, company, person_id, phone")
-          .eq("group_id", g.id)
-          .range(page * PAGE, (page + 1) * PAGE - 1);
-        if (error) throw error;
-        if (data?.length) rows.push(...(data as any[]));
-        if (!data || data.length < PAGE) break;
-        page++;
+      // Prefer resilient member fetch (works before/after phone column migration).
+      const members = await fetchRecipientGroupMembersResilient(supabase, g.id);
+      for (const m of members) {
+        rows.push({
+          email: m.email,
+          first_name: m.first_name,
+          last_name: m.last_name,
+          company: m.company,
+          person_id: null,
+          phone: m.phone,
+        });
       }
       // If group is phone-heavy (no emails), open phone campaign
       const phoneOnly = rows.filter((m) => m.phone && !(m.email || "").trim());
@@ -896,13 +884,8 @@ export default function RecipientGroups() {
     queryKey: ["recipient-group-members", manageId],
     enabled: !!manageId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("recipient_group_members")
-        .select("id, email, phone, first_name, last_name, company")
-        .eq("group_id", manageId)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data || [];
+      if (!manageId) return [];
+      return fetchRecipientGroupMembersResilient(supabase, manageId);
     },
   });
 
@@ -1040,6 +1023,17 @@ export default function RecipientGroups() {
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : groupsError ? (
+            <div className="text-center py-12 text-muted-foreground space-y-3">
+              <FolderOpen className="h-12 w-12 mx-auto mb-1 opacity-50" />
+              <p className="font-medium text-destructive">Couldn&apos;t load your groups</p>
+              <p className="text-sm max-w-md mx-auto">
+                {(groupsErrorObj as Error)?.message || "Something went wrong fetching recipient groups."}
+              </p>
+              <Button variant="outline" onClick={() => void refetchGroups()}>
+                Try again
+              </Button>
             </div>
           ) : groups.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">

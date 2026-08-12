@@ -104,21 +104,36 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
-      const { data: groups } = await supabase
+      // Prefer channel when available; fall back if migration not applied.
+      let groups: { id: string; name: string; description: string | null; channel?: string | null }[] = [];
+      const withChannel = await supabase
         .from('recipient_groups')
         .select('id, name, description, channel')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
-      if (!groups?.length) return [];
+      if (!withChannel.error && withChannel.data) {
+        groups = withChannel.data;
+      } else {
+        const fallback = await supabase
+          .from('recipient_groups')
+          .select('id, name, description')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        if (fallback.error) throw fallback.error;
+        groups = (fallback.data || []).map((g) => ({ ...g, channel: 'email' }));
+      }
+      if (!groups.length) return [];
       const ids = groups.map((g) => g.id);
-      const { data: members } = await supabase
+      const withPhone = await supabase
         .from('recipient_group_members')
         .select('group_id, phone')
         .in('group_id', ids)
         .not('phone', 'is', null);
       const counts: Record<string, number> = {};
-      for (const m of members || []) {
-        if (m.phone) counts[m.group_id] = (counts[m.group_id] || 0) + 1;
+      if (!withPhone.error) {
+        for (const m of withPhone.data || []) {
+          if (m.phone) counts[m.group_id] = (counts[m.group_id] || 0) + 1;
+        }
       }
       return groups
         .map((g) => ({ ...g, phoneCount: counts[g.id] || 0 }))
