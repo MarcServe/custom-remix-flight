@@ -58,10 +58,31 @@ export interface BulkEmailDialogHandle {
   replaceRecipientsWithSelection: () => Promise<void>;
 }
 
+const BARE_URL_RE = /https?:\/\/[^\s<>"')\]]+/gi;
+
+function escapeHtmlText(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Turn bare http(s) URLs into anchors (after HTML-escaping the surrounding text). */
+function linkifyEscapedText(escaped: string): string {
+  return escaped.replace(/(https?:\/\/[^\s<&]+)/gi, (url) => {
+    const href = url.replace(/&amp;/g, '&');
+    return `<a href="${href.replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${url}</a>`;
+  });
+}
+
 function previewBodyToHtml(text: string): string {
   const raw = (text || '').trim();
   if (!raw) return '';
-  if (raw.includes('<p>') || raw.includes('<div') || raw.includes('<ul') || raw.includes('<ol')) return raw;
+  if (raw.includes('<p>') || raw.includes('<div') || raw.includes('<ul') || raw.includes('<ol')) {
+    // Still linkify bare URLs that were never wrapped in <a>
+    return raw.replace(/(^|[^"'>=])(https?:\/\/[^\s<&]+)/gi, (full, prefix, url) => {
+      if (typeof prefix === 'string' && /href\s*=\s*$/i.test(prefix)) return full;
+      const href = String(url).replace(/&amp;/g, '&');
+      return `${prefix}<a href="${href.replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${url}</a>`;
+    });
+  }
   const blocks = raw.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
   const out: string[] = [];
   for (const block of blocks) {
@@ -69,24 +90,43 @@ function previewBodyToHtml(text: string): string {
     const listMatch = lines.every((l) => /^(\s*)([-*•]\s*|(\d+\.)\s)/.test(l) || l === '');
     if (listMatch && lines.some(Boolean)) {
       const items = lines.filter(Boolean).map((l) => l.replace(/^(\s*)([-*•]\s*|(\d+\.)\s)/, '').trim());
-      if (items.length) out.push('<ul style="margin:12px 0;padding-left:20px;">' + items.map((i) => `<li style="margin-bottom:6px;">${i.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</li>`).join('') + '</ul>');
+      if (items.length) {
+        out.push(
+          '<ul style="margin:12px 0;padding-left:20px;">' +
+            items.map((i) => `<li style="margin-bottom:6px;">${linkifyEscapedText(escapeHtmlText(i))}</li>`).join('') +
+            '</ul>'
+        );
+      }
     } else {
-      const para = lines.map((l) => l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')).join('<br>');
+      const para = lines.map((l) => linkifyEscapedText(escapeHtmlText(l))).join('<br>');
       if (para) out.push(`<p style="margin:0 0 12px 0;line-height:1.5;">${para}</p>`);
     }
   }
   return out.join('');
 }
 
+function textHasUrlMissingFromHtml(text: string, html: string): boolean {
+  const urls = (text || '').match(BARE_URL_RE) || [];
+  if (!urls.length) return false;
+  const normalizedHtml = (html || '').replace(/&amp;/g, '&');
+  if (!normalizedHtml.trim()) return true;
+  return urls.some((u) => !normalizedHtml.includes(u));
+}
+
 /**
- * Variant B is edited as plain text. Always bake HTML from that text so inbox
- * content matches the textarea (stale ab_body_html_b previously dropped URLs
- * and other edits added after the last HTML bake).
+ * Resolve Variant B HTML for save/send/preview.
+ * Prefers editor HTML when present, but rebuilds from plain text when the text
+ * contains bare URLs that stale ab_body_html_b dropped (classic A/B B bug).
  */
 function variantBBodyHtml(textB: string, htmlBFallback = ''): string {
   const text = (textB || '').trim();
+  const html = (htmlBFallback || '').trim();
+  if (text && textHasUrlMissingFromHtml(text, html)) {
+    return previewBodyToHtml(textB);
+  }
+  if (html) return html;
   if (text) return previewBodyToHtml(textB);
-  return (htmlBFallback || '').trim();
+  return '';
 }
 
 /**
@@ -2402,8 +2442,16 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setAbTestEnabled(abEnabled);
       setAbSectionOpen(abEnabled || !!(draft as any).ab_subject_b || !!(draft as any).ab_body_text_b);
       setAbSubjectB((draft as any).ab_subject_b ?? "");
-      setAbBodyHtmlB((draft as any).ab_body_html_b ?? "");
-      setAbBodyTextB((draft as any).ab_body_text_b ?? "");
+      {
+        const textB = String((draft as any).ab_body_text_b ?? "");
+        let htmlB = String((draft as any).ab_body_html_b ?? "");
+        // Rebuild B HTML when text has URLs/content that stale HTML dropped.
+        if (textB.trim() && (!htmlB.trim() || textHasUrlMissingFromHtml(textB, htmlB))) {
+          htmlB = previewBodyToHtml(textB);
+        }
+        setAbBodyHtmlB(htmlB);
+        setAbBodyTextB(textB);
+      }
       setAbTrafficSplit(typeof (draft as any).ab_traffic_split === 'number' ? (draft as any).ab_traffic_split : 50);
       const metric = (draft as any).ab_winner_metric;
       setAbWinnerMetric(metric === 'click_rate' || metric === 'reply_rate' ? metric : 'open_rate');
@@ -3991,16 +4039,17 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 </div>
                 <div className="space-y-2">
                   <Label>Variant B — Body</Label>
-                  <Textarea
-                    value={abBodyTextB}
-                    onChange={(e) => {
-                      const text = e.target.value;
+                  <p className="text-xs text-muted-foreground">
+                    Same editor as Variant A so links and formatting are preserved on send.
+                  </p>
+                  <RichTextEditor
+                    content={abBodyHtmlB || (abBodyTextB.trim() ? previewBodyToHtml(abBodyTextB) : '')}
+                    onChange={(html, text) => {
+                      setAbBodyHtmlB(html);
                       setAbBodyTextB(text);
-                      // Keep HTML in sync with the textarea (source of truth for Variant B).
-                      setAbBodyHtmlB(text.trim() ? previewBodyToHtml(text) : '');
                     }}
-                    placeholder="Alternative email body (same placeholders: {{firstName}}, {{companyName}}, etc.)"
-                    className="min-h-[120px] bg-background"
+                    disabled={sending || generatingAi}
+                    placeholder="Alternative email body (same placeholders: {{firstName}}, {{companyName}}, {{demoLink}}, etc.)"
                   />
                 </div>
               </CollapsibleContent>

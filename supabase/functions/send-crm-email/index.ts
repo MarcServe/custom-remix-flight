@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { renderEmailTemplate } from "../_shared/professional-template.ts";
+import { renderEmailTemplate, resolveRecipientBodyHtml } from "../_shared/professional-template.ts";
 import { encodeRfc2047 } from "../_shared/gmail-utils.ts";
 import { stripTrailingDuplicateSignoffHtml } from "../_shared/strip-trailing-signoff.ts";
 
@@ -195,10 +195,17 @@ serve(async (req) => {
     // Generate thread_id for email threading (used across all sending methods)
     const threadId = `crm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Support both legacy plain text and new HTML emails
-    // Note: We'll use renderEmailTemplate which handles signatures, so we extract just the body content
-    let emailBodyContent = bodyHtml || (body ? `<p>${body.replace(/\n/g, '</p><p>')}</p>` : '') || '';
+    // Support both legacy plain text and new HTML emails.
+    // Variant B tests often send text with bare URLs while HTML is stale/missing them —
+    // resolveRecipientBodyHtml rebuilds from text in that case.
     let emailBodyText = bodyText || body || '';
+    let emailBodyContent = resolveRecipientBodyHtml(
+      bodyHtml || (body && /<\s*[a-zA-Z]/.test(body) ? body : '') || '',
+      emailBodyText || (body && !/<\s*[a-zA-Z]/.test(body) ? body : '') || '',
+    );
+    if (!emailBodyContent && body) {
+      emailBodyContent = /<\s*[a-zA-Z]/.test(body) ? body : `<p>${body.replace(/\n/g, '</p><p>')}</p>`;
+    }
     
     // Ensure emailBodyContent is always a string (not undefined/null)
     if (!emailBodyContent) {

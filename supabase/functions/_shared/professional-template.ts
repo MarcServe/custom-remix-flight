@@ -176,6 +176,18 @@ function renderSignatureBlock(opts: {
  * - Single newlines within a paragraph become <br>.
  * - Already HTML content is returned as-is.
  */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** Linkify bare URLs inside already-escaped text. */
+function linkifyEscapedText(escaped: string): string {
+  return escaped.replace(/(https?:\/\/[^\s<&]+)/gi, (url) => {
+    const href = url.replace(/&amp;/g, '&');
+    return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${url}</a>`;
+  });
+}
+
 function bodyTextToHtml(text: string): string {
   let raw = (text || '').trim();
   if (!raw) return '';
@@ -183,8 +195,14 @@ function bodyTextToHtml(text: string): string {
   if (/&lt;/.test(raw) && !/<\s*[a-zA-Z]/.test(raw)) {
     raw = raw.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
   }
-  // Pass through any content that looks like HTML so it is never escaped
-  if (/<\s*[a-zA-Z]/.test(raw)) return raw;
+  // Pass through any content that looks like HTML so it is never escaped —
+  // but still wrap bare URLs that were never turned into <a> tags (Variant B).
+  if (/<\s*[a-zA-Z]/.test(raw)) {
+    return raw.replace(/(^|[^"'>=])(https?:\/\/[^\s<&]+)/gi, (full, prefix, url) => {
+      if (typeof prefix === 'string' && /href\s*=\s*$/i.test(prefix)) return full;
+      return `${prefix}<a href="${escapeHtml(String(url).replace(/&amp;/g, '&'))}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${url}</a>`;
+    });
+  }
   const blocks = raw.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
   const out: string[] = [];
   for (const block of blocks) {
@@ -192,16 +210,34 @@ function bodyTextToHtml(text: string): string {
     const listMatch = lines.every((l) => /^(\s*)([-*•]\s*|(\d+\.)\s)/.test(l) || l === '');
     if (listMatch && lines.some(Boolean)) {
       const items = lines.filter(Boolean).map((l) => l.replace(/^(\s*)([-*•]\s*|(\d+\.)\s)/, '').trim());
-      if (items.length) out.push('<ul style="margin:12px 0;padding-left:20px;">' + items.map((i) => `<li style="margin-bottom:6px;">${escapeHtml(i)}</li>`).join('') + '</ul>');
+      if (items.length) out.push('<ul style="margin:12px 0;padding-left:20px;">' + items.map((i) => `<li style="margin-bottom:6px;">${linkifyEscapedText(escapeHtml(i))}</li>`).join('') + '</ul>');
     } else {
-      const para = lines.map(escapeHtml).join('<br>\n');
+      const para = lines.map((l) => linkifyEscapedText(escapeHtml(l))).join('<br>\n');
       if (para) out.push(`<p style="margin:0 0 14px 0;line-height:1.5;">${para}</p>`);
     }
   }
   return out.join('\n');
 }
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** True when plain text has http(s) URLs that are missing from the HTML body. */
+export function textHasUrlMissingFromHtml(text: string, html: string): boolean {
+  const urls = (text || '').match(/https?:\/\/[^\s<>"')\]]+/gi) || [];
+  if (!urls.length) return false;
+  const normalizedHtml = (html || '').replace(/&amp;/g, '&');
+  if (!normalizedHtml.trim()) return true;
+  return urls.some((u) => !normalizedHtml.includes(u));
+}
+
+/** Prefer HTML, but rebuild from text when Variant B stale HTML dropped bare URLs. */
+export function resolveRecipientBodyHtml(bodyHtml: string, bodyText: string): string {
+  const html = (bodyHtml || '').trim();
+  const text = (bodyText || '').trim();
+  if (text && textHasUrlMissingFromHtml(text, html)) {
+    return bodyTextToHtml(text);
+  }
+  if (html) return html;
+  if (text) return bodyTextToHtml(text);
+  return '';
 }
 
 export function renderProfessionalTemplate({

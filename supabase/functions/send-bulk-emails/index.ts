@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
-import { renderEmailTemplate } from "../_shared/professional-template.ts";
+import { renderEmailTemplate, resolveRecipientBodyHtml } from "../_shared/professional-template.ts";
 import { stripTrailingDuplicateSignoffHtml } from "../_shared/strip-trailing-signoff.ts";
 import { personalizeEmailTemplate, mergeContextFromRecipient } from "../_shared/email-personalize.ts";
 
@@ -128,10 +128,12 @@ function buildWrappedHtml(
   senderName: string,
   fromEmail: string,
 ): string {
-  let bodyHtml = recipient.personalized_body_html || '';
-  if (!bodyHtml.trim() && (recipient.personalized_body_text || '').trim()) {
-    bodyHtml = recipient.personalized_body_text;
-  }
+  // Variant B often had stale personalized_body_html (missing bare URLs) while
+  // personalized_body_text still had them — rebuild from text when that happens.
+  let bodyHtml = resolveRecipientBodyHtml(
+    recipient.personalized_body_html || '',
+    recipient.personalized_body_text || '',
+  );
   bodyHtml = stripTrailingDuplicateSignoffHtml(bodyHtml);
 
   return renderEmailTemplate(branding.templateStyle, {
