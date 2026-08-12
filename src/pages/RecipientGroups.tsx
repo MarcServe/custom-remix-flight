@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Phone, Loader2, Pencil, Trash2, Users, FolderOpen, Plus, Upload, Building2, UserCircle, ClipboardPaste, Inbox, Target, Megaphone, Send, Copy, Check, UserPlus, X } from "lucide-react";
+import { Phone, Loader2, Pencil, Trash2, Users, FolderOpen, Plus, Upload, Building2, UserCircle, ClipboardPaste, Inbox, Target, Megaphone, Send, Copy, Check, UserPlus, X, MoreHorizontal } from "lucide-react";
 import { useCampaignDialog } from "@/contexts/CampaignDialogContext";
 import {
   Dialog,
@@ -25,6 +25,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -985,15 +992,81 @@ export default function RecipientGroups() {
     }
   };
 
+  const channelBadge = (channel: string | null | undefined) => {
+    if (channel === "phone") {
+      return (
+        <Badge variant="secondary" className="gap-1">
+          <Phone className="h-3 w-3" /> Phone
+        </Badge>
+      );
+    }
+    if (channel === "mixed") return <Badge variant="outline">Mixed</Badge>;
+    return <Badge variant="outline">Email</Badge>;
+  };
+
+  const groupActionsMenu = (g: RecipientGroup) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" aria-label="Group actions">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuItem
+          disabled={launchingCampaignId === g.id || (g.member_count ?? 0) === 0}
+          onClick={() => handleCreateCampaignFromGroup(g)}
+        >
+          {launchingCampaignId === g.id ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4 mr-2" />
+          )}
+          Create campaign
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => openManage(g)}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Manage members
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => openRename(g)}>
+          <Pencil className="h-4 w-4 mr-2" />
+          Edit group
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            navigator.clipboard.writeText(g.id);
+            setCopiedGroupId(g.id);
+            setTimeout(() => setCopiedGroupId((c) => (c === g.id ? null : c)), 1500);
+            toast({ title: "Group ID copied", description: "Use it as group_id in the API / daily automation." });
+          }}
+        >
+          {copiedGroupId === g.id ? (
+            <Check className="h-4 w-4 mr-2 text-emerald-600" />
+          ) : (
+            <Copy className="h-4 w-4 mr-2" />
+          )}
+          Copy group ID
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          onClick={() => setDeleteId(g.id)}
+        >
+          <Trash2 className="h-4 w-4 mr-2" />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 min-w-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            <Users className="h-6 w-6" />
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight flex items-center gap-2">
+            <Users className="h-5 w-5 sm:h-6 sm:w-6 shrink-0" />
             Recipient Groups
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Saved lists for email{" "}
             <Link to="/campaigns" className="text-primary hover:underline">
               Campaigns
@@ -1005,21 +1078,21 @@ export default function RecipientGroups() {
             . Create email or phone groups from CSV, paste, People, or Companies.
           </p>
         </div>
-        <Button onClick={openCreate} className="shrink-0">
+        <Button onClick={openCreate} className="shrink-0 w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-2" />
           New group
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader className="px-4 sm:px-6">
           <CardTitle className="flex items-center gap-2">
             <FolderOpen className="h-5 w-5" />
             Your groups
           </CardTitle>
           <CardDescription>Rename, delete, or create a new list below.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4 sm:px-6">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1048,100 +1121,108 @@ export default function RecipientGroups() {
               </Button>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Channel</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="text-right">Members</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="w-[120px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Phone / iPad: stacked rows (avoids cramped table + horizontal scroll) */}
+              <div className="space-y-3 lg:hidden">
                 {groups.map((g) => (
-                  <TableRow key={g.id}>
-                    <TableCell className="font-medium">{g.name}</TableCell>
-                    <TableCell>
-                      {g.channel === "phone" ? (
-                        <Badge variant="secondary" className="gap-1">
-                          <Phone className="h-3 w-3" /> Phone
-                        </Badge>
-                      ) : g.channel === "mixed" ? (
-                        <Badge variant="outline">Mixed</Badge>
-                      ) : (
-                        <Badge variant="outline">Email</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground max-w-[200px] truncate">
-                      {g.description || "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{g.member_count ?? 0}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {formatDistanceToNow(new Date(g.created_at), { addSuffix: true })}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 gap-1.5"
-                          disabled={launchingCampaignId === g.id || (g.member_count ?? 0) === 0}
-                          onClick={() => handleCreateCampaignFromGroup(g)}
-                        >
-                          {launchingCampaignId === g.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                          <span className="hidden sm:inline">Create campaign</span>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            navigator.clipboard.writeText(g.id);
-                            setCopiedGroupId(g.id);
-                            setTimeout(() => setCopiedGroupId((c) => (c === g.id ? null : c)), 1500);
-                            toast({ title: "Group ID copied", description: "Use it as group_id in the API / daily automation." });
-                          }}
-                          aria-label="Copy group ID"
-                          title="Copy group ID (for the API / MCP)"
-                        >
-                          {copiedGroupId === g.id ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => openManage(g)}
-                          aria-label="Manage members"
-                          title="Add or remove emails"
-                        >
-                          <UserPlus className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => openRename(g)}
-                          aria-label="Rename"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => setDeleteId(g.id)}
-                          aria-label="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                  <div
+                    key={g.id}
+                    className="rounded-lg border bg-background/60 p-3 sm:p-4 space-y-3 min-w-0"
+                  >
+                    <div className="flex items-start gap-2 min-w-0">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="font-medium truncate">{g.name}</div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          {channelBadge(g.channel)}
+                          <span className="tabular-nums">{g.member_count ?? 0} members</span>
+                          <span>·</span>
+                          <span>{formatDistanceToNow(new Date(g.created_at), { addSuffix: true })}</span>
+                        </div>
+                        {g.description ? (
+                          <p className="text-sm text-muted-foreground line-clamp-2">{g.description}</p>
+                        ) : null}
                       </div>
-                    </TableCell>
-                  </TableRow>
+                      {groupActionsMenu(g)}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 flex-1 min-w-[8.5rem]"
+                        disabled={launchingCampaignId === g.id || (g.member_count ?? 0) === 0}
+                        onClick={() => handleCreateCampaignFromGroup(g)}
+                      >
+                        {launchingCampaignId === g.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                        ) : (
+                          <Send className="h-3.5 w-3.5 mr-1.5" />
+                        )}
+                        Create campaign
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-9 flex-1 min-w-[8.5rem]"
+                        onClick={() => openManage(g)}
+                      >
+                        <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                        Manage members
+                      </Button>
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+
+              {/* Desktop: table */}
+              <div className="hidden lg:block min-w-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Channel</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="text-right">Members</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="w-[1%] text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {groups.map((g) => (
+                      <TableRow key={g.id}>
+                        <TableCell className="font-medium max-w-[220px] truncate">{g.name}</TableCell>
+                        <TableCell>{channelBadge(g.channel)}</TableCell>
+                        <TableCell className="text-muted-foreground max-w-[220px] truncate">
+                          {g.description || "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{g.member_count ?? 0}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                          {formatDistanceToNow(new Date(g.created_at), { addSuffix: true })}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5"
+                              disabled={launchingCampaignId === g.id || (g.member_count ?? 0) === 0}
+                              onClick={() => handleCreateCampaignFromGroup(g)}
+                            >
+                              {launchingCampaignId === g.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Send className="h-3.5 w-3.5" />
+                              )}
+                              Create campaign
+                            </Button>
+                            {groupActionsMenu(g)}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -1154,21 +1235,22 @@ export default function RecipientGroups() {
           if (!open) resetCreateForm();
         }}
       >
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-lg flex flex-col gap-0 overflow-hidden p-0 max-h-[min(92dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-0.75rem))]">
+          <DialogHeader className="shrink-0 px-4 pt-4 sm:px-6 sm:pt-6">
             <DialogTitle>New recipient group</DialogTitle>
             <DialogDescription>
               Choose email or phone. Members are stored for reuse in campaigns.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-1">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6 space-y-3">
             <div className="space-y-2">
               <Label>Group type</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   variant={createChannel === "email" ? "default" : "outline"}
                   size="sm"
+                  className="flex-1 sm:flex-none"
                   onClick={() => {
                     setCreateChannel("email");
                     setCsvPreviewCount(0);
@@ -1183,6 +1265,7 @@ export default function RecipientGroups() {
                   type="button"
                   variant={createChannel === "phone" ? "default" : "outline"}
                   size="sm"
+                  className="flex-1 sm:flex-none"
                   onClick={() => {
                     setCreateChannel("phone");
                     setCreateTab("paste");
@@ -1214,37 +1297,37 @@ export default function RecipientGroups() {
                 onChange={(e) => setCreateDescription(e.target.value)}
               />
             </div>
-            <Tabs value={createTab} onValueChange={(v) => setCreateTab(v as typeof createTab)} className="w-full">
-              <TabsList className="flex flex-wrap h-auto w-full justify-start gap-1">
-                <TabsTrigger value="csv" className="gap-1 text-xs sm:text-sm">
+            <Tabs value={createTab} onValueChange={(v) => setCreateTab(v as typeof createTab)} className="w-full min-w-0">
+              <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
+                <TabsTrigger value="csv" className="gap-1 text-xs sm:text-sm shrink-0">
                   <Upload className="h-3.5 w-3.5" />
                   CSV
                 </TabsTrigger>
-                <TabsTrigger value="paste" className="gap-1 text-xs sm:text-sm">
+                <TabsTrigger value="paste" className="gap-1 text-xs sm:text-sm shrink-0">
                   <ClipboardPaste className="h-3.5 w-3.5" />
                   Paste
                 </TabsTrigger>
                 {createChannel === "email" && (
-                  <TabsTrigger value="people" className="gap-1 text-xs sm:text-sm">
+                  <TabsTrigger value="people" className="gap-1 text-xs sm:text-sm shrink-0">
                     <UserCircle className="h-3.5 w-3.5" />
                     People
                   </TabsTrigger>
                 )}
-                <TabsTrigger value="companies" className="gap-1 text-xs sm:text-sm">
+                <TabsTrigger value="companies" className="gap-1 text-xs sm:text-sm shrink-0">
                   <Building2 className="h-3.5 w-3.5" />
                   Companies
                 </TabsTrigger>
                 {createChannel === "email" && (
                   <>
-                    <TabsTrigger value="leads" className="gap-1 text-xs sm:text-sm">
+                    <TabsTrigger value="leads" className="gap-1 text-xs sm:text-sm shrink-0">
                       <Inbox className="h-3.5 w-3.5" />
                       Lead Inbox
                     </TabsTrigger>
-                    <TabsTrigger value="deals" className="gap-1 text-xs sm:text-sm">
+                    <TabsTrigger value="deals" className="gap-1 text-xs sm:text-sm shrink-0">
                       <Target className="h-3.5 w-3.5" />
                       Deals
                     </TabsTrigger>
-                    <TabsTrigger value="campaign" className="gap-1 text-xs sm:text-sm">
+                    <TabsTrigger value="campaign" className="gap-1 text-xs sm:text-sm shrink-0">
                       <Megaphone className="h-3.5 w-3.5" />
                       Campaign
                     </TabsTrigger>
@@ -1586,11 +1669,11 @@ export default function RecipientGroups() {
               </TabsContent>
             </Tabs>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+          <DialogFooter className="shrink-0 border-t px-4 py-3 sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <Button variant="outline" onClick={() => setCreateOpen(false)} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button onClick={handleCreateGroup} disabled={creating || !createName.trim()}>
+            <Button onClick={handleCreateGroup} disabled={creating || !createName.trim()} className="w-full sm:w-auto">
               {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Create group
             </Button>
@@ -1626,10 +1709,10 @@ export default function RecipientGroups() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameId(null)}>
+            <Button variant="outline" onClick={() => setRenameId(null)} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button onClick={saveRename} disabled={savingRename || !renameName.trim()}>
+            <Button onClick={saveRename} disabled={savingRename || !renameName.trim()} className="w-full sm:w-auto">
               {savingRename ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Save
             </Button>
@@ -1639,9 +1722,16 @@ export default function RecipientGroups() {
 
       {/* Manage members dialog */}
       <Dialog open={!!manageId} onOpenChange={(open) => !open && setManageId(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Manage members — {manageName}</DialogTitle>
+        <DialogContent className="max-w-lg flex flex-col gap-0 overflow-hidden p-0 max-h-[min(92dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-0.75rem))]">
+          <DialogHeader className="shrink-0 px-4 pt-4 sm:px-6 sm:pt-6">
+            <DialogTitle className="truncate pr-2">
+              Manage members
+              {manageName ? (
+                <span className="block text-base font-normal text-muted-foreground truncate mt-1">
+                  {manageName}
+                </span>
+              ) : null}
+            </DialogTitle>
             <DialogDescription>
               {manageChannel === "phone"
                 ? "Add or remove phone numbers in this group. Changes save immediately."
@@ -1649,53 +1739,68 @@ export default function RecipientGroups() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 py-1">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6 space-y-3">
             <div className="space-y-2">
               <Label>{manageChannel === "phone" ? "Add phone numbers" : "Add emails"}</Label>
               <Textarea
                 value={addEmailsText}
                 onChange={(e) => setAddEmailsText(e.target.value)}
                 rows={2}
+                className="min-h-[4.5rem]"
                 placeholder={
                   manageChannel === "phone"
                     ? "Paste numbers — commas or new lines (e.g. +447700900123, +15550102000)"
                     : "Paste emails — commas, spaces or new lines (e.g. jane@acme.com, john@beta.co)"
                 }
               />
-              <Button size="sm" onClick={addMembers} disabled={savingMembers || !addEmailsText.trim()}>
+              <Button
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={addMembers}
+                disabled={savingMembers || !addEmailsText.trim()}
+              >
                 {savingMembers ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
                 Add to group
               </Button>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>{(manageMembers as any[]).length} member{(manageMembers as any[]).length === 1 ? "" : "s"}</Label>
+            <div className="space-y-2 min-h-0 flex flex-col">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Label className="shrink-0">
+                  {(manageMembers as any[]).length} member{(manageMembers as any[]).length === 1 ? "" : "s"}
+                </Label>
                 {selectedMemberIds.size > 0 && (
-                  <Button size="sm" variant="destructive" onClick={() => removeMembers([...selectedMemberIds])} disabled={savingMembers}>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="w-full sm:w-auto"
+                    onClick={() => removeMembers([...selectedMemberIds])}
+                    disabled={savingMembers}
+                  >
                     <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove {selectedMemberIds.size} selected
                   </Button>
                 )}
               </div>
-              <div className="max-h-72 overflow-auto rounded-md border divide-y">
+              <div className="max-h-[min(40vh,22rem)] sm:max-h-72 overflow-auto rounded-md border divide-y overscroll-contain">
                 {loadingManageMembers ? (
                   <div className="p-4 text-center text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
                 ) : (manageMembers as any[]).length === 0 ? (
                   <div className="p-4 text-center text-sm text-muted-foreground">No members yet — add some above.</div>
                 ) : (
                   (manageMembers as any[]).map((m) => (
-                    <div key={m.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+                    <div key={m.id} className="flex items-center gap-2 px-3 py-2.5 text-sm min-w-0">
                       <Checkbox
+                        className="h-5 w-5"
                         checked={selectedMemberIds.has(m.id)}
                         onCheckedChange={(c) => setSelectedMemberIds((prev) => { const n = new Set(prev); c ? n.add(m.id) : n.delete(m.id); return n; })}
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate">{m.phone || m.email}</div>
+                        <div className="truncate font-medium">{m.phone || m.email}</div>
                         {(m.first_name || m.last_name || m.company) && (
                           <div className="truncate text-xs text-muted-foreground">{[[m.first_name, m.last_name].filter(Boolean).join(" "), m.company].filter(Boolean).join(" · ")}</div>
                         )}
                       </div>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeMembers([m.id])} disabled={savingMembers} aria-label="Remove">
+                      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-destructive hover:text-destructive" onClick={() => removeMembers([m.id])} disabled={savingMembers} aria-label="Remove">
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -1705,8 +1810,8 @@ export default function RecipientGroups() {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setManageId(null)}>Done</Button>
+          <DialogFooter className="shrink-0 border-t px-4 py-3 sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <Button variant="outline" onClick={() => setManageId(null)} className="w-full sm:w-auto">Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

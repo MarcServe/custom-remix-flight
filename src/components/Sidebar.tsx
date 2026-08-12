@@ -270,10 +270,11 @@ export const Sidebar = () => {
     setIsMobileOpen(false);
   }, [location.pathname]);
 
-  // Close mobile menu on window resize to desktop
+  // Close overlay nav when viewport reaches desktop dock breakpoint (xl / 1280).
+  // Keep overlay through iPad landscape (~1024–1180) so content stays full-width.
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth >= 768) {
+      if (window.innerWidth >= 1280) {
         setIsMobileOpen(false);
       }
     };
@@ -295,20 +296,20 @@ export const Sidebar = () => {
 
   return (
     <>
-      {/* Mobile Menu Button */}
+      {/* Mobile / tablet menu button (overlay nav below xl) */}
       <Button
         variant="ghost"
         size="icon"
-        className="fixed top-3 left-3 z-[60] lg:hidden bg-background/95 backdrop-blur-sm border shadow-md"
+        className="fixed z-[60] xl:hidden bg-background/95 backdrop-blur-sm border shadow-md top-[max(0.75rem,env(safe-area-inset-top))] left-[max(0.75rem,env(safe-area-inset-left))]"
         onClick={() => setIsMobileOpen(!isMobileOpen)}
       >
         {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </Button>
 
-      {/* Mobile Overlay */}
+      {/* Mobile / tablet overlay */}
       {isMobileOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 z-[55] lg:hidden backdrop-blur-sm"
+          className="fixed inset-0 bg-black/60 z-[55] xl:hidden backdrop-blur-sm"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
@@ -320,10 +321,10 @@ export const Sidebar = () => {
         aria-label="Main navigation"
         className={cn(
           "flex h-full flex-col border-r bg-card transition-[width] duration-300 shrink-0",
-          "fixed lg:relative inset-y-0 left-0 z-[56]",
+          "fixed xl:relative inset-y-0 left-0 z-[56]",
           isCollapsed ? "w-16" : "w-[280px] sm:w-64",
-          // Mobile: hidden by default, slide in when open
-          isMobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"
+          // Overlay below xl (phones + iPad); docked from xl up
+          isMobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full xl:translate-x-0"
         )}
       >
         <div className="flex h-16 items-center border-b px-3 justify-between min-w-0">
@@ -341,7 +342,7 @@ export const Sidebar = () => {
           type="button"
           variant="ghost"
           size="icon"
-          className="h-8 w-8 shrink-0 hidden md:flex"
+          className="h-8 w-8 shrink-0 hidden xl:flex"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
