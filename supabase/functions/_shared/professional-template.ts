@@ -180,9 +180,9 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/** Linkify bare URLs inside already-escaped text. */
+/** Linkify bare URLs inside already-escaped text (keeps &amp; query params). */
 function linkifyEscapedText(escaped: string): string {
-  return escaped.replace(/(https?:\/\/[^\s<&]+)/gi, (url) => {
+  return escaped.replace(/(https?:\/\/[^\s<]+)/gi, (url) => {
     const href = url.replace(/&amp;/g, '&');
     return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${url}</a>`;
   });
@@ -198,7 +198,7 @@ function bodyTextToHtml(text: string): string {
   // Pass through any content that looks like HTML so it is never escaped —
   // but still wrap bare URLs that were never turned into <a> tags (Variant B).
   if (/<\s*[a-zA-Z]/.test(raw)) {
-    return raw.replace(/(^|[^"'>=])(https?:\/\/[^\s<&]+)/gi, (full, prefix, url) => {
+    return raw.replace(/(^|[^"'>=])(https?:\/\/[^\s<]+)/gi, (full, prefix, url) => {
       if (typeof prefix === 'string' && /href\s*=\s*$/i.test(prefix)) return full;
       return `${prefix}<a href="${escapeHtml(String(url).replace(/&amp;/g, '&'))}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${url}</a>`;
     });

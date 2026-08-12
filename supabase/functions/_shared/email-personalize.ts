@@ -37,12 +37,15 @@ export function personalizeEmailTemplate(template: string, ctx: EmailMergeContex
     companyname: companyName,
     company: companyName,
     company_name: companyName,
-    demolink: demoLink,
-    demo_link: demoLink,
   };
+  // Leave {{demoLink}} unreplaced when empty so CTAs are not wiped.
+  if (demoLink) {
+    map.demolink = demoLink;
+    map.demo_link = demoLink;
+  }
 
   for (const [k, v] of Object.entries(ctx.extras || {})) {
-    if (v == null) continue;
+    if (v == null || String(v).trim() === '') continue;
     map[normKey(k)] = String(v);
   }
 

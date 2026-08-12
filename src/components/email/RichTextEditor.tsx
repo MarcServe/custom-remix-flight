@@ -1,9 +1,10 @@
 import { useEditor, EditorContent } from '@tiptap/react';
-import { useEffect, forwardRef, useImperativeHandle, useRef } from 'react';
+import { useEffect, forwardRef, useImperativeHandle } from 'react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
-import { Bold, Italic, List, ListOrdered, Undo, Redo } from 'lucide-react';
+import Link from '@tiptap/extension-link';
+import { Bold, Italic, List, ListOrdered, Undo, Redo, Link2, Link2Off } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 
@@ -38,6 +39,18 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle | null, RichTextEd
       StarterKit,
       Placeholder.configure({
         placeholder,
+      }),
+      // Preserve <a href> on paste/edit — without this, Visual mode strips links
+      // and Variant A/B sent HTML loses demo URLs while link text remains.
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        linkOnPaste: true,
+        HTMLAttributes: {
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          style: 'color:#2563eb;text-decoration:underline;word-break:break-all;',
+        },
       }),
       ...(allowImages
         ? [
@@ -82,6 +95,20 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle | null, RichTextEd
     return null;
   }
 
+  const setLink = () => {
+    if (disabled) return;
+    const prev = editor.getAttributes('link').href as string | undefined;
+    const next = window.prompt('Link URL', prev || 'https://');
+    if (next === null) return;
+    const url = next.trim();
+    if (!url) {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+      return;
+    }
+    const href = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    editor.chain().focus().extendMarkRange('link').setLink({ href }).run();
+  };
+
   return (
     <div className="border rounded-lg overflow-hidden">
       {/* Toolbar */}
@@ -119,6 +146,32 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle | null, RichTextEd
         >
           <ListOrdered className="h-4 w-4" />
         </Toggle>
+        <div className="w-px h-6 bg-border mx-1" />
+        <Toggle
+          size="sm"
+          pressed={editor.isActive('link')}
+          onPressedChange={() => {
+            if (editor.isActive('link')) {
+              editor.chain().focus().extendMarkRange('link').unsetLink().run();
+            } else {
+              setLink();
+            }
+          }}
+          disabled={disabled}
+          aria-label="Link"
+        >
+          <Link2 className="h-4 w-4" />
+        </Toggle>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => editor.chain().focus().extendMarkRange('link').unsetLink().run()}
+          disabled={!editor.isActive('link') || disabled}
+          title="Remove link"
+        >
+          <Link2Off className="h-4 w-4" />
+        </Button>
         <div className="w-px h-6 bg-border mx-1" />
         <Button
           type="button"

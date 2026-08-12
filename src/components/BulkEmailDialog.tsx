@@ -58,7 +58,9 @@ export interface BulkEmailDialogHandle {
   replaceRecipientsWithSelection: () => Promise<void>;
 }
 
+// Allow query strings (& / &amp;) so UTM/demo links are not truncated.
 const BARE_URL_RE = /https?:\/\/[^\s<>"')\]]+/gi;
+const BARE_URL_IN_ESCAPED_RE = /https?:\/\/[^\s<]+/gi;
 
 function escapeHtmlText(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -66,7 +68,7 @@ function escapeHtmlText(s: string): string {
 
 /** Turn bare http(s) URLs into anchors (after HTML-escaping the surrounding text). */
 function linkifyEscapedText(escaped: string): string {
-  return escaped.replace(/(https?:\/\/[^\s<&]+)/gi, (url) => {
+  return escaped.replace(BARE_URL_IN_ESCAPED_RE, (url) => {
     const href = url.replace(/&amp;/g, '&');
     return `<a href="${href.replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${url}</a>`;
   });
@@ -75,10 +77,12 @@ function linkifyEscapedText(escaped: string): string {
 function previewBodyToHtml(text: string): string {
   const raw = (text || '').trim();
   if (!raw) return '';
-  if (raw.includes('<p>') || raw.includes('<div') || raw.includes('<ul') || raw.includes('<ol')) {
+  if (raw.includes('<p>') || raw.includes('<div') || raw.includes('<ul') || raw.includes('<ol') || raw.includes('<a ')) {
     // Still linkify bare URLs that were never wrapped in <a>
-    return raw.replace(/(^|[^"'>=])(https?:\/\/[^\s<&]+)/gi, (full, prefix, url) => {
+    return raw.replace(/(^|[^"'>=])(https?:\/\/[^\s<]+)/gi, (full, prefix, url) => {
       if (typeof prefix === 'string' && /href\s*=\s*$/i.test(prefix)) return full;
+      // Skip if this URL is already inside an href="..."
+      if (/href\s*=\s*["']?https?:/i.test(full)) return full;
       const href = String(url).replace(/&amp;/g, '&');
       return `${prefix}<a href="${href.replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${url}</a>`;
     });
@@ -114,19 +118,31 @@ function textHasUrlMissingFromHtml(text: string, html: string): boolean {
 }
 
 /**
- * Resolve Variant B HTML for save/send/preview.
+ * Shared A/B body HTML resolver for save/send/preview/test.
  * Prefers editor HTML when present, but rebuilds from plain text when the text
- * contains bare URLs that stale ab_body_html_b dropped (classic A/B B bug).
+ * contains bare URLs that stale HTML dropped (affects both Variant A and B).
  */
-function variantBBodyHtml(textB: string, htmlBFallback = ''): string {
-  const text = (textB || '').trim();
-  const html = (htmlBFallback || '').trim();
-  if (text && textHasUrlMissingFromHtml(text, html)) {
-    return previewBodyToHtml(textB);
+function resolveBodyHtml(text: string, htmlFallback = ''): string {
+  const t = (text || '').trim();
+  const html = (htmlFallback || '').trim();
+  if (t && textHasUrlMissingFromHtml(t, html)) {
+    return previewBodyToHtml(text);
   }
-  if (html) return html;
-  if (text) return previewBodyToHtml(textB);
+  if (html) {
+    // Ensure bare URLs inside existing HTML become clickable anchors.
+    return previewBodyToHtml(html);
+  }
+  if (t) return previewBodyToHtml(text);
   return '';
+}
+
+/** @deprecated use resolveBodyHtml — kept as alias for call-site clarity */
+function variantBBodyHtml(textB: string, htmlBFallback = ''): string {
+  return resolveBodyHtml(textB, htmlBFallback);
+}
+
+function variantABodyHtml(textA: string, htmlAFallback = ''): string {
+  return resolveBodyHtml(textA, htmlAFallback);
 }
 
 /**
@@ -1186,12 +1202,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
 
-  // Personalize text with merge tokens ({{firstName}}, {{companyName}}, {{demoLink}}, …)
-  const personalizeText = (template: string, person: any) => {
+  // Personalize with merge tokens ({{firstName}}, {{companyName}}, {{demoLink}}, …).
+  // Escape values only for HTML bodies — plain text must not get &amp; entities.
+  const personalizeText = (template: string, person: any, asHtml = false) => {
     return personalizeEmailTemplate(
       template,
       mergeContextFromPerson(person, { demoLink: demoLink.trim() || null }),
-      { escapeHtmlValues: true }
+      { escapeHtmlValues: asHtml }
     );
   };
 
@@ -1235,9 +1252,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       person_id: personIdForDb(person),
       email: person.email,
       name: `${person.first_name} ${person.last_name}`.trim() || person.email,
-      personalized_subject: personalizeText(subj, person),
-      personalized_body_html: personalizeText(htmlForDb, person),
-      personalized_body_text: personalizeText(text, person),
+      personalized_subject: personalizeText(subj, person, false),
+      personalized_body_html: personalizeText(htmlForDb, person, true),
+      personalized_body_text: personalizeText(text, person, false),
       status: 'pending',
       email_period: 'new',
       ...(variant && { ab_variant: variant }),
@@ -1293,9 +1310,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       text: string,
       html: string
     ) => {
-      const expSubj = personalizeText(subj || '', person);
-      const expText = personalizeText(text || '', person);
-      const expHtml = personalizeText(html || '', person);
+      const expSubj = personalizeText(subj || '', person, false);
+      const expText = personalizeText(text || '', person, false);
+      const expHtml = personalizeText(html || '', person, true);
       const gotSubj = r.personalized_subject ?? '';
       const gotText = r.personalized_body_text ?? '';
       const gotHtml = r.personalized_body_html ?? '';
@@ -1347,8 +1364,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     }
     if (!pending.length) return 0;
 
-    const bodyHtmlA =
-      bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
+    const bodyHtmlA = variantABodyHtml(bodyText, bodyHtml) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
     const bodyTextB = abBodyTextB || bodyText;
     const bodyHtmlB = variantBBodyHtml(abBodyTextB, abBodyHtmlB) || (bodyTextB ? previewBodyToHtml(bodyTextB) : bodyHtmlA);
     const useAb =
@@ -1397,9 +1413,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       const html = useB ? bodyHtmlB : bodyHtmlA;
       return {
         id: r.id,
-        personalized_subject: personalizeText(subj, person),
-        personalized_body_html: personalizeText(html, person),
-        personalized_body_text: personalizeText(text, person),
+        personalized_subject: personalizeText(subj, person, false),
+        personalized_body_html: personalizeText(html, person, true),
+        personalized_body_text: personalizeText(text, person, false),
       };
     });
 
@@ -2096,7 +2112,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         const updatePayload: Record<string, unknown> = {
           name: campaignName,
           subject_template: subject,
-          body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
+          body_html_template: variantABodyHtml(bodyText, bodyHtml) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
           body_text_template: bodyText,
           sender_connection_id: senderConnectionId,
           sender_profile_id: senderProfileId || null,
@@ -2129,7 +2145,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
           if (deleteRecipientsError) throw deleteRecipientsError;
 
           const useAb = !usePersonalizedEmails && abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
-          const bodyHtmlA = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
+          const bodyHtmlA = variantABodyHtml(bodyText, bodyHtml) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
           const bodyTextB = abBodyTextB || bodyText;
           const bodyHtmlB = variantBBodyHtml(abBodyTextB, abBodyHtmlB) || (bodyTextB ? previewBodyToHtml(bodyTextB) : '');
           const recipients = recipientsToUse
@@ -2182,7 +2198,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             user_id: user.id,
             name: campaignName,
             subject_template: subject,
-            body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
+            body_html_template: variantABodyHtml(bodyText, bodyHtml) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
             body_text_template: bodyText,
             sender_connection_id: senderConnectionId,
             sender_profile_id: senderProfileId || null,
@@ -2207,7 +2223,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         setDraftId(campaign.id);
 
         const useAbDraft = !usePersonalizedEmails && abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
-        const bodyHtmlADraft = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
+        const bodyHtmlADraft = variantABodyHtml(bodyText, bodyHtml) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
         const bodyTextBDraft = abBodyTextB || bodyText;
         const bodyHtmlBDraft = variantBBodyHtml(abBodyTextB, abBodyHtmlB) || (bodyTextBDraft ? previewBodyToHtml(bodyTextBDraft) : '');
         const recipients = recipientsToUse
@@ -2408,8 +2424,14 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       setSubject(draft.subject_template || '');
       
       // Strip trailing duplicate sign-off when loading (template adds signature again). Avoid greedy regex on first "Best regards" in body.
-      let loadedBodyHtml = stripTrailingDuplicateSignoffHtml(draft.body_html_template || '');
       let loadedBodyText = stripTrailingDuplicateSignoffPlain(draft.body_text_template || '');
+      let loadedBodyHtml = stripTrailingDuplicateSignoffHtml(draft.body_html_template || '');
+      // Same URL-recovery as Variant B: rebuild A HTML when text has bare URLs HTML dropped.
+      if (loadedBodyText.trim() && (!loadedBodyHtml.trim() || textHasUrlMissingFromHtml(loadedBodyText, loadedBodyHtml))) {
+        loadedBodyHtml = previewBodyToHtml(loadedBodyText);
+      } else if (loadedBodyHtml.trim()) {
+        loadedBodyHtml = variantABodyHtml(loadedBodyText, loadedBodyHtml);
+      }
       
       setBodyHtml(loadedBodyHtml);
       setBodyText(loadedBodyText);
@@ -3042,18 +3064,19 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
       if (hasPersonalizedEmail && !useVariantB) {
         const personalized = personalizedEmails[testPerson.id];
-        // Re-apply merge tokens in case pe content still has {{companyName}} / {{demoLink}}
-        testSubject = personalizeText(personalized.subject, testPerson);
-        testBodyHtml = personalizeText(personalized.bodyHtml, testPerson);
-        testBodyText = personalizeText(personalized.bodyText, testPerson);
+        // Re-apply merge tokens; recover bare URLs from text when HTML dropped them.
+        testSubject = personalizeText(personalized.subject, testPerson, false);
+        testBodyText = personalizeText(personalized.bodyText, testPerson, false);
+        const peHtml = resolveBodyHtml(personalized.bodyText || '', personalized.bodyHtml || '');
+        testBodyHtml = personalizeText(peHtml, testPerson, true);
       } else {
-        testSubject = personalizeText(subjectForTest, testPerson);
-        testBodyText = personalizeText(bodyTextForTest, testPerson);
-        // Same mechanism for A and B: send HTML + text so server uses same path (Variant A mechanism for both)
+        testSubject = personalizeText(subjectForTest, testPerson, false);
+        testBodyText = personalizeText(bodyTextForTest, testPerson, false);
+        // Same resolver for A and B so links survive test sends.
         const bodyHtmlForTest = useVariantB
           ? (variantBBodyHtml(abBodyTextB, abBodyHtmlB) || bodyText)
-          : (bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`);
-        testBodyHtml = personalizeText(bodyHtmlForTest, testPerson);
+          : (variantABodyHtml(bodyText, bodyHtml) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`);
+        testBodyHtml = personalizeText(bodyHtmlForTest, testPerson, true);
       }
 
       const payload: Record<string, unknown> = {
@@ -3265,7 +3288,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         const updatePayload: Record<string, unknown> = {
           name: campaignName,
           subject_template: subject,
-          body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
+          body_html_template: variantABodyHtml(bodyText, bodyHtml) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
           body_text_template: bodyText,
           sender_connection_id: senderConnectionId,
           sender_profile_id: senderProfileId || null,
@@ -3330,7 +3353,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         const sendUpdatePayload = {
             name: campaignName,
             subject_template: subject,
-            body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
+            body_html_template: variantABodyHtml(bodyText, bodyHtml) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
             body_text_template: bodyText,
             sender_connection_id: senderConnectionId,
             sender_profile_id: senderProfileId || null,
@@ -3372,7 +3395,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             user_id: user.id,
             name: campaignName,
             subject_template: subject,
-            body_html_template: bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
+            body_html_template: variantABodyHtml(bodyText, bodyHtml) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
             body_text_template: bodyText,
             sender_connection_id: senderConnectionId,
             sender_profile_id: senderProfileId || null,
@@ -3398,7 +3421,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       }
 
       const useAbSend = !usePersonalizedEmails && abTestEnabled && (abSubjectB?.trim() || abBodyHtmlB?.trim() || abBodyTextB?.trim());
-      const bodyHtmlASend = bodyHtml || previewBodyToHtml(bodyText) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
+      const bodyHtmlASend = variantABodyHtml(bodyText, bodyHtml) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
       const bodyTextBSend = abBodyTextB || bodyText;
       const bodyHtmlBSend = variantBBodyHtml(abBodyTextB, abBodyHtmlB) || (bodyTextBSend ? previewBodyToHtml(bodyTextBSend) : '');
       const recipients = recipientsToUse
@@ -4835,11 +4858,11 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
               ? (subject?.trim() || 'No subject')
               : personalizeText(subject, previewPerson) || 'No subject';
             const previewBodyA = usePersonalizedEmails
-              ? (bodyHtml || previewBodyToHtml(bodyText) || '<p>Your email body will appear here...</p>')
-              : personalizeText(bodyHtml || previewBodyToHtml(bodyText), previewPerson) || '<p>Your email body will appear here...</p>';
+              ? (variantABodyHtml(bodyText, bodyHtml) || '<p>Your email body will appear here...</p>')
+              : personalizeText(variantABodyHtml(bodyText, bodyHtml), previewPerson, true) || '<p>Your email body will appear here...</p>';
             const bodyHtmlB = variantBBodyHtml(abBodyTextB, abBodyHtmlB);
-            const previewSubjectB = personalizeText(abSubjectB || subject, previewPerson) || 'No subject';
-            const previewBodyB = personalizeText(bodyHtmlB || previewBodyA, previewPerson) || '<p>Variant B body...</p>';
+            const previewSubjectB = personalizeText(abSubjectB || subject, previewPerson, false) || 'No subject';
+            const previewBodyB = personalizeText(bodyHtmlB || previewBodyA, previewPerson, true) || '<p>Variant B body...</p>';
             const showAbPreviews =
               !usePersonalizedEmails && !!(abSubjectB?.trim() || abBodyTextB?.trim());
 

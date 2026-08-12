@@ -55,12 +55,15 @@ export function personalizeEmailTemplate(
     companyname: wrap(companyName),
     company: wrap(companyName),
     company_name: wrap(companyName),
-    demolink: wrap(demoLink),
-    demo_link: wrap(demoLink),
   };
+  // Only replace {{demoLink}} when a value exists — empty would wipe CTAs from the body.
+  if (demoLink) {
+    map.demolink = wrap(demoLink);
+    map.demo_link = wrap(demoLink);
+  }
 
   for (const [k, v] of Object.entries(ctx.extras || {})) {
-    if (v == null) continue;
+    if (v == null || String(v).trim() === '') continue;
     map[normKey(k)] = wrap(String(v));
   }
 
