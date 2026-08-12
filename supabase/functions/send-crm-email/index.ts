@@ -179,11 +179,12 @@ serve(async (req) => {
         };
       }
     }
-    // Campaign header banner overrides logo and uses contain (full image, not cropped)
+    // Campaign header banner overrides logo; always full natural-height banner
+    // (never logo cover-crop — that clips on iPad/web Gmail).
     if (typeof headerImageUrl === 'string' && headerImageUrl.trim()) {
       branding.logoUrl = headerImageUrl.trim();
       branding.footerImageUrl = null;
-      branding.headerBanner = headerBanner !== false;
+      branding.headerBanner = true;
     }
 
     // Determine sender based on business profile preference

@@ -23,17 +23,16 @@ export interface EmailTemplateProps {
 }
 
 /**
- * Header image styles.
- * Campaign banners must NEVER use a fixed height / object-fit:cover — Gmail mobile
- * often ignores those and shows the full image, while iPad/web honor them and crop.
- * Logos keep a fixed cover crop.
+ * Header image styles — never use object-fit:cover / fixed height.
+ * Cover crops on iPad/web Gmail (mobile often ignores those rules).
+ * Campaign banners: full width, natural height.
+ * Logos: max-height box with contain (no crop).
  */
 function headerImgStyle(headerBanner?: boolean, coverHeight = 180): string {
   if (headerBanner) {
-    // !important beats client/stylesheet rules that force height/object-fit.
-    return 'display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;object-fit:initial!important;border:0;outline:none;margin:0;padding:0;';
+    return 'display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:none!important;border:0!important;outline:none;margin:0;padding:0;-ms-interpolation-mode:bicubic;';
   }
-  return `width:100%;height:${coverHeight}px;display:block;object-fit:cover;`;
+  return `display:block;width:auto;max-width:100%;max-height:${coverHeight}px;height:auto;margin:0 auto;object-fit:contain;border:0;`;
 }
 
 function headerImgCss(headerBanner?: boolean, coverHeight = 180): string {
@@ -43,16 +42,19 @@ function headerImgCss(headerBanner?: boolean, coverHeight = 180): string {
       max-width: 100% !important;
       height: auto !important;
       max-height: none !important;
-      object-fit: initial !important;
-      border: 0;
+      border: 0 !important;
       outline: none;
       margin: 0;
       padding: 0;`;
   }
-  return `width: 100%;
-      height: ${coverHeight}px;
-      display: block;
-      object-fit: cover;`;
+  return `display: block;
+      width: auto;
+      max-width: 100%;
+      max-height: ${coverHeight}px;
+      height: auto;
+      margin: 0 auto;
+      object-fit: contain;
+      border: 0;`;
 }
 
 /** Escape attribute values used in generated email HTML. */
@@ -65,8 +67,26 @@ function escapeAttr(value: string): string {
 }
 
 /**
- * Render the header image. Banners use a table + width="600" (no height attr) so
- * Outlook/Gmail iPad/web scale the full graphic; logos keep the cover crop img.
+ * Campaign banner as its own block ABOVE .email-header so header CSS
+ * (padding/overflow/img rules) can never clip it on iPad/web.
+ */
+function renderCampaignBannerBlock(logoUrl: string | undefined, alt = ''): string {
+  if (!logoUrl) return '';
+  const safeSrc = escapeAttr(logoUrl);
+  const safeAlt = escapeAttr(alt || '');
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;width:100%;margin:0;padding:0;">
+  <tr>
+    <td align="center" style="padding:0!important;margin:0!important;line-height:0!important;font-size:0!important;border:0;">
+      <img src="${safeSrc}" alt="${safeAlt}" width="600" border="0" style="${headerImgStyle(true)}" />
+    </td>
+  </tr>
+</table>`;
+}
+
+/**
+ * Header image. Prefer placing campaign banners via bannerAndHeaderLogo()
+ * above .email-header; this helper still renders a safe full banner if called
+ * with headerBanner (no cover crop).
  */
 function renderHeaderImageHtml(
   logoUrl: string | undefined,
@@ -75,18 +95,29 @@ function renderHeaderImageHtml(
   coverHeight = 180,
 ): string {
   if (!logoUrl) return '';
+  if (headerBanner) return renderCampaignBannerBlock(logoUrl, alt);
   const safeSrc = escapeAttr(logoUrl);
   const safeAlt = escapeAttr(alt || 'Header');
-  if (headerBanner) {
-    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;width:100%;">
-      <tr>
-        <td align="center" style="padding:0;margin:0;line-height:0;font-size:0;border:0;">
-          <img src="${safeSrc}" alt="${safeAlt}" width="600" style="${headerImgStyle(true, coverHeight)}" />
-        </td>
-      </tr>
-    </table>`;
-  }
   return `<img src="${safeSrc}" alt="${safeAlt}" style="${headerImgStyle(false, coverHeight)}">`;
+}
+
+/** Top-of-email banner HTML + whether header should omit the logo img. */
+function bannerAndHeaderLogo(
+  logoUrl: string | undefined,
+  alt: string,
+  headerBanner: boolean | undefined,
+  coverHeight: number,
+): { bannerBlock: string; headerLogo: string } {
+  if (headerBanner && logoUrl) {
+    return {
+      bannerBlock: renderCampaignBannerBlock(logoUrl, alt),
+      headerLogo: '',
+    };
+  }
+  return {
+    bannerBlock: '',
+    headerLogo: renderHeaderImageHtml(logoUrl, alt, false, coverHeight),
+  };
 }
 
 function renderFooterWithImage(footerImageUrl: string | undefined, footerText: string, brandColor: string, bgStyle: string, textColor: string, newsletterFooterHtml?: string): string {
@@ -194,6 +225,9 @@ export function renderProfessionalTemplate({
   const displayHeaderName = (typeof headerName === 'string' && headerName.trim() !== '') ? headerName.trim() : null;
   const safeBody = body || '';
   const bodyHtml = bodyTextToHtml(safeBody);
+  const alt = displayHeaderName || companyName || 'Company';
+  const { bannerBlock, headerLogo } = bannerAndHeaderLogo(logoUrl, alt, headerBanner, 180);
+  const hasCampaignBanner = !!(headerBanner && logoUrl);
   
   return `
 <!DOCTYPE html>
@@ -217,28 +251,28 @@ export function renderProfessionalTemplate({
       max-width: 600px;
       margin: 12px auto;
       background-color: #ffffff;
-      border-radius: 8px;
-      overflow: hidden;
+      border-radius: ${hasCampaignBanner ? '0' : '8px'};
+      overflow: ${hasCampaignBanner ? 'visible' : 'hidden'};
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     .email-header {
-      background: ${headerBanner && logoUrl ? '#0f172a' : `linear-gradient(135deg, ${brandColor} 0%, ${brandColor}dd 100%)`};
+      background: ${hasCampaignBanner ? 'transparent' : `linear-gradient(135deg, ${brandColor} 0%, ${brandColor}dd 100%)`};
       text-align: center;
-      overflow: ${headerBanner ? 'visible' : 'hidden'};
-      line-height: 0;
+      overflow: visible;
+      line-height: ${headerLogo ? '0' : 'inherit'};
     }
     .email-header.has-logo { padding: 0; }
-    .email-header.no-logo { padding: 20px 28px; }
-    .email-header img { ${headerImgCss(headerBanner, 180)} }
+    .email-header.no-logo { padding: ${hasCampaignBanner && !displayHeaderName ? '0' : '20px 28px'}; }
+    .email-header img { ${headerImgCss(false, 180)} }
     .email-header h1,
     .email-header .header-brand-name {
-      color: #ffffff;
+      color: ${hasCampaignBanner ? '#111827' : '#ffffff'};
       margin: 0;
       font-size: 22px;
       font-weight: 600;
     }
     .email-header .brand-name-bar {
-      background: rgba(0,0,0,0.25);
+      background: ${hasCampaignBanner ? '#f8fafc' : 'rgba(0,0,0,0.25)'};
       padding: 8px 28px;
       line-height: 1.4;
     }
@@ -297,10 +331,11 @@ export function renderProfessionalTemplate({
 </head>
 <body>
   <div class="email-container">
-    <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-      ${renderHeaderImageHtml(logoUrl, displayHeaderName || companyName || 'Company', headerBanner, 180)}
-      ${displayHeaderName ? `<div class="brand-name-bar" style="background:${logoUrl ? 'rgba(0,0,0,0.25)' : 'transparent'};padding:8px 28px;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
-    </div>
+    ${bannerBlock}
+    ${(!hasCampaignBanner || displayHeaderName) ? `<div class="email-header ${headerLogo ? 'has-logo' : 'no-logo'}">
+      ${headerLogo}
+      ${displayHeaderName ? `<div class="brand-name-bar" style="background:${hasCampaignBanner ? '#f8fafc' : (headerLogo ? 'rgba(0,0,0,0.25)' : 'transparent')};padding:8px 28px;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
+    </div>` : ''}
     
     <div class="email-body">
       <div class="email-content">
@@ -340,6 +375,10 @@ export function renderMinimalTemplate({
   const safeBody = body || '';
   const bodyHtml = bodyTextToHtml(safeBody);
   
+  const alt = displayHeaderName || companyName || 'Company';
+  const { bannerBlock, headerLogo } = bannerAndHeaderLogo(logoUrl, alt, headerBanner, 160);
+  const hasCampaignBanner = !!(headerBanner && logoUrl);
+
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -370,7 +409,7 @@ export function renderMinimalTemplate({
     }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 12px 0; }
-    .email-header img { ${headerImgCss(headerBanner, 160)} }
+    .email-header img { ${headerImgCss(false, 160)} }
     .email-header .header-brand-name { font-size: 18px; font-weight: 600; color: #111827; margin: 0; }
     .email-header .brand-name-bar { padding: 6px 0; }
     .email-body {
@@ -405,9 +444,10 @@ export function renderMinimalTemplate({
 </head>
 <body>
   <div class="email-container">
-    ${logoUrl || displayHeaderName ? `
-      <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-        ${renderHeaderImageHtml(logoUrl, displayHeaderName || companyName || 'Company', headerBanner, 160)}
+    ${bannerBlock}
+    ${headerLogo || displayHeaderName ? `
+      <div class="email-header ${headerLogo ? 'has-logo' : 'no-logo'}">
+        ${headerLogo}
         ${displayHeaderName ? `<div class="brand-name-bar" style="padding:6px 0;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
       </div>
     ` : ''}
@@ -448,6 +488,10 @@ export function renderModernTemplate({
   const safeBody = body || '';
   const bodyHtml = bodyTextToHtml(safeBody);
   
+  const alt = displayHeaderName || companyName || 'Company';
+  const { bannerBlock, headerLogo } = bannerAndHeaderLogo(logoUrl, alt, headerBanner, 180);
+  const hasCampaignBanner = !!(headerBanner && logoUrl);
+
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -470,7 +514,7 @@ export function renderModernTemplate({
       margin: 16px auto;
       background-color: #ffffff;
       border-radius: 12px;
-      overflow: hidden;
+      overflow: ${hasCampaignBanner ? 'visible' : 'hidden'};
       box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
     }
     .email-header {
@@ -483,7 +527,7 @@ export function renderModernTemplate({
     }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 24px 28px; }
-    .email-header img { ${headerImgCss(headerBanner, 180)} }
+    .email-header img { ${headerImgCss(false, 180)} }
     .email-header .header-brand-name { margin: 0; color: ${brandColor}; font-size: 22px; font-weight: 700; }
     .email-header .brand-name-bar { padding: 8px 28px; }
     .email-body {
@@ -537,8 +581,9 @@ export function renderModernTemplate({
 </head>
 <body>
   <div class="email-container">
-    <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-      ${renderHeaderImageHtml(logoUrl, displayHeaderName || companyName || 'Company', headerBanner, 180)}
+    ${bannerBlock}
+    <div class="email-header ${headerLogo ? 'has-logo' : 'no-logo'}" style="${hasCampaignBanner && !displayHeaderName ? 'display:none;padding:0;border:0;' : (hasCampaignBanner ? 'background:transparent;padding:0;' : '')}">
+      ${headerLogo}
       ${displayHeaderName ? `<div class="brand-name-bar" style="padding:8px 28px;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
     </div>
     
@@ -579,6 +624,10 @@ export function renderCreativeTemplate({
   const displayHeaderName = (typeof headerName === 'string' && headerName.trim() !== '') ? headerName.trim() : null;
   const safeBody = body || '';
   const bodyHtml = bodyTextToHtml(safeBody);
+  const alt = displayHeaderName || companyName || 'Company';
+  const { bannerBlock, headerLogo } = bannerAndHeaderLogo(logoUrl, alt, headerBanner, 200);
+  const hasCampaignBanner = !!(headerBanner && logoUrl);
+
   const accent = brandColor;
   return `
 <!DOCTYPE html>
@@ -590,7 +639,7 @@ export function renderCreativeTemplate({
   <meta name="supported-color-schemes" content="light">
   <style>
     body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 0; background: #f0f0f5; }
-    .email-container { max-width: 620px; margin: 20px auto; background: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+    .email-container { max-width: 620px; margin: 20px auto; background: #ffffff; border-radius: 20px; overflow: ${hasCampaignBanner ? 'visible' : 'hidden'}; box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
     .email-header {
       background: linear-gradient(135deg, ${accent} 0%, #6366f1 50%, #8b5cf6 100%);
       text-align: center;
@@ -599,7 +648,7 @@ export function renderCreativeTemplate({
     }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 28px 32px; }
-    .email-header img { ${headerImgCss(headerBanner, 200)} }
+    .email-header img { ${headerImgCss(false, 200)} }
     .email-header .header-brand-name { color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
     .email-header .brand-name-bar { background: rgba(0,0,0,0.3); padding: 10px 32px; }
     .email-body { padding: 18px 24px; color: #1f2937; }
@@ -629,8 +678,9 @@ export function renderCreativeTemplate({
 </head>
 <body>
   <div class="email-container">
-    <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-      ${renderHeaderImageHtml(logoUrl, displayHeaderName || companyName || 'Company', headerBanner, 200)}
+    ${bannerBlock}
+    <div class="email-header ${headerLogo ? 'has-logo' : 'no-logo'}" style="${hasCampaignBanner && !displayHeaderName ? 'display:none;padding:0;border:0;' : (hasCampaignBanner ? 'background:transparent;padding:0;' : '')}">
+      ${headerLogo}
       ${displayHeaderName ? `<div class="brand-name-bar" style="background:${logoUrl ? 'rgba(0,0,0,0.3)' : 'transparent'};padding:10px 32px;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
     </div>
     <div class="email-body">
@@ -666,6 +716,10 @@ export function renderCorporateTemplate({
   const displayHeaderName = (typeof headerName === 'string' && headerName.trim() !== '') ? headerName.trim() : null;
   const safeBody = body || '';
   const bodyHtml = bodyTextToHtml(safeBody);
+  const alt = displayHeaderName || companyName || 'Company';
+  const { bannerBlock, headerLogo } = bannerAndHeaderLogo(logoUrl, alt, headerBanner, 180);
+  const hasCampaignBanner = !!(headerBanner && logoUrl);
+
   const navy = '#1e3a5f';
   return `
 <!DOCTYPE html>
@@ -686,7 +740,7 @@ export function renderCorporateTemplate({
     }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 24px 32px; }
-    .email-header img { ${headerImgCss(headerBanner, 180)} }
+    .email-header img { ${headerImgCss(false, 180)} }
     .email-header .header-brand-name { color: #ffffff; margin: 0; font-size: 22px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; letter-spacing: 0.02em; }
     .email-header .brand-name-bar { background: rgba(0,0,0,0.3); padding: 8px 32px; }
     .email-body { padding: 18px 24px; font-size: 15px; line-height: 1.4; }
@@ -704,8 +758,9 @@ export function renderCorporateTemplate({
 </head>
 <body>
   <div class="email-container">
-    <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-      ${renderHeaderImageHtml(logoUrl, displayHeaderName || companyName || 'Company', headerBanner, 180)}
+    ${bannerBlock}
+    <div class="email-header ${headerLogo ? 'has-logo' : 'no-logo'}" style="${hasCampaignBanner && !displayHeaderName ? 'display:none;padding:0;border:0;' : (hasCampaignBanner ? 'background:transparent;padding:0;' : '')}">
+      ${headerLogo}
       ${displayHeaderName ? `<div class="brand-name-bar" style="background:${logoUrl ? 'rgba(0,0,0,0.3)' : 'transparent'};padding:8px 32px;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
     </div>
     <div class="email-body">
@@ -741,6 +796,10 @@ export function renderBoldTemplate({
   const displayHeaderName = (typeof headerName === 'string' && headerName.trim() !== '') ? headerName.trim() : null;
   const safeBody = body || '';
   const bodyHtml = bodyTextToHtml(safeBody);
+  const alt = displayHeaderName || companyName || 'Company';
+  const { bannerBlock, headerLogo } = bannerAndHeaderLogo(logoUrl, alt, headerBanner, 180);
+  const hasCampaignBanner = !!(headerBanner && logoUrl);
+
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -751,7 +810,7 @@ export function renderBoldTemplate({
   <meta name="supported-color-schemes" content="light">
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #0f0f0f; color: #e5e5e5; }
-    .email-container { max-width: 600px; margin: 20px auto; background: #18181b; border-radius: 4px; overflow: hidden; }
+    .email-container { max-width: 600px; margin: 20px auto; background: #18181b; border-radius: 4px; overflow: ${hasCampaignBanner ? 'visible' : 'hidden'}; }
     .email-header {
       border-bottom: 4px solid ${brandColor};
       text-align: center;
@@ -760,7 +819,7 @@ export function renderBoldTemplate({
     }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 24px 28px; }
-    .email-header img { ${headerImgCss(headerBanner, 180)} }
+    .email-header img { ${headerImgCss(false, 180)} }
     .email-header .header-brand-name { color: #ffffff; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
     .email-header .brand-name-bar { background: rgba(0,0,0,0.5); padding: 8px 28px; }
     .email-body { padding: 18px 24px; }
@@ -778,8 +837,9 @@ export function renderBoldTemplate({
 </head>
 <body>
   <div class="email-container">
-    <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-      ${renderHeaderImageHtml(logoUrl, displayHeaderName || companyName || 'Company', headerBanner, 180)}
+    ${bannerBlock}
+    <div class="email-header ${headerLogo ? 'has-logo' : 'no-logo'}" style="${hasCampaignBanner && !displayHeaderName ? 'display:none;padding:0;border:0;' : (hasCampaignBanner ? 'background:transparent;padding:0;' : '')}">
+      ${headerLogo}
       ${displayHeaderName ? `<div class="brand-name-bar" style="background:${logoUrl ? 'rgba(0,0,0,0.5)' : 'transparent'};padding:8px 28px;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
     </div>
     <div class="email-body">
@@ -815,6 +875,10 @@ export function renderElegantTemplate({
   const displayHeaderName = (typeof headerName === 'string' && headerName.trim() !== '') ? headerName.trim() : null;
   const safeBody = body || '';
   const bodyHtml = bodyTextToHtml(safeBody);
+  const alt = displayHeaderName || companyName || 'Company';
+  const { bannerBlock, headerLogo } = bannerAndHeaderLogo(logoUrl, alt, headerBanner, 180);
+  const hasCampaignBanner = !!(headerBanner && logoUrl);
+
   const sepia = '#6b5b4f';
   return `
 <!DOCTYPE html>
@@ -830,7 +894,7 @@ export function renderElegantTemplate({
     .email-header { border-bottom: 1px solid #e8e4df; text-align: center; overflow: ${headerBanner ? 'visible' : 'hidden'}; line-height: ${headerBanner && logoUrl ? '0' : 'inherit'}; }
     .email-header.has-logo { padding: 0; }
     .email-header.no-logo { padding: 28px 32px; }
-    .email-header img { ${headerImgCss(headerBanner, 180)} }
+    .email-header img { ${headerImgCss(false, 180)} }
     .email-header .header-brand-name { margin: 0; font-size: 22px; font-weight: 600; color: ${sepia}; letter-spacing: 0.04em; }
     .email-header .brand-name-bar { padding: 8px 32px; background: #faf9f7; }
     .email-body { padding: 18px 24px; font-size: 15px; line-height: 1.4; }
@@ -848,8 +912,9 @@ export function renderElegantTemplate({
 </head>
 <body>
   <div class="email-container">
-    <div class="email-header ${logoUrl ? 'has-logo' : 'no-logo'}">
-      ${renderHeaderImageHtml(logoUrl, displayHeaderName || companyName || 'Company', headerBanner, 180)}
+    ${bannerBlock}
+    <div class="email-header ${headerLogo ? 'has-logo' : 'no-logo'}" style="${hasCampaignBanner && !displayHeaderName ? 'display:none;padding:0;border:0;' : (hasCampaignBanner ? 'background:transparent;padding:0;' : '')}">
+      ${headerLogo}
       ${displayHeaderName ? `<div class="brand-name-bar" style="padding:8px 32px;background:#faf9f7;"><span class="header-brand-name">${displayHeaderName}</span></div>` : ''}
     </div>
     <div class="email-body">
