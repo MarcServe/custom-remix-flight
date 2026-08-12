@@ -27,6 +27,7 @@ import { PhoneCampaignDialog } from "@/components/PhoneCampaignDialog";
 import { PhoneServiceDialog } from "@/components/integrations/PhoneServiceDialog";
 import BulkEmailDialog, { type BulkEmailDialogHandle } from "@/components/BulkEmailDialog";
 import { format } from "date-fns";
+import { formatInTimeZone, zonedDateTimeToUtc } from "@/lib/zoned-time";
 import { useSearchParams, useLocation, useNavigate, Link } from "react-router-dom";
 import {
   DropdownMenu,
@@ -1840,9 +1841,17 @@ export default function Campaigns() {
 
   const handleRescheduleCampaign = async () => {
     if (!selectedCampaign || !rescheduleDateTime.trim()) return;
-    const at = new Date(rescheduleDateTime);
-    if (isNaN(at.getTime()) || at <= new Date()) {
-      toast.error('Choose a future date and time.');
+    // datetime-local is London wall-clock (not browser-local / not UTC from toISOString)
+    const [datePart, timePart = "09:00"] = rescheduleDateTime.trim().split("T");
+    let at: Date;
+    try {
+      at = zonedDateTimeToUtc(datePart, timePart.slice(0, 5), "Europe/London");
+    } catch {
+      toast.error("Choose a valid date and time.");
+      return;
+    }
+    if (at <= new Date()) {
+      toast.error("Choose a future date and time (Europe/London).");
       return;
     }
     setRescheduling(true);
@@ -1866,7 +1875,9 @@ export default function Campaigns() {
         queryClient.invalidateQueries({ queryKey: ['campaign-recipient-counts', selectedCampaign] }),
         queryClient.invalidateQueries({ queryKey: ['email-campaigns'] }),
       ]);
-      toast.success(`Campaign rescheduled for ${at.toLocaleString()}. Pending and failed recipients will be sent then.`);
+      toast.success(
+        `Campaign rescheduled for ${formatInTimeZone(at, "Europe/London")}. Pending and failed recipients will be sent then.`
+      );
     } catch (e: any) {
       toast.error(e?.message ?? 'Failed to reschedule');
     } finally {
@@ -2189,7 +2200,14 @@ export default function Campaigns() {
                             {isScheduled && (
                               <span className="text-xs text-violet-600 dark:text-violet-400 flex items-center gap-1">
                                 <CalendarClock className="h-3 w-3" />
-                                {format(new Date(campaign.scheduled_at!), 'MMM d, HH:mm')}
+                                {formatInTimeZone(campaign.scheduled_at!, "Europe/London", {
+                                  day: "numeric",
+                                  month: "short",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  hour12: false,
+                                  timeZoneName: "short",
+                                })}
                               </span>
                             )}
                             <span className="text-xs text-muted-foreground/70">
@@ -3039,7 +3057,7 @@ export default function Campaigns() {
                 <span className="text-muted-foreground">Scheduled for</span>
                 <span className="font-medium">
                   {selectedCampaignData.scheduled_at
-                    ? format(new Date(selectedCampaignData.scheduled_at), "PPp")
+                    ? formatInTimeZone(selectedCampaignData.scheduled_at, "Europe/London")
                     : "—"}
                 </span>
                 <div className="flex gap-2 ml-auto">
@@ -3126,10 +3144,21 @@ export default function Campaigns() {
                     variant="default"
                     size="sm"
                     onClick={() => {
-                      const d = new Date();
-                      d.setMinutes(d.getMinutes() + 30);
-                      d.setSeconds(0, 0);
-                      setRescheduleDateTime(d.toISOString().slice(0, 16));
+                      const d = new Date(Date.now() + 30 * 60 * 1000);
+                      // Prefill datetime-local as Europe/London wall clock (not UTC ISO)
+                      const parts = new Intl.DateTimeFormat("en-CA", {
+                        timeZone: "Europe/London",
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: false,
+                      }).formatToParts(d);
+                      const g = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+                      let hour = g("hour");
+                      if (hour === "24") hour = "00";
+                      setRescheduleDateTime(`${g("year")}-${g("month")}-${g("day")}T${hour}:${g("minute")}`);
                       setShowRescheduleDialog(true);
                     }}
                   >
@@ -3795,18 +3824,17 @@ export default function Campaigns() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2"><CalendarClock className="h-5 w-5" />Reschedule sending</DialogTitle>
               <DialogDescription>
-                Set a date and time to send. Failed recipients will be reset to pending and sent at the scheduled time. Resend/SendGrid sends all at once; Gmail sends up to 450/day.
+                Set a date and time in Europe/London (BST/GMT). Failed recipients will be reset to pending and sent at the scheduled time. Resend/SendGrid sends all at once; Gmail sends up to 450/day.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-1.5">
-                <Label htmlFor="reschedule-datetime">Date & time</Label>
+                <Label htmlFor="reschedule-datetime">Date & time (London)</Label>
                 <input
                   id="reschedule-datetime"
                   type="datetime-local"
                   value={rescheduleDateTime}
                   onChange={(e) => setRescheduleDateTime(e.target.value)}
-                  min={new Date(new Date().getTime() + 15 * 60 * 1000).toISOString().slice(0, 16)}
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>

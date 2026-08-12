@@ -42,6 +42,13 @@ import {
   stripTrailingDuplicateSignoffPlain,
 } from "@/lib/strip-trailing-signoff";
 import { cn } from "@/lib/utils";
+import {
+  calendarDateFromInstantInTimeZone,
+  calendarDateString,
+  formatInTimeZone,
+  todayDateStringInTimeZone,
+  zonedDateTimeToUtc,
+} from "@/lib/zoned-time";
 import { subscribeToRecipients } from "@/lib/recipient-broadcast";
 import { personalizeEmailTemplate, mergeContextFromPerson } from "@/lib/email-personalize";
 import {
@@ -215,7 +222,8 @@ function formatHourMinuteInTimeZone(isoOrDate: Date | string, timeZone: string):
       minute: "2-digit",
       hour12: false,
     }).formatToParts(date);
-    const h = parseInt(parts.find((p) => p.type === "hour")?.value ?? "9", 10);
+    let h = parseInt(parts.find((p) => p.type === "hour")?.value ?? "9", 10);
+    if (h === 24) h = 0;
     const m = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10);
     return `${String(isNaN(h) ? 9 : h).padStart(2, "0")}:${String(isNaN(m) ? 0 : m).padStart(2, "0")}`;
   } catch {
@@ -223,23 +231,30 @@ function formatHourMinuteInTimeZone(isoOrDate: Date | string, timeZone: string):
   }
 }
 
-/** Calendar day in `timeZone` as a local Date for the picker (local midnight of that civil day). */
-function calendarDateFromInstantInTimeZone(instant: Date, timeZone: string): Date {
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-    }).formatToParts(instant);
-    const y = parseInt(parts.find((p) => p.type === "year")?.value ?? "0", 10);
-    const mo = parseInt(parts.find((p) => p.type === "month")?.value ?? "1", 10);
-    const d = parseInt(parts.find((p) => p.type === "day")?.value ?? "1", 10);
-    if (!y) return new Date(instant);
-    return new Date(y, mo - 1, d);
-  } catch {
-    return new Date(instant);
+/**
+ * Build UTC scheduled_at from the picker date + time + IANA zone.
+ * Does not silently jump future calendar days when conversion is wrong.
+ */
+function resolveCampaignScheduledAt(
+  scheduledDate: Date,
+  scheduledTime: string,
+  scheduledTimezone: string
+): { scheduledAt: string; scheduledDateTime: Date } {
+  const dateStr = calendarDateString(scheduledDate);
+  let scheduledDateTime = zonedDateTimeToUtc(dateStr, scheduledTime, scheduledTimezone);
+
+  if (scheduledDateTime <= new Date()) {
+    // Only roll forward 24h when the user picked "today" in that zone and the clock already passed.
+    if (dateStr === todayDateStringInTimeZone(scheduledTimezone)) {
+      scheduledDateTime = new Date(scheduledDateTime.getTime() + 24 * 60 * 60 * 1000);
+    } else {
+      throw new Error(
+        `That date/time is already in the past in ${scheduledTimezone.replace(/_/g, " ")}. Pick a future time.`
+      );
+    }
   }
+
+  return { scheduledAt: scheduledDateTime.toISOString(), scheduledDateTime };
 }
 
 interface BulkEmailDialogProps {
@@ -845,7 +860,8 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       senderProfileId,
       selectedTags,
       scheduleEnabled,
-      scheduledDate: scheduledDate?.toISOString() ?? null,
+      // Store civil yyyy-MM-dd (not toISOString) so London midnight doesn't shift the day
+      scheduledDate: scheduledDate ? calendarDateString(scheduledDate) : null,
       scheduledTime,
       scheduledTimezone,
       autoFollowUpEnabled,
@@ -965,7 +981,19 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             if (data.senderProfileId) setSenderProfileId(data.senderProfileId);
             if (Array.isArray(data.selectedTags)) setSelectedTags(data.selectedTags);
             setScheduleEnabled(!!data.scheduleEnabled);
-            setScheduledDate(data.scheduledDate ? new Date(data.scheduledDate) : undefined);
+            setScheduledDate((() => {
+              const raw = data.scheduledDate;
+              if (!raw) return undefined;
+              if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+                const [y, m, d] = raw.split("-").map(Number);
+                return new Date(y, m - 1, d);
+              }
+              // Legacy ISO drafts: recover the civil day in the saved timezone
+              return calendarDateFromInstantInTimeZone(
+                new Date(raw),
+                data.scheduledTimezone || getDefaultCampaignTimeZone()
+              );
+            })());
             setScheduledTime(data.scheduledTime || "09:00");
             if (data.scheduledTimezone) setScheduledTimezone(data.scheduledTimezone);
             setAutoFollowUpEnabled(data.autoFollowUpEnabled !== false);
@@ -2096,52 +2124,16 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       let scheduledDateTime: Date | null = null;
       
       if (scheduleEnabled && scheduledDate) {
-        const [hours, minutes] = scheduledTime.split(':').map(Number);
-        const dateStr = format(scheduledDate, 'yyyy-MM-dd');
-        
         try {
-          const approxDate = new Date(`${dateStr}T${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00Z`);
-          let candidate = new Date(approxDate);
-          const formatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: scheduledTimezone,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          });
-          
-          for (let i = 0; i < 10; i++) {
-            const parts = formatter.formatToParts(candidate);
-            const candidateHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
-            const candidateMinute = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
-            
-            if (candidateHour === hours && candidateMinute === minutes) {
-              break;
-            }
-            
-            const hourDiff = hours - candidateHour;
-            const minuteDiff = minutes - candidateMinute;
-            const totalMinutesDiff = hourDiff * 60 + minuteDiff;
-            // ADD the difference: to make the wall-clock time LATER we move the UTC
-            // instant LATER. Using minus here inverted the direction and made the
-            // loop diverge, so a "15th 09:00" schedule drifted to the wrong time.
-            candidate = new Date(candidate.getTime() + totalMinutesDiff * 60 * 1000);
-          }
-          
-          scheduledDateTime = candidate;
+          const resolved = resolveCampaignScheduledAt(scheduledDate, scheduledTime, scheduledTimezone);
+          scheduledDateTime = resolved.scheduledDateTime;
+          scheduledAt = resolved.scheduledAt;
         } catch (error) {
           console.error('Error calculating timezone:', error);
-          scheduledDateTime = new Date(scheduledDate);
-          scheduledDateTime.setHours(hours, minutes, 0, 0);
+          throw error instanceof Error
+            ? error
+            : new Error('Could not calculate the scheduled send time for that timezone.');
         }
-        
-        if (scheduledDateTime < new Date()) {
-          scheduledDateTime.setDate(scheduledDateTime.getDate() + 1);
-        }
-        
-        scheduledAt = scheduledDateTime.toISOString();
       }
 
       if (draftId) {
@@ -3260,63 +3252,16 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       let scheduledDateTime: Date | null = null;
       
       if (scheduleEnabled && scheduledDate) {
-        // Combine date and time in the selected timezone
-        const [hours, minutes] = scheduledTime.split(':').map(Number);
-        const dateStr = format(scheduledDate, 'yyyy-MM-dd');
-        
         try {
-          // Convert local date/time in target timezone to UTC
-          // Method: Use iterative approach to find the UTC time that produces our desired local time
-          
-          // Start with an approximate UTC date
-          const approxDate = new Date(`${dateStr}T${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00Z`);
-          
-          // Use binary search approach: adjust until we get the right local time in target timezone
-          let candidate = new Date(approxDate);
-          const formatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: scheduledTimezone,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          });
-          
-          // Try a few iterations to find the right UTC time
-          for (let i = 0; i < 10; i++) {
-            const parts = formatter.formatToParts(candidate);
-            const candidateHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
-            const candidateMinute = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
-            
-            if (candidateHour === hours && candidateMinute === minutes) {
-              break; // Found it!
-            }
-            
-            // Calculate adjustment needed
-            const hourDiff = hours - candidateHour;
-            const minuteDiff = minutes - candidateMinute;
-            const totalMinutesDiff = hourDiff * 60 + minuteDiff;
-            
-            // Adjust candidate (subtract because we're going from local to UTC)
-            candidate = new Date(candidate.getTime() - totalMinutesDiff * 60 * 1000);
-          }
-          
-          scheduledDateTime = candidate;
-          
+          const resolved = resolveCampaignScheduledAt(scheduledDate, scheduledTime, scheduledTimezone);
+          scheduledDateTime = resolved.scheduledDateTime;
+          scheduledAt = resolved.scheduledAt;
         } catch (error) {
           console.error('Error calculating timezone:', error);
-          // Fallback: use the date/time as-is (will be interpreted as local time)
-          scheduledDateTime = new Date(scheduledDate);
-          scheduledDateTime.setHours(hours, minutes, 0, 0);
+          throw error instanceof Error
+            ? error
+            : new Error('Could not calculate the scheduled send time for that timezone.');
         }
-        
-        // If scheduled time is in the past, schedule for tomorrow at the same time
-        if (scheduledDateTime < new Date()) {
-          scheduledDateTime.setDate(scheduledDateTime.getDate() + 1);
-        }
-        
-        scheduledAt = scheduledDateTime.toISOString();
         campaignStatus = 'scheduled';
       }
 
@@ -4453,25 +4398,43 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 
                 {scheduledDate && (
                   <p className="text-xs text-muted-foreground">
-                    Campaign will be sent on {format(scheduledDate, "PPP")} at {scheduledTime} {(() => {
+                    Campaign will be sent on {format(scheduledDate, "PPP")} at {scheduledTime}{" "}
+                    {(() => {
                       try {
-                        const offset = new Date().toLocaleString('en-GB', { timeZone: scheduledTimezone, timeZoneName: 'short' }).split(' ').pop() || '';
-                        return `(${scheduledTimezone.replace(/_/g, ' ')} ${offset})`;
+                        const offset =
+                          new Date()
+                            .toLocaleString("en-GB", { timeZone: scheduledTimezone, timeZoneName: "short" })
+                            .split(" ")
+                            .pop() || "";
+                        return `(${scheduledTimezone.replace(/_/g, " ")} ${offset})`;
                       } catch {
                         return `(${scheduledTimezone})`;
                       }
                     })()}
                     {(() => {
                       try {
-                        const [hours, minutes] = scheduledTime.split(':').map(Number);
-                        const dateStr = format(scheduledDate, 'yyyy-MM-dd');
-                        const testDate = new Date(`${dateStr}T${scheduledTime}:00`);
-                        const tzTestDate = new Date(testDate.toLocaleString('en-US', { timeZone: scheduledTimezone }));
-                        if (tzTestDate < new Date()) {
-                          return <span className="text-amber-600 ml-1">(tomorrow at the same time)</span>;
-                        }
-                      } catch {}
-                      return null;
+                        const resolved = resolveCampaignScheduledAt(
+                          scheduledDate,
+                          scheduledTime,
+                          scheduledTimezone
+                        );
+                        const shown = formatInTimeZone(resolved.scheduledDateTime, scheduledTimezone, {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          hour12: false,
+                          timeZoneName: "short",
+                        });
+                        return <span className="block mt-1 text-foreground/80">Sends at {shown}</span>;
+                      } catch (e: any) {
+                        return (
+                          <span className="block mt-1 text-amber-600">
+                            {e?.message || "Pick a future date and time in this timezone."}
+                          </span>
+                        );
+                      }
                     })()}
                   </p>
                 )}
