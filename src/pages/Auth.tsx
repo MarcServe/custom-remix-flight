@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { z } from 'zod';
 import leadBoostersLogo from '@/assets/leadboosters-logo.png';
+import heroImage from '@/assets/genie.png';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -446,49 +447,65 @@ export default function Auth() {
       </nav>
 
       {/* ── Hero ── */}
-      <section className="px-6 py-16 lg:py-24 text-center max-w-3xl mx-auto">
-        <div className="inline-flex items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground mb-6">
-          <Sparkles className="h-3 w-3 text-primary" />
-          AI-powered lead generation and outreach
-        </div>
+      <section className="relative overflow-hidden px-6 py-10 sm:py-14 lg:py-20">
+        <div
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_hsl(var(--primary)/0.18),_transparent_55%),linear-gradient(180deg,_hsl(var(--background))_0%,_hsl(280_40%_98%)_100%)]"
+          aria-hidden
+        />
+        <div className="relative mx-auto grid max-w-5xl items-center gap-8 lg:grid-cols-2 lg:gap-12">
+          {/* Hero image: first on mobile, right column on desktop */}
+          <div className="order-1 lg:order-2 flex justify-center lg:justify-end">
+            <img
+              src={heroImage}
+              alt="LeadBoosters — AI-powered lead generation"
+              className="w-full max-w-[min(100%,22rem)] sm:max-w-md lg:max-w-lg h-auto object-contain drop-shadow-xl animate-fade-in"
+            />
+          </div>
 
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight mb-6">
-          Find leads, enrich them,{' '}
-          <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-            close more deals
-          </span>
-        </h1>
+          <div className="order-2 lg:order-1 text-center lg:text-left">
+            <div className="inline-flex items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground mb-5">
+              <Sparkles className="h-3 w-3 text-primary" />
+              AI-powered lead generation and outreach
+            </div>
 
-        <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto leading-relaxed">
-          LeadBoosters combines AI lead discovery, company enrichment, bulk email campaigns,
-          sequences, and a full CRM pipeline in one platform.
-        </p>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight mb-4">
+              Find leads, enrich them,{' '}
+              <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                close more deals
+              </span>
+            </h1>
 
-        <div className="flex flex-col sm:flex-row gap-3 justify-center mb-12">
-          <Button size="lg" className="gap-2 px-8 shadow-lg" onClick={() => goToAuth(true)}>
-            <Sparkles className="h-4 w-4" />
-            Start free 7-day trial
-          </Button>
-          <a href="#features">
-            <Button size="lg" variant="outline" className="gap-2 px-8">
-              See all features <ArrowRight className="h-4 w-4" />
-            </Button>
-          </a>
-        </div>
+            <p className="text-base sm:text-lg text-muted-foreground mb-7 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+              LeadBoosters combines AI lead discovery, company enrichment, bulk email campaigns,
+              sequences, and a full CRM pipeline in one platform.
+            </p>
 
-        {/* Trust badges */}
-        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
-          {[
-            { icon: Shield, text: 'No credit card required' },
-            { icon: CheckCircle2, text: '7-day free trial' },
-            { icon: Zap, text: 'Cancel anytime' },
-            { icon: Users, text: 'Unlimited contacts' },
-          ].map(({ icon: Icon, text }) => (
-            <span key={text} className="flex items-center gap-1.5">
-              <Icon className="h-3.5 w-3.5 text-primary" />
-              {text}
-            </span>
-          ))}
+            <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start mb-8">
+              <Button size="lg" className="gap-2 px-8 shadow-lg" onClick={() => goToAuth(true)}>
+                <Sparkles className="h-4 w-4" />
+                Start free 7-day trial
+              </Button>
+              <a href="#features">
+                <Button size="lg" variant="outline" className="gap-2 px-8 w-full sm:w-auto">
+                  See all features <ArrowRight className="h-4 w-4" />
+                </Button>
+              </a>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-2 text-xs text-muted-foreground">
+              {[
+                { icon: Shield, text: 'No credit card required' },
+                { icon: CheckCircle2, text: '7-day free trial' },
+                { icon: Zap, text: 'Cancel anytime' },
+                { icon: Users, text: 'Unlimited contacts' },
+              ].map(({ icon: Icon, text }) => (
+                <span key={text} className="flex items-center gap-1.5">
+                  <Icon className="h-3.5 w-3.5 text-primary" />
+                  {text}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -668,14 +685,12 @@ export default function Auth() {
         </div>
       </div>
 
-      {/* Mobile: stacked layout */}
+      {/* Mobile: marketing hero first (image at top), then auth */}
       <div className="lg:hidden flex flex-col">
-        {/* Auth first on mobile */}
-        <div id="auth" className="px-6 py-10 border-b bg-card/40">
+        {marketingContent}
+        <div id="auth" className="px-6 py-10 border-t bg-card/40 scroll-mt-16">
           {authPanel}
         </div>
-        {/* Marketing below */}
-        {marketingContent}
       </div>
     </div>
   );
