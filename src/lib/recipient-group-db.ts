@@ -1,15 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-function looksLikeMissingColumn(
+export function looksLikeMissingRecipientGroupColumn(
   error: { message?: string; code?: string; details?: string; hint?: string } | null | undefined,
   column: string
 ): boolean {
   if (!error) return false;
   const blob = `${error.message || ""} ${error.details || ""} ${error.hint || ""} ${error.code || ""}`.toLowerCase();
-  return (
-    blob.includes(column.toLowerCase()) &&
-    (blob.includes("column") || blob.includes("schema cache") || error.code === "PGRST204" || error.code === "42703")
-  );
+  const col = column.toLowerCase();
+  // PostgREST: "Could not find the 'channel' column of 'recipient_groups' in the schema cache"
+  if (blob.includes(col) && (blob.includes("schema cache") || blob.includes("could not find"))) return true;
+  if (blob.includes(col) && blob.includes("column")) return true;
+  if (error.code === "PGRST204" || error.code === "42703") return blob.includes(col) || blob.includes("schema cache");
+  return false;
 }
 
 export type RecipientGroupRow = {
@@ -38,7 +40,7 @@ export async function fetchRecipientGroupsResilient(
 
   let groupsData = withChannel.data as RecipientGroupRow[] | null;
   if (withChannel.error) {
-    if (!looksLikeMissingColumn(withChannel.error, "channel")) {
+    if (!looksLikeMissingRecipientGroupColumn(withChannel.error, "channel")) {
       throw withChannel.error;
     }
     const fallback = await supabase
@@ -104,7 +106,7 @@ export async function fetchRecipientGroupMembersResilient(
     }));
   }
 
-  if (!looksLikeMissingColumn(withPhone.error, "phone")) {
+  if (!looksLikeMissingRecipientGroupColumn(withPhone.error, "phone")) {
     throw withPhone.error;
   }
 
@@ -123,5 +125,3 @@ export async function fetchRecipientGroupMembersResilient(
     company: m.company ?? null,
   }));
 }
-
-export { looksLikeMissingColumn as looksLikeMissingRecipientGroupColumn };

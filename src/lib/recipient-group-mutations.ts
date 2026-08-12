@@ -12,10 +12,17 @@ export type RecipientGroupMemberInput = {
   person_id: string | null;
 };
 
+function errMessage(error: unknown): string {
+  if (!error) return "";
+  if (typeof error === "string") return error;
+  const e = error as { message?: string; details?: string; hint?: string; code?: string };
+  return `${e.message || ""} ${e.details || ""} ${e.hint || ""} ${e.code || ""}`;
+}
+
 /**
  * Creates a recipient group and inserts members in chunks (Supabase row limits).
- * Members may be email-only, phone-only, or both.
- * Retries without channel/phone columns when those migrations aren't applied yet.
+ * Email groups omit `channel` so create works before the phone-groups migration.
+ * Phone groups require the migration; members omit `phone` when null.
  */
 export async function createRecipientGroupWithMembers(
   supabase: SupabaseClient,
@@ -27,44 +34,68 @@ export async function createRecipientGroupWithMembers(
     channel?: "email" | "phone" | "mixed";
   }
 ): Promise<{ groupId: string; count: number }> {
-  const baseGroup = {
+  const channel = params.channel || "email";
+  const baseGroup: Record<string, unknown> = {
     user_id: params.userId,
     name: params.name.trim(),
     description: params.description?.trim() || null,
   };
 
-  let group: { id: string } | null = null;
-  const withChannel = await supabase
-    .from("recipient_groups")
-    .insert({ ...baseGroup, channel: params.channel || "email" } as any)
-    .select("id")
-    .single();
+  // Only send channel when non-default — avoids PostgREST "schema cache" errors
+  // when 20260811170000_recipient_groups_phone.sql hasn't been applied yet.
+  const preferChannel = channel === "phone" || channel === "mixed";
+  if (preferChannel) baseGroup.channel = channel;
 
-  if (!withChannel.error && withChannel.data) {
-    group = withChannel.data as { id: string };
-  } else if (withChannel.error && looksLikeMissingRecipientGroupColumn(withChannel.error, "channel")) {
-    if (params.channel === "phone") {
+  let group: { id: string } | null = null;
+
+  const first = await supabase.from("recipient_groups").insert(baseGroup as any).select("id").single();
+  if (!first.error && first.data) {
+    group = first.data as { id: string };
+  } else {
+    const msg = errMessage(first.error);
+    const missingChannel =
+      looksLikeMissingRecipientGroupColumn(first.error, "channel") ||
+      /channel/i.test(msg) && /schema cache|could not find|column/i.test(msg);
+
+    if (missingChannel && preferChannel) {
       throw new Error(
-        "Phone recipient groups need a database update (channel/phone columns). Apply migration 20260811170000_recipient_groups_phone.sql, then try again."
+        "Phone recipient groups need a database update. Apply migration 20260811170000_recipient_groups_phone.sql, then try again."
       );
     }
-    const fallback = await supabase.from("recipient_groups").insert(baseGroup as any).select("id").single();
-    if (fallback.error || !fallback.data) throw fallback.error || new Error("Failed to create group");
-    group = fallback.data as { id: string };
-  } else {
-    throw withChannel.error || new Error("Failed to create group");
+    if (missingChannel && "channel" in baseGroup) {
+      const { channel: _drop, ...withoutChannel } = baseGroup;
+      const retry = await supabase.from("recipient_groups").insert(withoutChannel as any).select("id").single();
+      if (retry.error || !retry.data) throw retry.error || new Error("Failed to create group");
+      group = retry.data as { id: string };
+    } else if (preferChannel) {
+      // Column might exist but insert failed for another reason — try plain email insert only for email channel
+      throw first.error || new Error("Failed to create group");
+    } else {
+      // Email path with no channel field still failed
+      throw first.error || new Error("Failed to create group");
+    }
   }
 
+  if (!group) throw new Error("Failed to create group");
+
   const cleaned = params.members
-    .map((m) => ({
-      email: m.email?.trim().toLowerCase() || null,
-      phone: m.phone?.trim() || null,
-      first_name: m.first_name,
-      last_name: m.last_name,
-      company: m.company,
-      person_id: m.person_id,
-      group_id: group!.id,
-    }))
+    .map((m) => {
+      const email = m.email?.trim().toLowerCase() || null;
+      const phone = m.phone?.trim() || null;
+      const row: Record<string, unknown> = {
+        first_name: m.first_name,
+        last_name: m.last_name,
+        company: m.company,
+        person_id: m.person_id,
+        group_id: group!.id,
+      };
+      if (email) row.email = email;
+      // Only include phone when present — avoids missing-column errors on email imports
+      if (phone) row.phone = phone;
+      // Email column may still be required NOT NULL on old schemas
+      if (!email && phone) row.email = `phone:${phone.replace(/\D/g, "")}@placeholder.local`;
+      return row;
+    })
     .filter((m) => m.email || m.phone);
 
   for (let i = 0; i < cleaned.length; i += CHUNK) {
@@ -72,10 +103,18 @@ export async function createRecipientGroupWithMembers(
     const withPhone = await supabase.from("recipient_group_members").insert(slice as any);
     if (!withPhone.error) continue;
 
-    if (looksLikeMissingRecipientGroupColumn(withPhone.error, "phone")) {
+    const missingPhone =
+      looksLikeMissingRecipientGroupColumn(withPhone.error, "phone") ||
+      (/phone/i.test(errMessage(withPhone.error)) &&
+        /schema cache|could not find|column/i.test(errMessage(withPhone.error)));
+
+    if (missingPhone) {
       const emailOnly = slice
-        .filter((m) => m.email)
-        .map(({ phone: _p, ...rest }) => rest);
+        .map((m) => {
+          const { phone: _p, ...rest } = m;
+          return rest;
+        })
+        .filter((m) => m.email && !String(m.email).startsWith("phone:"));
       if (emailOnly.length === 0) {
         throw new Error(
           "Phone-only members need a database update. Apply migration 20260811170000_recipient_groups_phone.sql."
