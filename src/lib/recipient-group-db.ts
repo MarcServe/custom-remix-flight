@@ -24,6 +24,60 @@ export type RecipientGroupRow = {
 };
 
 /**
+ * Exact member counts per group.
+ * Avoids Supabase's default 1000-row select cap (large CSV groups were showing as 0)
+ * and does not swallow count errors.
+ */
+export async function fetchRecipientGroupMemberCounts(
+  supabase: SupabaseClient,
+  groupIds: string[]
+): Promise<Record<string, number>> {
+  const countByGroup: Record<string, number> = {};
+  for (const id of groupIds) countByGroup[id] = 0;
+  if (groupIds.length === 0) return countByGroup;
+
+  const results = await Promise.all(
+    groupIds.map(async (id) => {
+      const { count, error } = await supabase
+        .from("recipient_group_members")
+        .select("id", { count: "exact", head: true })
+        .eq("group_id", id);
+      if (error) return { id, count: null as number | null, error };
+      return { id, count: count ?? 0, error: null };
+    })
+  );
+
+  const failed = results.filter((r) => r.count == null);
+  if (failed.length < results.length) {
+    for (const r of results) {
+      if (r.count != null) countByGroup[r.id] = r.count;
+    }
+    return countByGroup;
+  }
+
+  // Fallback: paginated row fetch (still correct past the 1000-row default)
+  const PAGE = 1000;
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("recipient_group_members")
+      .select("group_id")
+      .in("group_id", groupIds)
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = data || [];
+    for (const row of rows as { group_id: string }[]) {
+      if (row.group_id in countByGroup) {
+        countByGroup[row.group_id] += 1;
+      }
+    }
+    if (rows.length < PAGE) break;
+    from += PAGE;
+  }
+  return countByGroup;
+}
+
+/**
  * Load recipient groups for the current user.
  * Retries without `channel` when the phone-groups migration hasn't been applied yet,
  * so existing email groups still appear.
@@ -55,16 +109,7 @@ export async function fetchRecipientGroupsResilient(
   if (!groupsData?.length) return [];
 
   const ids = groupsData.map((g) => g.id);
-  const { data: countsData } = await supabase
-    .from("recipient_group_members")
-    .select("group_id")
-    .in("group_id", ids);
-
-  const countByGroup: Record<string, number> = {};
-  ids.forEach((id) => (countByGroup[id] = 0));
-  (countsData || []).forEach((r: { group_id: string }) => {
-    countByGroup[r.group_id] = (countByGroup[r.group_id] || 0) + 1;
-  });
+  const countByGroup = await fetchRecipientGroupMemberCounts(supabase, ids);
 
   return groupsData.map((g) => ({
     ...g,
@@ -89,39 +134,53 @@ export async function fetchRecipientGroupMembersResilient(
     company: string | null;
   }>
 > {
-  const withPhone = await supabase
-    .from("recipient_group_members")
-    .select("id, email, phone, first_name, last_name, company")
-    .eq("group_id", groupId)
-    .order("created_at", { ascending: true });
+  type MemberRow = {
+    id: string;
+    email: string | null;
+    phone: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    company: string | null;
+  };
 
-  if (!withPhone.error) {
-    return (withPhone.data || []).map((m: any) => ({
-      id: m.id,
-      email: m.email ?? null,
-      phone: m.phone ?? null,
-      first_name: m.first_name ?? null,
-      last_name: m.last_name ?? null,
-      company: m.company ?? null,
-    }));
-  }
-
-  if (!looksLikeMissingRecipientGroupColumn(withPhone.error, "phone")) {
-    throw withPhone.error;
-  }
-
-  const fallback = await supabase
-    .from("recipient_group_members")
-    .select("id, email, first_name, last_name, company")
-    .eq("group_id", groupId)
-    .order("created_at", { ascending: true });
-  if (fallback.error) throw fallback.error;
-  return (fallback.data || []).map((m: any) => ({
+  const mapRow = (m: any, phoneFallback: string | null = null): MemberRow => ({
     id: m.id,
     email: m.email ?? null,
-    phone: null,
+    phone: m.phone ?? phoneFallback,
     first_name: m.first_name ?? null,
     last_name: m.last_name ?? null,
     company: m.company ?? null,
-  }));
+  });
+
+  const PAGE = 1000;
+  const fetchAll = async (includePhone: boolean): Promise<MemberRow[]> => {
+    const all: MemberRow[] = [];
+    let from = 0;
+    const cols = includePhone
+      ? "id, email, phone, first_name, last_name, company"
+      : "id, email, first_name, last_name, company";
+    for (;;) {
+      const { data, error } = await supabase
+        .from("recipient_group_members")
+        .select(cols)
+        .eq("group_id", groupId)
+        .order("created_at", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      const rows = data || [];
+      for (const m of rows as any[]) {
+        all.push(mapRow(m));
+      }
+      if (rows.length < PAGE) break;
+      from += PAGE;
+    }
+    return all;
+  };
+
+  try {
+    return await fetchAll(true);
+  } catch (error: any) {
+    if (!looksLikeMissingRecipientGroupColumn(error, "phone")) throw error;
+    return await fetchAll(false);
+  }
 }

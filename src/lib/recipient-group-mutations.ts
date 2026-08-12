@@ -98,33 +98,39 @@ export async function createRecipientGroupWithMembers(
     })
     .filter((m) => m.email || m.phone);
 
-  for (let i = 0; i < cleaned.length; i += CHUNK) {
-    const slice = cleaned.slice(i, i + CHUNK);
-    const withPhone = await supabase.from("recipient_group_members").insert(slice as any);
-    if (!withPhone.error) continue;
+  try {
+    for (let i = 0; i < cleaned.length; i += CHUNK) {
+      const slice = cleaned.slice(i, i + CHUNK);
+      const withPhone = await supabase.from("recipient_group_members").insert(slice as any);
+      if (!withPhone.error) continue;
 
-    const missingPhone =
-      looksLikeMissingRecipientGroupColumn(withPhone.error, "phone") ||
-      (/phone/i.test(errMessage(withPhone.error)) &&
-        /schema cache|could not find|column/i.test(errMessage(withPhone.error)));
+      const missingPhone =
+        looksLikeMissingRecipientGroupColumn(withPhone.error, "phone") ||
+        (/phone/i.test(errMessage(withPhone.error)) &&
+          /schema cache|could not find|column/i.test(errMessage(withPhone.error)));
 
-    if (missingPhone) {
-      const emailOnly = slice
-        .map((m) => {
-          const { phone: _p, ...rest } = m;
-          return rest;
-        })
-        .filter((m) => m.email && !String(m.email).startsWith("phone:"));
-      if (emailOnly.length === 0) {
-        throw new Error(
-          "Phone-only members need a database update. Apply migration 20260811170000_recipient_groups_phone.sql."
-        );
+      if (missingPhone) {
+        const emailOnly = slice
+          .map((m) => {
+            const { phone: _p, ...rest } = m;
+            return rest;
+          })
+          .filter((m) => m.email && !String(m.email).startsWith("phone:"));
+        if (emailOnly.length === 0) {
+          throw new Error(
+            "Phone-only members need a database update. Apply migration 20260811170000_recipient_groups_phone.sql."
+          );
+        }
+        const retry = await supabase.from("recipient_group_members").insert(emailOnly as any);
+        if (retry.error) throw retry.error;
+        continue;
       }
-      const retry = await supabase.from("recipient_group_members").insert(emailOnly as any);
-      if (retry.error) throw retry.error;
-      continue;
+      throw withPhone.error;
     }
-    throw withPhone.error;
+  } catch (e) {
+    // Don't leave empty/orphan groups when member insert fails mid-import
+    await supabase.from("recipient_groups").delete().eq("id", group.id);
+    throw e;
   }
 
   return { groupId: group.id, count: cleaned.length };

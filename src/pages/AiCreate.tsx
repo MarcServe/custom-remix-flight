@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sparkles, Copy, Check, Wand2, MessageSquareText, Plug, Mail, Newspaper, ArrowRight, Loader2, Users } from "lucide-react";
+import { fetchRecipientGroupMemberCounts } from "@/lib/recipient-group-db";
 
 type Group = { id: string; name: string; members: number };
 
@@ -85,11 +86,7 @@ export default function AiCreate() {
         .select("id, name")
         .order("created_at", { ascending: false });
       const ids = (grp || []).map((g: any) => g.id);
-      const counts: Record<string, number> = {};
-      if (ids.length) {
-        const { data: mem } = await supabase.from("recipient_group_members").select("group_id").in("group_id", ids);
-        for (const m of mem || []) counts[m.group_id] = (counts[m.group_id] || 0) + 1;
-      }
+      const counts = ids.length ? await fetchRecipientGroupMemberCounts(supabase, ids) : {};
       setGroups((grp || []).map((g: any) => ({ id: g.id, name: g.name, members: counts[g.id] || 0 })));
     })();
   }, []);
