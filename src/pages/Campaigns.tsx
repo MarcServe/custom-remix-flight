@@ -62,6 +62,86 @@ function personalizeCampaignTemplate(
 }
 import ABTesting from "./ABTesting";
 
+type FollowUpSegment =
+  | "sent_all"
+  | "not_opened"
+  | "delivered_not_opened"
+  | "opened"
+  | "opened_no_click"
+  | "clicked";
+
+const FOLLOW_UP_SEGMENT_LABELS: Record<FollowUpSegment, string> = {
+  sent_all: "Everyone who was sent",
+  not_opened: "Not opened (sent, no open)",
+  delivered_not_opened: "Delivered, not opened",
+  opened: "Opened (any)",
+  opened_no_click: "Opened, but didn’t click",
+  clicked: "Clicked",
+};
+
+type RecipientStatusFilter =
+  | "all"
+  | "pending"
+  | "sent"
+  | "delivered"
+  | "delivered_not_opened"
+  | "opened"
+  | "clicked"
+  | "opened_no_click"
+  | "bounced"
+  | "failed";
+
+function statusFilterToFollowUpSegment(f: RecipientStatusFilter): FollowUpSegment | null {
+  switch (f) {
+    case "delivered_not_opened":
+      return "delivered_not_opened";
+    case "opened_no_click":
+      return "opened_no_click";
+    case "opened":
+      return "opened";
+    case "clicked":
+      return "clicked";
+    case "sent":
+      return "not_opened";
+    default:
+      return null;
+  }
+}
+
+type StatusCounts = {
+  all: number;
+  pending: number;
+  sent: number;
+  delivered: number;
+  delivered_not_opened: number;
+  opened: number;
+  clicked: number;
+  opened_no_click: number;
+  bounced: number;
+  failed: number;
+};
+
+function followUpSegmentCount(seg: FollowUpSegment, counts?: StatusCounts | null): number | null {
+  if (!counts) return null;
+  switch (seg) {
+    case "sent_all":
+      return Math.max(0, (counts.all ?? 0) - (counts.pending ?? 0) - (counts.bounced ?? 0) - (counts.failed ?? 0));
+    case "not_opened":
+      // status=sent rows are typically not-yet-opened; include delivered_not_opened when status already moved
+      return (counts.sent ?? 0);
+    case "delivered_not_opened":
+      return counts.delivered_not_opened ?? 0;
+    case "opened":
+      return counts.opened ?? 0;
+    case "opened_no_click":
+      return counts.opened_no_click ?? 0;
+    case "clicked":
+      return counts.clicked ?? 0;
+    default:
+      return null;
+  }
+}
+
 interface Campaign {
   id: string;
   name: string;
@@ -175,7 +255,6 @@ export default function Campaigns() {
   const [enrollFollowUpSequenceId, setEnrollFollowUpSequenceId] = useState<string>("");
   const [enrollingFollowUp, setEnrollingFollowUp] = useState(false);
   // Resend-style status filter: server-side for large lists, counts from RPC
-  type RecipientStatusFilter = 'all' | 'pending' | 'sent' | 'delivered' | 'delivered_not_opened' | 'opened' | 'clicked' | 'opened_no_click' | 'bounced' | 'failed';
   const [recipientStatusFilter, setRecipientStatusFilter] = useState<RecipientStatusFilter>('all');
   // Segment for follow-up enrollment (server-side filtered)
   type EnrollSegment = 'all_sent' | 'not_opened' | 'opened' | 'clicked' | 'opened_no_click';
@@ -185,7 +264,7 @@ export default function Campaigns() {
   // Polling ref for live "sending" progress — cleared when pending hits 0
   const sendPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [createFollowUpOpen, setCreateFollowUpOpen] = useState(false);
-  const [createFollowUpSegment, setCreateFollowUpSegment] = useState<'delivered_not_opened' | 'not_opened' | 'opened_no_click'>('not_opened');
+  const [createFollowUpSegment, setCreateFollowUpSegment] = useState<FollowUpSegment>('opened_no_click');
   const [settingUpNoReplyFollowUp, setSettingUpNoReplyFollowUp] = useState(false);
   const [creatingFollowUp, setCreatingFollowUp] = useState(false);
 
@@ -1749,8 +1828,9 @@ export default function Campaigns() {
     }
   };
 
-  const handleCreateFollowUpCampaign = async () => {
+  const handleCreateFollowUpCampaign = async (segmentOverride?: FollowUpSegment) => {
     if (!selectedCampaign || !selectedCampaignData) return;
+    const segment = segmentOverride ?? createFollowUpSegment;
     setCreatingFollowUp(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -1759,20 +1839,29 @@ export default function Campaigns() {
         return;
       }
       const s = selectedCampaignData as any;
+      // Anyone who was actually sent (exclude pending/failed/bounced by requiring sent_at)
       let segmentQuery = supabase
         .from('email_campaign_recipients')
         .select('id, person_id, email, name, personalized_subject, personalized_body_html, personalized_body_text')
         .eq('campaign_id', selectedCampaign)
-        .in('status', ['sent', 'opened', 'clicked']);
-      switch (createFollowUpSegment) {
+        .not('sent_at', 'is', null);
+      switch (segment) {
+        case 'sent_all':
+          break;
         case 'delivered_not_opened':
           segmentQuery = segmentQuery.not('delivered_at', 'is', null).is('opened_at', null);
           break;
         case 'not_opened':
           segmentQuery = segmentQuery.is('opened_at', null);
           break;
+        case 'opened':
+          segmentQuery = segmentQuery.not('opened_at', 'is', null);
+          break;
         case 'opened_no_click':
           segmentQuery = segmentQuery.not('opened_at', 'is', null).is('clicked_at', null);
+          break;
+        case 'clicked':
+          segmentQuery = segmentQuery.not('clicked_at', 'is', null);
           break;
         default:
           break;
@@ -1780,14 +1869,15 @@ export default function Campaigns() {
       const { data: segmentRecipients, error: segErr } = await segmentQuery;
       if (segErr) throw segErr;
       if (!segmentRecipients?.length) {
-        toast.error('No recipients in this segment. Sync from Resend first or choose another segment.');
+        toast.error('No recipients in this segment. Sync tracking first, or choose another filter.');
         return;
       }
+      const segmentLabel = FOLLOW_UP_SEGMENT_LABELS[segment] || 'Follow-up';
       const { data: newCampaign, error: insertErr } = await supabase
         .from('email_campaigns')
         .insert({
           user_id: user.id,
-          name: `${selectedCampaignData.name} (Follow-up)`,
+          name: `${selectedCampaignData.name} — ${segmentLabel}`,
           status: 'draft',
           subject_template: s.subject_template || '',
           body_html_template: s.body_html_template || '',
@@ -1825,15 +1915,23 @@ export default function Campaigns() {
         status: 'pending',
         email_period: 'new',
       }));
-      const { error: recErr } = await supabase.from('email_campaign_recipients').insert(recipients);
-      if (recErr) throw recErr;
+      // Insert in chunks for large segments
+      const CHUNK = 400;
+      for (let i = 0; i < recipients.length; i += CHUNK) {
+        const { error: recErr } = await supabase
+          .from('email_campaign_recipients')
+          .insert(recipients.slice(i, i + CHUNK));
+        if (recErr) throw recErr;
+      }
       setCreateFollowUpOpen(false);
       setDraftToEdit(newCampaign.id);
       setBulkEmailDialogOpen(true);
       await queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
-      toast.success(`Follow-up campaign created with ${segmentRecipients.length} recipient(s). Edit and send when ready.`);
+      toast.success(
+        `Resend draft ready with ${segmentRecipients.length} recipient(s) — ${segmentLabel}. Edit and send when ready.`
+      );
     } catch (e: any) {
-      toast.error(e?.message ?? 'Failed to create follow-up campaign');
+      toast.error(e?.message ?? 'Failed to create resend campaign');
     } finally {
       setCreatingFollowUp(false);
     }
@@ -3205,16 +3303,16 @@ export default function Campaigns() {
               </Button>
             </div>
 
-            {/* Sync from Resend + Create follow-up campaign (tracking-based) */}
+            {/* Sync tracking + Resend by engagement filter */}
             {(selectedCampaignData?.status?.toLowerCase() === 'completed' || selectedCampaignData?.status?.toLowerCase() === 'sending' || selectedCampaignData?.status?.toLowerCase() === 'paused') &&
              (selectedCampaignData as Campaign).sent_count > 0 && (
               <div className="rounded-lg border bg-muted/30 px-4 py-3 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
-                  <BarChart3 className="h-4 w-4 text-primary shrink-0" />
-                  Tracking & follow-up
+                  <SendHorizontal className="h-4 w-4 text-primary shrink-0" />
+                  Resend by engagement
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Pull delivered/opened/clicked status from Resend into the CRM (requires Resend as sender), then create a reminder campaign for a segment (e.g. not opened).
+                  Filter who engaged (opened, clicked, etc.), then create a new draft with only that segment — e.g. opened but didn&apos;t click. Sync tracking first if you use Resend.
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
@@ -3227,42 +3325,92 @@ export default function Campaigns() {
                     Sync tracking
                   </Button>
                   <Button
-                    variant="outline"
+                    variant="default"
                     size="sm"
-                    onClick={() => setCreateFollowUpOpen(true)}
+                    onClick={() => {
+                      const fromFilter = statusFilterToFollowUpSegment(recipientStatusFilter);
+                      if (fromFilter) setCreateFollowUpSegment(fromFilter);
+                      setCreateFollowUpOpen(true);
+                    }}
                   >
-                    Create follow-up campaign
+                    <SendHorizontal className="h-4 w-4 mr-1" />
+                    Resend to a segment…
                   </Button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      "opened_no_click",
+                      "not_opened",
+                      "delivered_not_opened",
+                      "opened",
+                      "clicked",
+                    ] as FollowUpSegment[]
+                  ).map((seg) => {
+                    const n = followUpSegmentCount(seg, statusCounts as StatusCounts | undefined);
+                    return (
+                      <Button
+                        key={seg}
+                        type="button"
+                        variant={createFollowUpSegment === seg ? "secondary" : "outline"}
+                        size="sm"
+                        className="h-8 text-xs"
+                        disabled={creatingFollowUp || n === 0}
+                        onClick={() => void handleCreateFollowUpCampaign(seg)}
+                      >
+                        {creatingFollowUp ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : null}
+                        {FOLLOW_UP_SEGMENT_LABELS[seg]}
+                        {n != null ? ` (${n})` : ""}
+                      </Button>
+                    );
+                  })}
                 </div>
                 <Dialog open={createFollowUpOpen} onOpenChange={setCreateFollowUpOpen}>
                   <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                      <DialogTitle>Create follow-up campaign</DialogTitle>
+                      <DialogTitle>Resend by engagement</DialogTitle>
                       <DialogDescription>
-                        Create a new draft with only the selected segment as recipients. Edit subject/body if needed, then send.
+                        Creates a new draft campaign with only the chosen segment. Edit the subject/body if you want, then send.
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-2">
                       <div className="space-y-2">
-                        <Label>Segment</Label>
-                        <Select value={createFollowUpSegment} onValueChange={(v: 'delivered_not_opened' | 'not_opened' | 'opened_no_click') => setCreateFollowUpSegment(v)}>
+                        <Label>Who should get this resend?</Label>
+                        <Select
+                          value={createFollowUpSegment}
+                          onValueChange={(v) => setCreateFollowUpSegment(v as FollowUpSegment)}
+                        >
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="not_opened">Not opened (sent but no open)</SelectItem>
-                            <SelectItem value="delivered_not_opened">Delivered, not opened</SelectItem>
-                            <SelectItem value="opened_no_click">Opened, no click</SelectItem>
+                            {(Object.keys(FOLLOW_UP_SEGMENT_LABELS) as FollowUpSegment[]).map((seg) => {
+                              const n = followUpSegmentCount(seg, statusCounts as StatusCounts | undefined);
+                              return (
+                                <SelectItem key={seg} value={seg}>
+                                  {FOLLOW_UP_SEGMENT_LABELS[seg]}
+                                  {n != null ? ` (${n})` : ""}
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Tip: pick <strong>Opened, but didn&apos;t click</strong> to nudge people who opened without taking action.
+                        </p>
                       </div>
                       <Button
                         className="w-full"
-                        onClick={handleCreateFollowUpCampaign}
+                        onClick={() => void handleCreateFollowUpCampaign()}
                         disabled={creatingFollowUp}
                       >
-                        {creatingFollowUp ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                        Create draft with segment
+                        {creatingFollowUp ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <SendHorizontal className="h-4 w-4 mr-2" />}
+                        Create resend draft
+                        {followUpSegmentCount(createFollowUpSegment, statusCounts as StatusCounts | undefined) != null
+                          ? ` (${followUpSegmentCount(createFollowUpSegment, statusCounts as StatusCounts | undefined)})`
+                          : ""}
                       </Button>
                     </div>
                   </DialogContent>
@@ -3522,7 +3670,7 @@ export default function Campaigns() {
               </div>
             )}
 
-            {/* Resend-style status filter: server-side for large lists */}
+            {/* Status filter + one-click resend for engagement segments */}
             {recipients && (
               <div className="flex flex-wrap items-center gap-3 py-2 border-b">
                 <Label className="text-sm font-medium shrink-0">Status</Label>
@@ -3570,6 +3718,33 @@ export default function Campaigns() {
                   Showing {filteredRecipients.length} recipient{filteredRecipients.length !== 1 ? 's' : ''}
                   {recipientSearchQuery.trim() && ` (of ${recipients.length})`}
                 </span>
+                {(() => {
+                  const seg = statusFilterToFollowUpSegment(recipientStatusFilter);
+                  if (!seg) return null;
+                  const n = followUpSegmentCount(seg, statusCounts as StatusCounts | undefined);
+                  const canResend =
+                    (selectedCampaignData?.status?.toLowerCase() === "completed" ||
+                      selectedCampaignData?.status?.toLowerCase() === "sending" ||
+                      selectedCampaignData?.status?.toLowerCase() === "paused") &&
+                    (selectedCampaignData as Campaign)?.sent_count > 0;
+                  if (!canResend) return null;
+                  return (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="ml-auto"
+                      disabled={creatingFollowUp || n === 0}
+                      onClick={() => void handleCreateFollowUpCampaign(seg)}
+                    >
+                      {creatingFollowUp ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <SendHorizontal className="h-4 w-4 mr-1" />
+                      )}
+                      Resend to this filter{n != null ? ` (${n})` : ""}
+                    </Button>
+                  );
+                })()}
               </div>
             )}
 
