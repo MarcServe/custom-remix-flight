@@ -221,7 +221,7 @@ export default function CompanySequences() {
   }, [filteredSequences, campaignNameMap]);
 
   const toggleSeq = (id: string) =>
-    setSelectedSeqIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelectedSeqIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleGroup = (seqs: CompanySequence[]) =>
     setSelectedSeqIds(prev => {
       const n = new Set(prev);

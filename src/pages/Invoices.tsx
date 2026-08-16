@@ -197,16 +197,16 @@ export default function Invoices() {
 
       let inserted = 0;
       for (const row of rows) {
-        const invoiceNumber = row.invoice_number || row.invoice_number || row["invoice number"] || `IMP-${Date.now()}-${inserted}`;
-        const invoiceType = (row.invoice_type || row.type || row.invoice_type || "invoice") as string;
-        const issueDate = row.issue_date || row.date || row.issue_date || format(new Date(), "yyyy-MM-dd");
-        const dueDate = row.due_date || row.due_date || row.due || issueDate;
-        const totalAmount = Number(row.total_amount ?? row.total ?? row.amount ?? row.total_amount ?? 0) || 0;
-        const subtotal = Number(row.subtotal ?? row.subtotal) || totalAmount;
-        const taxRate = Number(row.tax_rate ?? row.tax_rate) ?? 0;
-        const taxAmount = Number(row.tax_amount ?? row.tax_amount) ?? 0;
-        const status = (row.status || row.status || "draft") as string;
-        const companyName = (row.company_name || row.company || row.company_name || "").trim().toLowerCase();
+        const invoiceNumber = row.invoice_number || row.invoiceNumber || row["invoice number"] || `IMP-${Date.now()}-${inserted}`;
+        const invoiceType = (row.invoice_type || row.invoiceType || row.type || "invoice") as string;
+        const issueDate = row.issue_date || row.issueDate || row.date || format(new Date(), "yyyy-MM-dd");
+        const dueDate = row.due_date || row.dueDate || row.due || issueDate;
+        const totalAmount = Number(row.total_amount ?? row.totalAmount ?? row.total ?? row.amount ?? 0) || 0;
+        const subtotal = Number(row.subtotal ?? row.subTotal) || totalAmount;
+        const taxRate = Number(row.tax_rate ?? row.taxRate) || 0;
+        const taxAmount = Number(row.tax_amount ?? row.taxAmount) || 0;
+        const status = (row.status || "draft") as string;
+        const companyName = (row.company_name || row.companyName || row.company || "").trim().toLowerCase();
         const companyId = row.company_id || (companyName ? companyNameToId[companyName] : null) || null;
 
         let lineItems = row.line_items;

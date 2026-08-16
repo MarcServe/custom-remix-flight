@@ -248,7 +248,7 @@ serve(async (req) => {
             console.log(`Email opened: ${emailId}, count: ${updates.metadata.open_count}`);
             break;
 
-          case 'email.clicked':
+          case 'email.clicked': {
             updates.metadata.clicked = true;
             updates.metadata.click_count = (updates.metadata.click_count || 0) + 1;
             updates.metadata.last_click = new Date().toISOString();
@@ -261,8 +261,9 @@ serve(async (req) => {
             }
             console.log(`Email clicked: ${emailId}, link: ${clickedUrl}`);
             break;
+          }
 
-          case 'email.bounced':
+          case 'email.bounced': {
             updates.bounced_at = new Date().toISOString();
             updates.status = 'bounced';
             updates.metadata.bounce_reason = eventData.reason || eventData.type || 'Unknown';
@@ -301,6 +302,7 @@ serve(async (req) => {
               .update({ status: 'paused' })
               .eq('id', activity.company_sequence_id);
             break;
+          }
 
           case 'email.delivered':
             updates.status = 'delivered';
@@ -326,7 +328,7 @@ serve(async (req) => {
               .eq('id', activity.company_sequence_id);
             break;
 
-          case 'email.spam':
+          case 'email.spam': {
             updates.status = 'spam';
             updates.metadata.marked_spam_at = new Date().toISOString();
             
@@ -360,6 +362,7 @@ serve(async (req) => {
               .update({ status: 'completed' })
               .eq('id', activity.company_sequence_id);
             break;
+          }
 
           case 'email.unsubscribed':
             updates.status = 'unsubscribed';

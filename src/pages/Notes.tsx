@@ -118,7 +118,7 @@ export default function Notes() {
     toast({ title: "Copied", description: "Note content copied to clipboard" });
   };
 
-  const useInCampaign = (note: CrmNote) => {
+  const copyToCampaign = (note: CrmNote) => {
     navigator.clipboard.writeText(note.content);
     toast({ title: "Copied", description: "Note copied. Opening Campaigns — paste into your campaign or recipient list." });
     navigate("/campaigns");
@@ -172,7 +172,7 @@ export default function Notes() {
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => copyContent(note)} title="Copy content">
                         <Copy className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => useInCampaign(note)} title="Copy and open Campaigns">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => copyToCampaign(note)} title="Copy and open Campaigns">
                         <Send className="h-4 w-4" />
                       </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(note)} title="Edit">
