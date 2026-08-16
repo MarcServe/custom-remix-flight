@@ -234,9 +234,9 @@ serve(async (req) => {
   try {
     const { companyId, website, companyName } = await req.json();
 
-    if (!companyId || !website) {
+    if (!website) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Company ID and website are required' }),
+        JSON.stringify({ success: false, error: 'Website is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -375,26 +375,30 @@ serve(async (req) => {
 
     console.log(`[extract-website-email] Final email selected: ${finalEmail}`);
 
-    // Update company in database
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    
-    const { error: updateError } = await supabase
-      .from('companies')
-      .update({ 
-        general_email: finalEmail,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', companyId);
+    // Optionally update company in database when a CRM company id is provided
+    if (companyId) {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      
+      const { error: updateError } = await supabase
+        .from('companies')
+        .update({ 
+          general_email: finalEmail,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', companyId);
 
-    if (updateError) {
-      console.error('[extract-website-email] Database update error:', updateError);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Failed to update company' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (updateError) {
+        console.error('[extract-website-email] Database update error:', updateError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to update company' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(`[extract-website-email] Successfully extracted and saved email: ${finalEmail}`);
+    } else {
+      console.log(`[extract-website-email] Successfully extracted email (no CRM update): ${finalEmail}`);
     }
-
-    console.log(`[extract-website-email] Successfully extracted and saved email: ${finalEmail}`);
 
     return new Response(
       JSON.stringify({ 

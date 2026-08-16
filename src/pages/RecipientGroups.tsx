@@ -1397,7 +1397,7 @@ export default function RecipientGroups() {
                     <div key={m.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                       <Checkbox
                         checked={selectedMemberIds.has(m.id)}
-                        onCheckedChange={(c) => setSelectedMemberIds((prev) => { const n = new Set(prev); c ? n.add(m.id) : n.delete(m.id); return n; })}
+                        onCheckedChange={(c) => setSelectedMemberIds((prev) => { const n = new Set(prev); if (c) n.add(m.id); else n.delete(m.id); return n; })}
                       />
                       <div className="min-w-0 flex-1">
                         <div className="truncate">{m.email}</div>
