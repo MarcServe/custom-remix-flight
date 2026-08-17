@@ -111,3 +111,21 @@ verify_jwt = true
 # Service role (cron) or user JWT; auth enforced inside the function
 [functions.process-newsletter-series]
 verify_jwt = false
+
+[functions.twilio-click-to-call]
+verify_jwt = true
+
+[functions.send-campaign-sms]
+verify_jwt = true
+
+[functions.api-calling]
+verify_jwt = false  # API key or user JWT checked inside
+
+[functions.twilio-voice-webhook]
+verify_jwt = false  # Twilio voice TwiML callback
+
+[functions.twilio-status-webhook]
+verify_jwt = false  # Twilio status callback
+
+[functions.twilio-inbound-sms]
+verify_jwt = false  # Twilio inbound SMS webhook

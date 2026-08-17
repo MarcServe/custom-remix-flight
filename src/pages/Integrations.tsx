@@ -16,7 +16,8 @@ import { nangoClient } from "@/lib/integrations/nango";
 import { gmailDirectClient } from "@/lib/integrations/gmail-direct";
 import { EMAIL_PROVIDER_CONFIG } from "@/config/email-providers";
 import { toast } from "sonner";
-import { Mail, Shield, Loader2 } from "lucide-react";
+import { Mail, Shield, Loader2, Phone } from "lucide-react";
+import { PhoneServiceDialog } from "@/components/integrations/PhoneServiceDialog";
 import { supabase } from "@/integrations/supabase/client";
 
 
@@ -95,6 +96,7 @@ export default function Integrations() {
   const [testEmailDialogOpen, setTestEmailDialogOpen] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
+  const [phoneDialogOpen, setPhoneDialogOpen] = useState(false);
 
   const { data: connections, isLoading } = useQuery({
     queryKey: ['nango-connections'],
@@ -252,6 +254,18 @@ export default function Integrations() {
       </div>
 
       <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-xl flex items-center gap-2"><Phone className="h-5 w-5" /> Phone / Twilio</CardTitle>
+            <CardDescription>
+              Connect Twilio for click-to-call and SMS follow-ups. Point Voice and Messaging webhooks at the LeadBoosters functions after connecting.
+            </CardDescription>
+          </div>
+          <Button variant="outline" onClick={() => setPhoneDialogOpen(true)}>Connect Twilio</Button>
+        </CardHeader>
+      </Card>
+
+      <Card>
         <CardHeader>
           <CardTitle className="text-xl">Connected Email Providers</CardTitle>
           <CardDescription>
@@ -340,6 +354,7 @@ export default function Integrations() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PhoneServiceDialog open={phoneDialogOpen} onOpenChange={setPhoneDialogOpen} />
     </div>
   );
 }
