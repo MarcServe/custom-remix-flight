@@ -10,7 +10,7 @@ import {
 } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Lock, Sparkles, Check, ArrowRight } from 'lucide-react';
+import { Lock, Sparkles, Check, ArrowRight, Loader2 } from 'lucide-react';
 
 interface PlanGateProps {
   /** Minimum plan tier required to see children */
@@ -39,8 +39,17 @@ const BUTTON_CLASS: Record<'individual' | 'pro' | 'leadboosters', string> = {
 };
 
 export function PlanGate({ requiredTier, feature, children }: PlanGateProps) {
-  const { planTier, isAtLeast } = useAuth();
+  const { planTier, isAtLeast, subscriptionLoading } = useAuth();
   const navigate = useNavigate();
+
+  // Don't flash the upgrade/subscribe card before the plan status is known.
+  if (subscriptionLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (isAtLeast(requiredTier)) {
     return <>{children}</>;

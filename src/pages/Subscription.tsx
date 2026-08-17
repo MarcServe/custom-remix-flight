@@ -117,7 +117,7 @@ const FEATURE_GROUPS = [
 ];
 
 export default function Subscription() {
-  const { subscribed, productId, subscriptionEnd, trialEndsAt, isInTrial, checkSubscription } = useAuth();
+  const { subscribed, productId, subscriptionEnd, trialEndsAt, isInTrial, subscriptionLoading, checkSubscription } = useAuth();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -147,13 +147,15 @@ export default function Subscription() {
   };
 
   useEffect(() => {
-    if (searchParams.get('checkout') !== 'true' || subscribed || autoCheckoutStarted.current) return;
+    // Wait until the real subscription status is known so we don't kick off
+    // checkout for a user who is actually already subscribed.
+    if (subscriptionLoading || searchParams.get('checkout') !== 'true' || subscribed || autoCheckoutStarted.current) return;
     autoCheckoutStarted.current = true;
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('checkout');
     setSearchParams(nextParams, { replace: true });
     void handleSubscribe();
-  }, [searchParams, setSearchParams, subscribed]);
+  }, [searchParams, setSearchParams, subscribed, subscriptionLoading]);
 
   const handleManageSubscription = async () => {
     try {
@@ -180,6 +182,18 @@ export default function Subscription() {
       setRefreshing(false);
     }
   };
+
+  // Avoid flashing the "not subscribed" state (bottom CTA / missing banners /
+  // no "Current plan" badge) before the async subscription status resolves.
+  if (subscriptionLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </div>
+    );
+  }
 
   const isIndividualActive   = subscribed && productId === INDIVIDUAL_PRODUCT_ID;
   const isProActive          = subscribed && productId === PRO_PRODUCT_ID;

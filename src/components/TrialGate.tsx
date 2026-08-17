@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Sparkles } from 'lucide-react';
+import { Lock, Sparkles, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface TrialGateProps {
@@ -12,8 +12,17 @@ interface TrialGateProps {
 }
 
 export function TrialGate({ children, feature = 'this feature' }: TrialGateProps) {
-  const { hasAccess, isInTrial, trialEndsAt, subscribed } = useAuth();
+  const { hasAccess, isInTrial, trialEndsAt, subscribed, subscriptionLoading } = useAuth();
   const navigate = useNavigate();
+
+  // Don't flash the "Trial Expired" card before the subscription/trial status is known.
+  if (subscriptionLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (hasAccess) {
     return <>{children}</>;

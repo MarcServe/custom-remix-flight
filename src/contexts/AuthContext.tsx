@@ -72,6 +72,8 @@ interface AuthContextType {
   trialEndsAt: string | null;
   hasAccess: boolean;
   isInTrial: boolean;
+  /** True until the subscription/trial status has been resolved for the current session. */
+  subscriptionLoading: boolean;
   planTier: PlanTier;
   isAtLeast: (tier: PlanTier) => boolean;
   checkSubscription: () => Promise<void>;
@@ -104,6 +106,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [productId, setProductId] = useState<string | null>(null);
   const [subscriptionEnd, setSubscriptionEnd] = useState<string | null>(null);
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
+  // Starts true so the app doesn't render a "not subscribed" state before the
+  // async subscription/trial check for an existing session resolves.
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
   const initialLoadRef = useRef(true);
 
   // Calculate if user is in trial period
@@ -164,11 +169,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
         // Check subscription when user signs in
         if (session?.user) {
+          setSubscriptionLoading(true);
           checkSubscription();
         } else {
           setSubscribed(false);
           setProductId(null);
           setSubscriptionEnd(null);
+          setSubscriptionLoading(false);
         }
 
         // Only show toasts after initial load is complete to avoid showing on page refresh
@@ -195,7 +202,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       // Check subscription for existing session
       if (session?.user) {
+        setSubscriptionLoading(true);
         checkSubscription();
+      } else {
+        setSubscriptionLoading(false);
       }
 
       // Mark initial load as complete after session check
@@ -320,6 +330,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setSubscriptionEnd(data?.subscription_end || null);
     } catch (error) {
       console.error('[AUTH] Error in checkSubscription:', error);
+    } finally {
+      setSubscriptionLoading(false);
     }
   };
 
@@ -334,6 +346,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     trialEndsAt,
     hasAccess,
     isInTrial,
+    subscriptionLoading,
     planTier,
     isAtLeast,
     checkSubscription,
