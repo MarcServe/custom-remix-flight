@@ -1402,12 +1402,21 @@ Return ONLY the HTML body content.`,
           return;
         }
         const sent = data?.sent ?? data?.recipientCount ?? 0;
-        const batchNote = isAlreadySending
-          ? " Only not-yet-sent recipients were included."
-          : sendInBatches
-            ? " First 50 sent; next 50 every 15 min (see newsletter card for progress)."
-            : "";
-        toast({ title: "Batch sent", description: `Sent to ${sent} recipients.${batchNote}` });
+        const remaining = Number(data?.remaining ?? 0);
+        const failed = Number(data?.failed ?? 0);
+        const failedNote = failed > 0 ? ` ${failed} failed (see View recipients).` : "";
+        if (data?.batched && remaining > 0) {
+          // Large lists go out in resumable batches so one long run cannot time out half-way.
+          toast({
+            title: "Sending in batches",
+            description: `Sent to ${sent} so far; ${remaining} more will go out automatically every 15 minutes (see the newsletter card for progress).${failedNote}`,
+          });
+        } else {
+          toast({
+            title: isAlreadySending ? "Batch sent" : "Newsletter sent",
+            description: `Sent to ${sent} recipients.${isAlreadySending ? " Only not-yet-sent recipients were included." : ""}${failedNote}`,
+          });
+        }
       })
       .catch((err: any) => {
         queryClient.invalidateQueries({ queryKey: ["newsletters"] });

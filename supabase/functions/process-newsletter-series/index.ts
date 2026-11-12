@@ -64,6 +64,79 @@ function pickTemplateStyle(
   return "professional";
 }
 
+/** Image models to try, newest first. Older ones (dall-e-3) have been retired by OpenAI. */
+const IMAGE_MODELS = ["gpt-image-2", "gpt-image-1.5", "gpt-image-1-mini"];
+
+/** The editor's "insert an image here" slot that generate-email-with-ai leaves between sections. */
+const IMAGE_SLOT_RE = /<div class="newsletter-image-slot"[^>]*>[\s\S]*?<\/div>/g;
+
+/** Generate one image and return its bytes, or null if every model fails. */
+async function generateImageBytes(openaiKey: string, prompt: string): Promise<Uint8Array | null> {
+  for (const model of IMAGE_MODELS) {
+    // Try compact JPEG output first; fall back to the model's defaults if it rejects the options.
+    const bodies = [
+      { model, prompt, n: 1, size: "1536x1024", quality: "medium", output_format: "jpeg", output_compression: 82 },
+      { model, prompt, n: 1, size: "1536x1024" },
+    ];
+    for (const body of bodies) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 85_000);
+      try {
+        const res = await fetch("https://api.openai.com/v1/images/generations", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: ctrl.signal,
+        });
+        if (!res.ok) {
+          console.warn(`[process-newsletter-series] image model ${model} failed:`, res.status, (await res.text().catch(() => "")).slice(0, 300));
+          continue;
+        }
+        const json = await res.json() as { data?: { b64_json?: string; url?: string }[] };
+        const first = json?.data?.[0];
+        if (first?.b64_json) return Uint8Array.from(atob(first.b64_json), (c) => c.charCodeAt(0));
+        if (first?.url) {
+          const img = await fetch(first.url);
+          if (img.ok) return new Uint8Array(await img.arrayBuffer());
+        }
+      } catch (e) {
+        console.warn(`[process-newsletter-series] image model ${model} error:`, e instanceof Error ? e.message : e);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Store image bytes in the public email-branding bucket and return a permanent URL.
+ * (Provider URLs expire within the hour, which would break the image for later opens.)
+ */
+async function storeImage(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  bytes: Uint8Array,
+  basePath: string
+): Promise<string | null> {
+  try {
+    const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
+    const path = `${basePath}.${isJpeg ? "jpg" : "png"}`;
+    const { error } = await supabase.storage
+      .from("email-branding")
+      .upload(path, bytes, { contentType: isJpeg ? "image/jpeg" : "image/png", upsert: true });
+    if (error) {
+      console.warn("[process-newsletter-series] image upload failed:", error.message);
+      return null;
+    }
+    const { data } = supabase.storage.from("email-branding").getPublicUrl(path);
+    return data?.publicUrl || null;
+  } catch (e) {
+    console.warn("[process-newsletter-series] image store error:", e);
+    return null;
+  }
+}
+
 const CONTENT_ANGLES = [
   "Focus on one actionable tip readers can use today.",
   "Lead with a short industry insight or trend, then explain why it matters.",
@@ -133,8 +206,9 @@ serve(async (req) => {
       const { timeStr: seriesCurrentTime } = getTodayAndTimeInTimezone(seriesTz);
 
       const start = new Date(series.start_date);
+      // Last send day is start + (duration - 1): a 7-day series sends on 7 days, not 8.
       const end = new Date(start);
-      end.setDate(end.getDate() + series.duration_days);
+      end.setDate(end.getDate() + Math.max(1, Number(series.duration_days) || 1) - 1);
       const todayDate = new Date(seriesToday);
       if (todayDate < start || todayDate > end) {
         if (todayDate > end) {
@@ -228,53 +302,57 @@ Return ONLY the HTML body content.`;
         const subject = `${series.name} – Day ${dayNum}`;
         const headerUrls = Array.isArray(series.header_image_urls) ? series.header_image_urls.filter((u: unknown) => u && String(u).trim()) : [];
 
-        // Generate a topic-relevant header image.
-        // Priority: 1) user-supplied URLs → 2) DALL-E 3 → 3) Picsum fallback
-        let headerImageUrl: string | null = null;
-        if (headerUrls.length > 0) {
-          // Cycle through user-supplied images by day
-          headerImageUrl = headerUrls[dayIndex0 % headerUrls.length];
-        } else {
-          // Try DALL-E 3 using the already-configured OPENAI_API_KEY
-          const openaiKey = Deno.env.get("OPENAI_API_KEY");
-          if (openaiKey) {
-            try {
-              const imagePrompt =
-                `A clean, professional email newsletter header image for a business email about: ${topicTemplate.replace(/\{day\}/g, String(dayNum)).replace(/\{total\}/g, String(total)).slice(0, 200)}. ` +
-                `Wide landscape format, minimal text, modern design, soft colours, suitable for a ${series.ai_tone || "professional"} ${series.ai_target_audience || "business"} audience. ` +
-                `No people's faces, no logos. High quality editorial style.`;
-              const imgRes = await fetch("https://api.openai.com/v1/images/generations", {
-                method: "POST",
-                headers: {
-                  "Authorization": `Bearer ${openaiKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: "dall-e-3",
-                  prompt: imagePrompt,
-                  n: 1,
-                  size: "1792x1024",
-                  quality: "standard",
-                }),
-              });
-              if (imgRes.ok) {
-                const imgData = await imgRes.json() as { data?: { url?: string }[] };
-                const url = imgData?.data?.[0]?.url;
-                if (url) headerImageUrl = url;
-              } else {
-                console.warn("[process-newsletter-series] DALL-E image generation failed:", imgRes.status, await imgRes.text().catch(() => ""));
-              }
-            } catch (imgErr) {
-              console.warn("[process-newsletter-series] DALL-E image generation error:", imgErr);
-            }
-          }
+        // Images for this edition, grounded in the sender's business:
+        //   header  → user-supplied URLs if given, otherwise AI-generated
+        //   in-body → one AI illustration placed in the first image slot
+        // If generation fails we fall back to the sender's normal branding header (no random stock photo).
+        let headerImageUrl: string | null = headerUrls.length > 0 ? headerUrls[dayIndex0 % headerUrls.length] : null;
+        let inlineImageUrl: string | null = null;
+        const openaiKey = (Deno.env.get("OPENAI_API_KEY") || "").trim().replace(/[^\x21-\x7E]/g, "");
+        if (openaiKey) {
+          const { data: biz } = await supabase
+            .from("business_profiles")
+            .select("company_name, industry, services_description, email_brand_color")
+            .eq("user_id", series.user_id)
+            .maybeSingle();
+          const bz = (biz || {}) as { company_name?: string; industry?: string; services_description?: string; email_brand_color?: string };
+          const bizLine = [
+            bz.industry ? `The sender is a ${bz.industry} business` : "",
+            bz.services_description ? `that offers: ${String(bz.services_description).replace(/\s+/g, " ").slice(0, 220)}` : "",
+          ].filter(Boolean).join(" ");
+          const topicLine = topicTemplate.replace(/\{day\}/g, String(dayNum)).replace(/\{total\}/g, String(total)).slice(0, 200);
+          const shared =
+            (bizLine ? `${bizLine}. The scene should visibly relate to that line of work. ` : "") +
+            (bz.email_brand_color ? `Use ${bz.email_brand_color} as the accent colour. ` : "") +
+            `Suitable for a ${series.ai_tone || "professional"} ${series.ai_target_audience || "business"} audience. ` +
+            `No people's faces, no logos, no words or lettering anywhere in the image. High quality editorial style.`;
+          const base = `${series.user_id}/series/${series.id}-${seriesToday}`;
+          const wantsInline = IMAGE_SLOT_RE.test(bodyHtml);
+          IMAGE_SLOT_RE.lastIndex = 0;
 
-          // Fallback: Picsum Photos — deterministic seed per series+date, always works
-          if (!headerImageUrl) {
-            const seed = `${series.id}-${new Date().toISOString().slice(0, 10)}`.replace(/[^a-z0-9]/gi, "").slice(0, 20);
-            headerImageUrl = `https://picsum.photos/seed/${seed}/1200/400`;
-          }
+          const [headerBytes, inlineBytes] = await Promise.all([
+            headerImageUrl
+              ? Promise.resolve(null)
+              : generateImageBytes(openaiKey, `A clean, wide newsletter header banner for the series "${series.name}", today's edition about: ${topicLine}. Modern, uncluttered composition. ${shared}`),
+            wantsInline
+              ? generateImageBytes(openaiKey, `An illustration to sit inside a newsletter article about: ${topicLine}. Show one clear, concrete scene that explains the idea. ${shared}`)
+              : Promise.resolve(null),
+          ]);
+          if (headerBytes) headerImageUrl = await storeImage(supabase, headerBytes, `${base}-header`);
+          if (inlineBytes) inlineImageUrl = await storeImage(supabase, inlineBytes, `${base}-inline`);
         }
+
+        // Fill the first image slot with the illustration and remove every leftover slot, so the
+        // editor hint ("Click Insert Image…") can never be emailed to subscribers.
+        let slotFilled = false;
+        const finalBodyHtml = String(bodyHtml).replace(IMAGE_SLOT_RE, () => {
+          if (inlineImageUrl && !slotFilled) {
+            slotFilled = true;
+            return `<img src="${inlineImageUrl}" alt="" style="display:block;width:100%;max-width:100%;height:auto;border-radius:8px;margin:16px 0;" />`;
+          }
+          return "";
+        });
+
         // When the series owner wants to review each edition before it goes out,
         // create the newsletter as a draft and skip the send step entirely.
         const reviewBeforeSend =
@@ -296,10 +374,11 @@ Return ONLY the HTML body content.`;
             user_id: series.user_id,
             title: `${series.name} – Day ${dayNum}`,
             subject,
-            body_html: bodyHtml,
+            body_html: finalBodyHtml,
             sender_profile_id: series.sender_profile_id || null,
             template_style: templateStyle,
-            status: reviewBeforeSend ? "draft" : "scheduled",
+            // Always start as a draft; it only becomes "scheduled" once today's edition is claimed.
+            status: "draft",
             scheduled_at: new Date().toISOString(),
             scheduled_send_options: newsletterSendOptions,
             ...(headerImageUrl && { header_image_url: headerImageUrl }),
@@ -309,33 +388,51 @@ Return ONLY the HTML body content.`;
 
         if (insertErr || !nl) throw new Error(insertErr?.message || "Failed to create newsletter");
 
-        if (!reviewBeforeSend) {
-          const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-newsletter`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${supabaseServiceKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              newsletterId: nl.id,
-              triggeredByCron: true,
-            }),
-          });
-          const sendResult = await sendRes.json().catch(() => ({}));
-          if (sendResult.error) throw new Error(sendResult.error);
-        }
-
-        await supabase.from("newsletter_series_editions").insert({
+        // Claim today's edition BEFORE sending. UNIQUE(series_id, edition_date) makes this an
+        // atomic lock: an overlapping run loses the insert and backs out, and a failed send can
+        // no longer cause a fresh newsletter (and a fresh send) every 15 minutes.
+        const { error: claimErr } = await supabase.from("newsletter_series_editions").insert({
           series_id: series.id,
           edition_date: seriesToday,
           newsletter_id: nl.id,
         });
+        if (claimErr) {
+          await supabase.from("newsletters").delete().eq("id", nl.id);
+          if ((claimErr as { code?: string }).code === "23505") continue; // another run already has today
+          throw new Error(`Could not record edition: ${claimErr.message}`);
+        }
 
-        results.push({
-          seriesId: series.id,
-          name: series.name,
-          action: reviewBeforeSend ? "drafted_for_review" : "sent",
+        if (reviewBeforeSend) {
+          results.push({ seriesId: series.id, name: series.name, action: "drafted_for_review" });
+          continue;
+        }
+
+        await supabase.from("newsletters").update({ status: "scheduled" }).eq("id", nl.id);
+        const sendRes = await fetch(`${supabaseUrl}/functions/v1/send-newsletter`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${supabaseServiceKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            newsletterId: nl.id,
+            triggeredByCron: true,
+          }),
         });
+        const sendResult = await sendRes.json().catch(() => ({}));
+        if (sendResult.error) {
+          // The newsletter stays "scheduled", so the regular scheduled-newsletter cron retries
+          // this same newsletter; the series will not generate another one for today.
+          results.push({
+            seriesId: series.id,
+            name: series.name,
+            action: "error",
+            error: `Edition created but not sent yet (will retry): ${sendResult.error}`,
+          });
+          continue;
+        }
+
+        results.push({ seriesId: series.id, name: series.name, action: "sent" });
       } catch (err) {
         console.error("[process-newsletter-series] Series error:", series.id, err);
         results.push({

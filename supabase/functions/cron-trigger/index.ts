@@ -297,7 +297,6 @@ Deno.serve(async (req) => {
                 newsletterId: nl.id,
                 triggeredByCron: true,
                 continueBatch: nl.continueBatch === true,
-                batchSize: nl.continueBatch === true ? 50 : undefined,
               }),
             });
             const result = await response.json().catch(() => ({}));
