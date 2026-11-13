@@ -125,10 +125,10 @@ Rules:
     } catch (parseError) {
       console.error('[generate-ai-tags] Failed to parse tags:', content);
       // Fallback: extract tags from text
-      const lines = content.split('\n').filter(line => line.trim());
+      const lines = content.split('\n').filter((line: string) => line.trim());
       tags = lines
-        .map(line => line.replace(/^[-*•]\s*/, '').replace(/["']/g, '').trim())
-        .filter(tag => tag.length > 0 && tag.length < 30)
+        .map((line: string) => line.replace(/^[-*•]\s*/, '').replace(/["']/g, '').trim())
+        .filter((tag: string) => tag.length > 0 && tag.length < 30)
         .slice(0, 10);
     }
 

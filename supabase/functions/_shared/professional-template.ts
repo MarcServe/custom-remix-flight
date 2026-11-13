@@ -2,23 +2,23 @@ export interface EmailTemplateProps {
   body: string;
   senderName: string;
   /** Name shown in the signature block only. If set, overrides senderName for the signature line. */
-  signatureName?: string;
+  signatureName?: string | null;
   senderEmail: string;
-  senderTitle?: string;
-  companyName?: string;
-  headerName?: string;
-  logoUrl?: string;
+  senderTitle?: string | null;
+  companyName?: string | null;
+  headerName?: string | null;
+  logoUrl?: string | null;
   /**
    * When true, logoUrl is a full-width campaign banner: natural aspect ratio,
    * never a fixed-height object-fit:cover crop (that clips on iPad/web Gmail).
    */
   headerBanner?: boolean;
   brandColor?: string;
-  footerText?: string;
-  signature?: string;
-  footerImageUrl?: string;
-  senderImageUrl?: string;
-  websiteUrl?: string;
+  footerText?: string | null;
+  signature?: string | null;
+  footerImageUrl?: string | null;
+  senderImageUrl?: string | null;
+  websiteUrl?: string | null;
   newsletterFooterHtml?: string;
 }
 
@@ -70,7 +70,7 @@ function escapeAttr(value: string): string {
  * Campaign banner as its own block ABOVE .email-header so header CSS
  * (padding/overflow/img rules) can never clip it on iPad/web.
  */
-function renderCampaignBannerBlock(logoUrl: string | undefined, alt = ''): string {
+function renderCampaignBannerBlock(logoUrl: string | null | undefined, alt = ''): string {
   if (!logoUrl) return '';
   const safeSrc = escapeAttr(logoUrl);
   const safeAlt = escapeAttr(alt || '');
@@ -89,7 +89,7 @@ function renderCampaignBannerBlock(logoUrl: string | undefined, alt = ''): strin
  * with headerBanner (no cover crop).
  */
 function renderHeaderImageHtml(
-  logoUrl: string | undefined,
+  logoUrl: string | null | undefined,
   alt: string,
   headerBanner?: boolean,
   coverHeight = 180,
@@ -103,7 +103,7 @@ function renderHeaderImageHtml(
 
 /** Top-of-email banner HTML + whether header should omit the logo img. */
 function bannerAndHeaderLogo(
-  logoUrl: string | undefined,
+  logoUrl: string | null | undefined,
   alt: string,
   headerBanner: boolean | undefined,
   coverHeight: number,
@@ -120,7 +120,7 @@ function bannerAndHeaderLogo(
   };
 }
 
-function renderFooterWithImage(footerImageUrl: string | undefined, footerText: string, brandColor: string, bgStyle: string, textColor: string, newsletterFooterHtml?: string): string {
+function renderFooterWithImage(footerImageUrl: string | null | undefined, footerText: string, brandColor: string, bgStyle: string, textColor: string, newsletterFooterHtml?: string): string {
   let footerContent: string;
   if (!footerImageUrl) {
     footerContent = `<div class="email-footer" style="${bgStyle};color:${textColor};">${footerText}</div>`;
@@ -145,14 +145,14 @@ function renderFooterWithImage(footerImageUrl: string | undefined, footerText: s
 }
 
 function renderSignatureBlock(opts: {
-  signature?: string;
+  signature?: string | null;
   senderName: string;
   /** Name shown in the signature block. Defaults to senderName. */
-  signatureName?: string;
-  senderTitle?: string;
-  companyName?: string;
+  signatureName?: string | null;
+  senderTitle?: string | null;
+  companyName?: string | null;
   senderEmail: string;
-  websiteUrl?: string;
+  websiteUrl?: string | null;
   nameClass?: string;
   titleClass?: string;
   companyClass?: string;

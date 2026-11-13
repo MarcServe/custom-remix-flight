@@ -144,7 +144,7 @@ serve(async (req) => {
       let send = sendByExternalId.get(email.id);
       if (!send && toEmail(email)) {
         const recipientEmail = toEmail(email)!;
-        send = sendByEmail.get(recipientEmail) ?? null;
+        send = sendByEmail.get(recipientEmail);
         if (send) {
           await serviceSupabase
             .from('newsletter_sends')

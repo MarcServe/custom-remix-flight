@@ -46,6 +46,8 @@ interface EmailRequest {
   attachInvoice?: boolean; // Whether to attach the invoice
   useInboundReplyTo?: boolean; // Use Resend inbound email as Reply-To for tracking replies
   sender_profile_id?: string | null; // Optional sender profile (name/logo) for this email
+  headerImageUrl?: string | null; // Per-email header image (overrides branding logo)
+  headerBanner?: boolean; // Render headerImageUrl as a full-width banner
   attachments?: Array<{ // File attachments
     id?: string;
     file_name: string;

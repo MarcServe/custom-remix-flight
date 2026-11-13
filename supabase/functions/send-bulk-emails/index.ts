@@ -528,7 +528,8 @@ serve(async (req) => {
       }
       console.log(`[Resend] Firing ${payloads.length} emails across ${chunks.length} parallel batch call(s)`);
       const sentAt = new Date().toISOString();
-      const recipientLookup = new Map(allPendingRecipients.map((r: any) => [r.id, r]));
+      // deno-lint-ignore no-explicit-any
+      const recipientLookup = new Map<string, any>(allPendingRecipients.map((r: any) => [r.id, r]));
 
       // ── Step 1: Fire ALL chunks to Resend simultaneously ──────────────────
       const chunkResults = await Promise.all(

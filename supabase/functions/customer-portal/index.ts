@@ -53,8 +53,8 @@ serve(async (req) => {
     // opens focused on it (not unrelated subscriptions on the same customer)
     const LEADBOOSTERS_PRICE_ID = "price_1TZECTP8zypO5fiCk3voBln5";
     const allSubs = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 10 });
-    const leadBoostersSub = allSubs.data.find(s =>
-      s.items.data.some(i => i.price.id === LEADBOOSTERS_PRICE_ID)
+    const leadBoostersSub = allSubs.data.find((s: any) =>
+      s.items.data.some((i: any) => i.price.id === LEADBOOSTERS_PRICE_ID)
     );
     logStep("LeadBoosters subscription", { found: !!leadBoostersSub, id: leadBoostersSub?.id });
 

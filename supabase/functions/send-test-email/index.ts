@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
 
     const { data: businessProfile } = await supabase
       .from('business_profiles')
-      .select('company_name, email_header_name, email_provider, email_sender_image_url, email_sender_name, email_signature_name, email_sender_title, email_sender_email, website')
+      .select('company_name, email_header_name, email_provider, email_logo_url, email_footer_text, email_footer_logo_url, email_signature, email_sender_image_url, email_sender_name, email_signature_name, email_sender_title, email_sender_email, website')
       .eq('user_id', user.id)
       .single();
 

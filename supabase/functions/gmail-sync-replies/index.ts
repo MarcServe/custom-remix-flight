@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,7 +9,8 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-async function syncRepliesForUser(supabase: ReturnType<typeof createClient>, userId: string): Promise<{ repliesFound: number }> {
+// deno-lint-ignore no-explicit-any
+async function syncRepliesForUser(supabase: SupabaseClient<any, "public", any>, userId: string): Promise<{ repliesFound: number }> {
   // Get the Gmail connection
   const { data: connection, error: connError } = await supabase
     .from('crm_connections')
