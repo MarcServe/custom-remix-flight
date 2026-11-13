@@ -307,7 +307,7 @@ export default function Auth() {
   const authPanel = (
     <div className="w-full max-w-sm mx-auto">
       <div className="flex justify-center mb-6">
-        <img src={leadBoostersLogo} alt="LeadBoosters" className="h-14 w-auto drop-shadow" />
+        <img src={leadBoostersLogo} alt="LeadBoosters" className="h-14 w-auto" />
       </div>
 
       <div className="text-center mb-6">
