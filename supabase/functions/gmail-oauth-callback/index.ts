@@ -5,7 +5,7 @@ serve(async (req: Request) => {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
   
   // Use APP_URL env var (set in Supabase secrets) with a safe default
-  const appUrl = Deno.env.get('APP_URL') || 'https://leadgenie.bizboosters.co.uk';
+  const appUrl = Deno.env.get('APP_URL') || 'https://leadboosters.bizboosters.co.uk';
 
   try {
     const url = new URL(req.url);

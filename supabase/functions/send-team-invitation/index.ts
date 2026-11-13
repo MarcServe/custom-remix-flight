@@ -126,7 +126,7 @@ serve(async (req: Request) => {
 
     // Send email via Resend (if API key is available)
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    const appUrl = Deno.env.get('APP_URL') || 'http://localhost:5173';
+    const appUrl = Deno.env.get('APP_URL') || 'https://leadboosters.bizboosters.co.uk';
     const inviteUrl = `${appUrl}/#/auth?invitation=${invitation.token}`;
 
     if (!resendApiKey) {

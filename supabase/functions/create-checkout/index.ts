@@ -71,7 +71,7 @@ serve(async (req) => {
       }
     }
 
-    const origin = req.headers.get("origin") || "https://leadgenie.bizboosters.co.uk";
+    const origin = req.headers.get("origin") || "https://leadboosters.bizboosters.co.uk";
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,

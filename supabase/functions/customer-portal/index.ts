@@ -58,7 +58,7 @@ serve(async (req) => {
     );
     logStep("LeadBoosters subscription", { found: !!leadBoostersSub, id: leadBoostersSub?.id });
 
-    const origin = req.headers.get("origin") || "https://leadgenie.bizboosters.co.uk";
+    const origin = req.headers.get("origin") || "https://leadboosters.bizboosters.co.uk";
 
     // If we found the specific LeadBoosters subscription, direct the portal
     // to the subscription update flow so only that plan is shown prominently
