@@ -65,6 +65,7 @@ const navigation: NavigationItem[] = [
       { name: "Sequences", href: "/sequences", icon: Mail },
       { name: "Active Campaigns", href: "/company-sequences", icon: Activity },
       { name: "Campaigns", href: "/campaigns", icon: Briefcase },
+      { name: "Calling", href: "/calling", icon: Activity },
       { name: "Email Branding", href: "/email-branding", icon: Palette },
       { name: "Newsletters", href: "/newsletters", icon: Newspaper },
       // Newsletter Series retired from the UI (backend kept). Re-add this entry to restore it.
@@ -107,6 +108,7 @@ const navigation: NavigationItem[] = [
     icon: Settings,
     children: [
       { name: "Email Providers", href: "/integrations/email-providers", icon: Send },
+      { name: "Phone / Twilio", href: "/calling", icon: Activity },
       { name: "Business Profile", href: "/business-profile", icon: Building2 },
       { name: "API Keys", href: "/api-keys", icon: KeyRound },
       { name: "Subscription", href: "/subscription", icon: CreditCard },
@@ -118,6 +120,7 @@ const navigation: NavigationItem[] = [
 const ROUTE_TIER: Record<string, PlanTier> = {
   // Individual tier
   '/campaigns':             'individual',
+  '/calling':               'individual',
   '/newsletters':           'individual',
   // Pro tier
   '/lead-finder':           'pro',

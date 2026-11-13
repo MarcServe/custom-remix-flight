@@ -14,14 +14,16 @@ import { z } from "zod";
 
 const API_URL = process.env.LEADBOOSTERS_API_URL ||
   "https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/api-campaigns";
+const CALLING_API_URL = process.env.LEADBOOSTERS_CALLING_API_URL ||
+  "https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/api-calling";
 const API_KEY = process.env.LEADBOOSTERS_API_KEY;
 if (!API_KEY) {
   console.error("[leadboosters-mcp] LEADBOOSTERS_API_KEY env var is required.");
   process.exit(1);
 }
 
-async function callApi(payload) {
-  const res = await fetch(API_URL, {
+async function callApi(payload, url = API_URL) {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -122,6 +124,116 @@ server.tool(
   },
   async (args) => {
     const data = await callApi({ action: "send_test", ...args });
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "create_calling_campaign",
+  "Create a DRAFT human-assisted calling campaign (max 20 leads). Does NOT place calls or send cold SMS. You must include phone numbers. The user screens TPS/CTPS in LeadBoosters and clicks Call next lead. Never invent phone numbers.",
+  {
+    name: z.string().describe("Campaign name, e.g. TalkStay Cardiff hotels week 1."),
+    product: z.enum(["TalkStay", "TalkWeb", "GrantsCopilot", "other"]).describe("Product being offered."),
+    script: z.string().optional().describe("Call script. Supports {{company}}, {{caller}}, {{product}}."),
+    sms_template: z.string().optional().describe("Optional SMS follow-up template (sent only after a live call or consent)."),
+    email_followup_subject: z.string().optional(),
+    email_followup_body: z.string().optional(),
+    caller_phone: z.string().optional().describe("User's handset. Twilio rings this first."),
+    leads: z.array(z.object({
+      phone: z.string(),
+      company: z.string().optional(),
+      company_name: z.string().optional(),
+      contact_name: z.string().optional(),
+      email: z.string().optional(),
+      company_id: z.string().optional(),
+    })).describe("Up to 20 leads with real phone numbers. Duplicates and suppressed numbers are dropped."),
+  },
+  async (args) => {
+    const data = await callApi({ action: "create", ...args }, CALLING_API_URL);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "list_calling_campaigns",
+  "List calling campaigns (draft/ready/active/paused/completed).",
+  {},
+  async () => {
+    const data = await callApi({ action: "list" }, CALLING_API_URL);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "calling_campaign_status",
+  "Get a calling campaign and its queue (screening, outcomes, follow-ups).",
+  { campaign_id: z.string() },
+  async ({ campaign_id }) => {
+    const data = await callApi({ action: "status", campaign_id }, CALLING_API_URL);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "generate_call_script",
+  "Generate a TalkStay / TalkWeb / GrantsCopilot call script. Does not start a campaign.",
+  {
+    product: z.enum(["TalkStay", "TalkWeb", "GrantsCopilot", "other"]),
+    company: z.string().optional(),
+    caller: z.string().optional(),
+  },
+  async (args) => {
+    const data = await callApi({ action: "generate_script", ...args }, CALLING_API_URL);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "ready_calling_campaign",
+  "Mark a calling campaign ready so a HUMAN can click Call next lead. This does not place any calls.",
+  { campaign_id: z.string() },
+  async ({ campaign_id }) => {
+    const data = await callApi({ action: "start", campaign_id }, CALLING_API_URL);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "pause_calling_campaign",
+  "Pause a calling campaign. Does not hang up an in-progress Twilio call.",
+  { campaign_id: z.string() },
+  async ({ campaign_id }) => {
+    const data = await callApi({ action: "pause", campaign_id }, CALLING_API_URL);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "record_call_outcome",
+  "Log a call outcome and schedule the default next action. do_not_call / not_interested / invalid_number add the number to the suppression list.",
+  {
+    queue_item_id: z.string(),
+    outcome: z.enum(["interested", "send_demo", "call_back", "not_right_person", "not_interested", "no_answer", "invalid_number", "do_not_call"]),
+    notes: z.string().optional(),
+    follow_up_hours: z.number().optional(),
+  },
+  async (args) => {
+    const data = await callApi({ action: "record_outcome", ...args }, CALLING_API_URL);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "add_phone_suppression",
+  "Add a phone number to the do-not-call / TPS / CTPS / SMS opt-out list. Always do this when a contact objects.",
+  {
+    phone: z.string(),
+    reason: z.enum(["dnc", "tps", "ctps", "sms_opt_out", "invalid", "user_added"]).optional(),
+    notes: z.string().optional(),
+    email: z.string().optional(),
+  },
+  async (args) => {
+    const data = await callApi({ action: "add_suppression", ...args }, CALLING_API_URL);
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
   },
 );

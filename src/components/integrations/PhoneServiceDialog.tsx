@@ -28,7 +28,8 @@ const phoneServices = [
     fields: [
       { key: 'account_sid', label: 'Account SID', type: 'text', required: true },
       { key: 'auth_token', label: 'Auth Token', type: 'password', required: true },
-      { key: 'phone_number', label: 'From Phone Number', type: 'text', required: true, placeholder: 'e.g., +1234567890' },
+      { key: 'phone_number', label: 'Twilio UK number (CLI)', type: 'text', required: true, placeholder: 'e.g., +447...' },
+      { key: 'caller_phone', label: 'Your handset (Twilio rings this first)', type: 'text', required: false, placeholder: 'e.g., +4477...' },
     ],
   },
   {

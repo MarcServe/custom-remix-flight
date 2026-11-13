@@ -15,6 +15,9 @@ import { parseCSV } from '@/lib/utils/csv-parser';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PhoneServiceDialog } from '@/components/integrations/PhoneServiceDialog';
+import { useNavigate } from 'react-router-dom';
+import { callingTables } from '@/lib/calling/db';
+import { DEFAULT_SCRIPTS } from '@/lib/calling/types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -34,6 +37,7 @@ interface ManualPhoneNumber {
 export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [] }: PhoneCampaignDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [campaignName, setCampaignName] = useState('');
   const [message, setMessage] = useState('');
   const [selectedCompanies, setSelectedCompanies] = useState<Set<string>>(new Set(selectedCompanyIds));
@@ -353,68 +357,59 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
         return;
       }
 
-      // Create phone campaign using email_campaigns structure
-      // Store phone message in body_text_template and mark in subject
-      const { data: campaign, error: campaignError } = await supabase
-        .from('email_campaigns')
+      const { data: campaign, error: campaignError } = await callingTables.campaigns()
         .insert({
           user_id: user.id,
-          name: `📞 ${campaignName}`, // Prefix with phone emoji to identify
-          subject_template: `Phone Campaign: ${campaignName}`,
-          body_text_template: message,
-          body_html_template: `<p>${message.replace(/\n/g, '<br>')}</p>`,
+          name: campaignName,
+          product: 'TalkStay',
           status: 'draft',
-          total_recipients: totalRecipients,
-          sent_count: 0,
-          failed_count: 0,
-          opened_count: 0,
-          sender_connection_id: activePhoneService.id, // Link to phone service
+          script: DEFAULT_SCRIPTS.TalkStay,
+          sms_template: message || null,
+          connection_id: activePhoneService.id,
+          max_queue_size: Math.min(20, totalRecipients),
+          notes: 'Created from the phone campaign dialog. Screen TPS/CTPS before calling.',
         })
         .select('id')
         .single();
 
       if (campaignError) throw campaignError;
 
-      // Prepare recipients from companies and manual phones
-      // email_campaign_recipients requires email, name, personalized_* fields (NOT NULL).
-      const defaultSms = message || 'Hello from our team';
-      const recipients = [
-        ...selectedCompaniesData.map(company => ({
+      const queue = [
+        ...selectedCompaniesData.map((company, i) => ({
           campaign_id: campaign.id,
-          email: `phone:${company.company_phone}`,
-          name: company.name,
-          personalized_subject: campaignName || 'Phone campaign',
-          personalized_body_html: defaultSms,
-          personalized_body_text: defaultSms,
-          status: 'pending' as const,
+          user_id: user.id,
+          company_id: company.id,
+          company_name: company.name,
+          phone: company.company_phone,
+          email: company.general_email,
+          queue_position: i + 1,
+          status: 'pending',
+          tps_status: 'unknown',
+          ctps_status: 'unknown',
         })),
-        ...manualPhones.map(phone => {
-          const sms = phone.message || defaultSms;
-          return {
-            campaign_id: campaign.id,
-            email: `phone:${phone.phone}`,
-            name: phone.name || 'Manual Entry',
-            personalized_subject: campaignName || 'Phone campaign',
-            personalized_body_html: sms,
-            personalized_body_text: sms,
-            status: 'pending' as const,
-          };
-        }),
-      ];
+        ...manualPhones.map((phone, i) => ({
+          campaign_id: campaign.id,
+          user_id: user.id,
+          company_name: phone.name || 'Manual entry',
+          phone: phone.phone,
+          queue_position: selectedCompaniesData.length + i + 1,
+          status: 'pending',
+          tps_status: 'unknown',
+          ctps_status: 'unknown',
+          sms_consent: false,
+        })),
+      ].slice(0, 20);
 
-      // Store phone recipients - use email field to store phone number with prefix
-      const { error: recipientsError } = await supabase
-        .from('email_campaign_recipients')
-        .insert(recipients as any);
-
+      const { error: recipientsError } = await callingTables.queue().insert(queue);
       if (recipientsError) throw recipientsError;
 
-      queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
-      
+      queryClient.invalidateQueries({ queryKey: ['calling-campaigns'] });
+
       toast({
-        title: 'Success',
-        description: `Phone campaign "${campaignName}" created with ${totalRecipients} recipients`,
+        title: 'Calling campaign created',
+        description: `Draft queue of ${queue.length} leads. Open the calling console to screen and dial.`,
       });
+      navigate(`/calling/${campaign.id}`);
 
       // Reset form
       setCampaignName('');

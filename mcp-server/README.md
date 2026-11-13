@@ -5,8 +5,9 @@ email campaigns** in LeadBoosters. Sending happens automatically at the schedule
 London time, through the same pipeline as the app (dedupe, domain verification,
 monthly limits, and no-reply follow-ups all still apply).
 
-**Scope:** create + schedule + read status. No "send now" and no pause/delete — the
-safest surface for automation that touches real inboxes.
+**Scope:** create + schedule + read status for email. Calling tools create **draft
+queues only** — they never place calls or send cold SMS. A human screens TPS/CTPS
+and clicks Call next lead in LeadBoosters.
 
 ## 1. Get an API key
 In LeadBoosters: **Settings → API Keys → New API key**. Copy it (shown once). It looks

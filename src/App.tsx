@@ -48,6 +48,7 @@ import Files from "./pages/Files";
 import Invoices from "./pages/Invoices";
 import Auth from "./pages/Auth";
 import Subscription from "./pages/Subscription";
+import Calling from "./pages/Calling";
 import EmailBranding from "./pages/EmailBranding";
 import Newsletters from "./pages/Newsletters";
 import NewsletterSeries from "./pages/NewsletterSeries";
@@ -107,6 +108,8 @@ const App = () => (
                           {/* Individual tier routes */}
                           <Route path="/ai-create" element={<PlanGate requiredTier="individual" feature="Create with AI"><AiCreate /></PlanGate>} />
                           <Route path="/campaigns" element={<PlanGate requiredTier="individual" feature="Email Campaigns"><Campaigns /></PlanGate>} />
+                          <Route path="/calling" element={<PlanGate requiredTier="individual" feature="Calling Campaigns"><Calling /></PlanGate>} />
+                          <Route path="/calling/:campaignId" element={<PlanGate requiredTier="individual" feature="Calling Campaigns"><Calling /></PlanGate>} />
                           <Route path="/newsletters" element={<PlanGate requiredTier="individual" feature="Newsletters"><Newsletters /></PlanGate>} />
                           <Route path="/business-profile" element={<BusinessProfile />} />
                           <Route path="/api-keys" element={<ApiKeys />} />
