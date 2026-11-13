@@ -523,6 +523,7 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
       }
 
       if (recipients.length === 0) {
+        await supabase.from('email_campaigns').delete().eq('id', campaign.id);
         throw new Error('No valid phone numbers to add');
       }
 
@@ -535,13 +536,25 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
         .from('email_campaign_recipients')
         .insert(recipients);
 
-      if (recipientsError) throw recipientsError;
+      if (recipientsError) {
+        // A campaign with no contacts is useless and confusing: remove it and report the real error.
+        await supabase.from('email_campaigns').delete().eq('id', campaign.id);
+        throw recipientsError;
+      }
 
       queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
-      
+
+      // UK landlines (01/02/03) cannot receive SMS; say so now rather than at send time.
+      const landlines = recipients.filter((r) => {
+        const d = String(r.email).replace(/^phone:/, '').trim();
+        const digits = d.replace(/\D/g, '');
+        return /^0[123]/.test(digits) || /^(\+?44|0044)[123]/.test(d.replace(/[\s()-]/g, ''));
+      }).length;
+
       toast({
         title: 'Success',
-        description: `Phone campaign "${campaignName}" created with ${recipients.length} recipients. Start it from Campaigns to send SMS.`,
+        description: `Phone campaign "${campaignName}" created with ${recipients.length} recipients. Start it from Campaigns to send SMS.` +
+          (landlines > 0 ? ` Note: ${landlines} look like UK landlines, which cannot receive SMS and will be skipped.` : ''),
       });
 
       // Reset form

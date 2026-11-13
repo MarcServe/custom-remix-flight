@@ -8,14 +8,43 @@ function base64Encode(str: string): string {
   return btoa(String.fromCharCode(...data));
 }
 
-function extractPhone(raw: string | null | undefined): string | null {
+const TWO_DIGIT_CODES = new Set(['20','27','30','31','32','33','34','36','39','40','41','43','44','45','46','47','48','49','51','52','53','54','55','56','57','58','60','61','62','63','64','65','66','81','82','84','86','90','91','92','93','94','95','98']);
+
+/** Country calling code of an E.164 number ("+447…" → "44"), used as the default for local numbers. */
+function countryCodeOf(e164: string | null | undefined): string {
+  const d = String(e164 || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d[0] === '1' || d[0] === '7') return d[0];
+  if (TWO_DIGIT_CODES.has(d.slice(0, 2))) return d.slice(0, 2);
+  return d.slice(0, 3);
+}
+
+/**
+ * Turn whatever was typed or imported into E.164. Local numbers ("0117 924 0284",
+ * "07772 550734") take the sender's country code; without this they became "+0117…",
+ * which every provider rejects.
+ */
+function extractPhone(raw: string | null | undefined, defaultCc = ''): string | null {
   if (!raw) return null;
   let phone = String(raw).trim();
   if (phone.toLowerCase().startsWith('phone:')) phone = phone.slice(6).trim();
-  const digits = phone.replace(/\D/g, '');
+  const hasPlus = phone.startsWith('+');
+  let digits = phone.replace(/\D/g, '');
   if (digits.length < 7) return null;
-  return phone.startsWith('+') ? phone : (phone.includes('+') ? phone : `+${digits}`);
+  if (hasPlus) return `+${digits}`;
+  if (digits.startsWith('00')) return `+${digits.slice(2)}`;
+  if (digits.startsWith('0')) return defaultCc ? `+${defaultCc}${digits.replace(/^0+/, '')}` : null;
+  if (defaultCc && digits.startsWith(defaultCc) && digits.length >= 11) return `+${digits}`;
+  return defaultCc ? `+${defaultCc}${digits}` : `+${digits}`;
 }
+
+/** UK geographic/non-mobile numbers cannot receive SMS; only 07 mobiles can. */
+function isUkNonMobile(e164: string): boolean {
+  return e164.startsWith('+44') && !/^\+447[1-9]/.test(e164);
+}
+
+const SEND_TIME_BUDGET_MS = 100_000;
+const MAX_PER_RUN = 500;
 
 function personalizeText(template: string, recipient: { name?: string | null; email?: string | null }): string {
   if (!template) return '';
@@ -176,14 +205,18 @@ Deno.serve(async (req) => {
       });
     }
 
+    const startedAt = Date.now();
     const authHeader = req.headers.get('Authorization') || '';
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || 'invalid';
-    const isServiceRole = authHeader.includes(serviceRoleKey);
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    // Only the real service key unlocks the cron path. "triggeredByCron" in the body is
+    // caller-supplied, so on its own it must never bypass the ownership check.
+    const isServiceRole = serviceRoleKey.length > 0 && authHeader === `Bearer ${serviceRoleKey}`;
+    void triggeredByCron;
 
     let supabaseClient: any;
     let userId: string | null = null;
 
-    if (isServiceRole || triggeredByCron) {
+    if (isServiceRole) {
       supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -216,7 +249,7 @@ Deno.serve(async (req) => {
       .eq('id', campaignId)
       .single();
     if (campaignError || !campaign) throw new Error('Campaign not found');
-    if (!isServiceRole && !triggeredByCron && campaign.user_id !== userId) {
+    if (!isServiceRole && campaign.user_id !== userId) {
       throw new Error('Unauthorized: Campaign does not belong to user');
     }
 
@@ -268,7 +301,7 @@ Deno.serve(async (req) => {
       .eq('campaign_id', campaignId)
       .eq('status', 'pending')
       .order('created_at', { ascending: true })
-      .limit(5000);
+      .limit(MAX_PER_RUN);
 
     if (recipientsError) throw new Error('Failed to fetch recipients');
 
@@ -285,33 +318,44 @@ Deno.serve(async (req) => {
     let sentCount = 0;
     let failedCount = 0;
     const CONCURRENCY = 5;
+    const defaultCc = countryCodeOf(metadata.phone_number || metadata.from_number);
+
+    const markFailed = (id: string, error_message: string) =>
+      supabaseClient.from('email_campaign_recipients').update({ status: 'failed', error_message }).eq('id', id);
 
     for (let i = 0; i < pendingRecipients.length; i += CONCURRENCY) {
+      // Stop before the runtime kills us; the cron picks up whoever is still pending.
+      if (Date.now() - startedAt > SEND_TIME_BUDGET_MS) break;
       const batch = pendingRecipients.slice(i, i + CONCURRENCY);
       await Promise.all(
         batch.map(async (recipient: any) => {
-          const phone = extractPhone(recipient.email);
-          const message =
-            recipient.personalized_body_text ||
-            (campaign.body_text_template
-              ? personalizeText(campaign.body_text_template, recipient)
-              : '') ||
-            '';
+          const phone = extractPhone(recipient.email, defaultCc);
+          const template = recipient.personalized_body_text || campaign.body_text_template || '';
+          const message = personalizeText(template, recipient);
+
+          // Claim the row first (pending → sent). If another run already took it, skip:
+          // this is what stops overlapping runs texting the same person twice.
+          const { data: claimed } = await supabaseClient
+            .from('email_campaign_recipients')
+            .update({ status: 'sent', sent_at: new Date().toISOString(), error_message: null })
+            .eq('id', recipient.id)
+            .eq('status', 'pending')
+            .select('id');
+          if (!claimed || claimed.length === 0) return;
 
           if (!phone) {
             failedCount++;
-            await supabaseClient.from('email_campaign_recipients').update({
-              status: 'failed',
-              error_message: 'Invalid or missing phone number',
-            }).eq('id', recipient.id);
+            await markFailed(recipient.id, 'Invalid or missing phone number');
+            return;
+          }
+          if (isUkNonMobile(phone)) {
+            failedCount++;
+            await markFailed(recipient.id, 'UK landline or non-mobile number: it cannot receive SMS');
             return;
           }
           if (!message.trim()) {
             failedCount++;
-            await supabaseClient.from('email_campaign_recipients').update({
-              status: 'failed',
-              error_message: 'Empty SMS message',
-            }).eq('id', recipient.id);
+            await markFailed(recipient.id, 'Empty SMS message');
             return;
           }
 
@@ -319,24 +363,17 @@ Deno.serve(async (req) => {
             const result = await sendOneSms(provider, metadata, phone, message);
             if (result.success) {
               sentCount++;
-              await supabaseClient.from('email_campaign_recipients').update({
-                status: 'sent',
-                sent_at: new Date().toISOString(),
-                error_message: null,
-              }).eq('id', recipient.id);
+              if (result.messageId) {
+                await supabaseClient.from('email_campaign_recipients')
+                  .update({ external_message_id: result.messageId }).eq('id', recipient.id);
+              }
             } else {
               failedCount++;
-              await supabaseClient.from('email_campaign_recipients').update({
-                status: 'failed',
-                error_message: result.error || 'SMS send failed',
-              }).eq('id', recipient.id);
+              await markFailed(recipient.id, result.error || 'SMS send failed');
             }
           } catch (e: any) {
             failedCount++;
-            await supabaseClient.from('email_campaign_recipients').update({
-              status: 'failed',
-              error_message: e?.message || 'SMS send failed',
-            }).eq('id', recipient.id);
+            await markFailed(recipient.id, e?.message || 'SMS send failed');
           }
         }),
       );
@@ -348,13 +385,16 @@ Deno.serve(async (req) => {
       .eq('campaign_id', campaignId)
       .eq('status', 'pending');
 
-    const { data: counts } = await supabaseClient
-      .from('email_campaign_recipients')
-      .select('status')
-      .eq('campaign_id', campaignId);
-
-    const totalSent = (counts || []).filter((r: any) => r.status === 'sent').length;
-    const totalFailed = (counts || []).filter((r: any) => r.status === 'failed').length;
+    const countOf = async (status: string) => {
+      const { count } = await supabaseClient
+        .from('email_campaign_recipients')
+        .select('id', { count: 'exact', head: true })
+        .eq('campaign_id', campaignId)
+        .eq('status', status);
+      return count || 0;
+    };
+    const totalSent = await countOf('sent');
+    const totalFailed = await countOf('failed');
 
     await supabaseClient.from('email_campaigns').update({
       sent_count: totalSent,
