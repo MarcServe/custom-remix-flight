@@ -141,8 +141,8 @@ async function syncRepliesForUser(supabase: ReturnType<typeof createClient>, use
         const existingReply = await supabase
           .from('email_threads')
           .select('id')
-          .eq('external_message_id', message.id)
-          .single();
+          .eq('message_id', message.id)
+          .maybeSingle();
 
         if (existingReply.data) continue;
 
@@ -185,12 +185,12 @@ async function syncRepliesForUser(supabase: ReturnType<typeof createClient>, use
         // This is a reply from someone else - store it
         console.log(`User ${userId}: Found reply from ${fromEmail} in thread ${gmailThreadId}`);
 
-        // Store in email_threads
+        // Store in email_threads (schema uses message_id, not external_message_id)
         const { error: threadError } = await supabase
           .from('email_threads')
           .insert({
             company_sequence_id: email.company_sequence_id,
-            external_message_id: message.id,
+            message_id: message.id,
             thread_id: gmailThreadId,
             direction: 'inbound',
             from_email: fromEmail,

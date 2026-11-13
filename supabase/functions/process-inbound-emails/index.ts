@@ -276,13 +276,17 @@ serve(async (req) => {
 
       if (seqError) throw seqError;
 
-      // Match by checking email_activities metadata for matching to_email
+      // Match by checking email_activities metadata for matching recipient email.
+      // Sequence sends historically stored metadata.to (not to_email) — accept both.
       for (const seq of sequences || []) {
         const activities = seq.email_activities || [];
-        const matching = activities.find((act: any) => 
-          act.metadata?.to_email === from || 
-          act.metadata?.recipient_email === from
-        );
+        const matching = activities.find((act: any) => {
+          const meta = act.metadata || {};
+          const candidates = [meta.to_email, meta.recipient_email, meta.to]
+            .filter(Boolean)
+            .map((e: string) => String(e).toLowerCase());
+          return candidates.includes(String(from).toLowerCase());
+        });
         
         if (matching) {
           matchedSequence = seq;
@@ -320,10 +324,12 @@ serve(async (req) => {
           if (activity.subject && activity.company_sequences) {
             const similarity = calculateSubjectSimilarity(subject, activity.subject);
             
-            // Also check if sender email matches recipient in metadata
-            const recipientMatches = 
-              activity.metadata?.to_email === from || 
-              activity.metadata?.recipient_email === from;
+            // Also check if sender email matches recipient in metadata (to / to_email / recipient_email)
+            const meta = activity.metadata || {};
+            const candidates = [meta.to_email, meta.recipient_email, meta.to]
+              .filter(Boolean)
+              .map((e: string) => String(e).toLowerCase());
+            const recipientMatches = candidates.includes(String(from).toLowerCase());
             
             // Boost similarity if recipient also matches
             const finalSimilarity = recipientMatches ? similarity + 0.3 : similarity;
@@ -346,21 +352,95 @@ serve(async (req) => {
 
     if (!matchedSequence) {
       console.log('⚠️ No matching sequence found for email from:', from);
-      console.log('Only replies to campaign/sequence emails are stored in the CRM. This email is not linked to any sent campaign.');
-      
-      // Do not store: only replies to existing campaign/sequence emails belong in the CRM.
-      // This prevents all inbound mail (e.g. from a shared inbox) from appearing in Personal.
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: 'Email not stored — no matching campaign or sequence (only replies to sent campaign emails are imported).',
-          stored: false,
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      console.log('Storing as standalone Personal conversation so CRM inbox is not empty.');
+
+      // Also try matching an outbound email_threads row by counterpart email
+      let standaloneThreadId = threadId;
+      try {
+        const fromLower = String(from).toLowerCase();
+        const { data: recentOutbound } = await supabaseClient
+          .from('email_threads')
+          .select('id, thread_id, company_sequence_id, to_email, from_email')
+          .eq('direction', 'outbound')
+          .order('received_at', { ascending: false })
+          .limit(50);
+        const outbound = (recentOutbound || []).find((t: any) =>
+          String(t.to_email || '').toLowerCase() === fromLower ||
+          String(t.from_email || '').toLowerCase() === fromLower
+        );
+        if (outbound?.company_sequence_id) {
+          const { data: fullSeq } = await supabaseClient
+            .from('company_sequences')
+            .select(`
+              *,
+              email_sequences(goal, ai_instructions, created_by),
+              companies(name, industry, description),
+              email_activities(id, external_message_id, thread_id, subject, metadata)
+            `)
+            .eq('id', outbound.company_sequence_id)
+            .maybeSingle();
+          matchedSequence = fullSeq || { id: outbound.company_sequence_id };
+          matchMethod = 'outbound_thread';
+          if (outbound.thread_id) standaloneThreadId = outbound.thread_id;
+          console.log('✅ Matched via outbound email_threads');
+        } else if (outbound?.thread_id) {
+          standaloneThreadId = outbound.thread_id;
         }
-      );
+      } catch (e) {
+        console.warn('Outbound thread lookup failed:', e);
+      }
+
+      if (!matchedSequence) {
+        if (!from || !to) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: 'Email not stored — missing from/to and no matching campaign.',
+              stored: false,
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const resendEmailId = payload?.data?.email_id ?? payload?.email_id ?? null;
+        const { data: standaloneThread, error: standaloneErr } = await supabaseClient
+          .from('email_threads')
+          .insert({
+            company_sequence_id: null,
+            message_id: messageId || `fallback-${Date.now()}`,
+            thread_id: standaloneThreadId,
+            direction: 'inbound',
+            subject: subject || '(no subject)',
+            body_html: bodyHtml,
+            body_text: bodyText,
+            from_email: from,
+            to_email: to,
+            sentiment: 'neutral',
+            ai_analysis: {},
+            metadata: resendEmailId ? { resend_email_id: resendEmailId, unmatched: true } : { unmatched: true },
+          })
+          .select()
+          .single();
+
+        if (standaloneErr) {
+          console.error('Failed to store standalone inbound email:', standaloneErr);
+          return new Response(
+            JSON.stringify({ success: false, error: standaloneErr.message, stored: false }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Email stored as Personal conversation (no matching campaign/sequence).',
+            stored: true,
+            threadId: standaloneThread?.id,
+            matchMethod: 'standalone',
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     console.log(`✅ Matched sequence: ${matchedSequence.id} (${matchedSequence.companies?.name}) via ${matchMethod}`);

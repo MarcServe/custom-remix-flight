@@ -88,12 +88,19 @@ export const companySequencesApi = {
    * Delete a company sequence
    */
   async deleteCompanySequence(id: string) {
+    const { error: actErr } = await apiClient.supabase
+      .from('email_activities')
+      .delete()
+      .eq('company_sequence_id', id);
+    if (actErr) throw actErr;
+
     const { error } = await apiClient.supabase
       .from('company_sequences')
       .delete()
       .eq('id', id);
 
-    return { error };
+    if (error) throw error;
+    return { error: null };
   },
 
   /**

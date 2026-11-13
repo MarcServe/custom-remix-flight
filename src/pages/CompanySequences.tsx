@@ -236,12 +236,14 @@ export default function CompanySequences() {
     setBulkDeleting(true);
     try {
       const ids = Array.from(selectedSeqIds);
-      await supabase.from('email_activities').delete().in('company_sequence_id', ids);
+      const { error: actErr } = await supabase.from('email_activities').delete().in('company_sequence_id', ids);
+      if (actErr) throw actErr;
       const { error } = await supabase.from('company_sequences').delete().in('id', ids);
       if (error) throw error;
       toast.success(`Deleted ${ids.length} sequence(s)`);
       setSelectedSeqIds(new Set());
       queryClient.invalidateQueries({ queryKey: ['company-sequences-page'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-counts'] });
     } catch (e: any) {
       toast.error(e?.message ?? 'Failed to delete sequences');
     } finally {
@@ -254,20 +256,25 @@ export default function CompanySequences() {
   };
 
   const handleSendNext = async (sequence: CompanySequence) => {
+    // After step 0 is sent, current_step is 0 — advance to the next unsent step
+    const nextStep = typeof sequence.current_step === 'number' ? sequence.current_step + 1 : 0;
     await sendEmailMutation.mutateAsync({
       companySequenceId: sequence.id,
-      stepNumber: sequence.current_step
+      stepNumber: nextStep,
     });
   };
 
   const handleDeleteSequence = async (sequenceId: string) => {
     if (!confirm('Delete this sequence? This removes it and its tracking. This cannot be undone.')) return;
     try {
-      await supabase.from('email_activities').delete().eq('company_sequence_id', sequenceId);
+      // Clean related rows the client can touch; bounce/automation FKs are CASCADE via migration
+      const { error: actErr } = await supabase.from('email_activities').delete().eq('company_sequence_id', sequenceId);
+      if (actErr) throw actErr;
       const { error } = await supabase.from('company_sequences').delete().eq('id', sequenceId);
       if (error) throw error;
       toast.success('Sequence deleted');
       queryClient.invalidateQueries({ queryKey: ['company-sequences-page'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-counts'] });
     } catch (e: any) {
       toast.error(e?.message ?? 'Failed to delete sequence');
     }
