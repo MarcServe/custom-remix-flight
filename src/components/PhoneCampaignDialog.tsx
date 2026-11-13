@@ -150,7 +150,7 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
     setLoadingGroups(true);
     try {
       const PAGE = 1000;
-      const rows: { phone: string | null; first_name: string | null; last_name: string | null; company: string | null }[] = [];
+      const rows: { phone: string | null; email?: string | null; first_name: string | null; last_name: string | null; company: string | null }[] = [];
       for (const gid of groupIds) {
         let page = 0;
         while (true) {

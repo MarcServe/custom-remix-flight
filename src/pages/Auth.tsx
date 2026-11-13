@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { z } from 'zod';
 import leadBoostersLogo from '@/assets/leadboosters-logo.png';
-import heroImage from '@/assets/genie.png';
+import heroImage from '@/assets/hero-crm.webp';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -466,8 +466,10 @@ export default function Auth() {
           <div className="order-1 lg:order-2 flex justify-center lg:justify-end">
             <img
               src={heroImage}
-              alt="LeadBoosters — AI-powered lead generation"
-              className="w-full max-w-[min(100%,22rem)] sm:max-w-md lg:max-w-lg h-auto object-contain drop-shadow-xl animate-fade-in"
+              alt="LeadBoosters CRM dashboard with new leads flowing into the sales pipeline"
+              width={1000}
+              height={1000}
+              className="w-full max-w-[min(100%,22rem)] sm:max-w-md lg:max-w-lg h-auto object-contain mix-blend-multiply dark:mix-blend-normal [mask-image:radial-gradient(ellipse_at_center,black_72%,transparent_100%)] animate-fade-in"
             />
           </div>
 
