@@ -84,6 +84,8 @@ export const MCP_TOOLS: McpTool[] = [
   { name: "get_sms_conversation", action: "get_sms_conversation", description: "Full text thread with one number, oldest first. Marks it read unless mark_read=false.", inputSchema: O({ phone: S(""), mark_read: B(""), limit: I("") }, ["phone"]) },
   { name: "reply_sms", action: "reply_sms", sends: true, description: "SEND a text reply from your Twilio number to one person (REAL SMS). Refuses numbers that replied STOP. message supports {name}.", inputSchema: O({ phone: S(""), message: S("") }, ["phone", "message"]) },
   { name: "list_sms_opt_outs", action: "list_sms_opt_outs", description: "Numbers that replied STOP. Every campaign and reply skips them automatically.", inputSchema: O({ limit: I("") }) },
+  { name: "list_notifications", action: "list_notifications", description: "What's new: unread notifications (email replies, text replies, opt-outs, finished campaigns/newsletters, clicks, bounces, finished lead searches). Pass unread_only=false for recent history.", inputSchema: O({ unread_only: B("Default true"), type: S(""), limit: I("") }) },
+  { name: "mark_notifications_read", action: "mark_notifications_read", description: "Mark notifications read by ids[] or all=true.", inputSchema: O({ ids: A({ type: "string" }, ""), all: B("") }) },
   { name: "schedule_sms_followup", action: "schedule_sms_followup", description: "Schedule a follow-up TEXT to everyone who received an SMS campaign and has not replied or opted out, N days later (default 3) or at schedule_at. Cancel with unschedule_campaign. message supports {name} {first_name} {company}.", inputSchema: O({ campaign_id: S(""), message: S(""), days: N(""), schedule_at: scheduleAt, name: S("") }, ["campaign_id", "message"]) },
 ];
 

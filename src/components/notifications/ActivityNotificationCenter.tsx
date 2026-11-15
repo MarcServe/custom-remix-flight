@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,235 +7,110 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Bell, Eye, MousePointerClick, Reply, AlertCircle, Check } from 'lucide-react';
+import { Bell, Mail, MessageSquare, Ban, Send, Newspaper, MousePointerClick, AlertCircle, Search, Check, Reply } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { NotificationBadge } from './NotificationBadge';
 
-const STORAGE_KEY_PREFIX = 'activity-notifications-read';
-
-function storageKeyForUser(userId?: string | null) {
-  return userId ? `${STORAGE_KEY_PREFIX}:${userId}` : STORAGE_KEY_PREFIX;
-}
-
-function getStoredReadIds(userId?: string | null): Set<string> {
-  try {
-    const raw = localStorage.getItem(storageKeyForUser(userId));
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw) as string[];
-    return new Set(Array.isArray(parsed) ? parsed : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function setStoredReadIds(ids: Set<string>, userId?: string | null) {
-  try {
-    // Cap growth so quota failures don't leave the badge stuck forever
-    const pruned = [...ids].slice(-200);
-    localStorage.setItem(storageKeyForUser(userId), JSON.stringify(pruned));
-  } catch {
-    /* ignore quota / private mode */
-  }
-}
-
-interface ActivityNotification {
+export interface AppNotification {
   id: string;
-  type: 'opened' | 'clicked' | 'replied' | 'bounced';
-  companyName: string;
-  subject?: string;
-  timestamp: string;
-  read: boolean;
-  companySequenceId?: string | null;
-  metadata?: any;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+const ICONS: Record<string, JSX.Element> = {
+  email_reply: <Reply className="h-4 w-4 text-green-600" />,
+  sequence_reply: <Reply className="h-4 w-4 text-green-600" />,
+  sms_reply: <MessageSquare className="h-4 w-4 text-green-600" />,
+  sms_opt_out: <Ban className="h-4 w-4 text-destructive" />,
+  campaign_done: <Send className="h-4 w-4 text-blue-600" />,
+  newsletter_sent: <Newspaper className="h-4 w-4 text-blue-600" />,
+  sequence_click: <MousePointerClick className="h-4 w-4 text-purple-600" />,
+  bounce: <AlertCircle className="h-4 w-4 text-destructive" />,
+  lead_search_done: <Search className="h-4 w-4 text-primary" />,
+};
+
+export function useNotifications() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ['notifications', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('notifications' as any)
+        .select('id, type, title, body, link, entity_type, entity_id, read_at, created_at')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return (data || []) as unknown as AppNotification[];
+    },
+    refetchInterval: 60_000,
+  });
+
+  // Live: new rows arrive over realtime (the table is in the publication).
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel('notifications-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => {
+        queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, queryClient]);
+
+  const markRead = async (ids: string[]) => {
+    if (!ids.length) return;
+    await supabase.from('notifications' as any).update({ read_at: new Date().toISOString() }).in('id', ids).is('read_at', null);
+    queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
+  };
+  return { ...query, markRead };
 }
 
 export function ActivityNotificationCenter() {
-  const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const [readIds, setReadIds] = useState<Set<string>>(() => getStoredReadIds(user?.id));
   const navigate = useNavigate();
+  const { data: notifications = [], markRead } = useNotifications();
 
-  useEffect(() => {
-    setReadIds(getStoredReadIds(user?.id));
-  }, [user?.id]);
+  const unread = useMemo(() => notifications.filter((n) => !n.read_at), [notifications]);
 
-  const markAsRead = useCallback((id: string) => {
-    setReadIds((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      setStoredReadIds(next, user?.id);
-      return next;
-    });
-  }, [user?.id]);
-
-  const markAllAsReadInState = useCallback((ids: string[]) => {
-    if (ids.length === 0) return;
-    setReadIds((prev) => {
-      const next = new Set(prev);
-      ids.forEach((id) => next.add(id));
-      setStoredReadIds(next, user?.id);
-      return next;
-    });
-  }, [user?.id]);
-
-  const { data: notifications = [], refetch } = useQuery({
-    queryKey: ['activity-notifications'],
-    queryFn: async () => {
-      // Get recent email activities with engagement
-      const { data, error } = await supabase
-        .from('email_activities')
-        .select(`
-          id,
-          company_sequence_id,
-          status,
-          opened_at,
-          replied_at,
-          subject,
-          metadata,
-          company_sequences(
-            companies(name)
-          )
-        `)
-        .or('replied_at.not.is.null,status.eq.bounced,metadata->>clicked.eq.true,opened_at.not.is.null')
-        .order('sent_at', { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
-
-      // Transform to notification format
-      const notifs: ActivityNotification[] = (data || []).map((activity: any) => {
-        let type: 'opened' | 'clicked' | 'replied' | 'bounced' = 'opened';
-        let timestamp = activity.opened_at || activity.replied_at || new Date().toISOString();
-
-        if (activity.replied_at) {
-          type = 'replied';
-          timestamp = activity.replied_at;
-        } else if (activity.status === 'bounced') {
-          type = 'bounced';
-          timestamp = activity.metadata?.bounced_at || activity.opened_at || timestamp;
-        } else if (activity.metadata?.clicked) {
-          type = 'clicked';
-          timestamp = activity.metadata?.last_click || activity.opened_at || timestamp;
-        }
-
-        return {
-          id: activity.id,
-          type,
-          companyName: activity.company_sequences?.companies?.name || 'Unknown Company',
-          subject: activity.subject,
-          timestamp,
-          read: false,
-          companySequenceId: activity.company_sequence_id,
-          metadata: activity.metadata,
-        };
-      });
-
-      return notifs;
-    },
-    refetchInterval: 30000, // Refresh every 30 seconds
-  });
-
-  // If the panel is already open when data arrives, mark the listed items read
-  useEffect(() => {
-    if (open && notifications.length > 0) {
-      markAllAsReadInState(notifications.map((n) => n.id));
-    }
-  }, [open, notifications, markAllAsReadInState]);
-
-  const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length;
-
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'opened':
-        return <Eye className="h-4 w-4 text-blue-500" />;
-      case 'clicked':
-        return <MousePointerClick className="h-4 w-4 text-purple-500" />;
-      case 'replied':
-        return <Reply className="h-4 w-4 text-green-500" />;
-      case 'bounced':
-        return <AlertCircle className="h-4 w-4 text-destructive" />;
-      default:
-        return <Bell className="h-4 w-4" />;
-    }
-  };
-
-  const getLabel = (type: string) => {
-    switch (type) {
-      case 'opened':
-        return 'Opened Email';
-      case 'clicked':
-        return 'Clicked Link';
-      case 'replied':
-        return 'Sent Reply';
-      case 'bounced':
-        return 'Email Bounced';
-      default:
-        return 'Activity';
-    }
-  };
-
-  const markAllAsRead = () => {
-    markAllAsReadInState(notifications.map((n) => n.id));
-  };
-
-  const handleNotificationClick = (notif: ActivityNotification) => {
-    markAsRead(notif.id);
+  const handleClick = (n: AppNotification) => {
+    if (!n.read_at) void markRead([n.id]);
     setOpen(false);
-    // Use setTimeout so popover closes before navigation (avoids focus/portal issues)
-    const target = notif.companySequenceId
-      ? `/conversations?sequence=${notif.companySequenceId}`
-      : '/conversations';
+    const target = n.link || '/conversations';
     setTimeout(() => navigate(target), 0);
   };
 
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    // Mark currently listed notifications read when opening OR closing the panel
-    if (notifications.length > 0) {
-      markAllAsReadInState(notifications.map((n) => n.id));
-    }
-  };
-
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon" className="relative" aria-label={unread.length ? `${unread.length} unread notifications` : 'Notifications'}>
           <Bell className="h-5 w-5" />
-          {unreadCount > 0 && (
+          {unread.length > 0 && (
             <div className="absolute -top-1 -right-1">
-              <NotificationBadge count={unreadCount} />
+              <NotificationBadge count={unread.length} />
             </div>
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        side="right"
-        align="start"
-        sideOffset={12}
-        className="w-[420px] max-w-[calc(100vw-2rem)] p-0 max-h-[min(560px,calc(100vh-8rem))] flex flex-col z-[100]"
-      >
+      <PopoverContent side="right" align="start" sideOffset={12} className="w-[420px] max-w-[calc(100vw-2rem)] p-0 max-h-[min(560px,calc(100vh-8rem))] flex flex-col z-[100]">
         <Card className="border-0 shadow-none flex flex-col min-h-0">
           <CardHeader className="border-b shrink-0">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg">Activity Notifications</CardTitle>
-                <CardDescription>Recent email engagement</CardDescription>
+                <CardTitle className="text-lg">Notifications</CardTitle>
+                <CardDescription>Replies, texts, finished sends and alerts</CardDescription>
               </div>
-              {unreadCount > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={markAllAsRead}
-                  className="text-xs"
-                >
-                  <Check className="h-3 w-3 mr-1" />
-                  Mark all read
+              {unread.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => markRead(unread.map((n) => n.id))} className="text-xs">
+                  <Check className="h-3 w-3 mr-1" /> Mark all read
                 </Button>
               )}
             </div>
@@ -244,37 +119,26 @@ export function ActivityNotificationCenter() {
             <ScrollArea className="h-[min(440px,calc(100vh-12rem))]">
               {notifications.length === 0 ? (
                 <div className="p-6 text-center text-muted-foreground text-sm">
-                  No recent activity
+                  Nothing yet. You'll be told here when someone replies by email or text, a campaign or newsletter finishes, a link is clicked, an email bounces, or a lead search completes.
                 </div>
               ) : (
                 <div className="divide-y">
-                  {notifications.map((notif) => (
+                  {notifications.map((n) => (
                     <button
-                      key={notif.id}
+                      key={n.id}
                       type="button"
-                      onClick={() => handleNotificationClick(notif)}
-                      className={`w-full text-left p-4 hover:bg-muted/50 transition-colors ${
-                        !readIds.has(notif.id) ? 'bg-muted/30' : ''
-                      }`}
+                      onClick={() => handleClick(n)}
+                      className={`w-full text-left p-4 hover:bg-muted/50 transition-colors ${!n.read_at ? 'bg-muted/30' : ''}`}
                     >
                       <div className="flex gap-3">
-                        <div className="mt-0.5">{getIcon(notif.type)}</div>
+                        <div className="mt-0.5">{ICONS[n.type] || <Mail className="h-4 w-4" />}</div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-sm truncate">{notif.companyName}</span>
-                            {!readIds.has(notif.id) && (
-                              <Badge variant="default" className="h-5 text-[10px] px-1.5">New</Badge>
-                            )}
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="font-medium text-sm truncate">{n.title}</span>
+                            {!n.read_at && <Badge variant="default" className="h-5 text-[10px] px-1.5">New</Badge>}
                           </div>
-                          <p className="text-xs text-muted-foreground mb-1">{getLabel(notif.type)}</p>
-                          {notif.subject && (
-                            <p className="text-xs truncate text-muted-foreground/80">{notif.subject}</p>
-                          )}
-                          <p className="text-[11px] text-muted-foreground mt-1">
-                            {notif.timestamp
-                              ? formatDistanceToNow(new Date(notif.timestamp), { addSuffix: true })
-                              : ''}
-                          </p>
+                          {n.body && <p className="text-xs text-muted-foreground truncate">{n.body}</p>}
+                          <p className="text-[11px] text-muted-foreground mt-1">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</p>
                         </div>
                       </div>
                     </button>

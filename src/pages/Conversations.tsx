@@ -98,6 +98,12 @@ export default function Conversations() {
   const [selectedPersonalThread, setSelectedPersonalThread] = useState<string | null>(null);
   const [conversationType, setConversationType] = useState<"sequences" | "personal" | "texts">("sequences");
   const [smsUnread, setSmsUnread] = useState(0);
+  // Deep links from notifications: /conversations?tab=texts|personal
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'texts' || tab === 'personal') setConversationType(tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('tab')]);
   const [composeMode, setComposeMode] = useState<"ai" | "manual">("ai");
   const [generatedResponse, setGeneratedResponse] = useState<{ subject: string; body: string } | null>(null);
   const [manualReply, setManualReply] = useState<{ subject: string; body: string }>({ subject: "", body: "" });

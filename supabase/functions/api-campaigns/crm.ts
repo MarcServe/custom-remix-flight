@@ -141,6 +141,7 @@ export const CRM_ACTIONS = [
   "list_sequences", "get_sequence", "create_sequence", "update_sequence", "enroll_in_sequence",
   "list_enrollments", "update_enrollment", "run_sequences_now", "sequence_health", "schedule_sms_followup",
   "list_sms_conversations", "get_sms_conversation", "reply_sms", "list_sms_opt_outs",
+  "list_notifications", "mark_notifications_read",
 ];
 
 async function ownSequence(db: any, userId: string, body: any) {
@@ -934,6 +935,25 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
     case "list_sms_opt_outs": {
       const { data } = await db.from("sms_opt_outs").select("phone, reason, created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(lim(body.limit, 200, 2000));
       return json({ opt_outs: data || [], count: (data || []).length });
+    }
+
+    // ───────────────────────── notifications ─────────────────────────
+    case "list_notifications": {
+      let q = db.from("notifications").select("id, type, title, body, link, entity_type, entity_id, read_at, created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(lim(body.limit, 30, 200));
+      if (body.unread_only !== false) q = q.is("read_at", null);
+      if (str(body.type)) q = q.eq("type", str(body.type));
+      const { data, error } = await q;
+      if (error) return json({ error: error.message }, 500);
+      const { count } = await db.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", userId).is("read_at", null);
+      return json({ notifications: data || [], unread_total: count ?? 0, types: ["email_reply", "sms_reply", "sms_opt_out", "campaign_done", "newsletter_sent", "sequence_reply", "sequence_click", "bounce", "lead_search_done"] });
+    }
+    case "mark_notifications_read": {
+      const ids: string[] = Array.isArray(body.ids) ? body.ids.map(str).filter(Boolean) : [];
+      let q = db.from("notifications").update({ read_at: new Date().toISOString() }, { count: "exact" }).eq("user_id", userId).is("read_at", null);
+      if (ids.length) q = q.in("id", ids); else if (body.all !== true) return json({ error: "Pass ids[] or all:true" }, 400);
+      const { count, error } = await q;
+      if (error) return json({ error: error.message }, 500);
+      return json({ marked_read: count ?? 0 });
     }
 
     default:

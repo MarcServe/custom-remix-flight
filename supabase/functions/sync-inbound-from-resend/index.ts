@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
+const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || 'leadgenie@eldapgraaa.resend.app';
+
 /**
  * Sync inbound emails from Resend into the CRM.
  * Use when the webhook didn't fire or emails are missing from Conversations.
@@ -88,13 +90,36 @@ serve(async (req) => {
       );
     }
 
+    // Only mail addressed to THIS app: the shared Resend account also receives
+    // other products' inboxes (e.g. *@inbound.talkweb.io), which must not be
+    // imported here. Allow-list = our reply address + every user's sender/profile address.
+    const ownAddresses = new Set<string>([RESEND_INBOUND_EMAIL.toLowerCase()]);
+    const [{ data: conns }, { data: bps }, { data: profs }] = await Promise.all([
+      supabase.from('crm_connections').select('from_email'),
+      supabase.from('business_profiles').select('email_sender_email'),
+      supabase.from('profiles').select('email'),
+    ]);
+    for (const c of conns || []) if (c.from_email) ownAddresses.add(String(c.from_email).toLowerCase());
+    for (const b of bps || []) if (b.email_sender_email) ownAddresses.add(String(b.email_sender_email).toLowerCase());
+    for (const pr of profs || []) if (pr.email) ownAddresses.add(String(pr.email).toLowerCase());
+    const addressedToUs = (to: unknown): boolean => {
+      const list = Array.isArray(to) ? to : typeof to === 'string' ? to.split(/[,;]/) : [];
+      return list.some((t) => {
+        const m = String(t).toLowerCase().match(/[^\s<>,;"']+@[^\s<>,;"']+/);
+        return !!m && ownAddresses.has(m[0]);
+      });
+    };
+    let notOurs = 0;
+
     for (const item of items.slice(0, 50)) {
-      const messageId = item.message_id?.replace(/[<>]/g, '') ?? item.id;
+      if (!addressedToUs(item.to)) { notOurs++; continue; }
+      // Dedupe on the Resend email id AND the RFC message id (stored lower-case, no brackets).
+      const messageId = (item.message_id?.replace(/[<>]/g, '') ?? item.id).toLowerCase();
       const { data: existing } = await supabase
         .from('email_threads')
         .select('id')
         .eq('direction', 'inbound')
-        .eq('message_id', messageId)
+        .or(`message_id.eq.${messageId},message_id.eq.<${messageId}>,metadata->>resend_email_id.eq.${item.id}`)
         .limit(1)
         .maybeSingle();
 
