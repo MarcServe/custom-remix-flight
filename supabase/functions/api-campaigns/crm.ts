@@ -485,6 +485,15 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
       if (!["draft", "scheduled", "paused", "sending"].includes(String(c.status))) return json({ error: `Campaign is ${c.status}; nothing to send.` }, 400);
       const { count: pending } = await db.from("email_campaign_recipients").select("id", { count: "exact", head: true }).eq("campaign_id", id).eq("status", "pending");
       if (!pending) return json({ error: "No pending recipients to send to." }, 400);
+      // schedule_at → schedule instead of sending now (UK time unless an offset is given)
+      if (body.schedule_at) {
+        const when = toUtcIso(String(body.schedule_at));
+        if (!when) return json({ error: "schedule_at must be an ISO date-time, e.g. 2026-11-16T10:00 (UK time)" }, 400);
+        if (new Date(when).getTime() < Date.now() - 60_000) return json({ error: "schedule_at is in the past" }, 400);
+        const { error } = await db.from("email_campaigns").update({ status: "scheduled", scheduled_at: when }).eq("id", id).eq("user_id", userId);
+        if (error) return json({ error: error.message }, 500);
+        return json({ campaign_id: id, scheduled: true, scheduled_at: when, pending, message: `"${c.name}" is scheduled for ${when} (${pending} recipients). Nothing sent yet; unschedule_campaign cancels it.` });
+      }
       const fn = isPhoneCampaign(c) ? "send-bulk-sms" : "send-bulk-emails";
       const r = await callFunction(fn, { campaignId: id, triggeredByCron: true });
       if (!r.ok) return json({ error: r.data?.error || r.data?.message || `Send failed (${r.status})`, details: r.data }, 502);
