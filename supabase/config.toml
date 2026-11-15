@@ -118,3 +118,6 @@ verify_jwt = false
 # JWT / API key / service role checked inside the function
 [functions.ingest-hospitality-leads]
 verify_jwt = false
+
+[functions.api-campaigns]
+verify_jwt = false  # Authenticates itself: lb_live_ API key or user JWT

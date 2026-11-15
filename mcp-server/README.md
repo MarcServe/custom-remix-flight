@@ -1,16 +1,16 @@
 # LeadBoosters MCP server
 
-Lets Claude (or any MCP client — Codex, Cursor, your own scripts) **load and schedule
-email campaigns** in LeadBoosters. Sending happens automatically at the scheduled
-London time, through the same pipeline as the app (dedupe, domain verification,
-monthly limits, and no-reply follow-ups all still apply).
+Lets Claude (Claude Code, Claude Desktop, Codex, Cursor, or your own scripts) **work
+your LeadBoosters CRM directly**: look up and save contacts and companies, build
+recipient groups, write and send HTML email campaigns and SMS campaigns, run
+newsletters, and manage deals — all by instruction, with no copy-and-paste.
 
-**Scope:** create + schedule + read status. No "send now" and no pause/delete — the
-safest surface for automation that touches real inboxes.
+Sending goes through the same pipeline as the app, so dedupe, sender verification,
+monthly limits, branding and the Day 1/3/5 no-reply follow-ups all still apply.
 
 ## 1. Get an API key
 In LeadBoosters: **Settings → API Keys → New API key**. Copy it (shown once). It looks
-like `lb_live_…`.
+like `lb_live_…`. Everything the key does is scoped to your own account.
 
 ## 2. Install
 ```bash
@@ -19,6 +19,11 @@ npm install
 ```
 
 ## 3. Add to Claude
+**Claude Code** (one line):
+```bash
+claude mcp add leadboosters --env LEADBOOSTERS_API_KEY=lb_live_your_key -- node /ABSOLUTE/PATH/TO/mcp-server/index.mjs
+```
+
 **Claude Desktop** — edit `claude_desktop_config.json`:
 ```json
 {
@@ -32,52 +37,47 @@ npm install
 }
 ```
 
-**Claude Code** — from the repo:
-```bash
-claude mcp add leadboosters --env LEADBOOSTERS_API_KEY=lb_live_your_key -- node ./mcp-server/index.mjs
-```
-
 Restart Claude. You'll see the `leadboosters` tools available.
 
 ## 4. Tools
-- **create_campaign** — `{ name, subject, body_text?, body_html?, recipients:[{email,first_name?,last_name?,company?}], schedule_at? }`
-  - `schedule_at`: London time `"2026-07-16T09:00"` (or full ISO). Omit → draft.
-  - Subject/body support `{{firstName}} {{lastName}} {{fullName}} {{company}} {{email}}`.
-- **list_campaigns** — recent campaigns + status/counts.
-- **campaign_status** — `{ campaign_id }` → status + counts.
 
-## Daily sending
-This server is stateless — to send daily, have your automation (a Claude Code
-scheduled task, a cron, etc.) call **create_campaign** once a day with that day's
-list and a `schedule_at` for when it should go out. LeadBoosters handles the send.
+| Area | Tools |
+|---|---|
+| Brand & senders | `get_business_profile` (read before writing copy — brand colour, logo, signature, tone), `list_senders` |
+| Contacts | `search_contacts`, `get_contact`, `upsert_contact`, `update_contact` |
+| Companies | `search_companies`, `upsert_company`, `update_company` |
+| Groups | `list_groups`, `get_group`, `create_group`, `add_to_group`, `remove_from_group` |
+| Email campaigns | `create_campaign` (HTML/text, merge tags, schedule), `list_campaigns`, `get_campaign`, `update_campaign`, `send_test`, `send_campaign`, `unschedule_campaign` |
+| SMS campaigns | `create_phone_campaign` (`{name}` / `{first_name}` / `{company}` tags, per-recipient messages, `send_now`) |
+| Newsletters | `create_newsletter`, `list_newsletters`, `send_newsletter`, `list_subscribers`, `add_subscribers` |
+| Deals | `list_deals`, `create_deal`, `update_deal` |
+
+Times (`schedule_at`) are UK wall-clock, e.g. `"2026-11-20T09:00"`; a full ISO
+timestamp with a zone also works. Omit it to create a draft.
+
+Email merge tags: `{{firstName}} {{lastName}} {{fullName}} {{company}} {{email}}`.
+SMS merge tags: `{name} {first_name} {company} {phone}` (single or double braces).
+
+### Example instructions
+- "Find all contacts tagged *hotel* in Manchester and put them in a group called *Manchester hotels*."
+- "Write an on-brand HTML email introducing our new booking assistant, create it as a draft for the *Manchester hotels* group, and send me a test."
+- "Send campaign *Manchester hotels intro* now."
+- "Text everyone in *Route Local Bristol* : *Hi {name}, Mike at Route Local…* — save as a draft first."
+- "Add Jane Doe (jane@acme.com, Acme Ltd, Head of Ops) as a contact and open a £2,500 deal at Proposal stage."
+
+`send_campaign` and `send_newsletter` send real messages immediately. Claude is told
+to confirm with you first unless you already asked it to send.
 
 ## Raw API (no MCP)
+Every tool is a JSON action on one endpoint:
 ```bash
 curl -X POST https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/api-campaigns \
   -H "x-api-key: lb_live_your_key" -H "Content-Type: application/json" \
-  -d '{"action":"create","name":"Daily","subject":"Hi {{firstName}}","body_text":"...","recipients":[{"email":"jane@acme.com","first_name":"Jane"}],"schedule_at":"2026-07-16T09:00"}'
+  -d '{"action":"search_contacts","query":"acme","limit":20}'
 ```
+Send `{"action":"anything"}` to get the full list of actions back in the error message.
 
-## Newsletters
-- **create_newsletter** — `{ subject, title?, body_html?, body_text?, audience?, schedule_at? }`
-  - `audience`: `{ "all_active": true }` (default) or `{ "group_ids": ["…"] }` / `{ "tag_ids": ["…"] }`.
-  - Sends to your subscriber base at `schedule_at` (London). Omit → draft.
-
-## Send a test first
-- **send_test** — `{ to_email, subject, body_html?, body_text? }` sends one email now from
-  your active sender, so you can eyeball it before scheduling a real run. Surfaces the real
-  provider error (e.g. "domain not verified") if the sender isn't ready.
-
-## Daily cadence (agent-triggered)
-The API/MCP is stateless — schedule the *cadence* on your side and call the API each day.
-
-**Option A — shell cron:** see `examples/daily-campaign.sh` (build today's list, schedule at 09:00 London).
-```
-# crontab -e
-0 6 * * *  LEADBOOSTERS_API_KEY=lb_live_...  /path/to/mcp-server/examples/daily-campaign.sh
-```
-
-**Option B — Claude Code scheduled task:** create a routine that runs daily and tells Claude:
-> "Using the leadboosters MCP: build today's recipient list from <your source>, send_test to me first, then create_campaign scheduled for 09:00 London."
-
-Claude will call `send_test` then `create_campaign` via this server on each run.
+## Daily sending
+The server is stateless. For a daily send, have your automation (a Claude Code
+scheduled task, cron, etc.) call `create_campaign` once a day with that day's
+`group_ids` and a `schedule_at`. LeadBoosters sends at that time.

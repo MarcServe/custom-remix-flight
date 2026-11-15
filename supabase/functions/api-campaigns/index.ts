@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleCrmAction, CRM_ACTIONS } from "./crm.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -203,7 +204,7 @@ Deno.serve(async (req) => {
 
     if (action === "list_groups") {
       const { data: groups } = await db.from("recipient_groups")
-        .select("id, name, description, created_at").eq("user_id", userId).order("created_at", { ascending: false });
+        .select("id, name, description, channel, created_at").eq("user_id", userId).order("created_at", { ascending: false });
       // Attach member counts
       const ids = (groups || []).map((g: any) => g.id);
       const counts: Record<string, number> = {};
@@ -211,7 +212,7 @@ Deno.serve(async (req) => {
         const { data: members } = await db.from("recipient_group_members").select("group_id").in("group_id", ids).limit(100000);
         for (const m of members || []) counts[m.group_id] = (counts[m.group_id] || 0) + 1;
       }
-      return json({ groups: (groups || []).map((g: any) => ({ id: g.id, name: g.name, description: g.description, members: counts[g.id] || 0 })) });
+      return json({ groups: (groups || []).map((g: any) => ({ id: g.id, name: g.name, description: g.description, channel: g.channel || "email", members: counts[g.id] || 0 })) });
     }
 
     if (action === "create_group") {
@@ -223,22 +224,33 @@ Deno.serve(async (req) => {
 
       const seen = new Set<string>();
       const members = [];
+      let hasEmail = false, hasPhone = false;
       for (const r of recipientsIn) {
         const email = String(r?.email || "").trim().toLowerCase();
-        if (!EMAIL_RE.test(email) || seen.has(email)) continue;
-        seen.add(email);
+        const phoneRaw = String(r?.phone || "").trim();
+        const pd = phoneRaw.replace(/\D/g, "");
+        const phone = pd.length >= 7 ? (phoneRaw.startsWith("+") ? `+${pd}` : pd.startsWith("00") ? `+${pd.slice(2)}` : pd.startsWith("0") ? `+44${pd.replace(/^0+/, "")}` : `+${pd}`) : null;
+        const validEmail = EMAIL_RE.test(email);
+        const key = validEmail ? email : phone ? `p:${phone}` : "";
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        if (validEmail) hasEmail = true;
+        if (phone) hasPhone = true;
+        const nm = String(r?.name || "").trim();
         members.push({
-          email,
-          first_name: r.first_name || r.firstName || null,
-          last_name: r.last_name || r.lastName || null,
+          email: validEmail ? email : `phone:${phone}`,
+          phone,
+          first_name: r.first_name || r.firstName || (nm ? nm.split(" ")[0] : null) || null,
+          last_name: r.last_name || r.lastName || (nm ? nm.split(" ").slice(1).join(" ") : null) || null,
           company: r.company || null,
           person_id: r.person_id || r.personId || null,
         });
       }
-      if (!members.length) return json({ error: "No valid recipient emails" }, 400);
+      if (!members.length) return json({ error: "No valid recipient emails or phone numbers" }, 400);
+      const channel = String(body.channel || (hasPhone && hasEmail ? "mixed" : hasPhone ? "phone" : "email"));
 
       const { data: grp, error: gErr } = await db.from("recipient_groups").insert({
-        user_id: userId, name: groupName, description,
+        user_id: userId, name: groupName, description, channel,
       }).select("id, name").single();
       if (gErr || !grp) return json({ error: gErr?.message || "Failed to create group" }, 500);
 
@@ -461,7 +473,10 @@ Deno.serve(async (req) => {
       return json({ ok: true, sent_to: toEmail, provider: "sendgrid", from: conn.from_email, message: `Test email sent to ${toEmail}.` });
     }
 
-    return json({ error: "Unknown action. Use create | create_group | create_newsletter | send_test | list | list_groups | status." }, 400);
+    const crm = await handleCrmAction(db, userId, action, body);
+    if (crm) return crm;
+
+    return json({ error: `Unknown action "${action}". Available: create | create_group | create_newsletter | send_test | list | list_groups | status | ${CRM_ACTIONS.join(" | ")}` }, 400);
   } catch (e: any) {
     return json({ error: e?.message || "Failed" }, 500);
   }
