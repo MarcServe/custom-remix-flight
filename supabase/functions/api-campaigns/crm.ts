@@ -131,7 +131,7 @@ export const CRM_ACTIONS = [
   "get_business_profile", "list_senders",
   "search_contacts", "get_contact", "upsert_contact", "update_contact",
   "search_companies", "upsert_company", "update_company",
-  "get_group", "add_to_group", "remove_from_group",
+  "get_group", "add_to_group", "remove_from_group", "delete_group",
   "get_campaign", "update_campaign", "send_campaign", "unschedule_campaign", "create_phone_campaign",
   "list_newsletters", "send_newsletter", "list_subscribers", "add_subscribers",
   "list_deals", "create_deal", "update_deal",
@@ -349,6 +349,19 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
       if (emails.length) { const { count } = await db.from("recipient_group_members").delete({ count: "exact" }).eq("group_id", g.id).in("email", emails); removed += count || 0; }
       if (phones.length) { const { count } = await db.from("recipient_group_members").delete({ count: "exact" }).eq("group_id", g.id).in("phone", phones); removed += count || 0; }
       return json({ group_id: g.id, removed });
+    }
+
+    case "delete_group": {
+      const g = await ownGroup(db, userId, body);
+      if (!g) return json({ error: "Group not found" }, 404);
+      const { count } = await db.from("recipient_group_members").select("id", { count: "exact", head: true }).eq("group_id", g.id);
+      if ((count || 0) > 0 && body.confirm !== true) {
+        return json({ error: `"${g.name}" has ${count} member(s). Pass confirm:true to delete the group and its member list (campaigns already created from it are unaffected).`, group_id: g.id, members: count }, 409);
+      }
+      await db.from("recipient_group_members").delete().eq("group_id", g.id);
+      const { error } = await db.from("recipient_groups").delete().eq("id", g.id).eq("user_id", userId);
+      if (error) return json({ error: error.message }, 500);
+      return json({ deleted: true, group_id: g.id, name: g.name, members_removed: count || 0 });
     }
 
     // ───────────────────────── campaigns ─────────────────────────

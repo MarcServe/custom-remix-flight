@@ -46,7 +46,7 @@ Restart Claude. You'll see the `leadboosters` tools available.
 | Brand & senders | `get_business_profile` (read before writing copy — brand colour, logo, signature, tone), `list_senders` |
 | Contacts | `search_contacts`, `get_contact`, `upsert_contact`, `update_contact` |
 | Companies | `search_companies`, `upsert_company`, `update_company` |
-| Groups | `list_groups`, `get_group`, `create_group`, `add_to_group`, `remove_from_group` |
+| Groups | `list_groups`, `get_group`, `create_group`, `add_to_group`, `remove_from_group`, `delete_group` |
 | Email campaigns | `create_campaign` (HTML/text, merge tags, schedule), `list_campaigns`, `get_campaign`, `update_campaign`, `send_test`, `send_campaign`, `unschedule_campaign` |
 | SMS campaigns | `create_phone_campaign` (`{name}` / `{first_name}` / `{company}` tags, per-recipient messages, `send_now`) |
 | Newsletters | `create_newsletter`, `list_newsletters`, `send_newsletter`, `list_subscribers`, `add_subscribers` |

@@ -115,6 +115,9 @@ tool("add_to_group",
 tool("remove_from_group", "Remove members from a group by email and/or phone.",
   { group_id: z.string().optional(), group_name: z.string().optional(), emails: z.array(z.string()).optional(), phones: z.array(z.string()).optional() });
 
+tool("delete_group", "Delete a recipient group and its member list. Refuses when the group has members unless confirm=true (ask the user first). Campaigns already created from it are unaffected.",
+  { group_id: z.string().optional(), group_name: z.string().optional(), confirm: z.boolean().optional() });
+
 // ───────────── Email campaigns ─────────────
 tool("create_campaign",
   "Create an email campaign (HTML and/or text) and optionally schedule it. Recipients come from an explicit list and/or group_ids. Subject/body support {{firstName}} {{lastName}} {{fullName}} {{company}} {{email}}. Defaults: recipients are linked to CRM people/companies and the Day 1/3/5 no-reply follow-up is on (set follow_up=false for a one-off). With an explicit recipients list, set a short descriptive group_name — it is saved as a reusable group. Omit schedule_at to create a draft, then use send_test to preview and send_campaign to send.",
