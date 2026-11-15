@@ -142,6 +142,7 @@ export const CRM_ACTIONS = [
   "list_enrollments", "update_enrollment", "run_sequences_now", "sequence_health", "schedule_sms_followup",
   "list_sms_conversations", "get_sms_conversation", "reply_sms", "list_sms_opt_outs",
   "list_notifications", "mark_notifications_read",
+  "list_automations", "create_automation", "update_automation", "delete_automation", "run_automation", "list_automation_runs", "reschedule_automations",
 ];
 
 async function ownSequence(db: any, userId: string, body: any) {
@@ -954,6 +955,71 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
       const { count, error } = await q;
       if (error) return json({ error: error.message }, 500);
       return json({ marked_read: count ?? 0 });
+    }
+
+    // ───────────────────────── scheduled AI automations ─────────────────────────
+    case "list_automations": {
+      const { data, error } = await db.from("ai_automations").select("id, name, instruction, schedule_kind, time_of_day, days_of_week, timezone, enabled, allow_sending, next_run_at, last_run_at, last_status, last_summary, created_at").eq("user_id", userId).order("created_at", { ascending: true });
+      if (error) return json({ error: error.message }, 500);
+      return json({ automations: data || [], how: "Automations run on the server every 15 minutes when due. allow_sending=false means drafts only." });
+    }
+    case "create_automation": {
+      const name = str(body.name); const instruction = str(body.instruction);
+      if (!name || !instruction) return json({ error: "name and instruction are required" }, 400);
+      const kind = ["hourly", "daily", "weekdays", "weekly"].includes(str(body.schedule_kind)) ? str(body.schedule_kind) : "daily";
+      const row = { user_id: userId, name, instruction, schedule_kind: kind, time_of_day: /^\d{2}:\d{2}$/.test(str(body.time_of_day)) ? str(body.time_of_day) : "08:00", days_of_week: Array.isArray(body.days_of_week) ? body.days_of_week.map(Number).filter((d: number) => d >= 0 && d <= 6) : [1], timezone: str(body.timezone) || "Europe/London", enabled: body.enabled !== false, allow_sending: body.allow_sending === true, model: opt(body.model) };
+      const { data, error } = await db.from("ai_automations").insert(row).select("id, name").single();
+      if (error) return json({ error: error.message }, 500);
+      await callFunction("run-ai-automations", { reschedule_only: true }).catch(() => null);
+      const { data: fresh } = await db.from("ai_automations").select("next_run_at").eq("id", data.id).maybeSingle();
+      return json({ automation_id: data.id, name: data.name, next_run_at: fresh?.next_run_at || null, message: `Automation "${name}" created (${kind} at ${row.time_of_day} UK). Use run_automation to try it now.` });
+    }
+    case "update_automation": {
+      const id = str(body.automation_id);
+      if (!id) return json({ error: "automation_id required" }, 400);
+      const fields: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (body.name != null) fields.name = str(body.name);
+      if (body.instruction != null) fields.instruction = str(body.instruction);
+      if (body.schedule_kind != null && ["hourly", "daily", "weekdays", "weekly"].includes(str(body.schedule_kind))) fields.schedule_kind = str(body.schedule_kind);
+      if (body.time_of_day != null && /^\d{2}:\d{2}$/.test(str(body.time_of_day))) fields.time_of_day = str(body.time_of_day);
+      if (Array.isArray(body.days_of_week)) fields.days_of_week = body.days_of_week.map(Number);
+      if (typeof body.enabled === "boolean") fields.enabled = body.enabled;
+      if (typeof body.allow_sending === "boolean") fields.allow_sending = body.allow_sending;
+      if (body.model != null) fields.model = opt(body.model);
+      fields.next_run_at = null;
+      const { data, error } = await db.from("ai_automations").update(fields).eq("id", id).eq("user_id", userId).select("id").maybeSingle();
+      if (error) return json({ error: error.message }, 500);
+      if (!data) return json({ error: "Automation not found" }, 404);
+      await callFunction("run-ai-automations", { reschedule_only: true }).catch(() => null);
+      return json({ automation_id: id, updated_fields: Object.keys(fields).filter((k) => k !== "updated_at" && k !== "next_run_at") });
+    }
+    case "delete_automation": {
+      const id = str(body.automation_id);
+      if (!id) return json({ error: "automation_id required" }, 400);
+      const { data, error } = await db.from("ai_automations").delete().eq("id", id).eq("user_id", userId).select("id, name").maybeSingle();
+      if (error) return json({ error: error.message }, 500);
+      if (!data) return json({ error: "Automation not found" }, 404);
+      return json({ deleted: true, name: data.name });
+    }
+    case "run_automation": {
+      const id = str(body.automation_id);
+      if (!id) return json({ error: "automation_id required" }, 400);
+      const { data: a } = await db.from("ai_automations").select("id").eq("id", id).eq("user_id", userId).maybeSingle();
+      if (!a) return json({ error: "Automation not found" }, 404);
+      const r = await callFunction("run-ai-automations", { automation_id: id, trigger: "api" });
+      if (!r.ok) return json({ error: r.data?.error || `HTTP ${r.status}`, details: r.data }, 502);
+      return json(r.data);
+    }
+    case "list_automation_runs": {
+      let q = db.from("ai_automation_runs").select("id, automation_id, started_at, finished_at, status, trigger, summary, error, steps").eq("user_id", userId).order("started_at", { ascending: false }).limit(lim(body.limit, 10, 100));
+      if (str(body.automation_id)) q = q.eq("automation_id", str(body.automation_id));
+      const { data, error } = await q;
+      if (error) return json({ error: error.message }, 500);
+      return json({ runs: (data || []).map((r: any) => ({ ...r, steps: (r.steps || []).map((s: any) => ({ tool: s.tool, ok: s.ok })) })) });
+    }
+    case "reschedule_automations": {
+      await callFunction("run-ai-automations", { reschedule_only: true }).catch(() => null);
+      return json({ ok: true });
     }
 
     default:

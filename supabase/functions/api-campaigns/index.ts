@@ -177,7 +177,12 @@ Deno.serve(async (req) => {
     const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
     const rawKey = xApiKey || bearer;
     let userId: string;
-    if (rawKey.startsWith("lb_live_")) {
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const actAs = (req.headers.get("x-user-id") || "").trim();
+    if (serviceKey && bearer === serviceKey && actAs) {
+      // Trusted internal caller (run-ai-automations) acting on behalf of a user.
+      userId = actAs;
+    } else if (rawKey.startsWith("lb_live_")) {
       const keyHash = await sha256Hex(rawKey);
       const { data: keyRow } = await db.from("api_keys").select("id, user_id, revoked_at").eq("key_hash", keyHash).maybeSingle();
       if (!keyRow || keyRow.revoked_at) return json({ error: "Invalid or revoked API key" }, 401);

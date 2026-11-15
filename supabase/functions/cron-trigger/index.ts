@@ -318,6 +318,16 @@ Deno.serve(async (req) => {
         });
       }
 
+      case 'run-ai-automations': {
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/run-ai-automations`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const result = await response.json().catch(() => ({}));
+        return new Response(JSON.stringify({ success: true, action: 'run-ai-automations', result }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
       case 'process-sequences': {
         // Trigger sequence step processing
         console.log('[cron-trigger] Processing sequence steps');

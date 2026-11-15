@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sparkles, Copy, Check, Wand2, MessageSquareText, Plug, Mail, Newspaper, ArrowRight, Loader2, Users } from "lucide-react";
+import { AiAutomationsPanel } from "@/components/automations/AiAutomationsPanel";
 import { fetchRecipientGroupMemberCounts } from "@/lib/recipient-group-db";
 
 type Group = { id: string; name: string; members: number };
@@ -334,12 +335,12 @@ export default function AiCreate() {
         <ul className="space-y-1 text-muted-foreground">
           <li><span className="font-medium text-foreground">✨ Generate for me</span> — easiest. Describe your campaign in a sentence and we write it. No setup.</li>
           <li><span className="font-medium text-foreground">💬 Use my AI chat</span> — already use ChatGPT or Claude? Copy our prompt in, paste the reply back, done.</li>
-          <li><span className="font-medium text-foreground">🔌 Automate daily</span> — advanced. Connect once so drafts appear every morning on autopilot.</li>
+          <li><span className="font-medium text-foreground">🔌 Automate daily</span> — describe a job once; LeadBoosters runs it on a schedule, on our servers, and tells you when it's done.</li>
         </ul>
         <p className="mt-2 text-muted-foreground">Every result is saved as a <span className="font-medium text-foreground">draft</span> — nothing sends until you review it and click send. For campaigns you can attach a saved recipient group so the draft comes out ready to go.</p>
       </div>
 
-      <Tabs defaultValue="generate" className="mt-6">
+      <Tabs defaultValue={new URLSearchParams(window.location.search).get("tab") === "connect" ? "connect" : "generate"} className="mt-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="generate" className="gap-1.5"><Wand2 className="h-4 w-4" /> Generate for me</TabsTrigger>
           <TabsTrigger value="chat" className="gap-1.5"><MessageSquareText className="h-4 w-4" /> Use my AI chat</TabsTrigger>
@@ -418,51 +419,7 @@ export default function AiCreate() {
 
         {/* 3 — Automate daily via Claude/Codex */}
         <TabsContent value="connect">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Run it automatically every day</CardTitle>
-              <CardDescription>For power users: connect LeadBoosters to Claude Code / Codex so it drafts for you on a schedule.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="space-y-2">
-                <Label>1. Your API key</Label>
-                {revealedKey ? (
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs bg-muted rounded px-2 py-2 break-all">{revealedKey}</code>
-                    <Button size="sm" variant="outline" onClick={() => copy(revealedKey, "key")}>
-                      {copied === "key" ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                ) : (
-                  <Button size="sm" onClick={createKey} disabled={creatingKey}>
-                    {creatingKey ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null} Generate a key
-                  </Button>
-                )}
-                <p className="text-xs text-muted-foreground">Shown once — copy it now. Manage keys anytime on the <button className="underline" onClick={() => navigate("/api-keys")}>API Keys</button> page.</p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>2. Connect it to Claude Code <span className="text-xs text-muted-foreground">(advanced — needs Node.js)</span></Label>
-                  <Button size="sm" variant="outline" onClick={() => copy(mcpCommand, "mcp")}>
-                    {copied === "mcp" ? <Check className="h-4 w-4 mr-1.5 text-emerald-600" /> : <Copy className="h-4 w-4 mr-1.5" />} Copy
-                  </Button>
-                </div>
-                <pre className="text-xs whitespace-pre-wrap bg-muted rounded px-2 py-2 break-all">{mcpCommand}</pre>
-                <p className="text-xs text-muted-foreground">Prefer a chat? Use the <strong>Use my AI chat</strong> tab instead — no install needed.</p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>3. Your daily instruction</Label>
-                  <Button size="sm" variant="outline" onClick={() => copy(dailyPrompt, "daily")}>
-                    {copied === "daily" ? <Check className="h-4 w-4 mr-1.5 text-emerald-600" /> : <Copy className="h-4 w-4 mr-1.5" />} Copy
-                  </Button>
-                </div>
-                <pre className="text-xs whitespace-pre-wrap bg-muted rounded px-2 py-2">{dailyPrompt}</pre>
-              </div>
-            </CardContent>
-          </Card>
+          <AiAutomationsPanel />
         </TabsContent>
       </Tabs>
     </div>

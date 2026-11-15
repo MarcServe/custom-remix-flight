@@ -130,3 +130,6 @@ verify_jwt = false  # Twilio webhook; verified with the Twilio signature
 
 [functions.send-sms-reply]
 verify_jwt = true
+
+[functions.run-ai-automations]
+verify_jwt = false  # service role (cron) or owner JWT, checked inside
