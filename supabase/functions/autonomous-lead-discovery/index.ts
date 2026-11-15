@@ -1684,33 +1684,34 @@ async function createAutoCampaigns(
       const bodyHtmlTemplate = `<p>${bodyTemplate.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`;
 
       // Create draft campaign
-      const campaignName = `Auto Discovery - ${personaName} - ${new Date().toLocaleDateString()}`;
-      
+      const campaignName = `Autopilot · ${personaName} · ${new Date().toLocaleDateString('en-GB', { timeZone: setting.timezone || 'Europe/London' })}`;
+      // Always a DRAFT: Autopilot never emails new strangers unreviewed. (email_campaigns has no
+      // `metadata` column — the old insert failed silently on every run, so no campaign was ever made.)
       const { data: campaign, error: campaignError } = await supabase
         .from('email_campaigns')
         .insert({
           user_id: setting.user_id,
           name: campaignName,
-          status: setting.full_auto_mode ? 'scheduled' : 'draft',
-          scheduled_at: setting.full_auto_mode ? calculateCampaignSendTime(setting) : null,
+          status: 'draft',
+          scheduled_at: null,
           subject_template: subjectTemplate,
           body_text_template: bodyTemplate,
           body_html_template: bodyHtmlTemplate,
           total_recipients: contacts.length,
-          metadata: {
-            ai_generated: true,
-            persona_id: personaId,
-            discovery_run_id: discoveryRunId,
-            leads_count: leads.length,
-          }
+          tags: ['autopilot', ...(personaName ? [personaName] : [])],
+          merge_vars: { ai_generated: true, persona_id: personaId, discovery_run_id: discoveryRunId, leads_count: leads.length, suggested_send_at: setting.full_auto_mode ? calculateCampaignSendTime(setting) : null },
         })
         .select('id, scheduled_at')
         .single();
-
       if (campaignError) {
         console.error(`[super-discovery] Failed to create campaign:`, campaignError);
         continue;
       }
+      await supabase.from('notifications').insert({
+        user_id: setting.user_id, type: 'autopilot_campaign_draft', title: `Autopilot drafted "${campaignName}"`,
+        body: `${contacts.length} new ${personaName} leads with emails are ready in a draft campaign. Review the copy and send it from Campaigns.`,
+        link: `/campaigns?open=${campaign.id}`, entity_type: 'email_campaign', entity_id: campaign.id,
+      }).then(() => {}, (e: any) => console.error('[super-discovery] notification failed', e?.message));
 
       // Create recipients with required fields (email, name, personalized content)
       const recipientInserts: any[] = [];
