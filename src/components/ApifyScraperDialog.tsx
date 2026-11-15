@@ -102,6 +102,7 @@ export function ApifyScraperDialog({ open, onOpenChange, onComplete }: ApifyScra
       });
 
       if (response.error) throw response.error;
+      if (response.data?.error) throw new Error(response.data.error);
 
       const leads = response.data?.leads || [];
       setScrapedLeads(leads);

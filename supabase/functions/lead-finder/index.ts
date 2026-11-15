@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { planDiscoveryQueries } from "../_shared/discovery-planner.ts";
+import { searchWithPerplexity } from "../_shared/discovery-sources.ts";
 import { createTrace, createSpan, endSpan } from '../_shared/langfuse.ts';
 
 const corsHeaders = {
@@ -1334,8 +1336,25 @@ Deno.serve(async (req) => {
         ];
       }
       // Autopilot / assistant callers can pass exact queries (planned per angle)
+      let plannedByAi = false;
       if (Array.isArray(exaQueriesOverride) && exaQueriesOverride.filter((q: unknown) => typeof q === 'string' && q.trim()).length) {
         exaQueries = exaQueriesOverride.filter((q: unknown) => typeof q === 'string' && q.trim()).slice(0, 6).map((q: string) => q.trim());
+      } else if (!autonomousMode) {
+        // Manual search: have the planner turn the form into 6 distinct angles (different towns/niches/hooks)
+        // instead of four near-identical phrasings of the same query. Falls back to the heuristics above.
+        try {
+          await sendEvent({ type: 'status', message: 'Planning search angles…', progress: 8 });
+          const plan = await planDiscoveryQueries({
+            persona: { name: 'Lead Finder', target_industries: industryContext ? [industryContext] : [], target_geographies: geoContext ? [geoContext] : [], target_company_sizes: sizeContext ? [sizeContext] : [], custom_search_query: customSearchText?.trim() || null },
+            setting: {}, businessProfile: null, recentCompanies: [], recentQueries: [], count: 6,
+          });
+          if (plan.method === 'ai' && plan.queries.length >= 3) {
+            const main = exaQueries[0];
+            exaQueries = [main, ...plan.queries.map((q) => q.query)].filter((q, i, a) => q && a.indexOf(q) === i).slice(0, 7);
+            plannedByAi = true;
+            console.log('Lead Finder: AI-planned angles:', exaQueries.join(' | '));
+          }
+        } catch (e) { console.warn('Lead Finder: planner failed, using heuristic queries', e); }
       }
       // When only custom search is set, use it as industry context for SerpAPI/Apify and extraction prompts
       if (!hasStructuredFilters && customSearchText?.trim()) {
@@ -1363,16 +1382,17 @@ Deno.serve(async (req) => {
       const exaQueryCount = exaQueries.length;
       const exaNumResults = isPublicSectorSearch
         ? Math.min(50, Math.max(25, Math.ceil(targetLeads / Math.max(1, exaQueryCount))))
-        : Math.min(50, Math.max(15, Math.ceil(targetLeads / 4)));
+        : Math.min(50, Math.max(12, Math.ceil((targetLeads * 1.5) / Math.max(1, exaQueryCount))));
       const exaBody: Record<string, unknown> = {
         query: '',
         numResults: exaNumResults,
         useAutoprompt: true,
-        type: exaSearchType === 'auto' || exaSearchType === 'neural' ? exaSearchType : "keyword",
+        type: exaSearchType === 'keyword' ? 'keyword' : (exaSearchType === 'neural' ? 'neural' : 'auto'),
         contents: { text: { maxCharacters: 2000, includeHtmlTags: false } }
       };
-      // category "company" makes Exa return company homepages instead of listicles/directories
-      if (exaCategory === 'company') exaBody.category = 'company';
+      // category "company" makes Exa return company homepages instead of listicles/directories.
+      // Default for everyone except public-sector searches (councils/NHS live on .gov.uk/.nhs.uk) or an explicit opt-out.
+      if (exaCategory === 'company' || (exaCategory !== 'none' && !isPublicSectorSearch)) exaBody.category = 'company';
       if (Array.isArray(excludeDomains) && excludeDomains.length) {
         exaBody.excludeDomains = [...new Set(excludeDomains.map((d: unknown) => String(d || '').toLowerCase().replace(/^www\./, '')).filter(Boolean))].slice(0, 100);
       }
@@ -1398,11 +1418,25 @@ Deno.serve(async (req) => {
         searchPromises.push(searchWithApify(customContext, geography, industryContext, trace.id, { isPublicSector: isPublicSectorSearch }));
       }
 
-      const searchResults = await Promise.all(searchPromises);
+      // Perplexity company lists (manual searches only; Autopilot runs its own): real companies with websites,
+      // often with a phone/email, which the extraction step then treats like any other search result.
+      const perplexityPromise: Promise<any[]> = autonomousMode ? Promise.resolve([]) : (async () => {
+        const out: any[] = [];
+        const angles = exaQueries.filter((q) => !q.startsWith('site:')).slice(0, 2);
+        for (const q of angles) {
+          const r = await searchWithPerplexity(q, geoContext, industryContext, 20, []);
+          if (r.error) console.warn('Lead Finder: Perplexity', r.error);
+          for (const l of r.leads) out.push({ id: l.website, url: l.website, title: l.name, text: `${l.name}. ${l.description || ''} ${l.geography ? `Location: ${l.geography}.` : ''} ${l.companyPhone ? `Phone: ${l.companyPhone}.` : ''} ${l.generalEmail ? `Email: ${l.generalEmail}.` : ''}`.trim(), source: 'perplexity', phone: l.companyPhone || undefined, email: l.generalEmail || undefined });
+        }
+        return out;
+      })();
+      const searchResults = await Promise.all([...searchPromises, perplexityPromise]);
+      const perplexityResults = searchResults.pop() as any[];
       
       // Process Exa results
       const exaResponses = searchResults[0] as any[];
       let allResults: any[] = [];
+      if (perplexityResults?.length) { allResults.push(...perplexityResults); console.log(`Perplexity added ${perplexityResults.length} companies`); }
       exaResponses.forEach(r => { 
         if (r.results) {
           // Mark Exa results with source
@@ -1613,6 +1647,9 @@ ${JSON.stringify(batch, null, 2)}`;
               // Preserve phone if AI missed it
               if (!lead.companyPhone && originalResult.phone) {
                 lead.companyPhone = originalResult.phone;
+              }
+              if (!lead.generalEmail && originalResult.email) {
+                lead.generalEmail = originalResult.email;
               }
               // Preserve address if AI missed it
               if (!lead.address && originalResult.address) {

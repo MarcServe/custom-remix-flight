@@ -107,9 +107,14 @@ serve(async (req) => {
     if (!apifyResponse.ok) {
       const errorText = await apifyResponse.text();
       console.error("Apify API error:", errorText);
+      const friendly = apifyResponse.status === 401 || apifyResponse.status === 403
+        ? "Google Maps search is unavailable: the Apify token has expired or been revoked. Renew APIFY_API_TOKEN in Supabase secrets (Settings → Edge Functions → Secrets)."
+        : apifyResponse.status === 402 ? "Apify has run out of credit. Top up the Apify account to use Google Maps search."
+        : `Google Maps search failed (Apify ${apifyResponse.status}).`;
+      // 200 with an error field so the app can show the message (a non-2xx hides it behind a generic error)
       return new Response(
-        JSON.stringify({ error: `Apify API error: ${apifyResponse.status}` }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: friendly, leads: [] }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
