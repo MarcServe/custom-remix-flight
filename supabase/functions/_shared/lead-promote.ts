@@ -26,7 +26,8 @@ export async function promoteLeadToCompany(db: any, userId: string, lead: any, s
     if (error || !company) { console.error("[promote] company insert failed", error?.message); return null; }
     companyId = company.id;
     const contacts = Array.isArray(lead.contacts) && lead.contacts.length ? lead.contacts : Array.isArray(d.contacts) ? d.contacts : [];
-    const rows = contacts.filter((c: any) => c?.name || c?.email).slice(0, 10).map((c: any, i: number) => ({ company_id: companyId, name: c.name || c.email, email: c.email || null, title: c.title || null, phone: c.phone || null, linkedin_url: c.linkedinUrl || null, is_primary_contact: i === 0 }));
+    const isEmail = (v: unknown) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || ""));
+    const rows = contacts.filter((c: any) => c?.name || isEmail(c?.email)).map((c: any) => ({ ...c, email: isEmail(c?.email) ? String(c.email).toLowerCase() : null })).slice(0, 10).map((c: any, i: number) => ({ company_id: companyId, name: c.name || c.email, email: c.email || null, title: c.title || null, phone: c.phone || null, linkedin_url: c.linkedinUrl || null, is_primary_contact: i === 0 }));
     if (!rows.length && d.generalEmail) rows.push({ company_id: companyId, name: lead.company_name, email: d.generalEmail, title: "General enquiries", phone: d.companyPhone || null, linkedin_url: null, is_primary_contact: true });
     if (rows.length) await db.from("contacts").insert(rows).then(() => {}, (e: any) => console.error("[promote] contacts", e?.message));
   }

@@ -1601,7 +1601,8 @@ async function createAutoCampaigns(
         .from('contacts')
         .select('id, name, email, title, company_id')
         .in('company_id', companyIds)
-        .not('email', 'is', null);
+        .not('email', 'is', null)
+        .like('email', '%@%');
 
       if (!contacts || contacts.length === 0) {
         console.log(`[super-discovery] No contacts with emails for persona ${personaName}`);
@@ -1677,7 +1678,9 @@ async function createAutoCampaigns(
       );
 
       // Fallback to static template if AI generation fails
-      const subjectTemplate = aiEmail?.subject || `Quick question for {{name}}`;
+      // Campaign-level template is only a fallback shown in the editor; recipients get their own copy below.
+      const subjectTemplate = `Quick question for {{company}}`;
+      void aiEmail;
       const bodyTemplate = aiEmail?.body || `Hi {{name}},\n\nI noticed {{company}} and wanted to reach out about how we can help.\n\n${persona?.value_proposition || 'We help businesses streamline their operations.'}\n\nBest regards`;
 
       // Convert to HTML
@@ -1718,50 +1721,36 @@ async function createAutoCampaigns(
 
       // Create recipients with required fields (email, name, personalized content)
       const recipientInserts: any[] = [];
-      const shouldPersonalize = setting.full_auto_mode && contacts.length <= 20;
-
+      // Personalise every recipient (bounded, parallel): one company's email must never go to 44 others.
+      const PERSONALISE_MAX = 80, CONCURRENCY = 6;
+      const toPersonalise = contacts.slice(0, PERSONALISE_MAX);
+      const personalised = new Map<string, { subject: string; body: string }>();
+      for (let i = 0; i < toPersonalise.length; i += CONCURRENCY) {
+        await Promise.all(toPersonalise.slice(i, i + CONCURRENCY).map(async (contact: any) => {
+          const lead = leadsByCompanyId.get(contact.company_id);
+          if (!lead) return;
+          const e = await generateAIEmailContent(lead, persona, contact, senderProfile, businessProfile).catch(() => null);
+          if (e?.subject && e?.body) personalised.set(contact.id, e);
+        }));
+      }
+      const genericSubject = `Quick question for {{company}}`;
+      const genericBody = `Hi {{name}},\n\nI came across {{company}} and wanted to reach out.\n\n${persona?.value_proposition || businessProfile?.services_description || 'We help organisations like yours.'}\n\n${persona?.call_to_action || 'Would a short call be useful?'}\n\nBest regards,\n${senderProfile?.full_name || ''}`;
       for (const contact of contacts) {
         const person = peopleMap.get(contact.email.toLowerCase());
         if (!person) continue;
-
         const lead = leadsByCompanyId.get(contact.company_id);
         const contactName = contact.name || `${person.first_name || ''} ${person.last_name || ''}`.trim() || contact.email.split('@')[0];
-
-        let personalizedSubject = subjectTemplate;
-        let personalizedBodyHtml = bodyHtmlTemplate;
-        let personalizedBodyText = bodyTemplate;
-
-        if (shouldPersonalize && lead) {
-          const personalizedEmail = await generateAIEmailContent(
-            lead,
-            persona,
-            contact,
-            senderProfile,
-            businessProfile
-          );
-
-          if (personalizedEmail) {
-            personalizedSubject = personalizedEmail.subject;
-            personalizedBodyHtml = `<p>${personalizedEmail.body.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`;
-            personalizedBodyText = personalizedEmail.body;
-          }
-        }
-
-        personalizedSubject = personalizedSubject
-          .replace(/\{\{name\}\}/g, contactName.split(' ')[0])
-          .replace(/\{\{firstName\}\}/g, contactName.split(' ')[0])
-          .replace(/\{\{company\}\}/g, lead?.company_name || 'your company');
-
-        personalizedBodyHtml = personalizedBodyHtml
-          .replace(/\{\{name\}\}/g, contactName)
-          .replace(/\{\{firstName\}\}/g, contactName.split(' ')[0])
-          .replace(/\{\{company\}\}/g, lead?.company_name || 'your company');
-
-        personalizedBodyText = personalizedBodyText
-          .replace(/\{\{name\}\}/g, contactName)
-          .replace(/\{\{firstName\}\}/g, contactName.split(' ')[0])
-          .replace(/\{\{company\}\}/g, lead?.company_name || 'your company');
-
+        const own = personalised.get(contact.id);
+        // Never reuse the first company's email for someone else: fall back to a generic merge-field template.
+        let personalizedSubject = own ? own.subject : genericSubject;
+        let personalizedBodyText = own ? own.body : genericBody;
+        let personalizedBodyHtml = `<p>${personalizedBodyText.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`;
+        const first = contactName.split(' ')[0];
+        const company = lead?.company_name || 'your company';
+        const fill = (t: string) => t.replace(/\{\{name\}\}/g, contactName).replace(/\{\{firstName\}\}/g, first).replace(/\{\{company\}\}/g, company);
+        personalizedSubject = fill(personalizedSubject).replace(contactName, first);
+        personalizedBodyHtml = fill(personalizedBodyHtml);
+        personalizedBodyText = fill(personalizedBodyText);
         recipientInserts.push({
           campaign_id: campaign.id,
           person_id: person.id,
@@ -1774,7 +1763,6 @@ async function createAutoCampaigns(
           email_period: 'new',
         });
       }
-
       if (recipientInserts.length > 0) {
         await supabase
           .from('email_campaign_recipients')
