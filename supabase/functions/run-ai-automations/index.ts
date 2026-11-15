@@ -72,13 +72,14 @@ async function runOne(db: any, a: any, trigger: string) {
   let summary = ""; let status = "success"; let error: string | null = null; let tokensIn = 0, tokensOut = 0;
   try {
     if (!OPENAI_KEY) throw new Error("OPENAI_API_KEY is not configured");
-    const { data: bp } = await db.from("business_profiles").select("company_name, industry, services_description, target_audience, value_proposition, tone_preference, email_sender_name, website").eq("user_id", a.user_id).maybeSingle();
+    const { data: bp } = await db.from("business_profiles").select("company_name, industry, services_description, target_audience, value_proposition, tone_preference, email_sender_name, website, knowledge_base").eq("user_id", a.user_id).maybeSingle();
     const tools = MCP_TOOLS.filter((t) => a.allow_sending || !t.sends).map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
     const nowUk = new Date().toLocaleString("en-GB", { timeZone: a.timezone || "Europe/London", dateStyle: "full", timeStyle: "short" });
     const system =
       `You are LeadBoosters' automation agent, working inside the CRM of ${bp?.company_name || "the user's business"}` +
       `${bp?.industry ? ` (${bp.industry})` : ""}. Now: ${nowUk}. ` +
       `Business: ${bp?.services_description || bp?.value_proposition || "see profile"}. Audience: ${bp?.target_audience || "n/a"}. Tone: ${bp?.tone_preference || "professional"}. Sender: ${bp?.email_sender_name || "the owner"}.\n` +
+      (bp?.knowledge_base ? `\nBUSINESS KNOWLEDGE (use these facts, do not invent others):\n${String(bp.knowledge_base).slice(0, 6000)}\n` : "") +
       `You run unattended on a schedule. Carry out the job below using the tools; look things up before acting; prefer saving work in LeadBoosters (drafts, groups, contacts, deals). ` +
       (a.allow_sending ? `Sending is permitted for this automation when the job says to send.` : `This automation may NOT send anything: create drafts, groups, contacts and deals only (sending tools are unavailable).`) +
       ` Avoid duplicating work from a previous run: check existing campaigns/groups/drafts first. Do at most ${MAX_STEPS} tool calls. ` +

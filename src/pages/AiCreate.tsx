@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -334,7 +334,7 @@ export default function AiCreate() {
         <p className="font-medium mb-1.5">New here? Pick the way that suits you:</p>
         <ul className="space-y-1 text-muted-foreground">
           <li><span className="font-medium text-foreground">✨ Generate for me</span> — easiest. Describe your campaign in a sentence and we write it. No setup.</li>
-          <li><span className="font-medium text-foreground">💬 Use my AI chat</span> — already use ChatGPT or Claude? Copy our prompt in, paste the reply back, done.</li>
+          <li><span className="font-medium text-foreground">💬 Connect my AI</span> — already use ChatGPT or Claude? Connect it once and just tell it what you want; it saves straight into LeadBoosters.</li>
           <li><span className="font-medium text-foreground">🔌 Automate daily</span> — describe a job once; LeadBoosters runs it on a schedule, on our servers, and tells you when it's done.</li>
         </ul>
         <p className="mt-2 text-muted-foreground">Every result is saved as a <span className="font-medium text-foreground">draft</span> — nothing sends until you review it and click send. For campaigns you can attach a saved recipient group so the draft comes out ready to go.</p>
@@ -343,7 +343,7 @@ export default function AiCreate() {
       <Tabs defaultValue={new URLSearchParams(window.location.search).get("tab") === "connect" ? "connect" : "generate"} className="mt-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="generate" className="gap-1.5"><Wand2 className="h-4 w-4" /> Generate for me</TabsTrigger>
-          <TabsTrigger value="chat" className="gap-1.5"><MessageSquareText className="h-4 w-4" /> Use my AI chat</TabsTrigger>
+          <TabsTrigger value="chat" className="gap-1.5"><MessageSquareText className="h-4 w-4" /> Connect my AI</TabsTrigger>
           <TabsTrigger value="connect" className="gap-1.5"><Plug className="h-4 w-4" /> Automate daily</TabsTrigger>
         </TabsList>
 
@@ -378,6 +378,21 @@ export default function AiCreate() {
 
         {/* 2 — Bring your own AI chat */}
         <TabsContent value="chat">
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle className="text-lg">Connect Claude or ChatGPT to LeadBoosters</CardTitle>
+              <CardDescription>
+                No copying and pasting. Once connected, your assistant can read your business profile and contacts, build groups, write and save campaigns, newsletters and texts as drafts, and report on results, all by instruction.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-center gap-2">
+              <Button asChild><Link to="/connect-ai">Set up the connection</Link></Button>
+              <span className="text-xs text-muted-foreground">Works with Claude.ai, Claude Desktop, Claude Code, ChatGPT and Cursor. Takes about a minute.</span>
+            </CardContent>
+          </Card>
+          <details className="rounded-lg border p-3 text-sm">
+            <summary className="cursor-pointer font-medium">Can't connect? Copy a prompt and paste the reply back instead</summary>
+            <div className="mt-3">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Use ChatGPT, Claude or any AI chat</CardTitle>
@@ -415,6 +430,8 @@ export default function AiCreate() {
               {body && ResultEditor}
             </CardContent>
           </Card>
+                    </div>
+          </details>
         </TabsContent>
 
         {/* 3 — Automate daily via Claude/Codex */}

@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
       const apiKey = (Deno.env.get("OPENAI_API_KEY") || "").trim();
       if (!apiKey) return json({ success: false, error: "AI drafting is not configured (OPENAI_API_KEY missing)." }, 400);
       const [{ data: bp }, { data: msgs }] = await Promise.all([
-        db.from("business_profiles").select("company_name, services_description, value_proposition, tone_preference, email_sender_name, phone, website").eq("user_id", user.id).maybeSingle(),
+        db.from("business_profiles").select("company_name, services_description, value_proposition, tone_preference, email_sender_name, phone, website, knowledge_base").eq("user_id", user.id).maybeSingle(),
         db.from("sms_messages").select("direction, body, created_at, contact_name").eq("user_id", user.id).eq("counterparty", to).order("created_at", { ascending: false }).limit(12),
       ]);
       const thread = (msgs || []).reverse();
@@ -33,6 +33,7 @@ Deno.serve(async (req) => {
       const transcript = thread.map((m: any) => `${m.direction === "inbound" ? "Customer" : "Us"}: ${m.body}`).join("\n");
       const sys = `You write short SMS replies for ${bp?.company_name || "a small business"}${bp?.email_sender_name ? ` (sent by ${bp.email_sender_name})` : ""}. ` +
         `What we do: ${bp?.services_description || bp?.value_proposition || "see conversation"}. Tone: ${bp?.tone_preference || "friendly, professional"}. ` +
+        (bp?.knowledge_base ? `Business facts: ${String(bp.knowledge_base).slice(0, 3000)} ` : "") +
         `Rules: one SMS where possible (under 160 characters, never over 300), plain text, no emojis unless the customer used them, no links unless we already shared one, ` +
         `answer their actual question, propose one clear next step (e.g. a quick call or a link), sign off with the sender's first name if known. Output only the message text.`;
       const userMsg = `Conversation with ${name || to}:\n${transcript || "(no messages yet)"}\n\n${body.instruction ? `Guidance from me: ${String(body.instruction).slice(0, 500)}` : "Write the next reply from us."}`;

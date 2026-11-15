@@ -143,6 +143,7 @@ export const CRM_ACTIONS = [
   "list_sms_conversations", "get_sms_conversation", "reply_sms", "list_sms_opt_outs",
   "list_notifications", "mark_notifications_read",
   "list_automations", "create_automation", "update_automation", "delete_automation", "run_automation", "list_automation_runs", "reschedule_automations",
+  "learn_business", "update_business_profile",
 ];
 
 async function ownSequence(db: any, userId: string, body: any) {
@@ -175,7 +176,7 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
       const { data } = await db.from("business_profiles").select(
         "company_name, industry, website, phone, services_description, target_audience, value_proposition, tone_preference, " +
         "email_brand_color, email_logo_url, email_header_name, email_footer_text, email_footer_logo_url, email_signature, " +
-        "email_sender_name, email_sender_title, email_sender_email, email_sender_phone, email_template_style, email_provider",
+        "email_sender_name, email_sender_title, email_sender_email, email_sender_phone, email_template_style, email_provider, knowledge_base, website_learned_at, learned_from_url",
       ).eq("user_id", userId).maybeSingle();
       return json({ profile: data || null, note: data ? undefined : "No business profile yet — fill it in under Business Profile in the app." });
     }
@@ -1020,6 +1021,30 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
     case "reschedule_automations": {
       await callFunction("run-ai-automations", { reschedule_only: true }).catch(() => null);
       return json({ ok: true });
+    }
+
+    // ───────────────────────── business knowledge ─────────────────────────
+    case "learn_business": {
+      const url = str(body.url); const text = str(body.text);
+      if (!url && !text) return json({ error: "url (website) or text is required" }, 400);
+      const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/learn-business`, {
+        method: "POST", headers: { Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`, "x-user-id": userId, "Content-Type": "application/json" },
+        body: JSON.stringify({ url, text, apply: body.apply === true, overwrite: body.overwrite === true }),
+      });
+      const t = await r.text(); let data: any; try { data = JSON.parse(t); } catch { data = { raw: t }; }
+      if (!r.ok) return json({ error: data?.error || `HTTP ${r.status}` }, r.status === 401 ? 500 : r.status);
+      return json(data);
+    }
+    case "update_business_profile": {
+      const allowed = ["company_name", "industry", "website", "phone", "services_description", "target_audience", "value_proposition", "tone_preference", "email_signature", "email_sender_name", "email_sender_title", "email_sender_email", "email_sender_phone", "email_brand_color", "knowledge_base"];
+      const fields: Record<string, unknown> = {};
+      for (const k of allowed) if (body[k] !== undefined) fields[k] = body[k] === null ? null : String(body[k]);
+      if (!Object.keys(fields).length) return json({ error: `Nothing to update. Fields: ${allowed.join(", ")}` }, 400);
+      fields.updated_at = new Date().toISOString();
+      const { data: cur } = await db.from("business_profiles").select("id").eq("user_id", userId).maybeSingle();
+      const { error } = cur ? await db.from("business_profiles").update(fields).eq("user_id", userId) : await db.from("business_profiles").insert({ ...fields, user_id: userId });
+      if (error) return json({ error: error.message }, 500);
+      return json({ updated: Object.keys(fields).filter((k) => k !== "updated_at") });
     }
 
     default:

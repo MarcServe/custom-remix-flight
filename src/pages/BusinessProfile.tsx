@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Building2, Save } from "lucide-react";
+import { LearnBusinessCard, type LearnedProfile } from "@/components/business/LearnBusinessCard";
 
 export default function BusinessProfile() {
   const { toast } = useToast();
@@ -21,7 +22,37 @@ export default function BusinessProfile() {
     value_proposition: "",
     tone_preference: "professional",
     email_provider: "resend" as "resend" | "sendgrid" | "gmail_direct",
+    website: "",
+    phone: "",
+    knowledge_base: "",
   });
+  const [learnedAt, setLearnedAt] = useState<string | null>(null);
+
+  const applyLearned = (l: LearnedProfile) => {
+    setProfile((prev) => ({
+      ...prev,
+      company_name: l.company_name || prev.company_name,
+      industry: l.industry || prev.industry,
+      services_description: l.services_description || prev.services_description,
+      target_audience: l.target_audience || prev.target_audience,
+      value_proposition: l.value_proposition || prev.value_proposition,
+      tone_preference: l.tone_preference || prev.tone_preference,
+      website: l.website || prev.website,
+      phone: l.phone || prev.phone,
+      knowledge_base: l.knowledge_base || prev.knowledge_base,
+    }));
+    // Branding bits live on the Email Branding page; store them straight away if found.
+    if (l.email_brand_color || l.email_logo_url || l.email_signature) {
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (!user) return;
+        const patch: Record<string, string> = {};
+        if (l.email_brand_color) patch.email_brand_color = l.email_brand_color;
+        if (l.email_logo_url) patch.email_logo_url = l.email_logo_url;
+        if (l.email_signature) patch.email_signature = l.email_signature;
+        supabase.from("business_profiles").upsert({ user_id: user.id, ...patch } as any, { onConflict: "user_id" }).then(() => undefined);
+      });
+    }
+  };
 
   useEffect(() => {
     loadProfile();
@@ -51,7 +82,11 @@ export default function BusinessProfile() {
           value_proposition: data.value_proposition || "",
           tone_preference: data.tone_preference || "professional",
           email_provider: (data.email_provider || 'resend') as "resend" | "sendgrid" | "gmail_direct",
+          website: (data as any).website || "",
+          phone: (data as any).phone || "",
+          knowledge_base: (data as any).knowledge_base || "",
         });
+        setLearnedAt((data as any).website_learned_at || null);
       }
     } catch (error) {
       console.error("Error loading profile:", error);
@@ -116,15 +151,28 @@ export default function BusinessProfile() {
           <div>
             <h1 className="text-2xl font-bold">Business Profile</h1>
             <p className="text-sm text-muted-foreground">
-              Help AI personalize emails by describing your business
+              What the AI knows about your business when it writes emails, texts, newsletters and automations
             </p>
           </div>
         </div>
       </div>
 
+      <div className="mb-6">
+        <LearnBusinessCard initialUrl={profile.website} onApply={applyLearned} />
+        {learnedAt && <p className="mt-2 text-xs text-muted-foreground">Last learned from your website {new Date(learnedAt).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "short" })}.</p>}
+      </div>
+
       <Card className="p-6">
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="website">Website</Label>
+              <Input id="website" value={profile.website} onChange={(e) => setProfile({ ...profile, website: e.target.value })} placeholder="www.yourbusiness.co.uk" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone</Label>
+              <Input id="phone" value={profile.phone} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} placeholder="+44…" />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="company_name">Company Name</Label>
               <Input
@@ -200,6 +248,18 @@ export default function BusinessProfile() {
                 <SelectItem value="technical">Technical</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="knowledge_base">Knowledge base</Label>
+            <Textarea
+              id="knowledge_base"
+              value={profile.knowledge_base}
+              onChange={(e) => setProfile({ ...profile, knowledge_base: e.target.value })}
+              className="min-h-[160px] text-sm"
+              placeholder="Facts the AI should use: your offers and prices, who they're for, how it works, where you operate, what makes you different, common questions. Filled automatically from your website; add your own notes under a line that says MY NOTES."
+            />
+            <p className="text-xs text-muted-foreground">Used as grounding for every AI-written message so it says true things about your business. Re-learning from your website refreshes the top part and keeps anything under “MY NOTES”.</p>
           </div>
 
           <div className="space-y-2">
