@@ -1,43 +1,47 @@
 # LeadBoosters MCP server
 
-Lets Claude (Claude Code, Claude Desktop, Codex, Cursor, or your own scripts) **work
-your LeadBoosters CRM directly**: look up and save contacts and companies, build
-recipient groups, write and send HTML email campaigns and SMS campaigns, run
-newsletters, and manage deals — all by instruction, with no copy-and-paste.
+Lets Claude (Claude.ai, Claude Desktop, Claude Code), ChatGPT, Cursor, Codex, or your own
+scripts **work your LeadBoosters CRM directly**: look up and save contacts and companies,
+build recipient groups, write and send HTML email campaigns and SMS campaigns, run
+newsletters and follow-up sequences, and manage deals — all by instruction.
 
 Sending goes through the same pipeline as the app, so dedupe, sender verification,
 monthly limits, branding and the Day 1/3/5 no-reply follow-ups all still apply.
 
-## 1. Get an API key
-In LeadBoosters: **Settings → API Keys → New API key**. Copy it (shown once). It looks
-like `lb_live_…`. Everything the key does is scoped to your own account.
+## Hosted server (recommended)
 
-## 2. Install
-```bash
-cd mcp-server
-npm install
+The server is hosted; there is nothing to run. Get an API key in LeadBoosters
+(**Settings → API Keys → New API key**, starts with `lb_live_`) and use this URL:
+
+```
+https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/mcp?key=lb_live_YOUR_KEY
 ```
 
-## 3. Add to Claude
-**Claude Code** (one line):
+- **Claude.ai** (Pro/Max/Team/Enterprise): Settings → Connectors → Add custom connector → paste the URL.
+- **Claude Code**: `claude mcp add --transport http leadboosters "<url>"`
+- **ChatGPT** (Developer mode): Settings → Connectors → Create → paste the URL, auth "None".
+- **Cursor / Windsurf / Codex**: add `{ "url": "<url>" }` under `mcpServers`.
+
+Full step-by-step for each app: [docs/connect-ai-assistants.md](../docs/connect-ai-assistants.md).
+
+## Local stdio server (this folder)
+
+`index.mjs` is a thin stdio proxy to the hosted server, for clients that only speak stdio
+(e.g. Claude Desktop via config file without `mcp-remote`).
+
 ```bash
+cd mcp-server && npm install
 claude mcp add leadboosters --env LEADBOOSTERS_API_KEY=lb_live_your_key -- node /ABSOLUTE/PATH/TO/mcp-server/index.mjs
 ```
 
-**Claude Desktop** — edit `claude_desktop_config.json`:
+Claude Desktop `claude_desktop_config.json`:
 ```json
-{
-  "mcpServers": {
-    "leadboosters": {
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/mcp-server/index.mjs"],
-      "env": { "LEADBOOSTERS_API_KEY": "lb_live_your_key_here" }
-    }
-  }
-}
+{ "mcpServers": { "leadboosters": { "command": "node", "args": ["/ABSOLUTE/PATH/TO/mcp-server/index.mjs"], "env": { "LEADBOOSTERS_API_KEY": "lb_live_your_key_here" } } } }
 ```
 
-Restart Claude. You'll see the `leadboosters` tools available.
+The tool catalogue lives in `supabase/functions/_shared/mcp-tools.ts`; the hosted server is
+`supabase/functions/mcp`. Add a tool there (plus its `action` in `api-campaigns/crm.ts`) and
+every client picks it up — no npm release needed.
 
 ## 4. Tools
 

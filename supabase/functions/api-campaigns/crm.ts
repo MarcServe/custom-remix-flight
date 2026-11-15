@@ -132,7 +132,7 @@ const isPhoneCampaign = (c: any) => (Array.isArray(c?.tags) && c.tags.includes("
 export const CRM_ACTIONS = [
   "get_business_profile", "list_senders",
   "search_contacts", "get_contact", "upsert_contact", "update_contact",
-  "search_companies", "upsert_company", "update_company",
+  "search_companies", "get_company", "upsert_company", "update_company",
   "get_group", "add_to_group", "remove_from_group", "delete_group",
   "get_campaign", "update_campaign", "send_campaign", "unschedule_campaign", "create_phone_campaign",
   "list_newsletters", "send_newsletter", "list_subscribers", "add_subscribers",
@@ -261,6 +261,18 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
       const { data, error } = await sel;
       if (error) return json({ error: error.message }, 500);
       return json({ companies: data || [], count: (data || []).length });
+    }
+    case "get_company": {
+      const id = str(body.company_id || body.id);
+      const name = str(body.name);
+      if (!id && !name) return json({ error: "company_id or name required" }, 400);
+      let q = db.from("companies").select("id, name, website, industry, company_phone, general_email, description, headquarters, size, status, temperature, tags, linkedin_url, created_at").eq("user_id", userId);
+      q = id ? q.eq("id", id) : q.ilike("name", name);
+      const { data: company } = await q.limit(1).maybeSingle();
+      if (!company) return json({ error: "Company not found" }, 404);
+      const { data: people } = await db.from("people").select("id, first_name, last_name, email, phone, title").eq("company_id", company.id).limit(50);
+      const { data: deals } = await db.from("deals").select("id, title, stage, amount").eq("company_id", company.id).limit(20);
+      return json({ company, contacts: people || [], deals: deals || [] });
     }
     case "upsert_company": {
       const name = str(body.name);

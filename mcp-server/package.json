@@ -1,19 +1,41 @@
 {
   "name": "leadboosters-mcp",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "MCP server giving Claude, Codex and other MCP clients full working access to LeadBoosters: contacts, companies, groups, email + SMS campaigns, newsletters, deals.",
   "type": "module",
-  "bin": { "leadboosters-mcp": "index.mjs" },
-  "files": ["index.mjs", "README.md"],
-  "scripts": { "start": "node index.mjs" },
-  "engines": { "node": ">=18" },
-  "keywords": ["mcp", "leadboosters", "claude", "codex", "email", "campaigns", "crm"],
+  "bin": {
+    "leadboosters-mcp": "index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "leadboosters",
+    "claude",
+    "codex",
+    "email",
+    "campaigns",
+    "crm"
+  ],
   "homepage": "https://github.com/MarcServe/custom-remix-flight/tree/roundup/mcp-server#readme",
-  "repository": { "type": "git", "url": "git+https://github.com/MarcServe/custom-remix-flight.git", "directory": "mcp-server" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MarcServe/custom-remix-flight.git",
+    "directory": "mcp-server"
+  },
   "license": "MIT",
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
-    "zod": "^3.23.8"
+    "@modelcontextprotocol/sdk": "^1.0.4"
   }
 }
