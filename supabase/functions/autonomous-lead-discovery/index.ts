@@ -1685,21 +1685,22 @@ async function createAutoCampaigns(
 
       // Create draft campaign
       const campaignName = `Autopilot · ${personaName} · ${new Date().toLocaleDateString('en-GB', { timeZone: setting.timezone || 'Europe/London' })}`;
-      // Always a DRAFT: Autopilot never emails new strangers unreviewed. (email_campaigns has no
-      // `metadata` column — the old insert failed silently on every run, so no campaign was ever made.)
+      // Full-auto mode schedules the send at campaign_send_time (user's timezone); otherwise a draft.
+      // (email_campaigns has no `metadata` column — the old insert failed silently on every run.)
+      const autoSendAt = setting.full_auto_mode ? calculateCampaignSendTime(setting) : null;
       const { data: campaign, error: campaignError } = await supabase
         .from('email_campaigns')
         .insert({
           user_id: setting.user_id,
           name: campaignName,
-          status: 'draft',
-          scheduled_at: null,
+          status: autoSendAt ? 'scheduled' : 'draft',
+          scheduled_at: autoSendAt,
           subject_template: subjectTemplate,
           body_text_template: bodyTemplate,
           body_html_template: bodyHtmlTemplate,
           total_recipients: contacts.length,
           tags: ['autopilot', ...(personaName ? [personaName] : [])],
-          merge_vars: { ai_generated: true, persona_id: personaId, discovery_run_id: discoveryRunId, leads_count: leads.length, suggested_send_at: setting.full_auto_mode ? calculateCampaignSendTime(setting) : null },
+          merge_vars: { ai_generated: true, persona_id: personaId, discovery_run_id: discoveryRunId, leads_count: leads.length },
         })
         .select('id, scheduled_at')
         .single();
@@ -1708,8 +1709,10 @@ async function createAutoCampaigns(
         continue;
       }
       await supabase.from('notifications').insert({
-        user_id: setting.user_id, type: 'autopilot_campaign_draft', title: `Autopilot drafted "${campaignName}"`,
-        body: `${contacts.length} new ${personaName} leads with emails are ready in a draft campaign. Review the copy and send it from Campaigns.`,
+        user_id: setting.user_id, type: 'autopilot_campaign_draft', title: autoSendAt ? `Autopilot scheduled "${campaignName}"` : `Autopilot drafted "${campaignName}"`,
+        body: autoSendAt
+          ? `${contacts.length} new ${personaName} leads will be emailed at ${new Date(autoSendAt).toLocaleString('en-GB', { timeZone: setting.timezone || 'Europe/London', dateStyle: 'short', timeStyle: 'short' })}. Open it to review, edit or unschedule before then.`
+          : `${contacts.length} new ${personaName} leads with emails are ready in a draft campaign. Review the copy and send it from Campaigns.`,
         link: `/campaigns?open=${campaign.id}`, entity_type: 'email_campaign', entity_id: campaign.id,
       }).then(() => {}, (e: any) => console.error('[super-discovery] notification failed', e?.message));
 
@@ -1855,18 +1858,33 @@ async function createAutoCampaigns(
  * Calculate campaign send time based on settings
  */
 function calculateCampaignSendTime(setting: any): string {
-  const sendTime = setting.campaign_send_time || '10:00';
-  const [hours, minutes] = sendTime.split(':').map(Number);
-  
-  const sendDate = new Date();
-  sendDate.setUTCHours(hours, minutes, 0, 0);
-  
-  // If time has passed today, schedule for tomorrow
-  if (sendDate < new Date()) {
-    sendDate.setDate(sendDate.getDate() + 1);
+  // campaign_send_time is wall-clock time in the user's timezone (default Europe/London), not UTC.
+  const [hours, minutes] = String(setting.campaign_send_time || '10:00').split(':').map((n: string) => Number(n) || 0);
+  const tz = setting.timezone || 'Europe/London';
+  const localParts = (d: Date) => {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(d).map((x) => [x.type, x.value]));
+    return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour, mi: +p.minute };
+  };
+  const toUtc = (y: number, mo: number, d: number): Date => {
+    // Find the UTC instant at which local time in tz is y-mo-d hours:minutes
+    let guess = new Date(Date.UTC(y, mo - 1, d, hours, minutes));
+    for (let i = 0; i < 3; i++) {
+      const lp = localParts(guess);
+      const diffMin = (lp.h * 60 + lp.mi) - (hours * 60 + minutes) + ((lp.d - d) * 1440);
+      if (diffMin === 0) break;
+      guess = new Date(guess.getTime() - diffMin * 60_000);
+    }
+    return guess;
+  };
+  const now = new Date();
+  const lp = localParts(now);
+  let send = toUtc(lp.y, lp.mo, lp.d);
+  if (send.getTime() <= now.getTime() + 5 * 60_000) {
+    const tomorrow = new Date(send.getTime() + 36 * 3600_000);
+    const tp = localParts(tomorrow);
+    send = toUtc(tp.y, tp.mo, tp.d);
   }
-  
-  return sendDate.toISOString();
+  return send.toISOString();
 }
 
 /**
