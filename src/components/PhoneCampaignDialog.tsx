@@ -27,6 +27,8 @@ interface PhoneCampaignDialogProps {
   selectedCompanyIds?: string[];
   /** Pre-select phone recipient groups when opening (e.g. from Recipient Groups page). */
   initialGroupIds?: string[];
+  /** Open an existing phone campaign (draft or partly sent) for editing. */
+  draftCampaignId?: string | null;
 }
 
 interface ManualPhoneNumber {
@@ -36,7 +38,7 @@ interface ManualPhoneNumber {
   message?: string; // optional per-recipient SMS text (from CSV), overrides the campaign message
 }
 
-export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [], initialGroupIds = [] }: PhoneCampaignDialogProps) {
+export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [], initialGroupIds = [], draftCampaignId = null }: PhoneCampaignDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [campaignName, setCampaignName] = useState('');
@@ -56,6 +58,93 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [saveAsGroupName, setSaveAsGroupName] = useState('');
   const [isSavingGroup, setIsSavingGroup] = useState(false);
+  const [savingMode, setSavingMode] = useState<'draft' | 'send' | null>(null);
+  // Editing an existing campaign: its id, and phones already texted (kept, never re-sent).
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loadingDraft, setLoadingDraft] = useState(false);
+  const [alreadyProcessed, setAlreadyProcessed] = useState<{ count: number }>({ count: 0 });
+  const [processedKeys, setProcessedKeys] = useState<Set<string>>(new Set());
+
+  const resetForm = () => {
+    setCampaignName('');
+    setMessage('');
+    setSelectedCompanies(new Set());
+    setManualPhones([]);
+    setGroupMemberPhones([]);
+    setSelectedGroupIds(new Set());
+    setNewPhoneNumber('');
+    setNewPhoneName('');
+    setActiveTab('groups');
+    setEditingId(null);
+    setProcessedKeys(new Set());
+    setAlreadyProcessed({ count: 0 });
+  };
+
+  // Load an existing phone campaign into the form.
+  useEffect(() => {
+    if (!open || !draftCampaignId) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingDraft(true);
+      try {
+        const { data: camp, error } = await supabase
+          .from('email_campaigns')
+          .select('id, name, body_text_template, tags')
+          .eq('id', draftCampaignId)
+          .single();
+        if (error) throw error;
+        const rows: any[] = [];
+        for (let page = 0; ; page++) {
+          const { data, error: rErr } = await supabase
+            .from('email_campaign_recipients')
+            .select('email, name, status, personalized_body_text')
+            .eq('campaign_id', draftCampaignId)
+            .range(page * 1000, page * 1000 + 999);
+          if (rErr) throw rErr;
+          rows.push(...(data || []));
+          if (!data || data.length < 1000) break;
+        }
+        if (cancelled) return;
+        const perRecipientOnly = ((camp.tags as string[] | null) || []).includes('per_recipient_messages');
+        const template = perRecipientOnly ? '' : (camp.body_text_template || '');
+        const done = new Set<string>();
+        const phones: ManualPhoneNumber[] = [];
+        for (const r of rows) {
+          const phone = String(r.email || '').replace(/^phone:/, '').trim();
+          const key = phone.replace(/\D/g, '');
+          if (!key) continue;
+          if (r.status !== 'pending') { done.add(key); continue; }
+          const name = ['Manual Entry', 'Contact', 'Group member'].includes(r.name) ? undefined : r.name || undefined;
+          const body = r.personalized_body_text || '';
+          // Only keep a per-recipient message if it differs from the campaign message.
+          const own = body && body !== fillSmsTags(template, { name, phone }) ? body : undefined;
+          phones.push({ id: `draft_${key}`, phone, name, message: own });
+        }
+        setEditingId(camp.id);
+        setCampaignName(String(camp.name || '').replace(/^📞\s*/, ''));
+        setMessage(template);
+        setManualPhones(phones);
+        setSelectedCompanies(new Set());
+        setGroupMemberPhones([]);
+        setSelectedGroupIds(new Set());
+        setProcessedKeys(done);
+        setAlreadyProcessed({ count: done.size });
+        setActiveTab('manual');
+      } catch (e: any) {
+        toast({ title: 'Could not open campaign', description: e?.message || 'Failed to load', variant: 'destructive' });
+      } finally {
+        if (!cancelled) setLoadingDraft(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, draftCampaignId]);
+
+  // Opening a fresh "new campaign" after editing one must not carry the old form over.
+  useEffect(() => {
+    if (open && !draftCampaignId && editingId) resetForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, draftCampaignId]);
 
   // Apply preselected groups when dialog opens
   useEffect(() => {
@@ -434,132 +523,112 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
     }
   };
 
-  const handleCreateCampaign = async () => {
-    if (!campaignName.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a campaign name',
-        variant: 'destructive',
-      });
+  const handleSave = async (mode: 'draft' | 'send') => {
+    const name = campaignName.trim() || (mode === 'draft' ? `Phone campaign ${new Date().toLocaleDateString('en-GB')}` : '');
+    if (!name) {
+      toast({ title: 'Error', description: 'Please enter a campaign name', variant: 'destructive' });
       return;
     }
-
-    if (needsCampaignMessage && !message.trim()) {
-      toast({
-        title: 'Message needed',
-        description: manualPhones.some((p) => p.message)
-          ? 'Some recipients have no message of their own. Enter a message to send them.'
-          : 'Please enter a message',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (totalRecipients === 0) {
-      toast({
-        title: 'Error',
-        description: 'Please select at least one company or add a manual phone number',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsCreating(true);
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error('User not authenticated');
+    if (mode === 'send') {
+      if (needsCampaignMessage && !message.trim()) {
+        toast({
+          title: 'Message needed',
+          description: manualPhones.some((p) => p.message)
+            ? 'Some recipients have no message of their own. Enter a message to send them.'
+            : 'Please enter a message',
+          variant: 'destructive',
+        });
+        return;
       }
-
-      // Check if phone service is connected
+      if (totalRecipients === 0) {
+        toast({ title: 'Error', description: 'Please add at least one phone number', variant: 'destructive' });
+        return;
+      }
       if (!activePhoneService) {
         toast({
           title: 'Phone Service Required',
-          description: 'Please connect a phone service (Twilio, etc.) before creating a campaign',
+          description: 'Please connect a phone service (Twilio, etc.) before sending',
           variant: 'destructive',
         });
         setPhoneServiceDialogOpen(true);
-        setIsCreating(false);
         return;
       }
+    }
 
+    setIsCreating(true);
+    setSavingMode(mode);
+    let createdId: string | null = null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const perRecipientOnly = !message.trim() && manualPhones.some((p) => p.message);
       const campaignTemplate = message.trim() || manualPhones.find((p) => p.message)?.message || '';
 
-      // Create phone campaign using email_campaigns structure
-      // Store phone message in body_text_template and mark in subject
-      const { data: campaign, error: campaignError } = await supabase
-        .from('email_campaigns')
-        .insert({
-          user_id: user.id,
-          name: `📞 ${campaignName}`, // Prefix with phone emoji to identify
-          subject_template: `Phone Campaign: ${campaignName}`,
-          body_text_template: campaignTemplate,
-          body_html_template: `<p>${campaignTemplate.replace(/\n/g, '<br>')}</p>`,
-          status: 'draft',
-          total_recipients: totalRecipients,
-          sent_count: 0,
-          failed_count: 0,
-          opened_count: 0,
-          sender_connection_id: activePhoneService.id, // Link to phone service
-          tags: ['phone_sms'],
-        })
-        .select('id')
-        .single();
-
-      if (campaignError) throw campaignError;
-
-      // Dedupe phones across companies / manual / groups
-      const seen = new Set<string>();
+      // Build recipients, deduped, skipping anyone this campaign already texted.
+      const seen = new Set<string>(processedKeys);
       const recipients: any[] = [];
-      const pushPhone = (phone: string, name: string, perMsg?: string) => {
+      const pushPhone = (phone: string, rName: string, perMsg?: string) => {
         const key = phone.replace(/\D/g, '');
         if (key.length < 7 || seen.has(key)) return;
         seen.add(key);
         // Fill {name}-style tags now so what's stored is exactly what gets sent.
-        const body = fillSmsTags(perMsg || message, { name, phone });
+        const body = fillSmsTags(perMsg || message, { name: rName, phone });
         recipients.push({
-          campaign_id: campaign.id,
           email: `phone:${phone}`,
-          name: name || 'Contact',
+          name: rName || 'Contact',
           status: 'pending',
-          personalized_subject: `Phone Campaign: ${campaignName}`,
+          personalized_subject: `Phone Campaign: ${name}`,
           personalized_body_text: body,
           personalized_body_html: `<p>${body.replace(/\n/g, '<br>')}</p>`,
         });
       };
-
       for (const company of selectedCompaniesData) {
         if (company.company_phone) pushPhone(company.company_phone, company.name);
       }
-      for (const phone of manualPhones) {
-        pushPhone(phone.phone, phone.name || 'Manual Entry', phone.message);
-      }
-      for (const phone of groupMemberPhones) {
-        pushPhone(phone.phone, phone.name || 'Group member');
+      for (const phone of manualPhones) pushPhone(phone.phone, phone.name || 'Manual Entry', phone.message);
+      for (const phone of groupMemberPhones) pushPhone(phone.phone, phone.name || 'Group member');
+
+      if (mode === 'send' && recipients.length === 0) throw new Error('No valid phone numbers to send to');
+
+      const campaignFields = {
+        name: `📞 ${name}`,
+        subject_template: `Phone Campaign: ${name}`,
+        body_text_template: campaignTemplate,
+        body_html_template: `<p>${campaignTemplate.replace(/\n/g, '<br>')}</p>`,
+        total_recipients: recipients.length + processedKeys.size,
+        tags: perRecipientOnly ? ['phone_sms', 'per_recipient_messages'] : ['phone_sms'],
+        ...(activePhoneService ? { sender_connection_id: activePhoneService.id } : {}),
+      };
+
+      let campaignId = editingId;
+      if (campaignId) {
+        const { error } = await supabase.from('email_campaigns').update(campaignFields).eq('id', campaignId);
+        if (error) throw error;
+        // Replace only the not-yet-sent recipients.
+        const { error: delErr } = await supabase
+          .from('email_campaign_recipients')
+          .delete()
+          .eq('campaign_id', campaignId)
+          .eq('status', 'pending');
+        if (delErr) throw delErr;
+      } else {
+        const { data: campaign, error } = await supabase
+          .from('email_campaigns')
+          .insert({ ...campaignFields, user_id: user.id, status: 'draft', sent_count: 0, failed_count: 0, opened_count: 0 })
+          .select('id')
+          .single();
+        if (error) throw error;
+        campaignId = campaign.id;
+        createdId = campaign.id;
       }
 
-      if (recipients.length === 0) {
-        await supabase.from('email_campaigns').delete().eq('id', campaign.id);
-        throw new Error('No valid phone numbers to add');
+      for (let i = 0; i < recipients.length; i += 500) {
+        const chunk = recipients.slice(i, i + 500).map((r) => ({ ...r, campaign_id: campaignId }));
+        const { error } = await supabase.from('email_campaign_recipients').insert(chunk);
+        if (error) throw error;
       }
-
-      // Update total if dedupe reduced count
-      if (recipients.length !== totalRecipients) {
-        await supabase.from('email_campaigns').update({ total_recipients: recipients.length }).eq('id', campaign.id);
-      }
-
-      const { error: recipientsError } = await supabase
-        .from('email_campaign_recipients')
-        .insert(recipients);
-
-      if (recipientsError) {
-        // A campaign with no contacts is useless and confusing: remove it and report the real error.
-        await supabase.from('email_campaigns').delete().eq('id', campaign.id);
-        throw recipientsError;
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+      createdId = null; // saved successfully; nothing to roll back
 
       // UK landlines (01/02/03) cannot receive SMS; say so now rather than at send time.
       const landlines = recipients.filter((r) => {
@@ -567,33 +636,41 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
         const digits = d.replace(/\D/g, '');
         return /^0[123]/.test(digits) || /^(\+?44|0044)[123]/.test(d.replace(/[\s()-]/g, ''));
       }).length;
+      const landlineNote = landlines > 0 ? ` ${landlines} look like UK landlines, which cannot receive SMS and will be skipped.` : '';
 
-      toast({
-        title: 'Success',
-        description: `Phone campaign "${campaignName}" created with ${recipients.length} recipients. Start it from Campaigns to send SMS.` +
-          (landlines > 0 ? ` Note: ${landlines} look like UK landlines, which cannot receive SMS and will be skipped.` : ''),
-      });
+      if (mode === 'send') {
+        const { error: sendErr } = await supabase.functions.invoke('send-bulk-sms', { body: { campaignId } });
+        if (sendErr) {
+          toast({
+            title: 'Saved, but sending did not start',
+            description: `${sendErr.message || 'Send failed'}. The campaign is saved; start it from Campaigns.`,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Sending started',
+            description: `"${name}" is sending to ${recipients.length} number${recipients.length === 1 ? '' : 's'}. Track progress in Campaigns.${landlineNote}`,
+          });
+        }
+      } else {
+        toast({
+          title: 'Draft saved',
+          description: `"${name}" saved with ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}. Open it from Campaigns to edit or send.${landlineNote}`,
+        });
+      }
 
-      // Reset form
-      setCampaignName('');
-      setMessage('');
-      setSelectedCompanies(new Set());
-      setManualPhones([]);
-      setGroupMemberPhones([]);
-      setSelectedGroupIds(new Set());
-      setNewPhoneNumber('');
-      setNewPhoneName('');
-      setActiveTab('groups');
+      queryClient.invalidateQueries({ queryKey: ['email-campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      resetForm();
       onOpenChange(false);
     } catch (error: any) {
-      console.error('Error creating phone campaign:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to create phone campaign',
-        variant: 'destructive',
-      });
+      // Don't leave an empty new campaign behind if adding its recipients failed.
+      if (createdId) await supabase.from('email_campaigns').delete().eq('id', createdId);
+      console.error('Error saving phone campaign:', error);
+      toast({ title: 'Error', description: error.message || 'Failed to save phone campaign', variant: 'destructive' });
     } finally {
       setIsCreating(false);
+      setSavingMode(null);
     }
   };
 
@@ -603,11 +680,18 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Phone className="h-5 w-5" />
-            Create Phone Campaign
+            {editingId ? 'Edit Phone Campaign' : 'Create Phone Campaign'}
           </DialogTitle>
           <DialogDescription>
-            Create a phone/SMS campaign for companies with phone numbers
+            {editingId
+              ? `Change the message or recipients, then save or send.${alreadyProcessed.count > 0 ? ` ${alreadyProcessed.count} number${alreadyProcessed.count === 1 ? ' was' : 's were'} already sent to and won't be texted again.` : ''}`
+              : 'Send an SMS campaign now, or save it as a draft and finish later'}
           </DialogDescription>
+          {loadingDraft && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading campaign...
+            </div>
+          )}
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4">
@@ -1014,15 +1098,15 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
           </Tabs>
         </div>
 
-        <div className="flex items-center justify-between pt-4 border-t">
+        <div className="flex flex-col gap-3 pt-4 border-t sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-muted-foreground">
-            {totalRecipients} recipient{totalRecipients !== 1 ? 's' : ''} total
+            {totalRecipients} recipient{totalRecipients !== 1 ? 's' : ''}
             {(selectedCompanies.size > 0 || manualPhones.length > 0 || groupMemberPhones.length > 0) && (
               <>
                 {' '}(
                 {[
                   selectedCompanies.size > 0 ? `${selectedCompanies.size} companies` : null,
-                  manualPhones.length > 0 ? `${manualPhones.length} manual` : null,
+                  manualPhones.length > 0 ? `${manualPhones.length} ${editingId ? 'to send' : 'manual'}` : null,
                   groupMemberPhones.length > 0 ? `${groupMemberPhones.length} from groups` : null,
                 ]
                   .filter(Boolean)
@@ -1031,29 +1115,29 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
               </>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex">
             <Button
-              variant="outline"
+              variant="ghost"
+              className="col-span-2 sm:col-span-1"
               onClick={() => onOpenChange(false)}
               disabled={isCreating}
             >
               Cancel
             </Button>
             <Button
-              onClick={handleCreateCampaign}
-              disabled={isCreating || totalRecipients === 0}
+              variant="outline"
+              onClick={() => handleSave('draft')}
+              disabled={isCreating || loadingDraft}
             >
-              {isCreating ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4 mr-2" />
-                  Create Campaign
-                </>
-              )}
+              {savingMode === 'draft' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Save draft
+            </Button>
+            <Button
+              onClick={() => handleSave('send')}
+              disabled={isCreating || loadingDraft || totalRecipients === 0}
+            >
+              {savingMode === 'send' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+              Send now
             </Button>
           </div>
         </div>

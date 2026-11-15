@@ -198,6 +198,18 @@ export default function Campaigns() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'overview';
   const [phoneCampaignDialogOpen, setPhoneCampaignDialogOpen] = useState(false);
+  const [phoneDraftToEdit, setPhoneDraftToEdit] = useState<string | null>(null);
+  // Phone/SMS campaigns open in the phone dialog; everything else in the email composer.
+  const openCampaignEditor = (campaignId: string) => {
+    const c = campaigns?.find((x) => x.id === campaignId);
+    if (isPhoneSmsCampaign(c)) {
+      setPhoneDraftToEdit(campaignId);
+      setPhoneCampaignDialogOpen(true);
+    } else {
+      setDraftToEdit(campaignId);
+      setBulkEmailDialogOpen(true);
+    }
+  };
   const [phoneServiceDialogOpen, setPhoneServiceDialogOpen] = useState(false);
   const [bulkEmailDialogOpen, setBulkEmailDialogOpen] = useState(false);
   const [draftToEdit, setDraftToEdit] = useState<string | null>(null);
@@ -2376,7 +2388,7 @@ export default function Campaigns() {
                           variant="ghost"
                           size="sm"
                           className="h-8 px-2 text-xs gap-1.5 hover:bg-muted"
-                          onClick={() => { setDraftToEdit(campaign.id); setBulkEmailDialogOpen(true); }}
+                          onClick={() => openCampaignEditor(campaign.id)}
                         >
                           <Edit className="h-3.5 w-3.5" />
                           <span className="hidden sm:inline">Edit</span>
@@ -2391,7 +2403,7 @@ export default function Campaigns() {
                             <DropdownMenuItem onClick={() => setSelectedCampaign(campaign.id)}>
                               <Eye className="h-4 w-4 mr-2" /> View details
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setDraftToEdit(campaign.id); setBulkEmailDialogOpen(true); }}>
+                            <DropdownMenuItem onClick={() => openCampaignEditor(campaign.id)}>
                               <Edit className="h-4 w-4 mr-2" /> Edit campaign
                             </DropdownMenuItem>
                             {(campaign.failed_count > 0 || status === 'failed') && (
@@ -2714,10 +2726,7 @@ export default function Campaigns() {
                             <Button
                               variant="default"
                               size="sm"
-                              onClick={() => {
-                                setDraftToEdit(campaign.id);
-                                setBulkEmailDialogOpen(true);
-                              }}
+                              onClick={() => openCampaignEditor(campaign.id)}
                               className="bg-primary hover:bg-primary/90"
                             >
                               <FileText className="h-4 w-4 mr-2" />
@@ -3198,8 +3207,7 @@ export default function Campaigns() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      setDraftToEdit(selectedCampaign);
-                      setBulkEmailDialogOpen(true);
+                      openCampaignEditor(selectedCampaign!);
                       setSelectedCampaign(null);
                     }}
                   >
@@ -3259,10 +3267,7 @@ export default function Campaigns() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      setDraftToEdit(selectedCampaign!);
-                      setBulkEmailDialogOpen(true);
-                    }}
+                    onClick={() => openCampaignEditor(selectedCampaign!)}
                   >
                     <FileText className="h-4 w-4 mr-1" />
                     Edit content
@@ -3312,10 +3317,7 @@ export default function Campaigns() {
                   variant="outline"
                   size="sm"
                   className="ml-auto"
-                  onClick={() => {
-                    setDraftToEdit(selectedCampaign!);
-                    setBulkEmailDialogOpen(true);
-                  }}
+                  onClick={() => openCampaignEditor(selectedCampaign!)}
                 >
                   <FileText className="h-4 w-4 mr-1" />
                   Edit content
@@ -4147,7 +4149,11 @@ export default function Campaigns() {
 
       <PhoneCampaignDialog
         open={phoneCampaignDialogOpen}
-        onOpenChange={setPhoneCampaignDialogOpen}
+        onOpenChange={(o) => {
+          setPhoneCampaignDialogOpen(o);
+          if (!o) setPhoneDraftToEdit(null);
+        }}
+        draftCampaignId={phoneDraftToEdit}
       />
 
       <PhoneServiceDialog
