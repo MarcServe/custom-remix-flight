@@ -26,6 +26,8 @@ serve(async (req) => {
   }
 
   try {
+    const who = await callerIdentity(req);
+    if (!who) return unauthorized('Unauthorized', corsHeaders);
     const { companySequenceId, subject, body, recipientEmail, inboundThreadId }: SendAIResponseRequest = await req.json();
 
     if (!companySequenceId || !subject || !body) {
@@ -47,11 +49,9 @@ serve(async (req) => {
       .eq('id', companySequenceId)
       .single();
 
-    // Caller must be the service role or the user who owns this sequence (it sends email as them).
+    // Only the service role or the sequence owner may send (it emails as that user).
 
     if (!sequenceError && companySequence) {
-
-      const who = await callerIdentity(req);
 
       const ownerId = (companySequence as any).sequence?.user_id || null;
 

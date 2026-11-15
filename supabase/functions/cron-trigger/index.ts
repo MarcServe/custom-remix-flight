@@ -25,12 +25,16 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
  * - POST { action: "update-deliverability" } - Updates email deliverability metrics for all users
  * - POST { action: "hospitality-ingest" } - Daily verified hospitality lead ingest → groups/campaigns/newsletters
  */
+import { callerIdentity, unauthorized } from '../_shared/edge-auth.ts';
+
 const background = (p: Promise<unknown>) => { const rt = (globalThis as any).EdgeRuntime; if (rt?.waitUntil) rt.waitUntil(p.catch(() => {})); else p.catch(() => {}); };
 
 // pg_cron calls this through pg_net with a 5 s timeout, while most actions take 10–120 s.
 // Acknowledge at once and do the work in the background; pass {"sync": true} to wait (debugging).
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+  // pg_cron sends the service-role bearer (from Vault); the app sends the user's JWT. Nobody else may trigger jobs.
+  if (!(await callerIdentity(req))) return unauthorized('Unauthorized', corsHeaders);
   let body: any = {};
   try { body = await req.clone().json(); } catch { /* empty body */ }
   if (body?.sync === true) return handleCron(req);
