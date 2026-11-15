@@ -159,7 +159,7 @@ Only use facts present in the content; if unknown use null/empty. Content:\n\n${
 
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST", headers: { Authorization: `Bearer ${OPENAI_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "gpt-4o-mini", temperature: 0.2, response_format: { type: "json_object" }, messages: [{ role: "system", content: "You extract accurate, structured business information. Output JSON only." }, { role: "user", content: prompt }] }),
+      body: JSON.stringify({ model: "gpt-4o", temperature: 0.2, response_format: { type: "json_object" }, messages: [{ role: "system", content: "You extract accurate, structured business information. Output JSON only." }, { role: "user", content: prompt }] }),
     });
     if (!r.ok) return json({ error: `AI error: ${(await r.text()).slice(0, 300)}` }, 502);
     const d = await r.json();
