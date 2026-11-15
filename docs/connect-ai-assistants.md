@@ -116,6 +116,7 @@ Every tool is also a plain JSON action on `POST …/functions/v1/api-campaigns` 
 | Newsletters | "Create next month's newsletter from these three points and schedule it for the 1st at 9am." |
 | Follow-ups | "Are follow-ups working?" / "Enrol the *Manchester hotels* group in the Day 1/3/5 sequence." / "Schedule a follow-up text for the Bristol campaign in 3 days." |
 | Deals & reporting | "Open a £2,500 deal with Mercure at Proposal stage." / "How did the TalkStay UK campaign do?" |
+| Finding new leads | "Find 20 independent opticians in Leeds and save them." / "What did Autopilot find today?" / "Approve the ones with an email." / "Retarget Autopilot at housing associations in Greater Manchester and run it now." |
 
 Anything that sends real messages (send now, send newsletter, enrol in a sequence) is
 flagged to the assistant so it confirms with you first unless you've already said to send.

@@ -70,6 +70,11 @@ Deno.serve(async (req) => {
 });
 
 async function handleDiscovery(req: Request): Promise<Response> {
+  {
+    let b: any = {};
+    try { b = await req.clone().json(); } catch { /* no body */ }
+    if (b?.phase === 'post' && b.userId && b.discoveryRunId) return await runPostPhase(b.userId, b.discoveryRunId);
+  }
   console.log('[super-discovery] Starting multi-source discovery run');
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -350,16 +355,6 @@ async function handleDiscovery(req: Request): Promise<Response> {
           userStats.rawFound = leadStats.rawFound;
         }
 
-        // Auto-create campaign if enabled
-        // In full_auto_mode, create campaigns even if leads are processed differently
-        const shouldCreateCampaign = setting.auto_create_campaign && 
-          (userStats.autoApproved > 0 || (setting.full_auto_mode && userStats.totalLeads > 0));
-        
-        if (shouldCreateCampaign) {
-          const campaignsCreated = await createAutoCampaigns(supabase, setting, discoveryRunId);
-          userStats.campaignsCreated = campaignsCreated;
-        }
-
         totalLeadsDiscovered += userStats.totalLeads;
         allStats.push(userStats);
 
@@ -402,38 +397,14 @@ async function handleDiscovery(req: Request): Promise<Response> {
         processedCount++;
         console.log(`[super-discovery] Completed processing for user ${setting.user_id}. Stats:`, JSON.stringify(userStats));
 
-        // Send summary webhook notification - use slack/discord webhooks or legacy webhook_url
-        const summaryWebhookUrl = setting.slack_webhook_url || setting.discord_webhook_url || setting.webhook_url;
-        if (setting.webhook_enabled && summaryWebhookUrl && userStats.totalLeads > 0) {
-          if (setting.notify_on_discovery_complete) {
-            await sendSummaryWebhook(summaryWebhookUrl, userStats);
-          }
-        }
-
-        // Send hot lead alerts for high-quality leads
-        if (setting.notify_on_hot_leads && summaryWebhookUrl && userStats.autoApproved > 0) {
-          await sendHotLeadAlerts(supabase, setting, discoveryRunId, summaryWebhookUrl);
-        }
-
-        // Send discovery summary email
+        // Campaign creation, alerts and the summary email get their own invocation (fresh time budget),
+        // a little later so the background email lookup has had time to find addresses.
         if (userStats.totalLeads > 0) {
-          try {
-            await fetch(`${SUPABASE_URL}/functions/v1/send-discovery-summary`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                userId: setting.user_id,
-                discoveryRunId,
-                stats: userStats,
-              }),
-            });
-            console.log(`[super-discovery] Summary email sent for user ${setting.user_id}`);
-          } catch (emailError) {
-            console.error(`[super-discovery] Failed to send summary email:`, emailError);
-          }
+          background(new Promise((res) => setTimeout(res, 20_000)).then(() => fetch(`${SUPABASE_URL}/functions/v1/autonomous-lead-discovery`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phase: 'post', userId: setting.user_id, discoveryRunId }),
+          })));
         }
 
       } catch (userError) {
@@ -470,6 +441,46 @@ async function handleDiscovery(req: Request): Promise<Response> {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
+  }
+}
+
+/**
+ * After a run has saved its leads: auto-campaigns, webhooks/alerts and the summary email.
+ * Runs as its own invocation so a big run never gets cut off while writing campaigns.
+ */
+async function runPostPhase(userId: string, discoveryRunId: string): Promise<Response> {
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const ok = (o: unknown) => new Response(JSON.stringify(o), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  const [{ data: setting }, { data: run }] = await Promise.all([
+    supabase.from('autonomous_discovery_settings').select('*').eq('user_id', userId).maybeSingle(),
+    supabase.from('discovery_runs').select('*').eq('discovery_run_id', discoveryRunId).maybeSingle(),
+  ]);
+  if (!setting || !run) return ok({ success: false, error: 'setting or run not found' });
+  const stats: DiscoveryStats = {
+    totalLeads: run.total_leads_found || 0, bySource: run.source_breakdown || {}, autoApproved: run.leads_auto_approved || 0, pending: run.leads_pending || 0,
+    enriched: run.leads_enriched || 0, campaignsCreated: run.campaigns_created || 0, emailsExtracted: run.emails_extracted || 0, contactsCreated: run.contacts_created || 0,
+    sequencesEnrolled: run.sequences_enrolled || 0, errors: Array.isArray(run.errors) ? run.errors : [], searchQueries: run.search_queries || [], plannerMethod: run.planner_method || undefined, rawFound: run.raw_found || 0,
+  };
+  try {
+    const shouldCreateCampaign = setting.auto_create_campaign && (stats.autoApproved > 0 || (setting.full_auto_mode && stats.totalLeads > 0));
+    if (shouldCreateCampaign) {
+      stats.campaignsCreated = await createAutoCampaigns(supabase, setting, discoveryRunId);
+      await supabase.from('discovery_runs').update({ campaigns_created: stats.campaignsCreated }).eq('discovery_run_id', discoveryRunId);
+    }
+    const summaryWebhookUrl = setting.slack_webhook_url || setting.discord_webhook_url || setting.webhook_url;
+    if (setting.webhook_enabled && summaryWebhookUrl && stats.totalLeads > 0 && setting.notify_on_discovery_complete) await sendSummaryWebhook(summaryWebhookUrl, stats);
+    if (setting.notify_on_hot_leads && summaryWebhookUrl && stats.autoApproved > 0) await sendHotLeadAlerts(supabase, setting, discoveryRunId, summaryWebhookUrl);
+    if (stats.totalLeads > 0) {
+      await fetch(`${SUPABASE_URL}/functions/v1/send-discovery-summary`, {
+        method: 'POST', headers: { 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, discoveryRunId, stats }),
+      }).catch((e) => console.error('[super-discovery] summary email failed', e));
+    }
+    console.log(`[super-discovery] Post phase done for run ${discoveryRunId}: campaigns=${stats.campaignsCreated}`);
+    return ok({ success: true, phase: 'post', campaignsCreated: stats.campaignsCreated });
+  } catch (e) {
+    console.error('[super-discovery] Post phase error', e);
+    return ok({ success: false, phase: 'post', error: String((e as Error)?.message || e) });
   }
 }
 
@@ -545,9 +556,17 @@ async function runMultiSourceDiscovery(
     }, 80_000).then((r) => ({ source: 'lead-finder', ...r })));
   });
   if (setting.use_perplexity_search !== false) {
-    for (const q of queries.slice(0, 3)) {
-      sourcePromises.push(searchWithPerplexity(q.query, q.geography, q.industry, 20, known.recentNames.slice(0, 40)).then((r) => ({ source: 'perplexity', ...r })));
-    }
+    // Perplexity rate-limits concurrent requests: run its angles one after another in a single chain
+    const pq = queries.slice(0, 3);
+    sourcePromises.push((async (): Promise<R> => {
+      const leads: any[] = []; let error: string | undefined;
+      for (const q of pq) {
+        const r = await searchWithPerplexity(q.query, q.geography, q.industry, 20, known.recentNames.slice(0, 40));
+        leads.push(...r.leads); if (r.error && !error) error = r.error;
+        if (Date.now() - startedAt > 70_000) break;
+      }
+      return { source: 'perplexity', leads, error: leads.length ? undefined : error };
+    })());
   }
   if (setting.use_apify) {
     const maps = queries.filter((q) => q.maps_query).slice(0, 2);

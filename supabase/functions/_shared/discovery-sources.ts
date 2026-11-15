@@ -89,10 +89,14 @@ export async function searchWithPerplexity(query: string, geography: string, ind
     (avoid.length ? `Do NOT include any of these: ${avoid.slice(0, 60).join("; ")}. ` : "") +
     `For each give: name, website, city, industry, a one-sentence description, and a public phone or general email if shown on their site. Return JSON only.`;
   try {
-    const r = await fetch("https://api.perplexity.ai/chat/completions", {
-      method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "sonar", temperature: 0.2, max_tokens: 3500, messages: [{ role: "system", content: "You are a meticulous business researcher. Only list organisations you can verify exist." }, { role: "user", content: prompt }], response_format: { type: "json_schema", json_schema: { schema } } }),
-    });
+    const body = JSON.stringify({ model: "sonar", temperature: 0.2, max_tokens: 3500, messages: [{ role: "system", content: "You are a meticulous business researcher. Only list organisations you can verify exist." }, { role: "user", content: prompt }], response_format: { type: "json_schema", json_schema: { schema } } });
+    let r: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt) await new Promise((res) => setTimeout(res, 2500 * attempt));
+      r = await fetch("https://api.perplexity.ai/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body });
+      if (r.status !== 429) break;
+    }
+    if (!r) return { leads: [], error: "Perplexity: no response" };
     if (!r.ok) return { leads: [], error: `Perplexity ${r.status}: ${(await r.text()).slice(0, 200)}` };
     const d = await r.json();
     let content = String(d.choices?.[0]?.message?.content || "");
