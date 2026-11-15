@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { fillSmsTags, SMS_TAG_HINT } from '@/lib/smsMerge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -206,6 +207,17 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
   
   // Calculate total recipients (companies + manual phones + group phones)
   const totalRecipients = selectedCompanies.size + manualPhones.length + groupMemberPhones.length;
+  // Imported rows can carry their own message; the campaign message is only
+  // required for recipients that don't (companies, groups, manual numbers).
+  const needsCampaignMessage =
+    selectedCompanies.size > 0 || groupMemberPhones.length > 0 || manualPhones.some((p) => !p.message);
+  const allHaveOwnMessage = manualPhones.length > 0 && !needsCampaignMessage;
+  // A real recipient to preview and test with.
+  const sampleRecipient: ManualPhoneNumber | undefined = manualPhones[0] || groupMemberPhones[0];
+  const testTemplate = message.trim() || sampleRecipient?.message || '';
+  const previewText = testTemplate
+    ? fillSmsTags(testTemplate, { name: sampleRecipient?.name, phone: sampleRecipient?.phone })
+    : '';
 
   const toggleCompany = (companyId: string) => {
     setSelectedCompanies(prev => {
@@ -335,7 +347,7 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
       return;
     }
 
-    if (!message.trim()) {
+    if (!testTemplate) {
       toast({
         title: 'Error',
         description: 'Please enter a message to test',
@@ -359,7 +371,7 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
     try {
       console.log('Sending test SMS with:', {
         phoneNumber: testPhoneNumber.trim(),
-        message: message.trim(),
+        message: previewText,
         connectionId: activePhoneService.id,
         provider: activePhoneService.provider,
       });
@@ -367,7 +379,7 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
       // Use apiClient which handles auth properly
       const { data, error } = await apiClient.callFunction('send-test-sms', {
         phoneNumber: testPhoneNumber.trim(),
-        message: message.trim(),
+        message: previewText,
         connectionId: activePhoneService.id,
         provider: activePhoneService.provider,
       });
@@ -432,10 +444,12 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
       return;
     }
 
-    if (!message.trim()) {
+    if (needsCampaignMessage && !message.trim()) {
       toast({
-        title: 'Error',
-        description: 'Please enter a message',
+        title: 'Message needed',
+        description: manualPhones.some((p) => p.message)
+          ? 'Some recipients have no message of their own. Enter a message to send them.'
+          : 'Please enter a message',
         variant: 'destructive',
       });
       return;
@@ -470,6 +484,8 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
         return;
       }
 
+      const campaignTemplate = message.trim() || manualPhones.find((p) => p.message)?.message || '';
+
       // Create phone campaign using email_campaigns structure
       // Store phone message in body_text_template and mark in subject
       const { data: campaign, error: campaignError } = await supabase
@@ -478,8 +494,8 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
           user_id: user.id,
           name: `📞 ${campaignName}`, // Prefix with phone emoji to identify
           subject_template: `Phone Campaign: ${campaignName}`,
-          body_text_template: message,
-          body_html_template: `<p>${message.replace(/\n/g, '<br>')}</p>`,
+          body_text_template: campaignTemplate,
+          body_html_template: `<p>${campaignTemplate.replace(/\n/g, '<br>')}</p>`,
           status: 'draft',
           total_recipients: totalRecipients,
           sent_count: 0,
@@ -500,7 +516,8 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
         const key = phone.replace(/\D/g, '');
         if (key.length < 7 || seen.has(key)) return;
         seen.add(key);
-        const body = perMsg || message;
+        // Fill {name}-style tags now so what's stored is exactly what gets sent.
+        const body = fillSmsTags(perMsg || message, { name, phone });
         recipients.push({
           campaign_id: campaign.id,
           email: `phone:${phone}`,
@@ -687,18 +704,25 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="message">Message</Label>
+            <Label htmlFor="message">
+              Message{allHaveOwnMessage && <span className="font-normal text-muted-foreground"> (optional: your imported rows have their own messages)</span>}
+            </Label>
             <Textarea
               id="message"
-              placeholder="Enter your SMS/phone message here..."
+              placeholder={allHaveOwnMessage ? 'Leave empty to send each imported message as written' : 'e.g. Hi {first_name}, ...'}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               className="min-h-[120px]"
               disabled={isCreating}
             />
             <p className="text-xs text-muted-foreground">
-              {message.length} characters (SMS limit: 160 characters)
+              {message.length} characters (SMS limit: 160 characters) · {SMS_TAG_HINT}
             </p>
+            {previewText && sampleRecipient && previewText !== testTemplate && (
+              <p className="text-xs rounded-md border bg-muted/40 p-2">
+                <span className="font-medium">Preview for {sampleRecipient.name || sampleRecipient.phone}:</span> {previewText}
+              </p>
+            )}
           </div>
 
           {/* Test SMS Section */}
@@ -719,7 +743,7 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
                 <Button
                   variant="outline"
                   onClick={handleTestSMS}
-                  disabled={isTestingSMS || isCreating || !testPhoneNumber.trim() || !message.trim()}
+                  disabled={isTestingSMS || isCreating || !testPhoneNumber.trim() || !testTemplate}
                 >
                   {isTestingSMS ? (
                     <>

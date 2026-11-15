@@ -46,19 +46,28 @@ function isUkNonMobile(e164: string): boolean {
 const SEND_TIME_BUDGET_MS = 100_000;
 const MAX_PER_RUN = 500;
 
+// Same rules as src/lib/smsMerge.ts: {name} and {{name}}, {first_name}, {company}, ...
+const PLACEHOLDER_NAMES = new Set(['manual entry', 'contact', 'group member']);
 function personalizeText(template: string, recipient: { name?: string | null; email?: string | null }): string {
   if (!template) return '';
-  const fullName = recipient.name || '';
-  const nameParts = fullName.split(/\s+/);
-  const firstName = nameParts[0] || '';
-  const lastName = nameParts.slice(1).join(' ') || '';
-  return template
-    .replace(/\{\{firstName\}\}/gi, firstName)
-    .replace(/\{\{lastName\}\}/gi, lastName)
-    .replace(/\{\{fullName\}\}/gi, fullName)
-    .replace(/\{\{name\}\}/gi, fullName)
-    .replace(/\{\{email\}\}/gi, recipient.email || '')
-    .replace(/\{\{phone\}\}/gi, extractPhone(recipient.email) || '');
+  let full = (recipient.name || '').trim();
+  if (PLACEHOLDER_NAMES.has(full.toLowerCase())) full = '';
+  const parts = full.split(/\s+/).filter(Boolean);
+  const first = parts[0] || '';
+  const last = parts.slice(1).join(' ');
+  const phone = extractPhone(recipient.email) || '';
+  const email = recipient.email && !recipient.email.startsWith('phone:') ? recipient.email : '';
+  const values: Record<string, string> = {
+    name: full || 'there', fullname: full || 'there', contactname: full || 'there',
+    firstname: first || 'there', first: first || 'there',
+    lastname: last, last: last, surname: last,
+    company: full, companyname: full, business: full, businessname: full,
+    phone, mobile: phone, email,
+  };
+  return template.replace(/\{\{?\s*([A-Za-z][A-Za-z _-]{0,30}?)\s*\}?\}/g, (match, key: string) => {
+    const k = key.toLowerCase().replace(/[\s_-]/g, '');
+    return k in values ? values[k] : match;
+  });
 }
 
 type SmsResult = { success: boolean; messageId?: string; status?: string; error?: string };
