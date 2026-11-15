@@ -21,6 +21,8 @@ interface Automation {
 interface Run { id: string; started_at: string; finished_at: string | null; status: string; trigger: string; summary: string | null; steps: { tool: string; ok: boolean; result?: string }[]; error: string | null }
 
 const TEMPLATES: { label: string; name: string; instruction: string; kind: Automation['schedule_kind']; time: string }[] = [
+  { label: 'Daily lead hunt (fresh angles)', name: 'Daily lead hunt', kind: 'daily', time: '07:30',
+    instruction: 'Read get_business_profile and list_personas. Call find_leads 4 times with DIFFERENT angles than the last few days (check list_discovery_runs for the angles already used): each call a specific niche + a specific city/region from the persona, max 15 each. Then list_discovered_leads with_email=true for today and report how many new contactable leads were saved, with the best 5 by name and website. Do not send anything.' },
   { label: 'Morning drafts (campaign + newsletter)', name: 'Morning drafts', kind: 'weekdays', time: '08:00',
     instruction: 'Draft one fresh outreach email campaign for the recipient group named "<group name>" and one newsletter for all active subscribers, both as DRAFTS (do not schedule or send). Write on-brand HTML using the business profile. Reply with the draft names and ids so I can review and send from the app.' },
   { label: 'Reply triage + deals', name: 'Reply triage', kind: 'daily', time: '09:00',

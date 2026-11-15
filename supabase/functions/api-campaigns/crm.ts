@@ -128,6 +128,8 @@ async function callFunction(name: string, payload: Record<string, unknown>): Pro
   return { ok: r.ok, status: r.status, data };
 }
 
+import { handleLeadAction, LEAD_ACTIONS } from "./leads.ts";
+
 const isPhoneCampaign = (c: any) => (Array.isArray(c?.tags) && c.tags.includes("phone_sms")) || String(c?.name || "").startsWith("📞");
 
 export const CRM_ACTIONS = [
@@ -144,6 +146,7 @@ export const CRM_ACTIONS = [
   "list_notifications", "mark_notifications_read",
   "list_automations", "create_automation", "update_automation", "delete_automation", "run_automation", "list_automation_runs", "reschedule_automations",
   "learn_business", "update_business_profile",
+  ...LEAD_ACTIONS,
 ];
 
 async function ownSequence(db: any, userId: string, body: any) {
@@ -1048,6 +1051,6 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
     }
 
     default:
-      return null;
+      return await handleLeadAction(db, userId, action, body);
   }
 }

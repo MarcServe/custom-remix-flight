@@ -45,6 +45,9 @@ interface DiscoveryRun {
   campaigns_created: number | null;
   sequences_enrolled: number | null;
   source_breakdown: Record<string, number> | null;
+  search_queries: { query?: string; industry?: string; geography?: string; angle?: string }[] | null;
+  planner_method: string | null;
+  raw_found: number | null;
   errors: string[] | null;
   error_message: string | null;
   settings_snapshot: any;
@@ -67,7 +70,7 @@ export function DiscoveryRunHistory() {
         .limit(20);
       
       if (error) throw error;
-      return data as DiscoveryRun[];
+      return data as unknown as DiscoveryRun[];
     },
     enabled: !!user?.id,
     refetchInterval: 30000, // Refresh every 30 seconds
@@ -241,8 +244,12 @@ export function DiscoveryRunHistory() {
                               <h4 className="text-sm font-semibold">Lead Stats</h4>
                               <div className="text-sm space-y-1">
                                 <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Total Found:</span>
-                                  <span>{run.total_leads_found || 0}</span>
+                                  <span className="text-muted-foreground">Companies seen:</span>
+                                  <span>{run.raw_found || 0}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">New to you (saved):</span>
+                                  <span className="font-medium">{run.total_leads_found || 0}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Auto-Approved:</span>
@@ -291,6 +298,20 @@ export function DiscoveryRunHistory() {
                                       <span className="text-muted-foreground capitalize">{source}:</span>
                                       <span>{count as number}</span>
                                     </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Search angles */}
+                            {Array.isArray(run.search_queries) && run.search_queries.length > 0 && (
+                              <div className="space-y-2 md:col-span-2 lg:col-span-4">
+                                <h4 className="text-sm font-semibold">Search angles{run.planner_method ? <span className="ml-2 text-xs font-normal text-muted-foreground">({run.planner_method === 'ai' ? 'planned by AI' : run.planner_method})</span> : null}</h4>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {run.search_queries.map((q, i) => (
+                                    <Badge key={i} variant="outline" className="font-normal">
+                                      {q?.query || String(q)}{q?.geography ? <span className="ml-1 text-muted-foreground">· {q.geography}</span> : null}
+                                    </Badge>
                                   ))}
                                 </div>
                               </div>

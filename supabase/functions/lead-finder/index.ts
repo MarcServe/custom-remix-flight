@@ -1168,7 +1168,7 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify, autonomousMode, maxResults } = await req.json();
+  const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify, autonomousMode, maxResults, exaQueries: exaQueriesOverride, excludeDomains, exaCategory, exaSearchType } = await req.json();
   console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify, autonomousMode, maxResults });
 
   // Initialize Supabase
@@ -1333,6 +1333,10 @@ Deno.serve(async (req) => {
           `${industryContext || 'company'} news ${geoContext} 2024 2025${customContext}`.trim()
         ];
       }
+      // Autopilot / assistant callers can pass exact queries (planned per angle)
+      if (Array.isArray(exaQueriesOverride) && exaQueriesOverride.filter((q: unknown) => typeof q === 'string' && q.trim()).length) {
+        exaQueries = exaQueriesOverride.filter((q: unknown) => typeof q === 'string' && q.trim()).slice(0, 6).map((q: string) => q.trim());
+      }
       // When only custom search is set, use it as industry context for SerpAPI/Apify and extraction prompts
       if (!hasStructuredFilters && customSearchText?.trim()) {
         industryContext = customSearchText.trim();
@@ -1364,9 +1368,14 @@ Deno.serve(async (req) => {
         query: '',
         numResults: exaNumResults,
         useAutoprompt: true,
-        type: "keyword",
+        type: exaSearchType === 'auto' || exaSearchType === 'neural' ? exaSearchType : "keyword",
         contents: { text: { maxCharacters: 2000, includeHtmlTags: false } }
       };
+      // category "company" makes Exa return company homepages instead of listicles/directories
+      if (exaCategory === 'company') exaBody.category = 'company';
+      if (Array.isArray(excludeDomains) && excludeDomains.length) {
+        exaBody.excludeDomains = [...new Set(excludeDomains.map((d: unknown) => String(d || '').toLowerCase().replace(/^www\./, '')).filter(Boolean))].slice(0, 100);
+      }
       if (exaIncludeDomains) {
         exaBody.includeDomains = exaIncludeDomains;
       }

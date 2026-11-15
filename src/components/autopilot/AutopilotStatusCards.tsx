@@ -50,6 +50,26 @@ export function AutopilotStatusCards({ settings }: AutopilotStatusCardsProps) {
     refetchInterval: 60000, // Refresh every minute
   });
 
+  // Latest run: what each source returned and whether any source is broken
+  const { data: latestRun } = useQuery({
+    queryKey: ['autopilot-latest-run'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('discovery_runs')
+        .select('status, started_at, completed_at, raw_found, total_leads_found, source_breakdown, errors, planner_method, search_queries')
+        .eq('user_id', user?.id)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data as any;
+    },
+    enabled: !!user?.id,
+    refetchInterval: 60000,
+  });
+  const sourceLabel: Record<string, string> = { 'lead-finder': 'Web', exa: 'Web', perplexity: 'Perplexity', apify: 'Maps', serpapi: 'Google', google_maps: 'Maps', assistant: 'Assistant' };
+  const latestSources = latestRun?.source_breakdown ? Object.entries(latestRun.source_breakdown as Record<string, number>) : [];
+  const latestProblems: string[] = Array.isArray(latestRun?.errors) ? latestRun.errors : [];
+
   // Fetch active sequences count
   const { data: sequenceStats } = useQuery({
     queryKey: ['autopilot-sequence-stats'],
@@ -114,6 +134,24 @@ export function AutopilotStatusCards({ settings }: AutopilotStatusCardsProps) {
               <span className="text-muted-foreground">Total discovered</span>
               <span className="font-medium">{settings?.total_approved || 0} approved</span>
             </div>
+            {latestRun && (
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Last run</span>
+                <span className="font-medium">{latestRun.status === 'running' ? 'running…' : `${latestRun.raw_found || 0} seen · ${latestRun.total_leads_found || 0} new`}</span>
+              </div>
+            )}
+            {latestSources.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {latestSources.map(([src, n]) => (
+                  <Badge key={src} variant="outline" className="text-[10px] font-normal px-1.5 py-0">{sourceLabel[src] || src}: {n as number}</Badge>
+                ))}
+              </div>
+            )}
+            {latestProblems.length > 0 && (
+              <p className="text-[11px] text-amber-600 pt-1" title={latestProblems.join('\n')}>
+                {latestProblems.length} source problem{latestProblems.length === 1 ? '' : 's'}: {latestProblems[0].slice(0, 90)}{latestProblems[0].length > 90 ? '…' : ''}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { planDiscoveryQueries, type PlannedQuery } from "../_shared/discovery-planner.ts";
+import { knownCompanies, recentQueries, isKnown, searchWithLeadFinder, searchWithPerplexity, searchWithApifyMaps, dedupeLeads } from "../_shared/discovery-sources.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,17 +42,34 @@ interface DiscoveryStats {
   contactsCreated: number;
   sequencesEnrolled: number;
   errors: string[];
+  searchQueries: any[];
+  plannerMethod?: string;
+  rawFound?: number;
 }
 
 /**
  * Super Discovery Engine - Multi-source parallel lead discovery
  * Combines Exa AI, SerpAPI, and Apify for maximum lead coverage
  */
+const background = (p: Promise<unknown>) => { const rt = (globalThis as any).EdgeRuntime; if (rt?.waitUntil) rt.waitUntil(p.catch(() => {})); else p.catch(() => {}); };
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+  // async:true → reply at once and keep working in the background (the UI and the
+  // assistant use this; a run takes 2–4 minutes which is longer than a request may idle).
+  let parsed: any = {};
+  try { parsed = await req.clone().json(); } catch { /* cron trigger sends no body */ }
+  if (parsed?.async) {
+    const inner = new Request(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify({ ...parsed, async: false }) });
+    background(handleDiscovery(inner).then((r) => r.text()));
+    return new Response(JSON.stringify({ success: true, started: true, message: 'Discovery started; results appear in History in 2–4 minutes.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  return handleDiscovery(req);
+});
 
+async function handleDiscovery(req: Request): Promise<Response> {
   console.log('[super-discovery] Starting multi-source discovery run');
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -241,6 +260,7 @@ Deno.serve(async (req) => {
           contactsCreated: 0,
           sequencesEnrolled: 0,
           errors: [],
+          searchQueries: [],
         };
 
         // Determine trigger type for run tracking
@@ -286,6 +306,13 @@ Deno.serve(async (req) => {
             userStats.autoApproved += personaStats.autoApproved;
             userStats.pending += personaStats.pending;
             userStats.enriched += personaStats.enriched;
+            userStats.emailsExtracted += personaStats.emailsExtracted;
+            userStats.contactsCreated += personaStats.contactsCreated;
+            userStats.sequencesEnrolled += personaStats.sequencesEnrolled;
+            userStats.errors.push(...personaStats.errors);
+            userStats.searchQueries.push(...personaStats.searchQueries);
+            userStats.plannerMethod = personaStats.plannerMethod || userStats.plannerMethod;
+            userStats.rawFound = (userStats.rawFound || 0) + (personaStats.rawFound || 0);
             
             for (const [source, count] of Object.entries(personaStats.bySource)) {
               userStats.bySource[source] = (userStats.bySource[source] || 0) + count;
@@ -307,13 +334,20 @@ Deno.serve(async (req) => {
           console.log(`[super-discovery] No active personas, using main settings for user ${setting.user_id}`);
           
           const searchQuery = buildSearchQuery(setting, businessProfile);
-          const leadStats = await runMultiSourceDiscovery(supabase, setting, searchQuery, null, discoveryRunId);
+          const leadStats = await runMultiSourceDiscovery(supabase, setting, searchQuery, null, discoveryRunId, businessProfile);
           
           userStats.totalLeads = leadStats.totalLeads;
           userStats.bySource = leadStats.bySource;
           userStats.autoApproved = leadStats.autoApproved;
           userStats.pending = leadStats.pending;
           userStats.enriched = leadStats.enriched;
+          userStats.emailsExtracted = leadStats.emailsExtracted;
+          userStats.contactsCreated = leadStats.contactsCreated;
+          userStats.sequencesEnrolled = leadStats.sequencesEnrolled;
+          userStats.errors = leadStats.errors;
+          userStats.searchQueries = leadStats.searchQueries;
+          userStats.plannerMethod = leadStats.plannerMethod;
+          userStats.rawFound = leadStats.rawFound;
         }
 
         // Auto-create campaign if enabled
@@ -359,6 +393,9 @@ Deno.serve(async (req) => {
             sequences_enrolled: userStats.sequencesEnrolled,
             source_breakdown: userStats.bySource,
             errors: userStats.errors,
+            search_queries: userStats.searchQueries,
+            planner_method: userStats.plannerMethod || null,
+            raw_found: userStats.rawFound || 0,
           })
           .eq('discovery_run_id', discoveryRunId);
 
@@ -434,7 +471,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
   }
-});
+}
 
 /**
  * Discover leads for a specific persona using all enabled sources
@@ -451,130 +488,114 @@ async function discoverLeadsForPersona(
   
   console.log(`[super-discovery] Persona "${persona.name}" search query: ${searchQuery}`);
   
-  return await runMultiSourceDiscovery(supabase, setting, searchQuery, persona, discoveryRunId);
+  return await runMultiSourceDiscovery(supabase, setting, searchQuery, persona, discoveryRunId, businessProfile);
 }
 
 /**
- * Run parallel multi-source discovery
+ * Run parallel multi-source discovery.
+ * Plans several distinct search angles (AI planner, or rotation), runs them across
+ * Exa/SerpAPI (via lead-finder), Perplexity and Google Maps in parallel, excludes
+ * companies the user already has, then enriches and saves.
  */
 async function runMultiSourceDiscovery(
   supabase: any,
   setting: any,
   searchQuery: string,
   persona: Persona | null,
-  discoveryRunId: string
+  discoveryRunId: string,
+  businessProfile: any = null
 ): Promise<DiscoveryStats> {
+  const startedAt = Date.now();
   const stats: DiscoveryStats = {
-    totalLeads: 0,
-    bySource: {},
-    autoApproved: 0,
-    pending: 0,
-    enriched: 0,
-    campaignsCreated: 0,
-    emailsExtracted: 0,
-    contactsCreated: 0,
-    sequencesEnrolled: 0,
-    errors: [],
+    totalLeads: 0, bySource: {}, autoApproved: 0, pending: 0, enriched: 0, campaignsCreated: 0,
+    emailsExtracted: 0, contactsCreated: 0, sequencesEnrolled: 0, errors: [], searchQueries: [],
   };
+  const userId = setting.user_id;
+  const dailyTarget = Number(setting.daily_lead_target) || 50;
+  const maxPerRun = Number(setting.max_leads_per_run ?? 100) || 100;
+  const target = Math.min(150, Math.max(dailyTarget, Math.min(maxPerRun, 100)));
 
-  // Calculate leads per source. Request at least daily_lead_target from lead-finder (up to max_leads_per_run)
-  const dailyTarget = setting.daily_lead_target || 50;
-  const maxPerRun = setting.max_leads_per_run ?? 100;
-  const enabledSources = [
-    setting.use_serp_api !== false, // EXA + SerpAPI via lead-finder
-    setting.use_apify === true,     // Apify Google Maps
-  ].filter(Boolean).length + 1; // +1 for Exa (always on)
+  // 1. What we already have (skip it at source, and tell the planner to steer away from it)
+  const [known, usedQueries] = await Promise.all([knownCompanies(supabase, userId), recentQueries(supabase, userId)]);
 
-  const leadsPerSource = Math.ceil(dailyTarget / enabledSources);
-  // Lead-finder: request as many as we can use (at least daily target, cap at max per run) so we get 50–100+ results
-  const leadFinderMax = Math.min(maxPerRun, Math.max(leadsPerSource, dailyTarget));
+  // 2. Plan today's angles
+  const count = Math.min(10, Math.max(2, Number(setting.queries_per_run) || 6));
+  const plan = await planDiscoveryQueries({ persona, setting, businessProfile, recentCompanies: known.recentNames, recentQueries: usedQueries, count });
+  const queries: PlannedQuery[] = plan.queries.length ? plan.queries : [{
+    query: searchQuery, industry: persona?.target_industries?.[0] || setting.target_industries?.[0] || '', geography: persona?.target_geographies?.[0] || setting.target_geographies?.[0] || '', angle: 'legacy',
+  }];
+  stats.plannerMethod = plan.method;
+  stats.searchQueries = queries.map((q) => ({ query: q.query, industry: q.industry, geography: q.geography, angle: q.angle }));
+  console.log(`[super-discovery] Planned ${queries.length} angles (${plan.method}):`, queries.map((q) => q.query).join(' | '));
 
-  // Prepare parallel source calls
-  const sourcePromises: Promise<SourceResult>[] = [];
-
-  // Source 1: Lead Finder (Exa + SerpAPI combined)
-  sourcePromises.push(
-    runLeadFinder(supabase, setting, searchQuery, persona, leadFinderMax)
-      .then(leads => ({ source: 'lead-finder', leads }))
-      .catch(error => ({ source: 'lead-finder', leads: [], error: error.message }))
-  );
-
-  // Source 2: Apify Google Maps (if enabled and has location context)
+  // 3. Run every source in parallel
+  const excludeDomains = known.recentDomains.slice(0, 100);
+  const perQuery = Math.min(50, Math.max(12, Math.ceil((target * 1.5) / queries.length)));
+  const useSerp = setting.use_serp_api !== false;
+  type R = { source: string; leads: any[]; error?: string; timedOut?: boolean };
+  const sourcePromises: Promise<R>[] = [];
+  queries.forEach((q, i) => {
+    sourcePromises.push(searchWithLeadFinder({
+      size: q.size || persona?.target_company_sizes?.[0] || setting.target_company_sizes?.[0] || 'any',
+      geography: q.geography || 'any', industry: q.industry || 'any', customSearchText: q.query,
+      useSerpApi: useSerp && i < 2, // SerpAPI quota is small: only the first two angles
+      maxResults: perQuery,
+      exaQueries: [q.query, q.alt_query || `${q.industry} ${q.geography}`.trim()].filter(Boolean),
+      excludeDomains, exaCategory: 'company', exaSearchType: 'auto',
+    }, 80_000).then((r) => ({ source: 'lead-finder', ...r })));
+  });
+  if (setting.use_perplexity_search !== false) {
+    for (const q of queries.slice(0, 3)) {
+      sourcePromises.push(searchWithPerplexity(q.query, q.geography, q.industry, 20, known.recentNames.slice(0, 40)).then((r) => ({ source: 'perplexity', ...r })));
+    }
+  }
   if (setting.use_apify) {
-    const location = persona?.target_geographies?.[0] || 
-                     setting.target_geographies?.[0] || 
-                     'United States';
-    const apifyQuery = persona?.target_keywords?.[0] || 
-                       buildApifyQuery(persona, setting, searchQuery);
-    
-    sourcePromises.push(
-      runApifyScraper(setting, apifyQuery, location, setting.apify_max_results || 100)
-        .then(leads => ({ source: 'apify', leads }))
-        .catch(error => ({ source: 'apify', leads: [], error: error.message }))
-    );
+    const maps = queries.filter((q) => q.maps_query).slice(0, 2);
+    if (!maps.length) maps.push({ ...queries[0], maps_query: buildApifyQuery(persona, setting, searchQuery), maps_location: queries[0].geography || 'United Kingdom' });
+    for (const q of maps) {
+      sourcePromises.push(searchWithApifyMaps(q.maps_query!, q.maps_location || q.geography || 'United Kingdom', Math.min(Number(setting.apify_max_results) || 60, 100), 85_000).then((r) => ({ source: 'apify', ...r })));
+    }
   }
+  console.log(`[super-discovery] Running ${sourcePromises.length} source calls in parallel`);
+  const results = await Promise.all(sourcePromises);
 
-  // Run all sources in parallel
-  console.log(`[super-discovery] Running ${sourcePromises.length} sources in parallel`);
-  const sourceResults = await Promise.all(sourcePromises);
-
-  // Collect all leads
   const allLeads: any[] = [];
-  
-  for (const result of sourceResults) {
-    if (result.error) {
-      console.error(`[super-discovery] Source ${result.source} failed:`, result.error);
-      continue;
-    }
-    
-    stats.bySource[result.source] = result.leads.length;
-    console.log(`[super-discovery] Source ${result.source} returned ${result.leads.length} leads`);
-    
-    // Tag leads with their source
-    for (const lead of result.leads) {
-      lead.source = result.source;
-      allLeads.push(lead);
-    }
+  const seenErrors = new Set<string>();
+  for (const r of results) {
+    if (r.error && !seenErrors.has(`${r.source}:${r.error}`)) { seenErrors.add(`${r.source}:${r.error}`); stats.errors.push(`${r.source}: ${r.error}`); console.error(`[super-discovery] ${r.source}:`, r.error); }
+    if (r.timedOut) console.warn(`[super-discovery] ${r.source} hit the time limit; kept ${r.leads.length} partial results`);
+    stats.bySource[r.source] = (stats.bySource[r.source] || 0) + r.leads.length;
+    for (const lead of r.leads) { lead.source = lead.source || r.source; allLeads.push(lead); }
   }
+  stats.rawFound = allLeads.length;
 
-  // Deduplicate leads by company name and website
-  const uniqueLeads = deduplicateLeads(allLeads);
-  console.log(`[super-discovery] After deduplication: ${uniqueLeads.length} unique leads (from ${allLeads.length})`);
+  // 4. Dedupe within the run, drop what the user already has, apply persona exclusions
+  const uniqueLeads = dedupeLeads(allLeads);
+  const freshLeads = uniqueLeads.filter((l: any) => !isKnown(l, known));
+  console.log(`[super-discovery] ${allLeads.length} raw → ${uniqueLeads.length} unique → ${freshLeads.length} new to this account`);
+  let filteredLeads = filterLeadsByPersona(freshLeads, persona);
+  filteredLeads.sort((a: any, b: any) => (b.qualityScore || 0) - (a.qualityScore || 0));
+  if (filteredLeads.length > maxPerRun) filteredLeads = filteredLeads.slice(0, maxPerRun);
+  console.log(`[super-discovery] After filtering: ${filteredLeads.length} leads (cap ${maxPerRun})`);
+  if (filteredLeads.length === 0) return stats;
 
-  // Filter out excluded industries/keywords
-  const filteredLeads = filterLeadsByPersona(uniqueLeads, persona);
-  console.log(`[super-discovery] After filtering: ${filteredLeads.length} leads`);
-
-  if (filteredLeads.length === 0) {
-    return stats;
-  }
-
-  // Enrich leads with Perplexity
-  // In deep_enrichment_mode or full_auto_mode, enrich ALL leads for better AI campaign generation
+  // 5. Enrich (bounded by remaining time) and save
   let enrichedLeads = filteredLeads;
-  const shouldEnrichAll = setting.deep_enrichment_mode || setting.full_auto_mode;
-  
-  if (setting.enrich_with_perplexity || shouldEnrichAll) {
-    enrichedLeads = await enrichLeadsWithPerplexity(filteredLeads, setting, shouldEnrichAll);
+  const elapsed = Date.now() - startedAt;
+  const shouldEnrichAll = (setting.deep_enrichment_mode || setting.full_auto_mode) && elapsed < 60_000;
+  if ((setting.enrich_with_perplexity || shouldEnrichAll) && elapsed < 95_000) {
+    const budgetSetting = { ...setting, max_leads_per_run: elapsed > 90_000 ? Math.min(10, maxPerRun) : Math.min(setting.max_perplexity_enriched || 30, maxPerRun) };
+    enrichedLeads = await enrichLeadsWithPerplexity(filteredLeads, budgetSetting, shouldEnrichAll);
     stats.enriched = enrichedLeads.filter((l: any) => l.wasEnriched).length;
   }
 
-  // Save leads to database
-  const savedStats = await saveDiscoveredLeads(
-    supabase,
-    enrichedLeads,
-    setting,
-    persona,
-    discoveryRunId
-  );
-
+  const savedStats = await saveDiscoveredLeads(supabase, enrichedLeads, setting, persona, discoveryRunId);
   stats.totalLeads = savedStats.total;
   stats.autoApproved = savedStats.autoApproved;
   stats.pending = savedStats.pending;
   stats.emailsExtracted = savedStats.emailsExtracted || 0;
   stats.contactsCreated = savedStats.contactsCreated || 0;
   stats.sequencesEnrolled = savedStats.sequencesEnrolled || 0;
-
   return stats;
 }
 
@@ -1215,30 +1236,14 @@ async function saveDiscoveredLeads(
     }
     const toExtract = leadIdsNeedingEmail.slice(0, extractLimit);
     if ((setting.auto_extract_emails || shouldExtractAll) && toExtract.length > 0) {
-      console.log(`[super-discovery] Auto-extracting emails for ${toExtract.length} leads (before saving to companies)`);
-      try {
-        const extractResponse = await fetch(`${SUPABASE_URL}/functions/v1/bulk-extract-emails`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            leadIds: toExtract,
-            createContact: false,
-            stream: false,
-          }),
-        });
-        if (extractResponse.ok) {
-          const extractResult = await extractResponse.json();
-          result.emailsExtracted = extractResult.emailsFound || 0;
-          console.log(`[super-discovery] Email extraction complete: ${result.emailsExtracted} emails found`);
-        } else {
-          console.error(`[super-discovery] Email extraction failed: ${extractResponse.status}`);
-        }
-      } catch (extractError) {
-        console.error('[super-discovery] Email extraction error:', extractError);
-      }
+      // Runs in its own invocations (chunked + chained) so this run finishes on time; the
+      // extractor promotes approved leads to companies itself and updates this run's counters.
+      console.log(`[super-discovery] Queuing email lookup for ${toExtract.length} leads`);
+      background(fetch(`${SUPABASE_URL}/functions/v1/bulk-extract-emails`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadIds: toExtract, createContact: false, stream: false, promote: true, chain: true, chunk: 12 }),
+      }));
     }
 
     // Step 2: Re-fetch so company_data includes any extracted generalEmail

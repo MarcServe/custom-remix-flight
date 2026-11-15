@@ -148,19 +148,18 @@ export default function Autopilot() {
   const runDiscoveryMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke('autonomous-lead-discovery', {
-        body: { userId: user?.id, forceRun: true },
+        body: { userId: user?.id, forceRun: true, async: true },
       });
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['autonomous-leads'] });
-      queryClient.invalidateQueries({ queryKey: ['autonomous-leads-counts'] });
-      queryClient.invalidateQueries({ queryKey: ['autonomous-discovery-settings'] });
-      toast({ 
-        title: 'Discovery complete!', 
-        description: `Found ${data?.leadsDiscovered || 0} new leads.`,
+    onSuccess: () => {
+      toast({
+        title: 'Discovery started',
+        description: 'Fresh search angles are being planned and run across all sources. New leads land in the Lead Inbox and History within 2–4 minutes.',
       });
+      const refresh = () => ['autonomous-leads', 'autonomous-leads-counts', 'autonomous-discovery-settings', 'discovery-runs', 'autopilot-today-stats', 'autopilot-latest-run'].forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
+      [45_000, 120_000, 240_000].forEach((ms) => setTimeout(refresh, ms));
     },
     onError: (error: any) => {
       toast({ title: 'Discovery failed', description: error.message, variant: 'destructive' });

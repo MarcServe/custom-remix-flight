@@ -18,6 +18,8 @@ function cleanApiKey(key: string | undefined): string | null {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OPENAI_API_KEY = cleanApiKey(Deno.env.get('OPENAI_API_KEY'));
+import { promoteLeadToCompany, bumpRunCounters } from '../_shared/lead-promote.ts';
+const background = (p: Promise<unknown>) => { const rt = (globalThis as any).EdgeRuntime; if (rt?.waitUntil) rt.waitUntil(p.catch(() => {})); else p.catch(() => {}); };
 
 // Regex patterns for email extraction
 const EMAIL_PATTERNS = [
@@ -159,6 +161,39 @@ Rules:
   }
 }
 
+
+const GENERIC_MAIL_HOSTS = /gmail\.com|yahoo\.|hotmail\.|outlook\.com|icloud\.com|example\.com|sentry\.io|wixpress\.com/i;
+async function findEmailWithPerplexity(companyName: string, websiteUrl: string): Promise<string | null> {
+  const key = (Deno.env.get('PERPLEXITY_API_KEY') || '').trim();
+  if (!key) return null;
+  let domain = '';
+  try { domain = new URL(websiteUrl).hostname.replace(/^www\./, '').toLowerCase(); } catch { /* ignore */ }
+  try {
+    const r = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'sonar', temperature: 0, max_tokens: 120,
+        messages: [
+          { role: 'system', content: 'You find public business contact email addresses. Answer with JSON only.' },
+          { role: 'user', content: `What is the general/public contact email address of "${companyName}" (website ${websiteUrl})? Only return an address published by the company itself (on its website, Google listing or official directory entry)${domain ? `, preferably at @${domain}` : ''}. If you cannot find one, return null. JSON: {"email": string|null}` },
+        ],
+        response_format: { type: 'json_schema', json_schema: { schema: { type: 'object', properties: { email: { type: ['string', 'null'] } }, required: ['email'] } } },
+      }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const content = String(d.choices?.[0]?.message?.content || '');
+    const m = content.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    if (!m) return null;
+    const email = m[0].toLowerCase();
+    if (GENERIC_MAIL_HOSTS.test(email)) return null;
+    // Only trust it when it is on the company's own domain (or a close parent/child of it)
+    const host = email.split('@')[1];
+    if (domain && !(host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host))) return null;
+    return email;
+  } catch { return null; }
+}
+
 async function extractEmailForLead(lead: any): Promise<{ email: string | null; method: string }> {
   const website = lead.company_website;
   if (!website) {
@@ -231,6 +266,12 @@ async function extractEmailForLead(lead: any): Promise<{ email: string | null; m
     finalEmail = await extractEmailWithAI(htmlContent, lead.company_name);
     method = finalEmail ? 'ai' : 'not_found';
   }
+
+  // Last resort: ask Perplexity (web-grounded) for the company's public contact email.
+  if (!finalEmail) {
+    const viaSearch = await findEmailWithPerplexity(lead.company_name, url);
+    if (viaSearch) { finalEmail = viaSearch; method = 'perplexity'; }
+  }
   
   return { email: finalEmail, method };
 }
@@ -243,7 +284,7 @@ serve(async (req) => {
   console.log('[bulk-extract-emails] Starting bulk email extraction');
 
   try {
-    const { leadIds, createContact = true, stream: useStream = true } = await req.json();
+    const { leadIds, createContact = true, stream: useStream = true, promote = false, chain = false, chunk = 12 } = await req.json();
 
     if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
       return new Response(
@@ -259,7 +300,7 @@ serve(async (req) => {
     // Fetch all leads
     const { data: leads, error: fetchError } = await supabase
       .from('autonomous_leads')
-      .select('id, company_name, company_website, company_data, company_id')
+      .select('id, user_id, company_name, company_website, company_data, company_id, status, discovery_run_id, persona_id, contacts, industry, geography, company_size, enrichment_data, reviewed_at')
       .in('id', leadIds);
 
     if (fetchError) {
@@ -287,7 +328,17 @@ serve(async (req) => {
     
     // If useStream=false, return JSON response for backend callers (like autonomous-lead-discovery)
     if (!useStream) {
-      return await processLeadsAndReturnJson(supabase, leadsToProcess, createContact);
+      // Server callers: work in bounded chunks and hand the rest to a fresh invocation so a
+      // long list never hits the function's wall-clock limit.
+      const size = Math.max(3, Math.min(25, Number(chunk) || 12));
+      const now = chain ? leadsToProcess.slice(0, size) : leadsToProcess;
+      const rest = chain ? leadsToProcess.slice(size) : [];
+      const res = await processLeadsAndReturnJson(supabase, now, createContact, promote === true);
+      if (rest.length) {
+        console.log(`[bulk-extract-emails] Chaining ${rest.length} remaining leads`);
+        background(fetch(`${SUPABASE_URL}/functions/v1/bulk-extract-emails`, { method: 'POST', headers: { Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ leadIds: rest.map((l: any) => l.id), createContact, stream: false, promote, chain: true, chunk: size }) }));
+      }
+      return res;
     }
 
     // Create SSE response for frontend callers
@@ -453,11 +504,16 @@ serve(async (req) => {
 async function processLeadsAndReturnJson(
   supabase: any,
   leadsToProcess: any[],
-  createContact: boolean
+  createContact: boolean,
+  promote = false
 ): Promise<Response> {
   let successCount = 0;
   let failedCount = 0;
   let contactsCreated = 0;
+  let promoted = 0;
+  const settingsCache = new Map<string, any>();
+  const runDeltas = new Map<string, { emails_extracted: number; contacts_created: number }>();
+  const bump = (runId: string | null, k: 'emails_extracted' | 'contacts_created') => { if (!runId) return; const d = runDeltas.get(runId) || { emails_extracted: 0, contacts_created: 0 }; d[k]++; runDeltas.set(runId, d); };
 
   for (let i = 0; i < leadsToProcess.length; i++) {
     const lead = leadsToProcess[i];
@@ -538,6 +594,19 @@ async function processLeadsAndReturnJson(
         }
 
         successCount++;
+        bump(lead.discovery_run_id, 'emails_extracted');
+
+        // Autopilot: an approved lead that now has an email becomes a CRM company (+ contact, + sequence)
+        if (promote && !lead.company_id && (lead.status === 'auto_approved' || lead.status === 'approved') && lead.user_id) {
+          if (!settingsCache.has(lead.user_id)) {
+            const { data: st } = await supabase.from('autonomous_discovery_settings').select('auto_enroll_enabled, auto_enroll_sequence_id').eq('user_id', lead.user_id).maybeSingle();
+            settingsCache.set(lead.user_id, st || null);
+          }
+          let personaSeq: string | null = null;
+          if (lead.persona_id) { const { data: pr } = await supabase.from('discovery_personas').select('auto_enroll_sequence_id').eq('id', lead.persona_id).maybeSingle(); personaSeq = pr?.auto_enroll_sequence_id || null; }
+          const companyId = await promoteLeadToCompany(supabase, lead.user_id, { ...lead, company_data: { ...(lead.company_data || {}), generalEmail: email } }, settingsCache.get(lead.user_id), personaSeq);
+          if (companyId) { promoted++; bump(lead.discovery_run_id, 'contacts_created'); }
+        }
       } else {
         failedCount++;
       }
@@ -546,12 +615,14 @@ async function processLeadsAndReturnJson(
       console.error(`[bulk-extract] Error for ${lead.company_name}:`, error);
     }
   }
+  for (const [runId, d] of runDeltas) await bumpRunCounters(supabase, runId, d);
 
   return new Response(
     JSON.stringify({
       success: true,
       emailsFound: successCount,
-      contactsCreated: contactsCreated,
+      contactsCreated: contactsCreated + promoted,
+      promoted,
       failed: failedCount,
       total: leadsToProcess.length,
     }),

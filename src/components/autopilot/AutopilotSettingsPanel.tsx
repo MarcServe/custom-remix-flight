@@ -268,6 +268,43 @@ export function AutopilotSettingsPanel({ settings }: AutopilotSettingsPanelProps
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
+              <Label>AI search planner</Label>
+              <p className="text-xs text-muted-foreground">Plans fresh search angles every run (different places, niches and hooks) and steers away from companies you already have</p>
+            </div>
+            <Switch
+              checked={localSettings?.use_ai_planner !== false}
+              onCheckedChange={(checked) => handleChange('use_ai_planner', checked)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm">Search angles per run</Label>
+            <Slider
+              value={[localSettings?.queries_per_run || 6]}
+              onValueChange={([value]) => handleChange('queries_per_run', value)}
+              min={2}
+              max={10}
+              step={1}
+            />
+            <p className="text-xs text-muted-foreground">
+              Currently: {localSettings?.queries_per_run || 6} angles · more angles = more new companies per run (and a longer run)
+            </p>
+          </div>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Perplexity company search</Label>
+              <p className="text-xs text-muted-foreground">Web-grounded list of real companies per angle, often with a contact email</p>
+            </div>
+            <Switch
+              checked={localSettings?.use_perplexity_search !== false}
+              onCheckedChange={(checked) => handleChange('use_perplexity_search', checked)}
+            />
+          </div>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
               <Label>Exa AI Search</Label>
               <p className="text-xs text-muted-foreground">AI-powered web search</p>
             </div>
