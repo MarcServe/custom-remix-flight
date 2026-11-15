@@ -162,6 +162,7 @@ Rules:
 }
 
 
+const NON_SALES_MAILBOX = /^(privacy|dpo|gdpr|legal|abuse|noreply|no-reply|donotreply|unsubscribe|press|media|careers|jobs|recruit(ment|ing)?|hr|security|postmaster|webmaster|billing|accounts|invoices?|complaints|whistleblow\w*|compliance)@/i;
 const GENERIC_MAIL_HOSTS = /gmail\.com|yahoo\.|hotmail\.|outlook\.com|icloud\.com|example\.com|sentry\.io|wixpress\.com/i;
 async function findEmailWithPerplexity(companyName: string, websiteUrl: string): Promise<string | null> {
   const key = (Deno.env.get('PERPLEXITY_API_KEY') || '').trim();
@@ -175,7 +176,7 @@ async function findEmailWithPerplexity(companyName: string, websiteUrl: string):
         model: 'sonar', temperature: 0, max_tokens: 120,
         messages: [
           { role: 'system', content: 'You find public business contact email addresses. Answer with JSON only.' },
-          { role: 'user', content: `What is the general/public contact email address of "${companyName}" (website ${websiteUrl})? Only return an address published by the company itself (on its website, Google listing or official directory entry)${domain ? `, preferably at @${domain}` : ''}. If you cannot find one, return null. JSON: {"email": string|null}` },
+          { role: 'user', content: `What is the general/public contact email address of "${companyName}" (website ${websiteUrl})? Return the general enquiries, hello/info or sales address published by the company itself (on its website, Google listing or official directory entry) — never a privacy, legal, careers or no-reply address${domain ? `, preferably at @${domain}` : ''}. If you cannot find one, return null. JSON: {"email": string|null}` },
         ],
         response_format: { type: 'json_schema', json_schema: { schema: { type: 'object', properties: { email: { type: ['string', 'null'] } }, required: ['email'] } } },
       }),
@@ -186,7 +187,7 @@ async function findEmailWithPerplexity(companyName: string, websiteUrl: string):
     const m = content.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
     if (!m) return null;
     const email = m[0].toLowerCase();
-    if (GENERIC_MAIL_HOSTS.test(email)) return null;
+    if (GENERIC_MAIL_HOSTS.test(email) || NON_SALES_MAILBOX.test(email)) return null;
     // Only trust it when it is on the company's own domain (or a close parent/child of it)
     const host = email.split('@')[1];
     if (domain && !(host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host))) return null;
@@ -232,8 +233,8 @@ async function extractEmailForLead(lead: any): Promise<{ email: string | null; m
     }
   }
   
-  // Remove duplicates
-  allEmails = [...new Set(allEmails)];
+  // Remove duplicates and addresses nobody should prospect to
+  allEmails = [...new Set(allEmails)].filter(e => !NON_SALES_MAILBOX.test(e));
   
   let finalEmail: string | null = null;
   let method = 'not_found';
