@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { loadOwnAddresses, addressedToUs } from '../_shared/own-addresses.ts';
 import { corsHeaders } from "../_shared/cors.ts";
 
 /**
@@ -72,6 +73,19 @@ serve(async (req) => {
         );
       }
       console.log('Resend payload keys:', Object.keys(payload));
+
+      // Resend's account-wide webhook also posts email.sent / delivered / opened …
+      // for OUTBOUND mail (ours and other products'). Those carry no body and are
+      // not conversations: only inbound mail is processed here.
+      const evType = String(payload?.type || '');
+      if (evType && evType !== 'email.received') {
+        return new Response(JSON.stringify({ ignored: true, reason: `event ${evType} is not inbound mail` }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      // And only mail addressed to one of this app's addresses.
+      const ownAddresses = await loadOwnAddresses(supabaseClient);
+      if (!addressedToUs(ownAddresses, payload?.data?.to ?? payload?.to, payload?.data?.cc ?? payload?.cc)) {
+        return new Response(JSON.stringify({ ignored: true, reason: 'not addressed to this app' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
 
       // Extract from email with multiple fallback paths for nested Resend structure
       const rawFrom =
