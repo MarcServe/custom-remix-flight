@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import { verifySvix } from '../_shared/edge-auth.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -15,7 +16,31 @@ serve(async (req) => {
   }
 
   try {
-    const rawPayload = await req.json();
+    const rawText = await req.text();
+
+    // Resend signs with Svix. When RESEND_WEBHOOK_SECRET is set, reject anything unsigned or forged.
+
+    const resendSecret = (Deno.env.get('RESEND_WEBHOOK_SECRET') || '').trim();
+
+    const fromSendGrid = (req.headers.get('user-agent') || '').toLowerCase().includes('sendgrid');
+
+    if (resendSecret && !fromSendGrid) {
+
+      if (!(await verifySvix(resendSecret, rawText, req.headers))) {
+
+        console.warn('email-webhook rejected: invalid Svix signature');
+
+        return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      }
+
+    } else if (!resendSecret) {
+
+      console.warn('email-webhook: RESEND_WEBHOOK_SECRET not set - events are accepted unverified');
+
+    }
+
+    const rawPayload = JSON.parse(rawText);
     console.log('Received email webhook:', JSON.stringify(rawPayload, null, 2));
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);

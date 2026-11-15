@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { loadOwnAddresses, addressedToUs } from '../_shared/own-addresses.ts';
 import { corsHeaders } from "../_shared/cors.ts";
+import { verifySvix } from "../_shared/edge-auth.ts";
 
 /**
  * Clean API key - removes any non-ASCII characters that cause ByteString errors
@@ -56,7 +57,27 @@ serve(async (req) => {
       // Resend webhook format (or synthetic payload from sync-inbound-from-resend)
       webhookSource = 'resend';
       try {
-        const raw = await req.json();
+        const rawText = await req.text();
+
+        const inboundSecret = (Deno.env.get('RESEND_INBOUND_WEBHOOK_SECRET') || Deno.env.get('RESEND_WEBHOOK_SECRET') || '').trim();
+
+        if (inboundSecret) {
+
+          if (!(await verifySvix(inboundSecret, rawText, req.headers))) {
+
+            console.warn('process-inbound-emails rejected: invalid Svix signature');
+
+            return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+          }
+
+        } else {
+
+          console.warn('process-inbound-emails: no RESEND_INBOUND_WEBHOOK_SECRET - inbound events are accepted unverified');
+
+        }
+
+        const raw = JSON.parse(rawText);
         payload = raw && typeof raw === 'object' ? raw : null;
       } catch (_e) {
         console.error('Invalid or empty JSON body');

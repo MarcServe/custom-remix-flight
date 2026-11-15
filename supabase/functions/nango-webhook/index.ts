@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyNango } from "../_shared/edge-auth.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,7 +23,19 @@ serve(async (req) => {
   }
 
   try {
-    const webhookData = await req.json();
+    const rawBody = await req.text();
+
+    const nangoSecret = (Deno.env.get('NANGO_SECRET_KEY') || '').trim();
+
+    if (!nangoSecret || !(await verifyNango(nangoSecret, rawBody, req.headers))) {
+
+      console.warn('Nango webhook rejected: bad or missing X-Nango-Signature');
+
+      return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+    }
+
+    const webhookData = JSON.parse(rawBody);
     console.log('Nango webhook received:', JSON.stringify(webhookData, null, 2));
 
     const { type, operation, payload } = webhookData;

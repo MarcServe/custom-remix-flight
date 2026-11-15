@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getValidGmailAccessToken } from '../_shared/gmail-utils.ts';
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 import { corsHeaders } from '../_shared/cors.ts';
+import { callerIdentity, unauthorized } from '../_shared/edge-auth.ts';
 import { renderEmailTemplate } from '../_shared/professional-template.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
@@ -45,6 +46,18 @@ serve(async (req) => {
       `)
       .eq('id', companySequenceId)
       .single();
+
+    // Caller must be the service role or the user who owns this sequence (it sends email as them).
+
+    if (!sequenceError && companySequence) {
+
+      const who = await callerIdentity(req);
+
+      const ownerId = (companySequence as any).sequence?.user_id || null;
+
+      if (!who || (who.kind === 'user' && ownerId && who.userId !== ownerId)) return unauthorized('Unauthorized', corsHeaders);
+
+    }
 
     if (sequenceError || !companySequence) {
       throw new Error(`Company sequence not found: ${sequenceError?.message}`);
