@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import { sendOneSms, logSms } from '../_shared/sms-send.ts';
 
 function base64Encode(str: string): string {
   if (typeof btoa !== 'undefined') return btoa(str);
@@ -68,136 +69,6 @@ function personalizeText(template: string, recipient: { name?: string | null; em
     const k = key.toLowerCase().replace(/[\s_-]/g, '');
     return k in values ? values[k] : match;
   });
-}
-
-type SmsResult = { success: boolean; messageId?: string; status?: string; error?: string };
-
-async function sendOneSms(
-  provider: string,
-  metadata: Record<string, any>,
-  phoneNumber: string,
-  message: string,
-): Promise<SmsResult> {
-  switch (provider) {
-    case 'twilio': {
-      const accountSid = metadata.account_sid;
-      const authToken = metadata.auth_token;
-      const fromNumber = metadata.phone_number;
-      if (!accountSid || !authToken || !fromNumber) {
-        return { success: false, error: 'Twilio credentials not configured' };
-      }
-      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-      const twilioAuth = base64Encode(`${accountSid}:${authToken}`);
-      const twilioResponse = await fetch(twilioUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${twilioAuth}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({ From: fromNumber, To: phoneNumber, Body: message }),
-      });
-      if (!twilioResponse.ok) {
-        const errorData = await twilioResponse.text();
-        let errorMessage = 'Twilio API error';
-        try {
-          const errorJson = JSON.parse(errorData);
-          if (errorJson.message) errorMessage = errorJson.message;
-          if (errorJson.code) errorMessage = `Twilio Error ${errorJson.code}: ${errorMessage}`;
-        } catch {
-          errorMessage = errorData || errorMessage;
-        }
-        return { success: false, error: errorMessage };
-      }
-      const twilioData = await twilioResponse.json();
-      return { success: true, messageId: twilioData.sid, status: twilioData.status };
-    }
-    case 'vonage': {
-      const apiKey = metadata.api_key;
-      const apiSecret = metadata.api_secret;
-      const fromNumber = metadata.from_number;
-      if (!apiKey || !apiSecret || !fromNumber) {
-        return { success: false, error: 'Vonage credentials not configured' };
-      }
-      const vonageResponse = await fetch('https://rest.nexmo.com/sms/json', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          api_key: apiKey,
-          api_secret: apiSecret,
-          from: fromNumber,
-          to: phoneNumber,
-          text: message,
-        }),
-      });
-      if (!vonageResponse.ok) {
-        return { success: false, error: `Vonage error: ${await vonageResponse.text()}` };
-      }
-      const vonageData = await vonageResponse.json();
-      if (vonageData.messages?.[0]?.status !== '0') {
-        return {
-          success: false,
-          error: `Vonage error: ${vonageData.messages?.[0]?.['error-text'] || 'Unknown error'}`,
-        };
-      }
-      return {
-        success: true,
-        messageId: vonageData.messages?.[0]?.['message-id'],
-        status: 'sent',
-      };
-    }
-    case 'plivo': {
-      const authId = metadata.auth_id;
-      const authToken = metadata.auth_token;
-      const fromNumber = metadata.phone_number;
-      if (!authId || !authToken || !fromNumber) {
-        return { success: false, error: 'Plivo credentials not configured' };
-      }
-      const plivoAuth = base64Encode(`${authId}:${authToken}`);
-      const plivoResponse = await fetch(`https://api.plivo.com/v1/Account/${authId}/Message/`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${plivoAuth}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ src: fromNumber, dst: phoneNumber, text: message }),
-      });
-      if (!plivoResponse.ok) {
-        return { success: false, error: `Plivo error: ${await plivoResponse.text()}` };
-      }
-      const plivoData = await plivoResponse.json();
-      return { success: true, messageId: plivoData.message_uuid?.[0], status: 'sent' };
-    }
-    case 'messagebird': {
-      const accessKey = metadata.access_key;
-      const originator = metadata.originator;
-      if (!accessKey || !originator) {
-        return { success: false, error: 'MessageBird credentials not configured' };
-      }
-      const messagebirdResponse = await fetch('https://rest.messagebird.com/messages', {
-        method: 'POST',
-        headers: {
-          Authorization: `AccessKey ${accessKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          originator,
-          recipients: [phoneNumber],
-          body: message,
-        }),
-      });
-      if (!messagebirdResponse.ok) {
-        return { success: false, error: `MessageBird error: ${await messagebirdResponse.text()}` };
-      }
-      const messagebirdData = await messagebirdResponse.json();
-      return {
-        success: true,
-        messageId: messagebirdData.id,
-        status: messagebirdData.status,
-      };
-    }
-    default:
-      return { success: false, error: `Unsupported provider: ${provider}` };
-  }
 }
 
 Deno.serve(async (req) => {
@@ -332,6 +203,12 @@ Deno.serve(async (req) => {
     const markFailed = (id: string, error_message: string) =>
       supabaseClient.from('email_campaign_recipients').update({ status: 'failed', error_message }).eq('id', id);
 
+    // Numbers that replied STOP are never texted again, by any campaign.
+    const { data: optOutRows } = await supabaseClient.from('sms_opt_outs').select('phone').eq('user_id', campaign.user_id);
+    const optedOut = new Set((optOutRows || []).map((o: any) => o.phone));
+    const fromNumber = metadata.phone_number || metadata.from_number || metadata.originator || '';
+    let skippedOptOut = 0;
+
     for (let i = 0; i < pendingRecipients.length; i += CONCURRENCY) {
       // Stop before the runtime kills us; the cron picks up whoever is still pending.
       if (Date.now() - startedAt > SEND_TIME_BUDGET_MS) break;
@@ -362,6 +239,11 @@ Deno.serve(async (req) => {
             await markFailed(recipient.id, 'UK landline or non-mobile number: it cannot receive SMS');
             return;
           }
+          if (optedOut.has(phone)) {
+            skippedOptOut++;
+            await supabaseClient.from('email_campaign_recipients').update({ status: 'skipped', error_message: 'Opted out (replied STOP)' }).eq('id', recipient.id);
+            return;
+          }
           if (!message.trim()) {
             failedCount++;
             await markFailed(recipient.id, 'Empty SMS message');
@@ -376,6 +258,13 @@ Deno.serve(async (req) => {
                 await supabaseClient.from('email_campaign_recipients')
                   .update({ external_message_id: result.messageId }).eq('id', recipient.id);
               }
+              // Show the campaign text in the Conversations thread so replies have context.
+              await logSms(supabaseClient, {
+                user_id: campaign.user_id, connection_id: campaign.sender_connection_id || null, direction: 'outbound', counterparty: phone,
+                from_number: fromNumber, to_number: phone, body: message, status: 'sent', provider, provider_sid: result.messageId || null,
+                campaign_id: campaignId, campaign_recipient_id: recipient.id, contact_name: ['Contact', 'Manual Entry', 'Group member'].includes(recipient.name) ? null : recipient.name || null,
+                read_at: new Date().toISOString(), metadata: { campaign: true },
+              });
             } else {
               failedCount++;
               await markFailed(recipient.id, result.error || 'SMS send failed');
@@ -415,7 +304,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        sent: sentCount,
+        sent: sentCount, skipped_opt_out: skippedOptOut,
         failed: failedCount,
         pending: stillPending || 0,
         provider,

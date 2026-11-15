@@ -1,4 +1,5 @@
 import { ensurePersonCompany, parseSteps } from "../_shared/followup.ts";
+import { sendOneSms, activePhoneConnection, isOptedOut, senderNumberOf, logSms, nameForNumber, normalizePhone as normalizeE164 } from "../_shared/sms-send.ts";
 
 // CRM actions for the public API (api-campaigns). Each action is scoped to the
 // authenticated user's rows. Returns null when the action isn't one of ours so
@@ -139,6 +140,7 @@ export const CRM_ACTIONS = [
   "list_deals", "create_deal", "update_deal",
   "list_sequences", "get_sequence", "create_sequence", "update_sequence", "enroll_in_sequence",
   "list_enrollments", "update_enrollment", "run_sequences_now", "sequence_health", "schedule_sms_followup",
+  "list_sms_conversations", "get_sms_conversation", "reply_sms", "list_sms_opt_outs",
 ];
 
 async function ownSequence(db: any, userId: string, body: any) {
@@ -852,12 +854,14 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
         if (!data || data.length < 1000) break;
       }
       if (!rows.length) return json({ error: "No sent recipients to follow up" }, 400);
+      const { data: outs } = await db.from("sms_opt_outs").select("phone").eq("user_id", userId);
+      const optedOut = new Set((outs || []).map((o: any) => o.phone));
       const when = body.schedule_at ? toUtcIso(str(body.schedule_at), body.timezone || "Europe/London")
         : new Date(Date.now() + Math.max(0.01, Number(body.days ?? 3)) * 86400000).toISOString();
       const seen = new Set<string>(); const recips: any[] = [];
       for (const r of rows) {
         const phone = normalizePhone(String(r.email || "").replace(/^phone:/, ""));
-        if (!phone || seen.has(phone)) continue; seen.add(phone);
+        if (!phone || seen.has(phone) || optedOut.has(phone)) continue; seen.add(phone);
         const text = fillSmsTags(message, { name: r.name, phone });
         recips.push({ email: `phone:${phone}`, name: r.name || "Contact", status: "pending", personalized_subject: `Phone Campaign: ${c.name}`, personalized_body_text: text, personalized_body_html: `<p>${text.replace(/\n/g, "<br>")}</p>` });
       }
@@ -874,7 +878,62 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
         const { error: rErr } = await db.from("email_campaign_recipients").insert(recips.slice(i, i + 500).map((r) => ({ ...r, campaign_id: camp.id })));
         if (rErr) { await db.from("email_campaigns").delete().eq("id", camp.id); return json({ error: rErr.message }, 500); }
       }
-      return json({ campaign_id: camp.id, name, recipients: recips.length, scheduled_at: when, message: `Follow-up text scheduled for ${when} (UTC) to ${recips.length} number(s) who received "${baseName}". Replies to the first text are not tracked, so everyone gets it unless you unschedule_campaign first; STOP opt-outs are handled by your SMS provider.` });
+      return json({ campaign_id: camp.id, name, recipients: recips.length, scheduled_at: when, message: `Follow-up text scheduled for ${when} (UTC) to ${recips.length} number(s) who received "${baseName}" and have not replied or opted out. Cancel with unschedule_campaign.` });
+    }
+
+    // ───────────────────────── two-way SMS ─────────────────────────
+    case "list_sms_conversations": {
+      const limit = lim(body.limit, 50, 200);
+      const { data, error } = await db.from("sms_messages").select("counterparty, contact_name, direction, body, status, created_at, read_at, campaign_id, person_id")
+        .eq("user_id", userId).order("created_at", { ascending: false }).limit(5000);
+      if (error) return json({ error: error.message }, 500);
+      const threads = new Map<string, any>();
+      for (const m of data || []) {
+        let t = threads.get(m.counterparty);
+        if (!t) { t = { phone: m.counterparty, name: m.contact_name || null, last_message: m.body, last_direction: m.direction, last_at: m.created_at, unread: 0, messages: 0, campaign_id: m.campaign_id || null, person_id: m.person_id || null }; threads.set(m.counterparty, t); }
+        if (!t.name && m.contact_name) t.name = m.contact_name;
+        if (!t.campaign_id && m.campaign_id) t.campaign_id = m.campaign_id;
+        t.messages++;
+        if (m.direction === "inbound" && !m.read_at) t.unread++;
+      }
+      let list = Array.from(threads.values());
+      if (body.unread_only === true) list = list.filter((t) => t.unread > 0);
+      if (str(body.campaign_id)) list = list.filter((t) => t.campaign_id === str(body.campaign_id));
+      if (body.inbound_only !== false) list = list.filter((t) => (data || []).some((m: any) => m.counterparty === t.phone && m.direction === "inbound"));
+      const { data: outs } = await db.from("sms_opt_outs").select("phone").eq("user_id", userId);
+      const optedOut = new Set((outs || []).map((o: any) => o.phone));
+      list = list.slice(0, limit).map((t) => ({ ...t, opted_out: optedOut.has(t.phone) }));
+      return json({ conversations: list, count: list.length, note: list.length ? undefined : "No texts received yet. Replies arrive here once your Twilio number is pointed at the LeadBoosters webhook." });
+    }
+    case "get_sms_conversation": {
+      const phone = normalizeE164(body.phone);
+      if (!phone) return json({ error: "phone required" }, 400);
+      const { data, error } = await db.from("sms_messages").select("id, direction, body, status, created_at, read_at, contact_name, campaign_id, error_message")
+        .eq("user_id", userId).eq("counterparty", phone).order("created_at", { ascending: true }).limit(lim(body.limit, 200, 1000));
+      if (error) return json({ error: error.message }, 500);
+      if (body.mark_read !== false) await db.from("sms_messages").update({ read_at: new Date().toISOString() }).eq("user_id", userId).eq("counterparty", phone).eq("direction", "inbound").is("read_at", null);
+      const opted = await isOptedOut(db, userId, phone);
+      return json({ phone, name: (data || []).find((m: any) => m.contact_name)?.contact_name || null, opted_out: opted, messages: data || [] });
+    }
+    case "reply_sms": {
+      const phone = normalizeE164(body.phone || body.to);
+      const message = str(body.message);
+      if (!phone || !message) return json({ error: "phone and message are required" }, 400);
+      const conn = await activePhoneConnection(db, userId, str(body.connection_id) || null);
+      if (!conn) return json({ error: "No active phone service (Twilio etc.) connected." }, 400);
+      if (await isOptedOut(db, userId, phone)) return json({ error: "This number has opted out (replied STOP); it cannot be texted unless they reply START." }, 400);
+      const { name, personId } = await nameForNumber(db, userId, phone);
+      const text = fillSmsTags(message, { name, phone });
+      const result = await sendOneSms(conn.provider, conn.metadata || {}, phone, text);
+      const now = new Date().toISOString();
+      await logSms(db, { user_id: userId, connection_id: conn.id, direction: "outbound", counterparty: phone, from_number: senderNumberOf(conn.provider, conn.metadata || {}) || "", to_number: phone, body: text, status: result.success ? "sent" : "failed", provider: conn.provider, provider_sid: result.messageId || null, person_id: personId, contact_name: name, error_message: result.success ? null : result.error || null, read_at: now, metadata: { via: "api" } });
+      if (result.success) await db.from("sms_messages").update({ read_at: now }).eq("user_id", userId).eq("counterparty", phone).eq("direction", "inbound").is("read_at", null);
+      if (!result.success) return json({ error: result.error || "Send failed" }, 502);
+      return json({ sent: true, to: phone, name, message: text, provider_sid: result.messageId });
+    }
+    case "list_sms_opt_outs": {
+      const { data } = await db.from("sms_opt_outs").select("phone, reason, created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(lim(body.limit, 200, 2000));
+      return json({ opt_outs: data || [], count: (data || []).length });
     }
 
     default:

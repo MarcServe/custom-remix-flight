@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSendEmail } from "@/hooks/use-email-sending";
 import { QuickReplyTemplates } from "@/components/QuickReplyTemplates";
+import { SmsConversations } from "@/components/conversations/SmsConversations";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -95,7 +96,8 @@ export default function Conversations() {
 
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null);
   const [selectedPersonalThread, setSelectedPersonalThread] = useState<string | null>(null);
-  const [conversationType, setConversationType] = useState<"sequences" | "personal">("sequences");
+  const [conversationType, setConversationType] = useState<"sequences" | "personal" | "texts">("sequences");
+  const [smsUnread, setSmsUnread] = useState(0);
   const [composeMode, setComposeMode] = useState<"ai" | "manual">("ai");
   const [generatedResponse, setGeneratedResponse] = useState<{ subject: string; body: string } | null>(null);
   const [manualReply, setManualReply] = useState<{ subject: string; body: string }>({ subject: "", body: "" });
@@ -898,8 +900,9 @@ export default function Conversations() {
         <Tabs
           value={conversationType}
           onValueChange={(v) => {
-            const next = v as "sequences" | "personal";
+            const next = v as "sequences" | "personal" | "texts";
             setConversationType(next);
+            if (next === 'texts') return;
             // Clear the other tab's selection so replies don't use a stale sequence id
             if (next === 'personal') {
               setSelectedSequence(null);
@@ -920,8 +923,19 @@ export default function Conversations() {
               <span className="mr-2">Personal</span>
               <Badge variant="secondary" className="ml-1">{personalConversations?.length || 0}</Badge>
             </TabsTrigger>
+            <TabsTrigger value="texts" className="flex-1 sm:flex-initial">
+              <span className="mr-2">Texts</span>
+              {smsUnread > 0 ? <Badge className="ml-1">{smsUnread}</Badge> : <Badge variant="secondary" className="ml-1">SMS</Badge>}
+            </TabsTrigger>
           </TabsList>
 
+          {conversationType === 'texts' && (
+            <TabsContent value="texts">
+              <SmsConversations onUnreadChange={setSmsUnread} />
+            </TabsContent>
+          )}
+
+          {conversationType !== 'texts' && (
           <TabsContent value={conversationType}>
             <Card>
               <CardHeader>
@@ -1046,6 +1060,7 @@ export default function Conversations() {
               </CardContent>
             </Card>
           </TabsContent>
+          )}
         </Tabs>
 
         {/* Conversation Thread */}
