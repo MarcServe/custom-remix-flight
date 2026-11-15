@@ -4,6 +4,21 @@ import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { renderEmailTemplate, resolveRecipientBodyHtml } from "../_shared/professional-template.ts";
 import { stripTrailingDuplicateSignoffHtml } from "../_shared/strip-trailing-signoff.ts";
 import { personalizeEmailTemplate, mergeContextFromRecipient } from "../_shared/email-personalize.ts";
+import { ensurePersonCompany, ensureNoReplySequence } from "../_shared/followup.ts";
+
+// A campaign with follow-ups on but no sequence chosen gets the default
+// "No-reply follow-up (Day 1 / 3 / 5)". Resolved once per campaign per run.
+const followUpSeqCache = new Map<string, Promise<string | null>>();
+function defaultFollowUpSequenceId(db: any, campaign: any): Promise<string | null> {
+  if (!followUpSeqCache.has(campaign.id)) {
+    followUpSeqCache.set(campaign.id, (async () => {
+      const id = await ensureNoReplySequence(db, campaign.user_id).catch(() => null);
+      if (id) await db.from('email_campaigns').update({ follow_up_sequence_id: id }).eq('id', campaign.id);
+      return id;
+    })());
+  }
+  return followUpSeqCache.get(campaign.id)!;
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -164,10 +179,28 @@ async function enrollFollowUp(
   sentAt: string,
   messageId: string | null,
 ) {
-  if (!campaign.auto_follow_up_enabled || !campaign.follow_up_sequence_id || !recipient.person_id) return;
+  if (!campaign.auto_follow_up_enabled) return;
   try {
-    const { data: person } = await supabaseClient.from('people').select('company_id').eq('id', recipient.person_id).single();
-    const companyId = person?.company_id;
+    if (!campaign.follow_up_sequence_id) {
+      campaign.follow_up_sequence_id = await defaultFollowUpSequenceId(supabaseClient, campaign);
+      if (!campaign.follow_up_sequence_id) return;
+    }
+    // Follow-ups hang off a company. Recipients added in the app usually have no
+    // person_id, so link (or create) the CRM person + company here instead of
+    // silently skipping — this is what made follow-ups never fire.
+    let companyId: string | null = null;
+    if (recipient.person_id) {
+      const { data: person } = await supabaseClient.from('people').select('company_id').eq('id', recipient.person_id).maybeSingle();
+      companyId = person?.company_id ?? null;
+    }
+    if (!companyId) {
+      const linked = await ensurePersonCompany(supabaseClient, campaign.user_id, { email: recipient.email, name: recipient.name });
+      companyId = linked.companyId;
+      if (linked.personId && !recipient.person_id) {
+        recipient.person_id = linked.personId;
+        await supabaseClient.from('email_campaign_recipients').update({ person_id: linked.personId }).eq('id', recipient.id);
+      }
+    }
     if (!companyId) return;
     const { data: existing } = await supabaseClient.from('company_sequences').select('id').eq('campaign_id', campaignId).eq('company_id', companyId).maybeSingle();
     if (existing) return;

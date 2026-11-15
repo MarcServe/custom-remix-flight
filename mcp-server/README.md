@@ -51,6 +51,7 @@ Restart Claude. You'll see the `leadboosters` tools available.
 | SMS campaigns | `create_phone_campaign` (`{name}` / `{first_name}` / `{company}` tags, per-recipient messages, `send_now`) |
 | Newsletters | `create_newsletter`, `list_newsletters`, `send_newsletter`, `list_subscribers`, `add_subscribers` |
 | Deals | `list_deals`, `create_deal`, `update_deal` |
+| Sequences & follow-ups | `list_sequences`, `get_sequence`, `create_sequence`, `update_sequence`, `enroll_in_sequence`, `list_enrollments`, `update_enrollment`, `run_sequences_now`, `sequence_health`, `schedule_sms_followup` |
 
 Times (`schedule_at`) are UK wall-clock, e.g. `"2026-11-20T09:00"`; a full ISO
 timestamp with a zone also works. Omit it to create a draft.

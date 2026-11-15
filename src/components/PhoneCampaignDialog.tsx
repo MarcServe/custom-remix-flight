@@ -64,6 +64,9 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [alreadyProcessed, setAlreadyProcessed] = useState<{ count: number }>({ count: 0 });
   const [processedKeys, setProcessedKeys] = useState<Set<string>>(new Set());
+  const [sentRecipients, setSentRecipients] = useState<{ phone: string; name?: string; status: string }[]>([]);
+  const [editingStatus, setEditingStatus] = useState<string | null>(null);
+  const [showSent, setShowSent] = useState(false);
 
   const resetForm = () => {
     setCampaignName('');
@@ -78,6 +81,9 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
     setEditingId(null);
     setProcessedKeys(new Set());
     setAlreadyProcessed({ count: 0 });
+    setSentRecipients([]);
+    setEditingStatus(null);
+    setShowSent(false);
   };
 
   // Load an existing phone campaign into the form.
@@ -89,7 +95,7 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
       try {
         const { data: camp, error } = await supabase
           .from('email_campaigns')
-          .select('id, name, body_text_template, tags')
+          .select('id, name, status, body_text_template, tags')
           .eq('id', draftCampaignId)
           .single();
         if (error) throw error;
@@ -108,12 +114,17 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
         const perRecipientOnly = ((camp.tags as string[] | null) || []).includes('per_recipient_messages');
         const template = perRecipientOnly ? '' : (camp.body_text_template || '');
         const done = new Set<string>();
+        const doneList: { phone: string; name?: string; status: string }[] = [];
         const phones: ManualPhoneNumber[] = [];
         for (const r of rows) {
           const phone = String(r.email || '').replace(/^phone:/, '').trim();
           const key = phone.replace(/\D/g, '');
           if (!key) continue;
-          if (r.status !== 'pending') { done.add(key); continue; }
+          if (r.status !== 'pending') {
+            done.add(key);
+            doneList.push({ phone, name: ['Manual Entry', 'Contact', 'Group member'].includes(r.name) ? undefined : r.name || undefined, status: r.status });
+            continue;
+          }
           const name = ['Manual Entry', 'Contact', 'Group member'].includes(r.name) ? undefined : r.name || undefined;
           const body = r.personalized_body_text || '';
           // Only keep a per-recipient message if it differs from the campaign message.
@@ -129,6 +140,8 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
         setSelectedGroupIds(new Set());
         setProcessedKeys(done);
         setAlreadyProcessed({ count: done.size });
+        setSentRecipients(doneList);
+        setEditingStatus(camp.status || null);
         setActiveTab('manual');
       } catch (e: any) {
         toast({ title: 'Could not open campaign', description: e?.message || 'Failed to load', variant: 'destructive' });
@@ -603,7 +616,9 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
 
       let campaignId = editingId;
       if (campaignId) {
-        const { error } = await supabase.from('email_campaigns').update(campaignFields).eq('id', campaignId);
+        // A finished campaign that gets new recipients becomes a draft again so it can be started.
+        const reopen = mode === 'draft' && recipients.length > 0 && ['completed', 'failed', 'cancelled'].includes(String(editingStatus));
+        const { error } = await supabase.from('email_campaigns').update({ ...campaignFields, ...(reopen ? { status: 'draft' } : {}) }).eq('id', campaignId);
         if (error) throw error;
         // Replace only the not-yet-sent recipients.
         const { error: delErr } = await supabase
@@ -802,6 +817,11 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
             <p className="text-xs text-muted-foreground">
               {message.length} characters (SMS limit: 160 characters) · {SMS_TAG_HINT}
             </p>
+            {editingId && alreadyProcessed.count > 0 && manualPhones.length === 0 && !message && (
+              <p className="text-xs text-muted-foreground">
+                This campaign has already been sent. Add new numbers below (or import a list) and enter the message to send them, then use Send now or Save draft.
+              </p>
+            )}
             {previewText && sampleRecipient && previewText !== testTemplate && (
               <p className="text-xs rounded-md border bg-muted/40 p-2">
                 <span className="font-medium">Preview for {sampleRecipient.name || sampleRecipient.phone}:</span> {previewText}
@@ -1097,6 +1117,27 @@ export function PhoneCampaignDialog({ open, onOpenChange, selectedCompanyIds = [
             </TabsContent>
           </Tabs>
         </div>
+
+        {sentRecipients.length > 0 && (
+          <div className="border rounded-md p-2 text-xs">
+            <button type="button" className="flex w-full items-center justify-between font-medium" onClick={() => setShowSent((v) => !v)}>
+              <span>Already sent to {sentRecipients.length} number{sentRecipients.length === 1 ? '' : 's'} (won't be texted again)</span>
+              <span className="text-muted-foreground">{showSent ? 'Hide' : 'Show'}</span>
+            </button>
+            {showSent && (
+              <ScrollArea className="mt-2 max-h-40">
+                <ul className="space-y-1 pr-2">
+                  {sentRecipients.map((r) => (
+                    <li key={r.phone} className="flex justify-between gap-2 text-muted-foreground">
+                      <span className="truncate">{r.name ? `${r.name} · ` : ''}{r.phone}</span>
+                      <span className="capitalize">{r.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-col gap-3 pt-4 border-t sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-muted-foreground">

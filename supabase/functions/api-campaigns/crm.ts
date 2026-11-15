@@ -1,3 +1,5 @@
+import { ensurePersonCompany, parseSteps } from "../_shared/followup.ts";
+
 // CRM actions for the public API (api-campaigns). Each action is scoped to the
 // authenticated user's rows. Returns null when the action isn't one of ours so
 // the caller can fall through to its own handlers / "unknown action".
@@ -135,7 +137,32 @@ export const CRM_ACTIONS = [
   "get_campaign", "update_campaign", "send_campaign", "unschedule_campaign", "create_phone_campaign",
   "list_newsletters", "send_newsletter", "list_subscribers", "add_subscribers",
   "list_deals", "create_deal", "update_deal",
+  "list_sequences", "get_sequence", "create_sequence", "update_sequence", "enroll_in_sequence",
+  "list_enrollments", "update_enrollment", "run_sequences_now", "sequence_health", "schedule_sms_followup",
 ];
+
+async function ownSequence(db: any, userId: string, body: any) {
+  const id = str(body.sequence_id || body.sequenceId);
+  const name = str(body.sequence_name || body.sequenceName || body.sequence);
+  if (!id && !name) return null;
+  let q = db.from("email_sequences").select("id, name, description, steps, repeat_sequence, repeat_after_days, repeat_only_for, use_email_branding, created_at").eq("created_by", userId);
+  q = id ? q.eq("id", id) : q.ilike("name", name);
+  const { data } = await q.order("created_at", { ascending: false }).limit(1).maybeSingle();
+  return data || null;
+}
+
+async function enrollmentCounts(db: any, sequenceIds: string[]): Promise<Record<string, Record<string, number>>> {
+  const out: Record<string, Record<string, number>> = {};
+  if (!sequenceIds.length) return out;
+  const { data } = await db.from("company_sequences").select("sequence_id, status").in("sequence_id", sequenceIds).limit(100000);
+  for (const r of data || []) { (out[r.sequence_id] ||= {})[r.status] = ((out[r.sequence_id] ||= {})[r.status] || 0) + 1; }
+  return out;
+}
+
+async function sendersFor(db: any, userId: string) {
+  const { data } = await db.from("crm_connections").select("id").eq("user_id", userId).eq("status", "active").in("provider", ["twilio", "vonage", "messagebird", "plivo"]).limit(1).maybeSingle();
+  return data;
+}
 
 export async function handleCrmAction(db: any, userId: string, action: string, body: any): Promise<Response | null> {
   switch (action) {
@@ -602,6 +629,240 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
       if (error) return json({ error: error.message }, 500);
       if (!data) return json({ error: "Deal not found" }, 404);
       return json({ deal: data });
+    }
+
+    // ───────────────────────── sequences (follow-ups) ─────────────────────────
+    case "list_sequences": {
+      const { data } = await db.from("email_sequences").select("id, name, description, steps, repeat_sequence, repeat_after_days, repeat_only_for, created_at")
+        .eq("created_by", userId).order("created_at", { ascending: false }).limit(lim(body.limit, 100, 500));
+      const counts = await enrollmentCounts(db, (data || []).map((s: any) => s.id));
+      return json({ sequences: (data || []).map((s: any) => { const steps = parseSteps(s.steps); return { id: s.id, name: s.name, description: s.description, steps: steps.length, first_subject: steps[0]?.subject || null, repeat_sequence: s.repeat_sequence, enrollments: counts[s.id] || {}, created_at: s.created_at }; }) });
+    }
+    case "get_sequence": {
+      const seq = await ownSequence(db, userId, body);
+      if (!seq) return json({ error: "Sequence not found (pass sequence_id or sequence_name)" }, 404);
+      const counts = await enrollmentCounts(db, [seq.id]);
+      return json({ sequence: { ...seq, steps: parseSteps(seq.steps) }, enrollments: counts[seq.id] || {} });
+    }
+    case "create_sequence": {
+      const name = str(body.name);
+      const stepsIn = Array.isArray(body.steps) ? body.steps : [];
+      if (!name) return json({ error: "name is required" }, 400);
+      if (!stepsIn.length) return json({ error: "steps[{subject, body, delayDays}] is required" }, 400);
+      const steps = stepsIn.map((st: any, i: number) => ({ subject: str(st.subject) || `Follow-up ${i + 1}`, body: str(st.body || st.body_text), delayDays: Math.max(0, Number(st.delayDays ?? st.delay_days ?? (i === 0 ? 0 : 2)) || 0) }));
+      if (steps.some((st: any) => !st.body)) return json({ error: "Every step needs a body" }, 400);
+      const { data, error } = await db.from("email_sequences").insert({
+        name, description: opt(body.description), steps: steps.map((st: any) => JSON.stringify(st)), created_by: userId,
+        repeat_sequence: body.repeat_sequence === true, repeat_after_days: Math.max(1, Math.min(30, Number(body.repeat_after_days || 5))),
+        repeat_only_for: str(body.repeat_only_for) || "no_reply", auto_respond: false, use_email_branding: body.use_email_branding !== false,
+      }).select("id, name").single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ sequence_id: data.id, name: data.name, steps: steps.length, message: `Sequence "${name}" created with ${steps.length} step(s). Use enroll_in_sequence to start people on it, or pass it as follow_up to a campaign.` });
+    }
+    case "update_sequence": {
+      const seq = await ownSequence(db, userId, body);
+      if (!seq) return json({ error: "Sequence not found" }, 404);
+      const fields: Record<string, unknown> = {};
+      if (body.name != null) fields.name = str(body.name);
+      if (body.description != null) fields.description = opt(body.description);
+      if (Array.isArray(body.steps)) {
+        const steps = body.steps.map((st: any, i: number) => ({ subject: str(st.subject) || `Follow-up ${i + 1}`, body: str(st.body || st.body_text), delayDays: Math.max(0, Number(st.delayDays ?? st.delay_days ?? 2) || 0) }));
+        fields.steps = steps.map((st: any) => JSON.stringify(st));
+      }
+      for (const k of ["repeat_sequence", "use_email_branding"]) if (typeof body[k] === "boolean") fields[k] = body[k];
+      if (body.repeat_after_days != null) fields.repeat_after_days = Math.max(1, Math.min(30, Number(body.repeat_after_days) || 5));
+      if (body.repeat_only_for != null) fields.repeat_only_for = str(body.repeat_only_for);
+      if (!Object.keys(fields).length) return json({ error: "Nothing to update" }, 400);
+      const { error } = await db.from("email_sequences").update(fields).eq("id", seq.id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ sequence_id: seq.id, updated_fields: Object.keys(fields), note: fields.steps ? "People already enrolled keep the steps they were enrolled with; new enrolments use the new steps." : undefined });
+    }
+    case "enroll_in_sequence": {
+      const seq = await ownSequence(db, userId, body);
+      if (!seq) return json({ error: "Sequence not found (pass sequence_id or sequence_name)" }, 404);
+      const steps = parseSteps(seq.steps);
+      if (!steps.length) return json({ error: "Sequence has no steps" }, 400);
+      const incoming: any[] = Array.isArray(body.recipients) ? [...body.recipients] : [];
+      const contactIds: string[] = Array.isArray(body.contact_ids) ? body.contact_ids.map(str).filter(Boolean) : [];
+      if (contactIds.length) {
+        const { data: ppl } = await db.from("people").select("id, email, first_name, last_name, companies(name)").eq("user_id", userId).in("id", contactIds);
+        for (const p of ppl || []) incoming.push({ email: p.email, first_name: p.first_name, last_name: p.last_name, company: p.companies?.name });
+      }
+      const companyIds: string[] = Array.isArray(body.company_ids) ? body.company_ids.map(str).filter(Boolean) : [];
+      if (companyIds.length) {
+        const { data: cos } = await db.from("companies").select("id, name, general_email").eq("user_id", userId).in("id", companyIds);
+        for (const c of cos || []) incoming.push({ email: c.general_email, first_name: c.name, company: c.name });
+      }
+      const g = (body.group_id || body.group_name) ? await ownGroup(db, userId, body) : null;
+      if (g) {
+        const { data: members } = await db.from("recipient_group_members").select("email, first_name, last_name, company").eq("group_id", g.id).limit(100000);
+        for (const m of members || []) incoming.push(m);
+      }
+      if (!incoming.length) return json({ error: "Provide recipients[], contact_ids[], company_ids[] or group_id/group_name" }, 400);
+
+      const sendFirstNow = body.send_first_now !== false;
+      const seen = new Set<string>(); const enrolled: any[] = []; let skippedInvalid = 0; let skippedAlready = 0;
+      const emails = incoming.map((r) => str(r?.email).toLowerCase()).filter((e) => EMAIL_RE.test(e));
+      const uniq = incoming.filter((r) => { const e = str(r?.email).toLowerCase(); if (!EMAIL_RE.test(e)) { skippedInvalid++; return false; } if (seen.has(e)) return false; seen.add(e); return true; });
+      for (const r of uniq) {
+        const email = str(r.email).toLowerCase();
+        const vars = { first_name: r.first_name || "", last_name: r.last_name || "", name: r.name || "", company: r.company || "", email };
+        const { companyId } = await ensurePersonCompany(db, userId, { email, first_name: r.first_name, last_name: r.last_name, name: r.name, company: r.company });
+        if (!companyId) { skippedInvalid++; continue; }
+        const { data: existing } = await db.from("company_sequences").select("id, status").eq("sequence_id", seq.id).eq("company_id", companyId).in("status", ["active", "paused"]).limit(1).maybeSingle();
+        if (existing) { skippedAlready++; continue; }
+        const personalized = steps.map((st, i) => ({
+          stepNumber: i, subject: personalize(st.subject, vars), body: personalize(st.body, vars),
+          delayDays: i === 0 ? 0 : st.delayDays,
+          ...(st.automation_rule ? { automation_rule: st.automation_rule } : {}),
+        }));
+        const { data: cs, error } = await db.from("company_sequences").insert({
+          company_id: companyId, sequence_id: seq.id, current_step: 0, personalized_emails: personalized, status: "active",
+          automation_rules: { enabled: true, rules: [] },
+          metadata: { enrolled_via: "api", recipient_email: email, repeat_sequence: !!seq.repeat_sequence, repeat_after_days: seq.repeat_after_days ?? 5, repeat_only_for: seq.repeat_only_for ?? "no_reply" },
+        }).select("id").single();
+        if (error || !cs) { enrolled.push({ email, error: error?.message || "insert failed" }); continue; }
+        enrolled.push({ email, enrollment_id: cs.id, company_id: companyId });
+      }
+      const ok = enrolled.filter((e) => e.enrollment_id);
+      let firstEmail: any[] = [];
+      if (sendFirstNow && ok.length) {
+        // Bounded concurrency: each call sends a real email through the user's provider.
+        const queue = [...ok]; const results: any[] = [];
+        await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
+          while (queue.length) {
+            const e = queue.shift()!;
+            const r = await callFunction("send-sequence-email", { companySequenceId: e.enrollment_id, stepNumber: 0 });
+            results.push({ email: e.email, sent: r.ok, error: r.ok ? undefined : (r.data?.error || `HTTP ${r.status}`) });
+          }
+        }));
+        firstEmail = results;
+      }
+      return json({
+        sequence_id: seq.id, sequence: seq.name, enrolled: ok.length, skipped_already_enrolled: skippedAlready, skipped_invalid: skippedInvalid,
+        failed: enrolled.filter((e) => e.error), first_email: sendFirstNow ? { sent: firstEmail.filter((r) => r.sent).length, failed: firstEmail.filter((r) => !r.sent) } : "queued: the hourly sequence run sends step 1 within the hour",
+        message: `${ok.length} enrolled in "${seq.name}". Follow-up steps are sent automatically by the hourly run and stop as soon as someone replies.`,
+      });
+    }
+    case "list_enrollments": {
+      const limit = lim(body.limit, 100, 500);
+      let q = db.from("company_sequences").select("id, status, current_step, next_action, personalized_emails, metadata, campaign_id, created_at, updated_at, company:companies!inner(id, name, user_id), sequence:email_sequences(id, name)")
+        .eq("company.user_id", userId).order("updated_at", { ascending: false }).limit(limit);
+      const status = str(body.status);
+      if (status && status !== "all") q = q.eq("status", status);
+      if (str(body.sequence_id)) q = q.eq("sequence_id", str(body.sequence_id));
+      if (str(body.campaign_id)) q = q.eq("campaign_id", str(body.campaign_id));
+      const { data, error } = await q;
+      if (error) return json({ error: error.message }, 500);
+      const rows = data || [];
+      const ids = rows.map((r: any) => r.id);
+      const last: Record<string, any> = {};
+      if (ids.length) {
+        const { data: acts } = await db.from("email_activities").select("company_sequence_id, step_number, sent_at, opened_at, replied_at").in("company_sequence_id", ids).order("sent_at", { ascending: false }).limit(5000);
+        for (const a of acts || []) if (!last[a.company_sequence_id]) last[a.company_sequence_id] = a;
+      }
+      const out = rows.map((r: any) => {
+        const steps = Array.isArray(r.personalized_emails) ? r.personalized_emails : [];
+        const next = steps.find((s: any) => s.stepNumber === (r.current_step ?? 0) + 1);
+        const la = last[r.id];
+        const due = la?.sent_at && next ? new Date(new Date(la.sent_at).getTime() + (Number(next.delayDays) || 0) * 86400000).toISOString() : null;
+        return {
+          enrollment_id: r.id, status: r.status, sequence: r.sequence?.name, sequence_id: r.sequence?.id, company: r.company?.name, company_id: r.company?.id,
+          recipient_email: r.metadata?.recipient_email || null, campaign_id: r.campaign_id,
+          step: `${r.current_step ?? 0}/${Math.max(0, steps.length - 1)}`, last_sent_at: la?.sent_at || null, opened: !!la?.opened_at, replied: !!la?.replied_at,
+          next_step_subject: next?.subject || null, next_due_at: due, stopped_reason: r.next_action || null, updated_at: r.updated_at,
+        };
+      });
+      return json({ enrollments: out, count: out.length });
+    }
+    case "update_enrollment": {
+      const id = str(body.enrollment_id);
+      const status = str(body.status);
+      if (!id || !["active", "paused", "completed"].includes(status)) return json({ error: "enrollment_id and status (active|paused|completed) required" }, 400);
+      const { data: cs } = await db.from("company_sequences").select("id, company:companies!inner(user_id)").eq("id", id).eq("company.user_id", userId).maybeSingle();
+      if (!cs) return json({ error: "Enrollment not found" }, 404);
+      const { error } = await db.from("company_sequences").update({ status, updated_at: new Date().toISOString(), ...(status === "completed" ? { next_action: "stopped_manually" } : {}) }).eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ enrollment_id: id, status });
+    }
+    case "run_sequences_now": {
+      const r = await callFunction("process-sequence-steps", { triggered_by: "api" });
+      if (!r.ok) return json({ error: r.data?.error || `HTTP ${r.status}`, details: r.data }, 502);
+      return json({ result: r.data, note: "This processed every user's due steps (same as the hourly run)." });
+    }
+    case "sequence_health": {
+      const since = new Date(Date.now() - 30 * 86400000).toISOString();
+      const { data: cs } = await db.from("company_sequences").select("id, status, current_step, personalized_emails, company:companies!inner(user_id)").eq("company.user_id", userId).limit(20000);
+      const byStatus: Record<string, number> = {};
+      for (const r of cs || []) byStatus[r.status] = (byStatus[r.status] || 0) + 1;
+      const activeIds = (cs || []).filter((r: any) => r.status === "active").map((r: any) => r.id);
+      let lastFollowUp: string | null = null; let followUpsSent30d = 0; let dueNow = 0;
+      if (activeIds.length || true) {
+        const { data: acts } = await db.from("email_activities").select("company_sequence_id, step_number, sent_at").gt("step_number", 0).gte("sent_at", since).order("sent_at", { ascending: false }).limit(5000);
+        const mine = new Set((cs || []).map((r: any) => r.id));
+        const own = (acts || []).filter((a: any) => mine.has(a.company_sequence_id));
+        followUpsSent30d = own.length; lastFollowUp = own[0]?.sent_at || null;
+      }
+      if (activeIds.length) {
+        const { data: acts } = await db.from("email_activities").select("company_sequence_id, step_number, sent_at").in("company_sequence_id", activeIds.slice(0, 2000)).order("sent_at", { ascending: false }).limit(10000);
+        const last: Record<string, any> = {};
+        for (const a of acts || []) if (!last[a.company_sequence_id]) last[a.company_sequence_id] = a;
+        for (const r of (cs || []).filter((x: any) => x.status === "active")) {
+          const steps = Array.isArray(r.personalized_emails) ? r.personalized_emails : [];
+          const next = steps.find((s: any) => s.stepNumber === (r.current_step ?? 0) + 1);
+          const la = last[r.id];
+          if (next && la?.sent_at && Date.now() - new Date(la.sent_at).getTime() >= (Number(next.delayDays) || 0) * 86400000) dueNow++;
+        }
+      }
+      const { data: camps } = await db.from("email_campaigns").select("id, name, status, auto_follow_up_enabled, follow_up_sequence_id, sent_count, tags").eq("user_id", userId).gte("created_at", since).gt("sent_count", 0);
+      const emailCamps = (camps || []).filter((c: any) => !isPhoneCampaign(c));
+      const noSeq = emailCamps.filter((c: any) => c.auto_follow_up_enabled && !c.follow_up_sequence_id).map((c: any) => c.name);
+      const offCamps = emailCamps.filter((c: any) => !c.auto_follow_up_enabled).map((c: any) => c.name);
+      return json({
+        enrollments_by_status: byStatus, active: byStatus.active || 0, due_now: dueNow,
+        follow_ups_sent_last_30d: followUpsSent30d, last_follow_up_sent_at: lastFollowUp,
+        campaigns_last_30d: { email_with_follow_up: emailCamps.length - offCamps.length, email_follow_up_off: offCamps, email_missing_sequence_defaulted_at_send: noSeq, sms: (camps || []).length - emailCamps.length },
+        how_it_runs: "Hourly cron → process-sequence-steps. Each email campaign send enrols its recipients (linked to a CRM company) in the campaign's follow-up sequence; steps go out after their delay and stop on reply. SMS campaigns have no automatic follow-up: use schedule_sms_followup.",
+        verdict: (byStatus.active || 0) === 0 && followUpsSent30d === 0 ? "No follow-ups are active or have been sent in 30 days. Send an email campaign (follow-up on) or enroll_in_sequence to start some." : "Follow-ups are active.",
+      });
+    }
+    case "schedule_sms_followup": {
+      const id = str(body.campaign_id);
+      const message = str(body.message);
+      if (!id || !message) return json({ error: "campaign_id and message are required" }, 400);
+      const { data: c } = await db.from("email_campaigns").select("id, name, tags, sender_connection_id").eq("id", id).eq("user_id", userId).maybeSingle();
+      if (!c) return json({ error: "Campaign not found" }, 404);
+      if (!isPhoneCampaign(c)) return json({ error: "That is an email campaign; its follow-ups run through sequences automatically." }, 400);
+      const rows: any[] = [];
+      for (let page = 0; ; page++) {
+        const { data } = await db.from("email_campaign_recipients").select("email, name, status").eq("campaign_id", id).eq("status", "sent").range(page * 1000, page * 1000 + 999);
+        rows.push(...(data || []));
+        if (!data || data.length < 1000) break;
+      }
+      if (!rows.length) return json({ error: "No sent recipients to follow up" }, 400);
+      const when = body.schedule_at ? toUtcIso(str(body.schedule_at), body.timezone || "Europe/London")
+        : new Date(Date.now() + Math.max(0.01, Number(body.days ?? 3)) * 86400000).toISOString();
+      const seen = new Set<string>(); const recips: any[] = [];
+      for (const r of rows) {
+        const phone = normalizePhone(String(r.email || "").replace(/^phone:/, ""));
+        if (!phone || seen.has(phone)) continue; seen.add(phone);
+        const text = fillSmsTags(message, { name: r.name, phone });
+        recips.push({ email: `phone:${phone}`, name: r.name || "Contact", status: "pending", personalized_subject: `Phone Campaign: ${c.name}`, personalized_body_text: text, personalized_body_html: `<p>${text.replace(/\n/g, "<br>")}</p>` });
+      }
+      const baseName = String(c.name).replace(/^📞\s*/, "");
+      const name = str(body.name) || `${baseName} · follow-up`;
+      const svc = await sendersFor(db, userId);
+      const { data: camp, error } = await db.from("email_campaigns").insert({
+        user_id: userId, name: `📞 ${name}`, subject_template: `Phone Campaign: ${name}`, body_text_template: message, body_html_template: `<p>${message.replace(/\n/g, "<br>")}</p>`,
+        status: "scheduled", scheduled_at: when, total_recipients: recips.length, sent_count: 0, failed_count: 0, opened_count: 0,
+        sender_connection_id: c.sender_connection_id || svc?.id || null, tags: ["phone_sms", `follow_up_of:${id}`], auto_follow_up_enabled: false,
+      }).select("id").single();
+      if (error || !camp) return json({ error: error?.message || "Failed to create follow-up campaign" }, 500);
+      for (let i = 0; i < recips.length; i += 500) {
+        const { error: rErr } = await db.from("email_campaign_recipients").insert(recips.slice(i, i + 500).map((r) => ({ ...r, campaign_id: camp.id })));
+        if (rErr) { await db.from("email_campaigns").delete().eq("id", camp.id); return json({ error: rErr.message }, 500); }
+      }
+      return json({ campaign_id: camp.id, name, recipients: recips.length, scheduled_at: when, message: `Follow-up text scheduled for ${when} (UTC) to ${recips.length} number(s) who received "${baseName}". Replies to the first text are not tracked, so everyone gets it unless you unschedule_campaign first; STOP opt-outs are handled by your SMS provider.` });
     }
 
     default:

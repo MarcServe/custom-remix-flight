@@ -1146,12 +1146,14 @@ export default function Campaigns() {
     if (overviewStatusFilter !== "all") {
       list = list.filter((c) => (c.status?.toLowerCase()?.trim() ?? "") === overviewStatusFilter);
     }
-    const order: Record<string, number> = { sending: 0, paused: 1, scheduled: 2, draft: 3, completed: 4, failed: 5 };
+    // In-progress campaigns first; everything else newest first, so a campaign you
+    // just sent sits at the top instead of under months of old drafts.
+    const order: Record<string, number> = { sending: 0, paused: 1, scheduled: 2 };
     return [...list].sort((a, b) => {
       const aStatus = a.status?.toLowerCase()?.trim() ?? "";
       const bStatus = b.status?.toLowerCase()?.trim() ?? "";
-      const aOrder = order[aStatus] ?? 6;
-      const bOrder = order[bStatus] ?? 6;
+      const aOrder = order[aStatus] ?? 3;
+      const bOrder = order[bStatus] ?? 3;
       if (aOrder !== bOrder) return aOrder - bOrder;
       return new Date(b.updated_at ?? b.created_at).getTime() - new Date(a.updated_at ?? a.created_at).getTime();
     });

@@ -163,6 +163,25 @@ tool("create_deal", "Create a deal. company is matched by name (created if new).
 tool("update_deal", "Update a deal by deal_id (stage, amount, dates, notes, tags, company).",
   { deal_id: z.string(), title: z.string().optional(), stage: z.string().optional(), amount: z.number().optional(), priority: z.string().optional(), close_date: z.string().optional(), follow_up_date: z.string().optional(), notes: z.string().optional(), tags: z.array(z.string()).optional(), company: z.string().optional() });
 
+// ───────────── Sequences & follow-ups ─────────────
+const stepShape = z.object({ subject: z.string(), body: z.string().describe("Plain text; {{firstName}} {{company}} etc. supported."), delayDays: z.number().int().min(0).optional().describe("Days after the previous step. Step 1 sends immediately on enrolment.") });
+tool("list_sequences", "List follow-up sequences (id, name, step count, enrolment counts by status).", { limit: z.number().int().optional() });
+tool("get_sequence", "Get one sequence with its steps and enrolment counts. Pass sequence_id or sequence_name.", { sequence_id: z.string().optional(), sequence_name: z.string().optional() });
+tool("create_sequence", "Create a follow-up sequence: an ordered list of emails with day delays. Used as a campaign's follow-up or via enroll_in_sequence.",
+  { name: z.string(), description: z.string().optional(), steps: z.array(stepShape).min(1), repeat_sequence: z.boolean().optional(), repeat_after_days: z.number().int().optional(), repeat_only_for: z.enum(["no_reply", "not_opened", "opened_not_clicked", "clicked_not_replied", "all"]).optional() });
+tool("update_sequence", "Rename a sequence or replace its steps. People already enrolled keep the steps they started with.",
+  { sequence_id: z.string().optional(), sequence_name: z.string().optional(), name: z.string().optional(), description: z.string().optional(), steps: z.array(stepShape).optional(), repeat_sequence: z.boolean().optional(), repeat_after_days: z.number().int().optional(), repeat_only_for: z.string().optional() });
+tool("enroll_in_sequence",
+  "Start people on a sequence. Each is linked to a CRM company (created if needed); anyone already active on that sequence is skipped. By default step 1 is emailed immediately (REAL email) and later steps go out automatically after their delays, stopping on reply. Sources: recipients[], contact_ids[], company_ids[], group_id/group_name.",
+  { sequence_id: z.string().optional(), sequence_name: z.string().optional(), recipients: z.array(recipient).optional(), contact_ids: z.array(z.string()).optional(), company_ids: z.array(z.string()).optional(), group_id: z.string().optional(), group_name: z.string().optional(), send_first_now: z.boolean().optional().describe("Default true. false = the hourly run sends step 1 within the hour.") });
+tool("list_enrollments", "Who is on which sequence: status, current step, last send, opened/replied, next step and when it is due. Filter by status (default active; 'all'), sequence_id or campaign_id.",
+  { status: z.string().optional(), sequence_id: z.string().optional(), campaign_id: z.string().optional(), limit: z.number().int().optional() });
+tool("update_enrollment", "Pause, resume or stop one enrolment.", { enrollment_id: z.string(), status: z.enum(["active", "paused", "completed"]) });
+tool("run_sequences_now", "Run the follow-up processor immediately instead of waiting for the hourly cron. Sends any steps that are due (real emails).", {});
+tool("sequence_health", "Check whether follow-ups are working: enrolments by status, steps due now, follow-ups sent in the last 30 days, and recent campaigns with follow-up off or no sequence. Start here when asked if sequences are working.", {});
+tool("schedule_sms_followup", "Schedule a follow-up TEXT to everyone who received an SMS campaign, N days later (default 3) or at schedule_at. Replies to texts are not tracked, so it goes to all of them; cancel with unschedule_campaign. message supports {name} {first_name} {company}.",
+  { campaign_id: z.string(), message: z.string(), days: z.number().optional(), schedule_at: scheduleAt, name: z.string().optional() });
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error("[leadboosters-mcp] ready");
