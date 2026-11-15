@@ -25,11 +25,20 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
  * - POST { action: "update-deliverability" } - Updates email deliverability metrics for all users
  * - POST { action: "hospitality-ingest" } - Daily verified hospitality lead ingest → groups/campaigns/newsletters
  */
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+const background = (p: Promise<unknown>) => { const rt = (globalThis as any).EdgeRuntime; if (rt?.waitUntil) rt.waitUntil(p.catch(() => {})); else p.catch(() => {}); };
 
+// pg_cron calls this through pg_net with a 5 s timeout, while most actions take 10–120 s.
+// Acknowledge at once and do the work in the background; pass {"sync": true} to wait (debugging).
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+  let body: any = {};
+  try { body = await req.clone().json(); } catch { /* empty body */ }
+  if (body?.sync === true) return handleCron(req);
+  background(handleCron(req).then((r) => r.text()).then((t) => console.log(`[cron-trigger] ${body?.action || 'discovery'} finished: ${t.slice(0, 300)}`)));
+  return new Response(JSON.stringify({ success: true, accepted: true, action: body?.action || 'discovery' }), { status: 202, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+});
+
+async function handleCron(req: Request): Promise<Response> {
   console.log('[cron-trigger] Received request');
 
   try {
@@ -557,4 +566,4 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
   }
-});
+}

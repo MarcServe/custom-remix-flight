@@ -377,8 +377,10 @@ Deno.serve(async (req) => {
       let createdGroup: { id: string; name: string; members: number } | null = null;
       if (recipientsIn.length > 0) {
         const groupName = String(body.group_name || body.groupName || "").trim() || deriveGroupName(subject, bodyText);
+        const phoneCount = recips.filter((r) => String(r.email || "").startsWith("phone:")).length;
+        const grpChannel = phoneCount === 0 ? "email" : phoneCount === recips.length ? "phone" : "mixed";
         const { data: grp } = await db.from("recipient_groups").insert({
-          user_id: userId, name: groupName,
+          user_id: userId, name: groupName, channel: grpChannel,
           description: `Auto-created from API campaign "${name}".`,
         }).select("id, name").single();
         if (grp?.id) {

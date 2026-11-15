@@ -326,6 +326,17 @@ export default function Campaigns() {
     setSelectedRecipientIds(new Set());
   }, [selectedCampaign]);
 
+  // Deep link from notifications: /campaigns?open=<campaign id> opens that campaign's editor once loaded.
+  const openFromUrl = searchParams.get("open");
+  useEffect(() => {
+    if (!openFromUrl || !campaigns?.length) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("open");
+    setSearchParams(next, { replace: true });
+    if (campaigns.some((c) => c.id === openFromUrl)) openCampaignEditor(openFromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openFromUrl, campaigns]);
+
   const addToDraftFromState = (location.state as { addToDraft?: boolean })?.addToDraft === true;
   const addToDraftFromUrl = searchParams.get("addToDraft") === "1";
   const shouldAddToDraft = addToDraftFromState || addToDraftFromUrl;

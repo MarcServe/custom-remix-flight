@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -899,10 +899,17 @@ export default function RecipientGroups() {
   const openManage = (g: RecipientGroup) => {
     setManageId(g.id);
     setManageName(g.name);
-    setManageChannel((g.channel as "email" | "phone" | "mixed") || "email");
+    // Older phone groups were created without a channel: fall back to the 📞 name marker.
+    setManageChannel((g.channel as "email" | "phone" | "mixed") || (g.name.trim().startsWith("📞") ? "phone" : "email"));
     setAddEmailsText("");
     setSelectedMemberIds(new Set());
   };
+
+  // …and if the members themselves are all phone numbers, it is a phone group whatever the row says.
+  useEffect(() => {
+    if (!manageId || manageChannel === "phone" || manageMembers.length === 0) return;
+    if (manageMembers.every((m: any) => String(m.email || "").startsWith("phone:"))) setManageChannel("phone");
+  }, [manageId, manageMembers, manageChannel]);
 
   const refreshMembers = () => {
     queryClient.invalidateQueries({ queryKey: ["recipient-group-members", manageId] });

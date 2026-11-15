@@ -34,6 +34,9 @@ const ICONS: Record<string, JSX.Element> = {
   sequence_click: <MousePointerClick className="h-4 w-4 text-purple-600" />,
   bounce: <AlertCircle className="h-4 w-4 text-destructive" />,
   lead_search_done: <Search className="h-4 w-4 text-primary" />,
+  autopilot_campaign_draft: <Send className="h-4 w-4 text-primary" />,
+  automation_run: <Search className="h-4 w-4 text-primary" />,
+  automation_failed: <AlertCircle className="h-4 w-4 text-destructive" />,
 };
 
 export function useNotifications() {
