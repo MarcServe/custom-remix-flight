@@ -27,7 +27,7 @@ let rpcId = 0;
 async function remote(method, params) {
   const res = await fetch(MCP_URL, {
     method: "POST",
-    headers: { "x-api-key": API_KEY, "Content-Type": "application/json", Accept: "application/json" },
+    headers: { "x-api-key": API_KEY, "Content-Type": "application/json", Accept: "application/json", "x-lb-client": process.env.LEADBOOSTERS_CLIENT || "claude-code" },
     body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params }),
   });
   const text = await res.text();
@@ -37,13 +37,13 @@ async function remote(method, params) {
   return msg.result;
 }
 
-const init = await remote("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "leadboosters-mcp-stdio", version: "1.2.0" } }).catch((e) => {
+const init = await remote("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "leadboosters-mcp-stdio", version: "1.3.0" } }).catch((e) => {
   console.error(`[leadboosters-mcp] cannot reach ${MCP_URL}: ${e.message}`);
   process.exit(1);
 });
 
 const server = new Server(
-  { name: "leadboosters", version: "1.2.0" },
+  { name: "leadboosters", version: "1.3.0" },
   { capabilities: { tools: {} }, instructions: init?.instructions },
 );
 

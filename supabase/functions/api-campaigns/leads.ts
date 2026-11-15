@@ -3,6 +3,7 @@
 import { knownCompanies, isKnown, searchWithLeadFinder, searchWithPerplexity, searchWithApifyMaps, dedupeLeads, domainOf, type SourceLead } from "../_shared/discovery-sources.ts";
 import { cleanTerm } from "../_shared/discovery-planner.ts";
 import { promoteLeadToCompany } from "../_shared/lead-promote.ts";
+import { sourceTag } from "./crm.ts";
 
 const json = (obj: unknown, status = 200) => new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
 const str = (v: unknown): string => (v == null ? "" : String(v)).trim();
@@ -45,7 +46,7 @@ export async function handleLeadAction(db: any, userId: string, action: string, 
       const status = settings?.full_auto_mode ? "auto_approved" : (body.status === "approved" || body.status === "auto_approved") ? "auto_approved" : "pending";
       const rows = fresh.map((l) => ({
         user_id: userId, discovery_run_id: runId, persona_id: str(body.persona_id) || null, status, quality_score: Math.round(l.qualityScore || 0),
-        company_data: { ...l, generalEmail: l.generalEmail || null, companyPhone: l.companyPhone || null, contacts: (l as any).contacts || [], suggestedTags: (l as any).suggestedTags || [] },
+        company_data: { ...l, generalEmail: l.generalEmail || null, companyPhone: l.companyPhone || null, contacts: (l as any).contacts || [], suggestedTags: [...new Set([...(((l as any).suggestedTags as string[]) || []), ...(sourceTag(body) ? [sourceTag(body) as string] : [])])] },
         company_name: l.name, company_website: l.website || null, industry: l.industry || industry || null, geography: l.geography || geography || null, company_size: (l as any).size || size || null,
         contacts: (l as any).contacts || [], source: "assistant", sources_used: [...new Set(["assistant", ...((l.sources_used as string[]) || [l.source])])], source_breakdown: { primary: "assistant", all: l.sources_used || [l.source] },
       }));
@@ -87,7 +88,9 @@ export async function handleLeadAction(db: any, userId: string, action: string, 
       const { data: settings } = await db.from("autonomous_discovery_settings").select("auto_enroll_enabled, auto_enroll_sequence_id").eq("user_id", userId).maybeSingle();
       let approved = 0; const companies: { lead_id: string; company_id: string | null; name: string }[] = [];
       for (const lead of leads || []) {
-        const companyId = await promoteLeadToCompany(db, userId, lead, settings);
+        const st = sourceTag(body);
+        const tagged = st ? { ...lead, company_data: { ...(lead.company_data || {}), suggestedTags: [...new Set([...(((lead.company_data || {}).suggestedTags as string[]) || []), st])] } } : lead;
+        const companyId = await promoteLeadToCompany(db, userId, tagged, settings);
         await db.from("autonomous_leads").update({ status: "approved", reviewed_at: new Date().toISOString(), company_id: companyId }).eq("id", lead.id);
         approved++; companies.push({ lead_id: lead.id, company_id: companyId, name: lead.company_name });
       }

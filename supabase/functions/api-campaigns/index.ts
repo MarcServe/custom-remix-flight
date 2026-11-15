@@ -480,6 +480,12 @@ Deno.serve(async (req) => {
       return json({ ok: true, sent_to: toEmail, provider: "sendgrid", from: conn.from_email, message: `Test email sent to ${toEmail}.` });
     }
 
+    // Where did this record come from? The MCP server says (x-lb-source: via-claude / via-chatgpt…);
+    // a direct lb_live_ API caller is tagged via-api; app users (JWT) get no tag.
+    {
+      const hdr = (req.headers.get("x-lb-source") || "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40);
+      if (hdr) body.__source = hdr; else if (rawKey.startsWith("lb_live_")) body.__source = "via-api";
+    }
     const crm = await handleCrmAction(db, userId, action, body);
     if (crm) return crm;
 

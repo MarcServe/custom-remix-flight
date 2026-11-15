@@ -130,6 +130,10 @@ async function callFunction(name: string, payload: Record<string, unknown>): Pro
 
 import { handleLeadAction, LEAD_ACTIONS } from "./leads.ts";
 
+/** Tag records the assistant/API creates with where they came from (via-claude, via-chatgpt, via-api…). */
+export const sourceTag = (body: any): string | null => { const v = String(body?.__source || "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40); return v ? (v.startsWith("via-") ? v : `via-${v}`) : null; };
+export const withSource = (tags: unknown, body: any): string[] | undefined => { const t = sourceTag(body); const base = Array.isArray(tags) ? tags.map(String).filter(Boolean) : []; if (!t) return Array.isArray(tags) ? base : undefined; return Array.from(new Set([...base, t])); };
+
 const isPhoneCampaign = (c: any) => (Array.isArray(c?.tags) && c.tags.includes("phone_sms")) || String(c?.name || "").startsWith("📞");
 
 export const CRM_ACTIONS = [
@@ -231,12 +235,14 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
       const { data: existing } = await db.from("people").select("id, tags").eq("user_id", userId).eq("email", email).maybeSingle();
       if (existing?.id) {
         if (Array.isArray(body.add_tags)) fields.tags = Array.from(new Set([...(existing.tags || []), ...body.add_tags.map(str)])).filter(Boolean);
+        if (sourceTag(body)) fields.tags = withSource(fields.tags ?? existing.tags, body);
         const { data, error } = await db.from("people").update(fields).eq("id", existing.id).select("id, first_name, last_name, email, phone, title, tags, company_id").single();
         if (error) return json({ error: error.message }, 500);
         return json({ contact: data, created: false });
       }
       if (Array.isArray(body.add_tags)) fields.tags = body.add_tags.map(str).filter(Boolean);
       if (!fields.first_name) fields.first_name = email.split("@")[0];
+      if (sourceTag(body)) fields.tags = withSource(fields.tags, body);
       const { data, error } = await db.from("people").insert({ user_id: userId, email, ...fields }).select("id, first_name, last_name, email, phone, title, tags, company_id").single();
       if (error) return json({ error: error.message }, 500);
       return json({ contact: data, created: true });
@@ -298,6 +304,7 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
         if (error) return json({ error: error.message }, 500);
         return json({ company: data, created: false });
       }
+      if (sourceTag(body)) fields.tags = withSource(fields.tags, body);
       const { data, error } = await db.from("companies").insert({ user_id: userId, name, ...fields }).select("id, name, website, industry, company_phone, general_email, status, tags").single();
       if (error) return json({ error: error.message }, 500);
       return json({ company: data, created: true });

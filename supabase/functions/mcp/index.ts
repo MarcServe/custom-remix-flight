@@ -29,9 +29,21 @@ const rpcError = (id: Rpc["id"], code: number, message: string, data?: unknown) 
 const jsonResponse = (body: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json", ...extra } });
 
-async function callApi(key: string, payload: Record<string, unknown>) {
+/** Which assistant is talking: the local proxy says so (x-lb-client); hosted clients are told apart by User-Agent. */
+function detectClient(req: Request): string {
+  const explicit = (req.headers.get("x-lb-client") || "").toLowerCase().replace(/[^a-z0-9-]/g, "");
+  if (explicit) return explicit;
+  const ua = (req.headers.get("user-agent") || "").toLowerCase();
+  if (/chatgpt|openai/.test(ua)) return "chatgpt";
+  if (/claude|anthropic/.test(ua)) return "claude";
+  if (/cursor/.test(ua)) return "cursor";
+  return "assistant";
+}
+const sourceFor = (client: string) => (client.startsWith("claude") ? "via-claude" : `via-${client}`);
+
+async function callApi(key: string, payload: Record<string, unknown>, source = "via-assistant") {
   const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/api-campaigns`;
-  const r = await fetch(url, { method: "POST", headers: { "x-api-key": key, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  const r = await fetch(url, { method: "POST", headers: { "x-api-key": key, "Content-Type": "application/json", "x-lb-source": source }, body: JSON.stringify(payload) });
   const text = await r.text();
   let data: any; try { data = JSON.parse(text); } catch { data = { raw: text }; }
   return { ok: r.ok, status: r.status, data };
@@ -72,7 +84,7 @@ async function runFetch(key: string, id: string) {
   return { id, title: id, text: JSON.stringify(r.data, null, 2), url: `leadboosters://${kind}/${rid}`, metadata: { kind } };
 }
 
-async function handleRpc(msg: Rpc, key: string): Promise<unknown | null> {
+async function handleRpc(msg: Rpc, key: string, source = "via-assistant"): Promise<unknown | null> {
   const id = msg.id ?? null;
   const method = msg.method || "";
   const isNotification = msg.id === undefined;
@@ -105,7 +117,7 @@ async function handleRpc(msg: Rpc, key: string): Promise<unknown | null> {
         if (name === "fetch") return rpcResult(id, text(await runFetch(key, String(args.id || ""))));
         const tool = MCP_TOOLS.find((t) => t.name === name);
         if (!tool) return rpcError(id, -32602, `Unknown tool: ${name}`);
-        const r = await callApi(key, { action: tool.action, ...args });
+        const r = await callApi(key, { action: tool.action, ...args }, source);
         if (!r.ok) return rpcResult(id, { isError: true, content: [{ type: "text", text: `LeadBoosters error: ${r.data?.error || r.data?.message || `HTTP ${r.status}`}` }] });
         return rpcResult(id, text(r.data));
       }
@@ -144,7 +156,7 @@ Deno.serve(async (req) => {
   let body: unknown;
   try { body = await req.json(); } catch { return jsonResponse(rpcError(null, -32700, "Parse error"), 400); }
   const messages: Rpc[] = Array.isArray(body) ? body : [body as Rpc];
-  const responses = (await Promise.all(messages.map((m) => handleRpc(m, key)))).filter((r) => r !== null);
+  const responses = (await Promise.all(messages.map((m) => handleRpc(m, key, sourceFor(detectClient(req)))))).filter((r) => r !== null);
 
   // Notifications only → 202 with no body (per spec).
   if (!responses.length) return new Response(null, { status: 202, headers: CORS });
