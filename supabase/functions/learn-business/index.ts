@@ -46,6 +46,35 @@ async function fetchPage(url: string): Promise<string | null> {
   } catch { return null; }
 }
 
+// Script-rendered sites (React/Vite/Next SPAs) ship almost no text in their HTML.
+// Fall back to a rendering reader that returns the page as plain text/markdown.
+async function fetchRendered(url: string): Promise<{ text: string; links: string[]; title: string } | null> {
+  try {
+    const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 20000);
+    const r = await fetch(`https://r.jina.ai/${url}`, { headers: { Accept: "text/plain", "User-Agent": UA, "X-Return-Format": "markdown" }, signal: ctrl.signal });
+    clearTimeout(t);
+    if (!r.ok) return null;
+    const md = (await r.text()).slice(0, 200_000);
+    const title = md.match(/^Title:\s*(.+)$/m)?.[1]?.trim() || "";
+    const links = Array.from(md.matchAll(/\((https?:\/\/[^)\s]+)\)/g)).map((m) => m[1]);
+    const text = md.replace(/^(Title|URL Source|Published Time|Markdown Content):.*$/gm, "").replace(/!\[[^\]]*\]\([^)]*\)/g, " ").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
+    return { text, links, title };
+  } catch { return null; }
+}
+
+async function sitemapLinks(origin: string): Promise<string[]> {
+  try {
+    const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch(`${origin}/sitemap.xml`, { headers: { "User-Agent": UA }, signal: ctrl.signal });
+    clearTimeout(t);
+    if (!r.ok) return [];
+    const xml = await r.text();
+    return Array.from(xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)).map((m) => m[1]).slice(0, 200);
+  } catch { return []; }
+}
+
+const plainLen = (t: string) => t.replace(/\s+/g, " ").trim().length;
+
 function normaliseUrl(raw: string): string | null {
   let u = String(raw || "").trim();
   if (!u) return null;
@@ -84,12 +113,24 @@ Deno.serve(async (req) => {
       const origin = new URL(url).origin;
       const abs = (l: string) => { try { return new URL(l, url).toString(); } catch { return null; } };
       logo = h.logo ? abs(h.logo) : null; themeColor = h.themeColor; ogImage = h.ogImage ? abs(h.ogImage) : null; homeDescription = h.description;
-      pages.push({ url, title: h.title, text: h.text.slice(0, 9000) });
+      let homeText = h.text, homeTitle = h.title, homeLinks = h.links;
+      let rendered = false;
+      if (plainLen(homeText) < 600) {
+        const rr = await fetchRendered(url);
+        if (rr && plainLen(rr.text) > plainLen(homeText)) { homeText = rr.text; homeTitle = homeTitle || rr.title; homeLinks = [...homeLinks, ...rr.links]; rendered = true; }
+      }
+      pages.push({ url, title: homeTitle, text: homeText.slice(0, 9000) });
       const seen = new Set<string>([url.replace(/\/$/, "")]);
-      const candidates = h.links.map(abs).filter((l): l is string => !!l && l.startsWith(origin) && INTERESTING.test(l) && !/\.(pdf|jpg|png|svg|zip|mp4)$/i.test(l))
+      const fromSitemap = homeLinks.length < 5 ? await sitemapLinks(origin) : [];
+      const candidates = [...homeLinks, ...fromSitemap].map(abs).filter((l): l is string => !!l && l.startsWith(origin) && INTERESTING.test(l) && !/\.(pdf|jpg|png|svg|zip|mp4)$/i.test(l))
         .map((l) => l.replace(/\/$/, "")).filter((l) => !seen.has(l) && seen.add(l)).slice(0, 5);
-      const extra = await Promise.all(candidates.map(async (l) => { const html = await fetchPage(l); return html ? { url: l, ...stripHtml(html) } : null; }));
-      for (const p of extra) if (p && p.text.length > 200) pages.push({ url: p.url, title: p.title, text: p.text.slice(0, 5000) });
+      const extra = await Promise.all(candidates.map(async (l) => {
+        const html = await fetchPage(l);
+        let pg = html ? { url: l, ...stripHtml(html) } : null;
+        if (rendered || !pg || plainLen(pg.text) < 300) { const rr = await fetchRendered(l); if (rr && plainLen(rr.text) > plainLen(pg?.text || "")) pg = { url: l, title: rr.title, text: rr.text, links: rr.links, description: "", logo: null, themeColor: null, ogImage: null }; }
+        return pg;
+      }));
+      for (const p of extra) if (p && plainLen(p.text) > 200) pages.push({ url: p.url, title: p.title, text: p.text.slice(0, 5000) });
     }
     const corpus = [pastedText ? `PASTED DESCRIPTION:\n${pastedText.slice(0, 8000)}` : "", ...pages.map((p) => `PAGE ${p.url}\nTITLE: ${p.title}\n${p.text}`)].filter(Boolean).join("\n\n").slice(0, 28_000);
     if (corpus.replace(/\s+/g, " ").length < 200) return json({ error: "The site returned almost no readable text (it may be fully script-rendered). Paste a description of the business instead." }, 400);
@@ -112,7 +153,7 @@ Deno.serve(async (req) => {
  "proof_points": string[],                    // awards, numbers, notable clients, guarantees (max 6, only if stated)
  "faqs": [{"q": string, "a": string}],        // up to 6, only if present on the site
  "suggested_email_signature": string,         // 2-3 lines: name placeholder, role, company, phone/site
- "knowledge_base": string                     // 250-500 words of plain-text facts an assistant needs to write accurate, on-brand emails and texts: who they are, exactly what they offer (with prices if shown), who it's for, how it works, locations/hours, USPs, proof, common objections answered. No marketing fluff, no invented facts.
+ "knowledge_base": string                     // AT LEAST 300 words (up to 600) of plain-text facts an assistant needs to write accurate, on-brand emails and texts. Cover, in short paragraphs: who they are and where; EVERY offering/product/service found with one or two lines each (and prices if shown); who each is for; how working with them works (process, free audits/trials, contact routes); USPs; proof points; common questions answered. No marketing fluff, no invented facts.
 }
 Only use facts present in the content; if unknown use null/empty. Content:\n\n${corpus}`;
 
@@ -139,7 +180,7 @@ Only use facts present in the content; if unknown use null/empty. Content:\n\n${
       email_logo_url: logo || null,
       knowledge_base: learned.knowledge_base || null,
     };
-    const extras = { locations: learned.locations || null, offerings: learned.offerings || [], proof_points: learned.proof_points || [], faqs: learned.faqs || [], og_image: ogImage, pages_read: pages.map((p) => p.url), home_description: homeDescription };
+    const extras = { locations: learned.locations || null, offerings: learned.offerings || [], proof_points: learned.proof_points || [], faqs: learned.faqs || [], og_image: ogImage, pages_read: pages.map((p) => p.url), home_description: homeDescription, chars_read: plainLen(corpus) };
 
     let applied: Record<string, unknown> | null = null;
     if (body.apply === true) {
