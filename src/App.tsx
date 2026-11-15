@@ -28,6 +28,7 @@ import LeadInbox from "./pages/LeadInbox";
 import Enrichment from "./pages/Enrichment";
 import BusinessProfile from "./pages/BusinessProfile";
 import ApiKeys from "./pages/ApiKeys";
+import ConnectAI from "./pages/ConnectAI";
 import AiCreate from "./pages/AiCreate";
 import Profile from "./pages/Profile";
 import Pipeline from "./pages/Pipeline";
@@ -111,6 +112,7 @@ const App = () => (
                           <Route path="/newsletters" element={<PlanGate requiredTier="individual" feature="Newsletters"><Newsletters /></PlanGate>} />
                           <Route path="/business-profile" element={<BusinessProfile />} />
                           <Route path="/api-keys" element={<ApiKeys />} />
+                          <Route path="/connect-ai" element={<ConnectAI />} />
                           <Route path="/profile" element={<Profile />} />
                           <Route path="/pipeline" element={<Pipeline />} />
                           <Route path="/email-branding" element={<PageErrorBoundary fallbackTitle="Email Branding failed to load"><EmailBranding /></PageErrorBoundary>} />

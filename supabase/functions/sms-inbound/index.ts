@@ -7,6 +7,25 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { digitsOf, normalizePhone, isOptOut, isOptIn, nameForNumber, logSms } from "../_shared/sms-send.ts";
 
 const PUBLIC_URL = Deno.env.get("SMS_WEBHOOK_URL") || "https://kgndpwzqohepotahnfeo.supabase.co/functions/v1/sms-inbound";
+// The Twilio number is shared with another Biz Boosters product (TalkWeb). After we
+// handle a text we relay the original form to that product's webhook (re-signed for
+// its URL with the same auth token) so it keeps working, and pass back any reply it
+// wants Twilio to send when we have none of our own.
+const FORWARD_URL = (Deno.env.get("SMS_FORWARD_URL") || "").trim();
+
+async function relayToOtherProduct(params: Record<string, string>, authToken: string): Promise<string | null> {
+  if (!FORWARD_URL) return null;
+  try {
+    const sig = await twilioSignature(authToken, FORWARD_URL, params);
+    const r = await fetch(FORWARD_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Twilio-Signature": sig }, body: new URLSearchParams(params) });
+    const text = await r.text();
+    const m = text.match(/<Message[^>]*>([\s\S]*?)<\/Message>/i);
+    return m ? m[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&apos;/g, "'").replace(/&quot;/g, '"') : null;
+  } catch (e) {
+    console.warn("[sms-inbound] relay failed:", (e as Error).message);
+    return null;
+  }
+}
 
 const twiml = (message?: string) =>
   new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${message ? `<Message>${escapeXml(message)}</Message>` : ""}</Response>`, {
@@ -47,7 +66,9 @@ Deno.serve(async (req) => {
   });
   if (!candidates.length) {
     console.warn("[sms-inbound] no connection for", to);
-    return twiml(); // 200 so Twilio doesn't retry forever
+    const anyToken = (conns || []).find((c: any) => c.metadata?.auth_token)?.metadata?.auth_token;
+    const relayed = anyToken ? await relayToOtherProduct(params, anyToken) : null;
+    return twiml(relayed || undefined); // 200 so Twilio doesn't retry forever
   }
 
   // Verify Twilio's signature against each candidate's auth token (URL as Twilio called it).
@@ -66,6 +87,7 @@ Deno.serve(async (req) => {
     console.warn("[sms-inbound] signature mismatch for", to);
     return new Response("Forbidden", { status: 403 });
   }
+  const relayPromise = relayToOtherProduct(params, conn.metadata.auth_token);
 
   const userId = conn.user_id as string;
   const { name, personId } = await nameForNumber(db, userId, from);
@@ -97,13 +119,16 @@ Deno.serve(async (req) => {
     const { data: bp } = await db.from("business_profiles").select("company_name").eq("user_id", userId).maybeSingle();
     const reply = `You've been unsubscribed from ${bp?.company_name || "our"} texts and won't hear from us again. Reply START to opt back in.`;
     await logSms(db, { user_id: userId, connection_id: conn.id, direction: "outbound", counterparty: from, from_number: to, to_number: from, body: reply, status: "sent", provider: "twilio", metadata: { auto_reply: "opt_out" }, read_at: new Date().toISOString() });
+    await relayPromise;
     return twiml(reply);
   }
   if (optIn) {
     await db.from("sms_opt_outs").delete().eq("user_id", userId).eq("phone", from);
     const reply = "You're subscribed again. Reply STOP at any time to opt out.";
     await logSms(db, { user_id: userId, connection_id: conn.id, direction: "outbound", counterparty: from, from_number: to, to_number: from, body: reply, status: "sent", provider: "twilio", metadata: { auto_reply: "opt_in" }, read_at: new Date().toISOString() });
+    await relayPromise;
     return twiml(reply);
   }
-  return twiml();
+  const otherReply = await relayPromise;
+  return twiml(otherReply || undefined);
 });
