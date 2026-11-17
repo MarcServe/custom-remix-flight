@@ -45,12 +45,13 @@ const navigation: NavigationItem[] = [
     href: "#leads", 
     icon: Search,
     children: [
+      // Where leads live first, then the tools that find and enrich them
+      { name: "Lead Inbox", href: "/lead-inbox", icon: Inbox },
+      { name: "Hospitality Leads", href: "/hospitality-leads", icon: Building2 },
       { name: "Autopilot", href: "/autopilot", icon: Brain },
       { name: "Lead Finder", href: "/lead-finder", icon: Sparkles },
-      { name: "Hospitality Leads", href: "/hospitality-leads", icon: Building2 },
       { name: "Research Chat", href: "#", icon: MessageSquare, opensResearchPanel: true },
       { name: "Enrichment", href: "/enrichment", icon: Wand2 },
-      { name: "Lead Inbox", href: "/lead-inbox", icon: Inbox },
     ]
   },
   
