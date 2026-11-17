@@ -11,18 +11,38 @@ export async function promoteLeadToCompany(db: any, userId: string, lead: any, s
   const d = lead.company_data || {};
   const dom = domainOf(lead.company_website);
   let companyId: string | null = null;
-  if (dom) {
-    const { data: existing } = await db.from("companies").select("id").eq("user_id", userId).ilike("website", `%${dom}%`).limit(1).maybeSingle();
-    if (existing?.id) companyId = existing.id;
+  // 1) Same name → same company.
+  const name = String(lead.company_name || "").trim();
+  if (name) {
+    const { data: byName } = await db.from("companies").select("id").eq("user_id", userId).ilike("name", name).order("created_at").limit(1);
+    if (byName?.[0]?.id) companyId = byName[0].id;
+  }
+  // 2) Same website → same company, but only when exactly one company uses that site.
+  //    Hotel groups, franchises and NHS trusts share one domain across many separate organisations.
+  if (!companyId && dom) {
+    const { data: byDomain } = await db.from("companies").select("id, website").eq("user_id", userId).ilike("website", `%${dom}%`).limit(5);
+    const exact = (byDomain || []).filter((c: any) => domainOf(c.website) === dom);
+    if (exact.length === 1) companyId = exact[0].id;
   }
   if (!companyId) {
-    const { data: company, error } = await db.from("companies").insert({
-      user_id: userId, name: lead.company_name, website: lead.company_website || `no-website-${crypto.randomUUID()}`, description: d.description || null, industry: lead.industry || null,
+    // companies.website is unique platform-wide. Properties of a chain often list the group's
+    // shared site, so fall back to the property's own contact page, then a name-tagged URL.
+    const slug = String(lead.company_name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+    const base = lead.company_website || "";
+    const candidates = [base, d.sourceUrl && d.sourceUrl !== base ? d.sourceUrl : null, base ? `${base.replace(/#.*$/, "")}#${slug}` : null, `no-website-${crypto.randomUUID()}`]
+      .filter((v, i, a): v is string => !!v && a.indexOf(v) === i);
+    let company: any = null; let error: any = null;
+    for (const website of candidates) {
+      ({ data: company, error } = await db.from("companies").insert({
+        user_id: userId, name: lead.company_name, website, description: d.description || null, industry: lead.industry || null,
       size: lead.company_size || null, geography: lead.geography || null, linkedin_url: d.linkedinUrl || d.socialProfiles?.linkedin || null, company_phone: d.companyPhone || null, general_email: d.generalEmail || null,
       social_profiles: d.socialProfiles || {}, key_executives: d.keyExecutives || [], employee_count: d.employeeCount || null, recent_news: d.recentNews || null,
       enrichment_data: lead.enrichment_data || null, enrichment_status: d.wasEnriched || lead.enrichment_data ? "completed" : "pending",
       tags: Array.isArray(d.suggestedTags) && d.suggestedTags.length ? d.suggestedTags : null,
-    }).select("id").single();
+      }).select("id").single());
+      if (!error && company) break;
+      if (error?.code !== "23505") break; // only a duplicate website is worth retrying
+    }
     if (error || !company) { console.error("[promote] company insert failed", error?.message); return null; }
     companyId = company.id;
     const contacts = Array.isArray(lead.contacts) && lead.contacts.length ? lead.contacts : Array.isArray(d.contacts) ? d.contacts : [];

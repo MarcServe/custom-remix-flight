@@ -86,11 +86,16 @@ export async function handleLeadAction(db: any, userId: string, action: string, 
         return json({ rejected: (leads || []).length });
       }
       const { data: settings } = await db.from("autonomous_discovery_settings").select("auto_enroll_enabled, auto_enroll_sequence_id").eq("user_id", userId).maybeSingle();
+      // The Autopilot follow-up sequence is written for Autopilot's personas. Only leads Autopilot found
+      // for a persona are enrolled; curated or assistant-found leads are approved without emailing them,
+      // unless enroll:true is passed explicitly.
+      const noEnroll = { auto_enroll_enabled: false, auto_enroll_sequence_id: null };
       let approved = 0; const companies: { lead_id: string; company_id: string | null; name: string }[] = [];
       for (const lead of leads || []) {
         const st = sourceTag(body);
         const tagged = st ? { ...lead, company_data: { ...(lead.company_data || {}), suggestedTags: [...new Set([...(((lead.company_data || {}).suggestedTags as string[]) || []), st])] } } : lead;
-        const companyId = await promoteLeadToCompany(db, userId, tagged, settings);
+        const enroll = body.enroll === true || (body.enroll !== false && !!lead.persona_id && lead.source !== "curated" && lead.source !== "assistant");
+        const companyId = await promoteLeadToCompany(db, userId, tagged, enroll ? settings : noEnroll);
         await db.from("autonomous_leads").update({ status: "approved", reviewed_at: new Date().toISOString(), company_id: companyId }).eq("id", lead.id);
         approved++; companies.push({ lead_id: lead.id, company_id: companyId, name: lead.company_name });
       }
