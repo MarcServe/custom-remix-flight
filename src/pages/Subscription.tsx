@@ -11,113 +11,67 @@ import {
   Users, Building2, Target, Mail, Bot,
   BarChart2, Layers, ShieldCheck, Inbox, Globe, Star
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { useSearchParams } from "react-router-dom";
 
-const FEATURE_GROUPS = [
-  {
-    icon: Building2,
-    label: "CRM & Pipeline",
-    features: [
-      "Companies, People & Deals management",
-      "Visual sales pipeline with drag-and-drop stages",
-      "Deal tracking with custom stages & values",
-      "Notes, activity logs & event tracking",
-      "File attachments & document storage",
-      "Invoice generation",
-    ],
-  },
-  {
-    icon: Target,
-    label: "Lead Generation",
-    features: [
-      "AI-powered Lead Finder (search millions of contacts)",
-      "Lead Inbox — capture & qualify inbound leads",
-      "Company Enrichment (auto-fill company data)",
-      "Autonomous Lead Discovery (Autopilot)",
-      "Contact discovery from company websites",
-      "Export leads to CSV",
-    ],
-  },
-  {
-    icon: Mail,
-    label: "Email Outreach & Campaigns",
-    features: [
-      "Personalised bulk email campaigns",
-      "AI-generated personalised email copy",
-      "Email Sequences (automated multi-step follow-ups)",
-      "Company Sequences",
-      "Email branding & custom templates",
-      "Double-send prevention & exclusion controls",
-      "Send via Gmail, custom SMTP, or email providers",
-    ],
-  },
-  {
-    icon: Layers,
-    label: "Newsletters & Marketing",
-    features: [
-      "Newsletter creation & broadcast sending",
-      "Newsletter Series (automated drip campaigns)",
-      "Recipient Group management",
-      "Email branding & unsubscribe handling",
-      "Campaign performance analytics",
-    ],
-  },
-  {
-    icon: Bot,
-    label: "AI & Automation",
-    features: [
-      "AI email writer with personalisation",
-      "AI lead scoring & campaign-fit analysis",
-      "AI conversation & deal opportunity analysis",
-      "Auto-response hub (reply to inbound emails automatically)",
-      "AI-generated tags & contact categorisation",
-      "Autopilot — background lead discovery while you sleep",
-    ],
-  },
-  {
-    icon: Inbox,
-    label: "Communication & Inbox",
-    features: [
-      "Unified Conversations (full email threading)",
-      "Shared Team Inbox",
-      "Connect your Gmail account for direct sending",
-      "Auto-response to leads & inbound enquiries",
-      "Lead reply detection & automatic CRM sync",
-    ],
-  },
-  {
-    icon: BarChart2,
-    label: "Analytics & Deliverability",
-    features: [
-      "Email deliverability monitoring & health score",
-      "Campaign open, click & reply tracking",
-      "Sequence performance analytics",
-      "Bounce & spam complaint tracking",
-    ],
-  },
-  {
-    icon: Users,
-    label: "Teams & Collaboration",
-    features: [
-      "Multi-user team workspaces",
-      "Role-based access control",
-      "Team invitations via email",
-      "Shared pipeline & deal visibility",
-    ],
-  },
-  {
-    icon: Globe,
-    label: "Email & Account Connections",
-    features: [
-      "Connect your Gmail account",
-      "SendGrid & Resend email delivery",
-      "Custom SMTP server support",
-      "Multiple sending accounts per workspace",
-    ],
-  },
-];
+type Cell = boolean | string;
+type CompareRow = { label: string; cells: [Cell, Cell, Cell, Cell] };
+const ALL: [Cell, Cell, Cell, Cell] = [true, true, true, true];
+const AUTO: [Cell, Cell, Cell, Cell] = [false, true, true, true];
+const PRO: [Cell, Cell, Cell, Cell] = [false, false, true, true];
+const DEFAULT_LIMITS: Record<string, { leads: number; personas: number }> = {
+  crm: { leads: 100, personas: 0 }, autopilot: { leads: 500, personas: 1 }, autopilot_pro: { leads: 2000, personas: 3 }, agency: { leads: 10000, personas: 20 },
+};
+const PLAN_ORDER = ['crm', 'autopilot', 'autopilot_pro', 'agency'] as const;
+
+const compareGroups = (L: typeof DEFAULT_LIMITS): { label: string; rows: CompareRow[] }[] => {
+  const per = (f: (l: { leads: number; personas: number }) => string) => PLAN_ORDER.map((p) => f(L[p])) as [Cell, Cell, Cell, Cell];
+  return [
+    { label: 'CRM & pipeline', rows: [
+      { label: 'Companies, people, deals and visual pipeline', cells: ALL },
+      { label: 'Notes, events, files and invoices', cells: ALL },
+      { label: 'Teams, roles and shared inbox', cells: ALL },
+      { label: 'In-app notifications', cells: ALL },
+    ] },
+    { label: 'Outreach', rows: [
+      { label: 'Email campaigns, newsletters and newsletter series', cells: ALL },
+      { label: 'SMS campaigns and two-way SMS conversations', cells: ALL },
+      { label: 'AI phone campaigns', cells: ALL },
+      { label: 'Sequences with automatic follow-ups that stop on reply', cells: ALL },
+      { label: 'AI email writer that knows your business and persona', cells: ALL },
+      { label: 'Bulk pause, resume and stop; resend to openers or clickers', cells: ALL },
+      { label: 'Recipient groups with automatic duplicate removal', cells: ALL },
+      { label: 'Email branding and custom templates', cells: ALL },
+      { label: 'One inbox for email and SMS replies', cells: ALL },
+    ] },
+    { label: 'Finding leads', rows: [
+      { label: 'New leads each month', cells: per((l) => l.leads.toLocaleString('en-GB')) },
+      { label: 'Lead Finder, Lead Inbox and Research Chat', cells: ALL },
+      { label: 'Hospitality leads', cells: ALL },
+      { label: 'Active personas', cells: per((l) => String(Math.max(1, l.personas))) },
+      { label: 'AI persona builder from a website and description', cells: ALL },
+      { label: 'Autopilot: finds leads, writes, sends and follows up every day', cells: AUTO },
+      { label: 'Daily Autopilot summary email', cells: AUTO },
+      { label: 'AI company enrichment and lead scoring', cells: AUTO },
+      { label: 'Auto-Response Hub: AI replies to inbound email', cells: AUTO },
+    ] },
+    { label: 'AI & automation', rows: [
+      { label: 'Learns your business from your website', cells: ALL },
+      { label: 'Daily AI automations and automation rules', cells: ALL },
+      { label: 'Claude and ChatGPT connection, API keys', cells: PRO },
+    ] },
+    { label: 'Sending & deliverability', rows: [
+      { label: 'Send through Gmail, Outlook, SMTP, Resend or SendGrid', cells: ALL },
+      { label: 'Connected sending accounts', cells: ['1', '1', 'Several', 'Several'] },
+      { label: 'Open, click, reply, bounce and complaint tracking', cells: ALL },
+      { label: 'Deliverability monitoring', cells: ALL },
+    ] },
+    { label: 'Support', rows: [
+      { label: 'Priority onboarding and support', cells: [false, false, false, true] },
+    ] },
+  ];
+};
 
 export default function Subscription() {
   const { subscribed, productId, subscriptionEnd, trialEndsAt, isInTrial, checkSubscription, planTier } = useAuth();
@@ -125,6 +79,17 @@ export default function Subscription() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const autoCheckoutStarted = useRef(false);
+  const [limits, setLimits] = useState(DEFAULT_LIMITS);
+  useEffect(() => {
+    // Plan limits are editable in the admin console: show the live numbers
+    (supabase as any).from('plan_limits').select('tier, leads_per_month, personas').then(({ data }: any) => {
+      if (!data?.length) return;
+      const next = { ...DEFAULT_LIMITS };
+      for (const r of data) if (r.tier in next) next[r.tier] = { leads: r.leads_per_month, personas: r.personas };
+      setLimits(next);
+    });
+  }, []);
+  const n = (v: number) => v.toLocaleString('en-GB');
 
   const [interval, setInterval_] = useState<'monthly' | 'yearly'>('monthly');
   const handleSubscribe = async (plan: PlanId = 'autopilot') => {
@@ -192,25 +157,25 @@ export default function Subscription() {
     {
       id: 'crm' as PlanId, name: 'CRM', monthly: 29,
       description: 'Your CRM, campaigns and follow-ups in one place',
-      features: ['People, Companies & Deals CRM', 'Email & SMS campaigns, newsletters', 'Sequences with automatic follow-ups', 'AI email writer', 'Lead Finder (manual, 100 new leads/month)'],
+      features: ['People, Companies & Deals CRM', 'Email & SMS campaigns, newsletters', 'Sequences with automatic follow-ups', 'AI email writer', `Lead Finder: ${n(limits.crm.leads)} new leads a month`],
       highlight: false, color: 'border-sky-500', badgeCls: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400',
     },
     {
       id: 'autopilot' as PlanId, name: 'Autopilot', monthly: 99,
       description: 'An AI sales rep that finds, writes to and follows up new leads every day',
-      features: ['Everything in CRM', 'Autopilot: up to 500 new leads a month', '1 target persona', 'Personal AI email for every lead, sent and followed up', 'AI enrichment, scoring & auto-replies'],
+      features: ['Everything in CRM', `Autopilot: up to ${n(limits.autopilot.leads)} new leads a month`, `${limits.autopilot.personas} target persona${limits.autopilot.personas === 1 ? '' : 's'}`, 'Personal AI email for every lead, sent and followed up', 'AI enrichment, scoring & auto-replies'],
       highlight: true, color: 'border-primary', badgeCls: 'bg-primary/10 text-primary',
     },
     {
       id: 'autopilot_pro' as PlanId, name: 'Autopilot Pro', monthly: 249,
       description: 'More reach, more audiences, more channels',
-      features: ['Everything in Autopilot', 'Up to 2,000 new leads a month', '3 target personas', 'SMS outreach & multiple sending accounts', 'Claude / ChatGPT connection'],
+      features: ['Everything in Autopilot', `Up to ${n(limits.autopilot_pro.leads)} new leads a month`, `${limits.autopilot_pro.personas} target personas`, 'Several sending accounts', 'Claude / ChatGPT connection & API keys'],
       highlight: false, color: 'border-violet-500', badgeCls: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400',
     },
     {
       id: 'agency' as PlanId, name: 'Agency', monthly: 499,
       description: 'For agencies and multi-brand teams',
-      features: ['Everything in Autopilot Pro', 'Up to 10,000 new leads a month', 'Up to 20 personas for brands or clients', 'Priority onboarding & support'],
+      features: ['Everything in Autopilot Pro', `Up to ${n(limits.agency.leads)} new leads a month`, `Up to ${limits.agency.personas} personas for brands or clients`, 'Priority onboarding & support'],
       highlight: false, color: 'border-amber-500', badgeCls: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
     },
   ].map((p) => ({
@@ -364,35 +329,47 @@ export default function Subscription() {
         ))}
       </div>
 
-      {/* Full feature grid */}
+      {/* Plan comparison */}
       <div className="mb-4">
-        <h2 className="text-lg font-semibold mb-1">Everything included</h2>
-        <p className="text-sm text-muted-foreground">All plans include core CRM — higher tiers unlock AI and automation.</p>
+        <h2 className="text-lg font-semibold mb-1">Compare plans</h2>
+        <p className="text-sm text-muted-foreground">What each plan includes. The free trial gives you Autopilot for 7 days.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {FEATURE_GROUPS.map(({ icon: Icon, label, features }) => (
-          <Card key={label} className="border bg-card">
-            <CardHeader className="pb-3 pt-4 px-4">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-md bg-primary/10">
-                  <Icon className="h-4 w-4 text-primary" />
-                </div>
-                <CardTitle className="text-sm font-semibold">{label}</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0">
-              <ul className="space-y-1.5">
-                {features.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-xs text-muted-foreground">
-                    <Check className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
-                    <span>{f}</span>
-                  </li>
+      <div className="overflow-x-auto rounded-lg border bg-card">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="p-3 text-left font-medium text-muted-foreground">Feature</th>
+              {plans.map((p) => (
+                <th key={p.id} className={`p-3 text-center font-semibold whitespace-nowrap ${p.isCurrent ? 'text-primary' : ''}`}>
+                  {p.name}
+                  <div className="text-xs font-normal text-muted-foreground">{p.price}{p.per}</div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {compareGroups(limits).map((g) => (
+              <Fragment key={g.label}>
+                <tr className="bg-muted/50">
+                  <td colSpan={5} className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{g.label}</td>
+                </tr>
+                {g.rows.map((r) => (
+                  <tr key={r.label} className="border-t">
+                    <td className="p-3">{r.label}</td>
+                    {r.cells.map((c, i) => (
+                      <td key={i} className="p-3 text-center tabular-nums">
+                        {c === true ? <Check className="h-4 w-4 text-primary inline" aria-label="Included" />
+                          : c === false ? <span className="text-muted-foreground" aria-label="Not included">–</span>
+                          : <span className="font-medium">{c}</span>}
+                      </td>
+                    ))}
+                  </tr>
                 ))}
-              </ul>
-            </CardContent>
-          </Card>
-        ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {/* Bottom CTA — only show when not subscribed */}

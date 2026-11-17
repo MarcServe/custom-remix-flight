@@ -21,7 +21,7 @@ export const TIER_RANK: Record<PlanTier, number> = {
   trial: 3,          // trial = full access (Autopilot capped at 100 leads) so users can see everything
   leadboosters: 3,
   autopilot: 3,
-  legacy_full: 3,
+  legacy_full: 4,     // keeps everything it had, including the AI connection
   autopilot_pro: 4,
   agency: 5,
 };
@@ -53,7 +53,13 @@ export const PLAN_PRICES: Record<PlanTier, string> = {
 };
 
 // Features unlocked at each tier (cumulative)
-export const TIER_FEATURES: Record<'individual' | 'pro' | 'leadboosters', string[]> = {
+export const TIER_FEATURES: Partial<Record<PlanTier, string[]>> = {
+  autopilot_pro: [
+    'Everything in Autopilot',
+    'Up to 2,000 new leads a month, 3 target personas',
+    'Claude / ChatGPT connection and API keys',
+    'Multiple sending accounts',
+  ],
   individual: [
     'People, Companies & Deals CRM',
     'Bulk email campaigns',

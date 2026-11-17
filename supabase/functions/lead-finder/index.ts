@@ -1,3 +1,4 @@
+import { getUserPlan, leadsUsedThisMonth } from "../_shared/plans.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { planDiscoveryQueries } from "../_shared/discovery-planner.ts";
 import { searchWithPerplexity } from "../_shared/discovery-sources.ts";
@@ -1171,6 +1172,7 @@ Deno.serve(async (req) => {
   }
 
   const { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify, autonomousMode, maxResults, exaQueries: exaQueriesOverride, excludeDomains, exaCategory, exaSearchType } = await req.json();
+  let planRemaining = Infinity; // new leads left this month on the caller's plan
   console.log("Lead Finder STREAMING:", { size, geography, industry, dryRun, provider, model, enrichWithPerplexity, searchId, customSearchText, useSerpApi, useApify, autonomousMode, maxResults });
 
   // Initialize Supabase
@@ -1206,6 +1208,23 @@ Deno.serve(async (req) => {
       });
     }
     user = authUser;
+
+    // Plan allowance: new leads per month, shared with Autopilot
+    if (!dryRun) {
+      const admin = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+      const plan = await getUserPlan(admin, authUser.id);
+      const remaining = Math.max(0, plan.limits.leadsPerMonth - await leadsUsedThisMonth(admin, authUser.id));
+      if (remaining <= 0) {
+        const message = plan.limits.leadsPerMonth === 0
+          ? "Finding new leads isn't included in your plan. Choose a plan under Settings > Subscription."
+          : `You've used this month's ${plan.limits.leadsPerMonth.toLocaleString()} new leads on your plan. It resets on the 1st, or upgrade for more.`;
+        return new Response(JSON.stringify({ error: message, code: 'lead_allowance_used' }), {
+          status: 402,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      planRemaining = remaining;
+    }
   }
 
   // Create SSE stream
@@ -1378,7 +1397,7 @@ Deno.serve(async (req) => {
         : undefined; // Search all domains for broader coverage; LinkedIn/Crunchbase restriction was causing 0 results
 
       // Target this many leads total; we have 4 Exa queries (6 for public sector) so request numResults per query to reach target (capped at 50 per query)
-      const targetLeads = typeof maxResults === 'number' && maxResults > 0 ? Math.min(200, Math.max(10, maxResults)) : 50;
+      const targetLeads = Math.min(planRemaining, typeof maxResults === 'number' && maxResults > 0 ? Math.min(200, Math.max(10, maxResults)) : 50);
       const exaQueryCount = exaQueries.length;
       const exaNumResults = isPublicSectorSearch
         ? Math.min(50, Math.max(25, Math.ceil(targetLeads / Math.max(1, exaQueryCount))))

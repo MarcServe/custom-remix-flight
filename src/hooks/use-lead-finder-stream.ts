@@ -507,6 +507,9 @@ export const useLeadFinderStream = () => {
       });
 
       if (!response.ok) {
+        // Plan allowance and similar refusals come back as JSON with a message worth showing
+        const detail = await response.json().catch(() => null);
+        if (detail?.error) throw new Error(detail.error);
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 

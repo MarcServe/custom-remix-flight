@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +50,9 @@ export function AutopilotPersonasQuickView({ onManage }: AutopilotPersonasQuickV
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['discovery-personas'] });
+    },
+    onError: (e: Error) => {
+      toast.error("Couldn't change that persona", { description: e.message });
     },
   });
 

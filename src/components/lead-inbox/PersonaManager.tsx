@@ -231,6 +231,9 @@ export function PersonaManager() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['discovery-personas'] });
     },
+    onError: (error: Error) => {
+      toast({ title: "Couldn't change that persona", description: error.message, variant: 'destructive' });
+    },
   });
 
   // Delete persona

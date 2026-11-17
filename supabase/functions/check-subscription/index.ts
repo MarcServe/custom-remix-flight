@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { tierForStripe, better, getUserPlan, LIMITS, type Tier } from "../_shared/plans.ts";
+import { tierForStripe, better, getUserPlan, loadLimits, type Tier } from "../_shared/plans.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -83,7 +83,7 @@ serve(async (req) => {
       subscribed: effective !== "free" && effective !== "trial",
       tier: effective,
       plan_source: plan.source === "override" ? "override" : (best ? "stripe" : "none"),
-      limits: plan.source === "override" ? plan.limits : LIMITS[tier],
+      limits: plan.source === "override" ? plan.limits : (await loadLimits(supabaseClient))[tier],
       product_id: productId,
       subscription_end: subscriptionEnd,
     }), {

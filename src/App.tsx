@@ -12,7 +12,7 @@ import { ResearchChatProvider } from "./contexts/ResearchChatContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PageErrorBoundary } from "./components/PageErrorBoundary";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { TrialGate } from "./components/TrialGate";
+import { TrialEndedBanner } from "./components/TrialEndedBanner";
 import { PlanGate } from "./components/PlanGate";
 import { CampaignDialogProvider } from "./contexts/CampaignDialogContext";
 import { GlobalCampaignDialog } from "./components/GlobalCampaignDialog";
@@ -118,6 +118,7 @@ const App = () => (
                         <GlobalCampaignDialog />
                         <main className="flex-1 overflow-auto overflow-x-hidden bg-gradient-to-br from-background to-muted/20 p-3 pt-16 sm:p-4 sm:pt-16 xl:pt-6 xl:p-6 2xl:p-8 min-w-0 pb-[max(5rem,env(safe-area-inset-bottom))] sm:pb-6 transition-[flex] duration-300">
                           <div className="max-w-full min-w-0 animate-enter">
+                          <TrialEndedBanner />
                           <Routes>
                           <Route path="/" element={<Dashboard />} />
                           <Route path="/companies" element={<Companies />} />
@@ -142,22 +143,22 @@ const App = () => (
                           <Route path="/campaigns" element={<PlanGate requiredTier="individual" feature="Email Campaigns"><Campaigns /></PlanGate>} />
                           <Route path="/newsletters" element={<PlanGate requiredTier="individual" feature="Newsletters"><Newsletters /></PlanGate>} />
                           <Route path="/business-profile" element={<BusinessProfile />} />
-                          <Route path="/api-keys" element={<ApiKeys />} />
-                          <Route path="/connect-ai" element={<ConnectAI />} />
+                          <Route path="/api-keys" element={<PlanGate requiredTier="autopilot_pro" allowTrial feature="API keys"><ApiKeys /></PlanGate>} />
+                          <Route path="/connect-ai" element={<PlanGate requiredTier="autopilot_pro" allowTrial feature="The Claude / ChatGPT connection"><ConnectAI /></PlanGate>} />
                           <Route path="/profile" element={<Profile />} />
                           <Route path="/pipeline" element={<Pipeline />} />
-                          <Route path="/email-branding" element={<PageErrorBoundary fallbackTitle="Email Branding failed to load"><EmailBranding /></PageErrorBoundary>} />
-                          <Route path="/recipient-groups" element={<RecipientGroups />} />
-                          <Route path="/notes" element={<Notes />} />
-                          <Route path="/conversations" element={<PageErrorBoundary fallbackTitle="Conversations failed to load"><Conversations /></PageErrorBoundary>} />
-                          <Route path="/events" element={<Events />} />
-                          <Route path="/integrations" element={<Integrations />} />
-                          <Route path="/integrations/email-providers" element={<EmailProviders />} />
-                          <Route path="/email-deliverability" element={<EmailDeliverability />} />
-                          <Route path="/teams" element={<Teams />} />
-                          <Route path="/shared-inbox" element={<SharedInbox />} />
-                          <Route path="/files" element={<Files />} />
-                          <Route path="/invoices" element={<Invoices />} />
+                          <Route path="/email-branding" element={<PlanGate requiredTier="individual" feature="Email Branding"><PageErrorBoundary fallbackTitle="Email Branding failed to load"><EmailBranding /></PageErrorBoundary></PlanGate>} />
+                          <Route path="/recipient-groups" element={<PlanGate requiredTier="individual" feature="Recipient Groups"><RecipientGroups /></PlanGate>} />
+                          <Route path="/notes" element={<PlanGate requiredTier="individual" feature="Notes"><Notes /></PlanGate>} />
+                          <Route path="/conversations" element={<PlanGate requiredTier="individual" feature="Conversations"><PageErrorBoundary fallbackTitle="Conversations failed to load"><Conversations /></PageErrorBoundary></PlanGate>} />
+                          <Route path="/events" element={<PlanGate requiredTier="individual" feature="Events"><Events /></PlanGate>} />
+                          <Route path="/integrations" element={<PlanGate requiredTier="individual" feature="Integrations"><Integrations /></PlanGate>} />
+                          <Route path="/integrations/email-providers" element={<PlanGate requiredTier="individual" feature="Email Providers"><EmailProviders /></PlanGate>} />
+                          <Route path="/email-deliverability" element={<PlanGate requiredTier="individual" feature="Email Deliverability"><EmailDeliverability /></PlanGate>} />
+                          <Route path="/teams" element={<PlanGate requiredTier="individual" feature="Teams"><Teams /></PlanGate>} />
+                          <Route path="/shared-inbox" element={<PlanGate requiredTier="individual" feature="Shared Inbox"><SharedInbox /></PlanGate>} />
+                          <Route path="/files" element={<PlanGate requiredTier="individual" feature="Files"><Files /></PlanGate>} />
+                          <Route path="/invoices" element={<PlanGate requiredTier="individual" feature="Invoices"><Invoices /></PlanGate>} />
                           <Route path="/subscription" element={<Subscription />} />
                           <Route path="/admin" element={<PageErrorBoundary fallbackTitle="Admin failed to load"><Admin /></PageErrorBoundary>} />
                           <Route path="*" element={<NotFound />} />

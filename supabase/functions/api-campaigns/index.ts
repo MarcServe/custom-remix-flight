@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAllRows } from "../_shared/fetch-all.ts";
+import { getUserPlan, canUseApi } from "../_shared/plans.ts";
 import { handleCrmAction, CRM_ACTIONS } from "./crm.ts";
 
 const corsHeaders = {
@@ -188,6 +189,9 @@ Deno.serve(async (req) => {
       const { data: keyRow } = await db.from("api_keys").select("id, user_id, revoked_at").eq("key_hash", keyHash).maybeSingle();
       if (!keyRow || keyRow.revoked_at) return json({ error: "Invalid or revoked API key" }, 401);
       userId = keyRow.user_id;
+      // API keys (and so the Claude / ChatGPT connection) are an Autopilot Pro feature.
+      const keyPlan = await getUserPlan(db, userId);
+      if (!canUseApi(keyPlan.tier)) return json({ error: `The Claude / ChatGPT connection and API access need the Autopilot Pro plan (this account is on ${keyPlan.tier}). Upgrade in LeadBoosters under Settings > Subscription.`, plan: keyPlan.tier }, 403);
       db.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyRow.id).then(() => {});
     } else if (bearer && bearer.split(".").length === 3) {
       // Supabase access token from an authenticated in-app session.

@@ -8,6 +8,7 @@ import { ConnectEmailDialog } from "@/components/integrations/ConnectEmailDialog
 import { VerifiedEmailDialog } from "@/components/integrations/VerifiedEmailDialog";
 import { nangoClient } from "@/lib/integrations/nango";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 import { Mail, AlertTriangle, Info, Webhook, ArrowRight, CheckCircle2, Copy, RefreshCw, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,7 @@ const emailProviders = [
 
 export default function EmailProviders() {
   const queryClient = useQueryClient();
+  const { isAtLeast, planTier } = useAuth();
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [verifiedEmailDialogOpen, setVerifiedEmailDialogOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<'gmail' | 'gmail_direct' | 'outlook' | 'smtp'>('gmail');
@@ -203,6 +205,16 @@ export default function EmailProviders() {
   });
 
   const handleConnect = (providerId: string) => {
+    // More than one sending account is an Autopilot Pro feature (reconnecting the same provider is fine).
+    const active = (connections || []).filter((c: any) => c.status === 'active');
+    const sameProvider = active.some((c: any) => c.provider === providerId || (providerId === 'gmail_direct' && c.provider === 'gmail'));
+    if (active.length >= 1 && !sameProvider && !isAtLeast('autopilot_pro') && planTier !== 'trial') {
+      toast.error('One sending account on your plan', {
+        description: 'Autopilot Pro lets you connect several. Disconnect the current one to switch, or upgrade.',
+        action: { label: 'See plans', onClick: () => { window.location.href = '/subscription'; } },
+      });
+      return;
+    }
     // Resend and SendGrid now use the verified email dialog
     if (providerId === 'resend' || providerId === 'sendgrid') {
       setSelectedApiProvider(providerId as 'resend' | 'sendgrid');

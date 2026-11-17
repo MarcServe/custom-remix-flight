@@ -74,7 +74,15 @@ export async function leadsUsedThisMonth(db: any, userId: string): Promise<numbe
   const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit" }).formatToParts(new Date());
   const y = parts.find((p) => p.type === "year")!.value, m = parts.find((p) => p.type === "month")!.value;
   const start = new Date(`${y}-${m}-01T00:00:00Z`).toISOString();
-  const { count } = await db.from("autonomous_leads").select("id", { count: "exact", head: true })
-    .eq("user_id", userId).gte("created_at", start).neq("source", "curated");
-  return count || 0;
+  // One shared allowance: Autopilot and AI-connection finds (autonomous_leads) plus Lead Finder page results.
+  const [{ count }, { count: finder }] = await Promise.all([
+    db.from("autonomous_leads").select("id", { count: "exact", head: true })
+      .eq("user_id", userId).gte("created_at", start).neq("source", "curated"),
+    db.from("lead_finder_leads").select("id", { count: "exact", head: true })
+      .eq("user_id", userId).gte("created_at", start),
+  ]);
+  return (count || 0) + (finder || 0);
 }
+
+/** The Claude / ChatGPT connection and API keys: Autopilot Pro and above (plus the trial and the legacy full plan). */
+export const canUseApi = (tier: Tier): boolean => ["autopilot_pro", "agency", "legacy_full", "trial"].includes(tier);

@@ -14,31 +14,33 @@ import { Lock, Sparkles, Check, ArrowRight } from 'lucide-react';
 
 interface PlanGateProps {
   /** Minimum plan tier required to see children */
-  requiredTier: 'individual' | 'pro' | 'leadboosters';
+  requiredTier: 'individual' | 'pro' | 'leadboosters' | 'autopilot_pro';
+  /** Let people on the free trial in even though the trial ranks below this tier */
+  allowTrial?: boolean;
   /** Human-readable feature name shown in the upgrade card */
   feature?: string;
   children: ReactNode;
 }
 
-const UPGRADE_COLORS: Record<'individual' | 'pro' | 'leadboosters', string> = {
+const UPGRADE_COLORS: Record<string, string> = {
   individual: 'text-sky-600 border-sky-500 bg-sky-500/5',
   pro:        'text-violet-600 border-violet-500 bg-violet-500/5',
   leadboosters: 'text-primary border-primary bg-primary/5',
 };
 
-const UPGRADE_ICON_BG: Record<'individual' | 'pro' | 'leadboosters', string> = {
+const UPGRADE_ICON_BG: Record<string, string> = {
   individual:   'bg-sky-100 text-sky-600 dark:bg-sky-950 dark:text-sky-400',
   pro:          'bg-violet-100 text-violet-600 dark:bg-violet-950 dark:text-violet-400',
   leadboosters: 'bg-primary/10 text-primary',
 };
 
-const BUTTON_CLASS: Record<'individual' | 'pro' | 'leadboosters', string> = {
+const BUTTON_CLASS: Record<string, string> = {
   individual:   'bg-sky-600 hover:bg-sky-700 text-white',
   pro:          'bg-violet-600 hover:bg-violet-700 text-white',
   leadboosters: '',  // uses default primary
 };
 
-export function PlanGate({ requiredTier, feature, children }: PlanGateProps) {
+export function PlanGate({ requiredTier, feature, allowTrial, children }: PlanGateProps) {
   const { planTier, isAtLeast, planResolved } = useAuth();
   const navigate = useNavigate();
 
@@ -51,16 +53,16 @@ export function PlanGate({ requiredTier, feature, children }: PlanGateProps) {
     );
   }
 
-  if (isAtLeast(requiredTier)) {
+  if (isAtLeast(requiredTier) || (allowTrial && planTier === 'trial')) {
     return <>{children}</>;
   }
 
   const tierLabel    = PLAN_LABELS[requiredTier];
   const tierPrice    = PLAN_PRICES[requiredTier];
-  const tierFeatures = TIER_FEATURES[requiredTier];
-  const colorClass   = UPGRADE_COLORS[requiredTier];
-  const iconBg       = UPGRADE_ICON_BG[requiredTier];
-  const btnClass     = BUTTON_CLASS[requiredTier];
+  const tierFeatures = TIER_FEATURES[requiredTier] || [];
+  const colorClass   = UPGRADE_COLORS[requiredTier] || UPGRADE_COLORS.leadboosters;
+  const iconBg       = UPGRADE_ICON_BG[requiredTier] || UPGRADE_ICON_BG.leadboosters;
+  const btnClass     = BUTTON_CLASS[requiredTier] || '';
 
   const isLoggedOutOrFree = planTier === 'free';
   const isDowngradedPlan  = !isLoggedOutOrFree && TIER_RANK[planTier] < TIER_RANK[requiredTier];
@@ -76,7 +78,7 @@ export function PlanGate({ requiredTier, feature, children }: PlanGateProps) {
           </div>
 
           <CardTitle className="text-2xl">
-            {isDowngradedPlan ? 'Upgrade to unlock this' : 'Subscribe to continue'}
+            {isDowngradedPlan ? 'Upgrade to unlock this' : 'Choose a plan to continue'}
           </CardTitle>
 
           <CardDescription className="text-sm mt-1">
@@ -112,9 +114,7 @@ export function PlanGate({ requiredTier, feature, children }: PlanGateProps) {
             onClick={() => navigate('/subscription')}
           >
             <Sparkles className="h-4 w-4" />
-            {isDowngradedPlan
-              ? `Upgrade to ${tierLabel}`
-              : `Subscribe — ${tierPrice}`}
+            {isDowngradedPlan ? `Upgrade to ${tierLabel}` : 'See plans'}
             <ArrowRight className="h-4 w-4 ml-auto" />
           </Button>
 
@@ -126,7 +126,7 @@ export function PlanGate({ requiredTier, feature, children }: PlanGateProps) {
           )}
           {isLoggedOutOrFree && (
             <p className="text-center text-xs text-muted-foreground">
-              New accounts start with a 7-day free trial. Cancel anytime.
+              Your records are safe. Pick a plan to carry on where you left off.
             </p>
           )}
         </CardContent>

@@ -137,18 +137,35 @@ const ROUTE_TIER: Record<string, PlanTier> = {
   '/enrichment':            'leadboosters',
   '/autopilot':             'leadboosters',
   '/auto-responses':        'leadboosters',
+  // Any paid plan
+  '/notes': 'individual',
+  '/conversations': 'individual',
+  '/events': 'individual',
+  '/recipient-groups': 'individual',
+  '/email-branding': 'individual',
+  '/integrations': 'individual',
+  '/integrations/email-providers': 'individual',
+  '/email-deliverability': 'individual',
+  '/teams': 'individual',
+  '/shared-inbox': 'individual',
+  '/files': 'individual',
+  '/invoices': 'individual',
+  '/api-keys': 'autopilot_pro',
+  '/connect-ai': 'autopilot_pro',
 };
 
-const TIER_BADGE_CLASS: Record<'individual' | 'pro' | 'leadboosters', string> = {
+const TIER_BADGE_CLASS: Record<string, string> = {
+  autopilot_pro: 'bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-950 dark:text-violet-400',
   individual:   'bg-sky-100 text-sky-700 border-sky-300 dark:bg-sky-950 dark:text-sky-400',
   pro:          'bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-950 dark:text-violet-400',
   leadboosters: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-400',
 };
 
-const TIER_SHORT: Record<'individual' | 'pro' | 'leadboosters', string> = {
-  individual:   'IND',
-  pro:          'PRO',
-  leadboosters: 'LB',
+const TIER_SHORT: Record<string, string> = {
+  individual:   'PLAN',
+  pro:          'CRM',
+  leadboosters: 'AUTO',
+  autopilot_pro: 'PRO',
 };
 
 // Helper function to get pending count for a menu item
@@ -172,6 +189,7 @@ export const Sidebar = () => {
     const required = ROUTE_TIER[href];
     if (!required) return true; // no restriction
     if (!planResolved) return true; // don't flash lock icons while the plan is loading
+    if (required === 'autopilot_pro' && planTier === 'trial') return true; // the trial can try the AI connection
     return TIER_RANK[planTier] >= TIER_RANK[required];
   };
   const isPlatformAdmin = useIsPlatformAdmin();
