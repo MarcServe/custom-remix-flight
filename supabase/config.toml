@@ -139,3 +139,6 @@ verify_jwt = false  # owner JWT or service role + x-user-id, checked inside
 
 [functions.stripe-webhook]
 verify_jwt = false
+
+[functions.admin-api]
+verify_jwt = true  # Signed-in platform admins only (checked again in code)

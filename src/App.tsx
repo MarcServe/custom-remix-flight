@@ -53,6 +53,7 @@ import Files from "./pages/Files";
 import Invoices from "./pages/Invoices";
 import Auth from "./pages/Auth";
 import Subscription from "./pages/Subscription";
+import Admin from "./pages/Admin";
 import EmailBranding from "./pages/EmailBranding";
 import Newsletters from "./pages/Newsletters";
 import NewsletterSeries from "./pages/NewsletterSeries";
@@ -158,6 +159,7 @@ const App = () => (
                           <Route path="/files" element={<Files />} />
                           <Route path="/invoices" element={<Invoices />} />
                           <Route path="/subscription" element={<Subscription />} />
+                          <Route path="/admin" element={<PageErrorBoundary fallbackTitle="Admin failed to load"><Admin /></PageErrorBoundary>} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                           </div>

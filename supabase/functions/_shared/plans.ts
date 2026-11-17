@@ -41,9 +41,23 @@ export function tierForStripe(price: any): Tier | null {
 const RANK: Record<Tier, number> = { free: 0, individual: 1, pro: 2, crm: 2, trial: 3, autopilot: 3, legacy_full: 4, autopilot_pro: 4, agency: 5 };
 export const better = (a: Tier, b: Tier): Tier => (RANK[b] > RANK[a] ? b : a);
 
+/** Limits as edited in the admin console (plan_limits table), falling back to the defaults above. */
+let limitsCache: { at: number; map: Record<string, PlanLimits> } | null = null;
+export async function loadLimits(db: any): Promise<Record<Tier, PlanLimits>> {
+  if (limitsCache && Date.now() - limitsCache.at < 60_000) return { ...LIMITS, ...limitsCache.map } as Record<Tier, PlanLimits>;
+  const map: Record<string, PlanLimits> = {};
+  try {
+    const { data } = await db.from("plan_limits").select("tier, autopilot, leads_per_month, personas");
+    for (const r of data || []) map[r.tier] = { autopilot: !!r.autopilot, leadsPerMonth: Number(r.leads_per_month) || 0, personas: Number(r.personas) || 0 };
+  } catch { /* table missing: defaults */ }
+  limitsCache = { at: Date.now(), map };
+  return { ...LIMITS, ...map } as Record<Tier, PlanLimits>;
+}
+
 /** Effective plan for a user: override > paid plan > trial (7 days from sign-up) > free. */
 export async function getUserPlan(db: any, userId: string): Promise<{ tier: Tier; limits: PlanLimits; source: string }> {
   const now = Date.now();
+  const LIMITS = await loadLimits(db);
   const { data: ov } = await db.from("plan_overrides").select("tier, expires_at").eq("user_id", userId).maybeSingle();
   if (ov?.tier && ov.tier in LIMITS && (!ov.expires_at || new Date(ov.expires_at).getTime() > now)) return { tier: ov.tier, limits: LIMITS[ov.tier as Tier], source: "override" };
   const { data: up } = await db.from("user_plans").select("tier, status").eq("user_id", userId).maybeSingle();

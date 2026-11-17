@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, CalendarClock, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FileSpreadsheet, FolderOpen, CreditCard, Inbox, Brain, Wand2, StickyNote, Palette, Newspaper, UsersRound, Lock, KeyRound, Bot } from "lucide-react";
+import { Building2, Users, DollarSign, BarChart3, Mail, Sparkles, TrendingUp, LogOut, User, Activity, Briefcase, ChevronLeft, ChevronRight, Calendar, CalendarClock, Plug2, Menu, X, MessageSquare, Shield, Zap, ChevronDown, Send, Settings, Search, FileText, FileSpreadsheet, FolderOpen, CreditCard, Inbox, Brain, Wand2, StickyNote, Palette, Newspaper, UsersRound, Lock, KeyRound, Bot, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth, PlanTier, TIER_RANK, PLAN_LABELS } from "@/contexts/AuthContext";
@@ -22,6 +22,7 @@ import { useEventsRealtime, useDealsRealtimeForNotifications, useCampaignsRealti
 import { supabase } from "@/integrations/supabase/client";
 import { usePendingReviewsCount } from "@/hooks/use-pending-reviews";
 import { ActivityNotificationCenter } from "@/components/notifications/ActivityNotificationCenter";
+import { useIsPlatformAdmin } from "@/hooks/use-platform-admin";
 import leadBoostersLogo from '@/assets/leadboosters-logo.png';
 
 type NavigationItem = {
@@ -173,6 +174,10 @@ export const Sidebar = () => {
     if (!planResolved) return true; // don't flash lock icons while the plan is loading
     return TIER_RANK[planTier] >= TIER_RANK[required];
   };
+  const isPlatformAdmin = useIsPlatformAdmin();
+  const navItems: NavigationItem[] = isPlatformAdmin
+    ? [...navigation, { name: "Admin", href: "/admin", icon: ShieldCheck }]
+    : navigation;
   const { setOpen: openResearchPanel } = useResearchChat();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -435,7 +440,7 @@ export const Sidebar = () => {
       )}
       
       <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
-        {navigation.map((item) => {
+        {navItems.map((item) => {
           const currentFullPath = location.pathname + location.search;
           const matchesHref = (href: string) => {
             if (href.includes('?')) return currentFullPath === href || (location.pathname + location.search) === href;
