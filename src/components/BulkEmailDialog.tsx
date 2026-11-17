@@ -3241,8 +3241,29 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       }
 
       // Content-only edit (paused/sending/completed): update campaign only, do not replace recipients. Close so user can Resume from campaign view.
+      // EXCEPT when the user added addresses that aren't on the campaign yet: those are sent as a NEW
+      // campaign (same content, only the new people), so earlier recipients are never emailed twice
+      // and the send is visible in the campaign list. (Previously the additions were silently dropped.)
       const contentOnly = contentOnlyEditRef.current;
+      let sendList: any[] = recipientsToUse;
+      let asNewCampaign = false;
+      let newCampaignName = campaignName;
       if (draftId && contentOnly) {
+        const existing = new Set<string>();
+        for (let from = 0; from < 200000; from += 1000) {
+          const { data: page } = await supabase.from('email_campaign_recipients').select('email').eq('campaign_id', draftId).range(from, from + 999);
+          (page || []).forEach((r: any) => r.email && existing.add(String(r.email).toLowerCase().trim()));
+          if (!page || page.length < 1000) break;
+        }
+        const fresh = recipientsToUse.filter((p: any) => p.email && !existing.has(String(p.email).toLowerCase().trim()));
+        if (fresh.length > 0) {
+          sendList = fresh;
+          asNewCampaign = true;
+          const day = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Europe/London' });
+          newCampaignName = `${campaignName.replace(/\s*\(\+\d[\d,]* new · [^)]*\)\s*$/, '')} (+${fresh.length.toLocaleString()} new · ${day})`;
+        }
+      }
+      if (draftId && contentOnly && !asNewCampaign) {
         const updatePayload: Record<string, unknown> = {
           name: campaignName,
           subject_template: subject,
@@ -3306,7 +3327,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       
       let campaign;
       
-      if (draftId) {
+      if (draftId && !asNewCampaign) {
         // Update existing draft and change status
         const sendUpdatePayload = {
             name: campaignName,
@@ -3317,7 +3338,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             sender_profile_id: senderProfileId || null,
             status: campaignStatus,
             scheduled_at: scheduledAt,
-            total_recipients: recipientsToUse.length,
+            total_recipients: sendList.length,
             tags: campaignTags,
             auto_follow_up_enabled: autoFollowUpEnabled,
             follow_up_sequence_id: followUpSequenceId || null,
@@ -3351,7 +3372,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         // Create new campaign
         const sendInsertPayload = {
             user_id: user.id,
-            name: campaignName,
+            name: newCampaignName,
             subject_template: subject,
             body_html_template: variantABodyHtml(bodyText, bodyHtml) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`,
             body_text_template: bodyText,
@@ -3359,7 +3380,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             sender_profile_id: senderProfileId || null,
             status: campaignStatus,
             scheduled_at: scheduledAt,
-            total_recipients: recipientsToUse.length,
+            total_recipients: sendList.length,
             tags: campaignTags,
             auto_follow_up_enabled: autoFollowUpEnabled,
             follow_up_sequence_id: followUpSequenceId || null,
@@ -3382,7 +3403,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       const bodyHtmlASend = variantABodyHtml(bodyText, bodyHtml) || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`;
       const bodyTextBSend = abBodyTextB || bodyText;
       const bodyHtmlBSend = variantBBodyHtml(abBodyTextB, abBodyHtmlB) || (bodyTextBSend ? previewBodyToHtml(bodyTextBSend) : '');
-      const recipients = recipientsToUse
+      const recipients = sendList
         .filter(person => person.email)
         .map((person: any) =>
           buildRecipientDbRow(
@@ -3407,6 +3428,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         .insert(recipients);
 
       if (recipientsError) throw recipientsError;
+
+      if (asNewCampaign) {
+        toast({
+          title: `Sending to ${sendList.length.toLocaleString()} new recipient(s) as a new campaign`,
+          description: `"${newCampaignName}" now appears in your campaign list. People already on "${campaignName}" were not emailed again.`,
+        });
+      }
 
       // Start sending immediately if not scheduled
       if (campaignStatus === 'scheduled' && scheduledDateTime) {
@@ -4988,6 +5016,11 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 <span className="text-sm font-medium">Selected Recipients</span>
                 <Badge variant="secondary">{recipientsToUse.length}</Badge>
               </div>
+              {draftId && contentOnlyEditRef.current && (
+                <p className="w-full text-xs text-amber-700 dark:text-amber-400">
+                  This campaign has already been sent. Anyone you add here is sent this email as a new campaign of their own; people already on it are not emailed again.
+                </p>
+              )}
               <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   type="button"
