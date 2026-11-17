@@ -2672,50 +2672,25 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       toast({ title: "No email content", description: "Add subject and email body first, then create a sequence from it.", variant: "destructive" });
       return;
     }
-    const content = subject.trim() ? `Subject: ${subject}\n\n${plainBody}` : plainBody;
     setCreatingSequenceFromBody(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL ?? 'https://kgndpwzqohepotahnfeo.supabase.co'}/functions/v1/sequence-chat`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ messages: [{ role: 'user', content }], extractedParams: {} }),
-        }
-      );
-      if (!response.ok || !response.body) throw new Error('Failed to create sequence');
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let textBuffer = '';
-      let newSequenceId: string | null = null;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
-          const line = textBuffer.slice(0, newlineIndex).replace(/\r$/, '');
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-          if (!line.startsWith('data: ') || line.trim() === 'data: [DONE]') continue;
-          try {
-            const parsed = JSON.parse(line.slice(6).trim());
-            if (parsed.sequence?.sequenceId) {
-              newSequenceId = parsed.sequence.sequenceId;
-              setFollowUpSequenceId(parsed.sequence.sequenceId);
-              queryClient.invalidateQueries({ queryKey: ['email-sequences-follow-up'] });
-              queryClient.invalidateQueries({ queryKey: ['sequences'] });
-            }
-          } catch {
-            // ignore parse errors for non-JSON lines
-          }
-        }
-      }
-      if (newSequenceId) {
-        toast({ title: "Sequence created", description: "Follow-up sequence was generated from your email and selected below." });
-      } else {
-        toast({ title: "Sequence creation", description: "No sequence was returned. Try again or create one from the Sequences page.", variant: "destructive" });
-      }
+      // Written straight from this email, so the follow-ups keep its product, offer and links.
+      const { data, error } = await supabase.functions.invoke('generate-sequence', {
+        body: { followUpOf: { subject: subject.trim(), body: plainBody, campaignName: campaignName.trim() }, tone: 'friendly, professional' },
+      });
+      if (error) throw new Error(error.message || 'Failed to create sequence');
+      if (data?.error) throw new Error(data.error);
+      if (!data?.sequenceId) throw new Error('No sequence was returned. Please try again.');
+      // Put the new sequence in the list before selecting it, so the selector shows it straight away.
+      queryClient.setQueryData(['email-sequences-follow-up'], (prev: any) => {
+        const list = Array.isArray(prev) ? prev.filter((x: any) => x.id !== data.sequenceId) : [];
+        return [...list, { id: data.sequenceId, name: data.name, steps: data.sequence }].sort((x: any, y: any) => String(x.name).localeCompare(String(y.name)));
+      });
+      setAutoFollowUpEnabled(true);
+      setFollowUpSequenceId(data.sequenceId);
+      queryClient.invalidateQueries({ queryKey: ['email-sequences-follow-up'] });
+      queryClient.invalidateQueries({ queryKey: ['sequences'] });
+      toast({ title: "Follow-ups created", description: `"${data.name}" was written from this email and is selected below. Review the three steps before sending.` });
     } catch (err: any) {
       toast({ title: "Error", description: err?.message || "Failed to create sequence from email body", variant: "destructive" });
     } finally {

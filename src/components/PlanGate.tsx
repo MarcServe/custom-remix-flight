@@ -57,9 +57,11 @@ export function PlanGate({ requiredTier, feature, allowTrial, children }: PlanGa
     return <>{children}</>;
   }
 
-  const tierLabel    = PLAN_LABELS[requiredTier];
-  const tierPrice    = PLAN_PRICES[requiredTier];
-  const tierFeatures = TIER_FEATURES[requiredTier] || [];
+  // The old Individual plan is no longer sold: the smallest plan on offer is CRM.
+  const shownTier    = requiredTier === 'individual' ? 'pro' : requiredTier;
+  const tierLabel    = PLAN_LABELS[shownTier];
+  const tierPrice    = PLAN_PRICES[shownTier];
+  const tierFeatures = TIER_FEATURES[shownTier] || [];
   const colorClass   = UPGRADE_COLORS[requiredTier] || UPGRADE_COLORS.leadboosters;
   const iconBg       = UPGRADE_ICON_BG[requiredTier] || UPGRADE_ICON_BG.leadboosters;
   const btnClass     = BUTTON_CLASS[requiredTier] || '';

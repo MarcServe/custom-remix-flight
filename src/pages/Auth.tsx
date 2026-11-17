@@ -28,120 +28,135 @@ const FEATURES = [
     icon: Search,
     title: 'AI Lead Finder',
     desc: 'Search millions of companies and contacts. Filter by industry, size, location, tech stack, and more.',
-    tier: 'Pro',
+    tier: 'CRM',
   },
   {
     icon: Brain,
     title: 'Autopilot',
-    desc: 'Set your ideal customer profile once. Autopilot discovers new leads in the background, 24/7.',
-    tier: 'LeadBoosters',
+    desc: 'Describe your ideal customer once. Every morning Autopilot finds matching businesses, writes each a personal email, sends it and follows up.',
+    tier: 'Autopilot',
   },
   {
     icon: Zap,
     title: 'AI Enrichment',
     desc: 'Auto-fill company details, find decision-maker contacts, and score leads for campaign fit.',
-    tier: 'LeadBoosters',
+    tier: 'Autopilot',
   },
   {
     icon: Mail,
     title: 'Email Campaigns',
     desc: 'Send bulk personalised emails with A/B testing, scheduling, open tracking, and reply detection.',
-    tier: 'Individual',
+    tier: 'CRM',
   },
   {
     icon: Target,
     title: 'Sequences',
     desc: 'Multi-step automated follow-ups with behavioral triggers, delays, and per-recipient personalisation.',
-    tier: 'Pro',
+    tier: 'CRM',
   },
   {
     icon: Layers,
     title: 'Newsletters & Series',
     desc: 'Broadcast newsletters and automated drip campaigns to subscriber lists with full unsubscribe handling.',
-    tier: 'Individual',
+    tier: 'CRM',
   },
   {
     icon: Building2,
     title: 'CRM & Pipeline',
     desc: 'Companies, people, deals, and a visual drag-and-drop sales pipeline with activity logs.',
-    tier: 'Individual',
+    tier: 'CRM',
   },
   {
     icon: Bot,
     title: 'Auto-Responses',
     desc: 'AI reads inbound emails and replies automatically. Capture leads from your inbox without lifting a finger.',
-    tier: 'LeadBoosters',
+    tier: 'Autopilot',
   },
   {
     icon: Inbox,
     title: 'Lead Inbox',
     desc: 'Centralised inbox for all inbound leads. Score, qualify, and route them to your CRM pipeline.',
-    tier: 'Pro',
+    tier: 'CRM',
   },
   {
     icon: MessageSquare,
     title: 'Unified Conversations',
     desc: 'Full email threading with your contacts. Shared team inbox and reply-to-lead auto-sync.',
-    tier: 'Individual',
+    tier: 'CRM',
   },
   {
     icon: Phone,
     title: 'Phone Campaigns',
     desc: 'Run outbound phone campaigns alongside your email outreach from the same dashboard.',
-    tier: 'Individual',
+    tier: 'CRM',
   },
   {
     icon: BarChart2,
     title: 'Analytics & Deliverability',
     desc: 'Open rates, click rates, bounce tracking, spam complaint monitoring, and email health scoring.',
-    tier: 'Individual',
+    tier: 'CRM',
   },
 ];
 
 const PLANS = [
   {
-    name: 'Individual',
-    price: '9.99',
-    desc: 'Core CRM, campaigns, and newsletters for solo users.',
+    id: 'crm',
+    name: 'CRM',
+    price: '29',
+    desc: 'Your CRM, campaigns and follow-ups in one place.',
     features: [
       'People, Companies & Deals CRM',
-      'Bulk email campaigns + A/B testing',
-      'Newsletters & broadcast sending',
-      'Phone campaigns',
-      'Notes, invoices & activity logs',
-      'Team conversations',
+      'Email & SMS campaigns, newsletters',
+      'Sequences with automatic follow-ups',
+      'AI email writer',
+      'Lead Finder: 100 new leads a month',
     ],
     highlight: false,
     cta: 'Start free trial',
     badge: null,
   },
   {
-    name: 'Pro',
-    price: '19.99',
-    desc: 'Everything in Individual plus lead generation and automation.',
+    id: 'autopilot',
+    name: 'Autopilot',
+    price: '99',
+    desc: 'An AI sales rep that finds, writes to and follows up new leads every day.',
     features: [
-      'Everything in Individual',
-      'AI Lead Finder (millions of contacts)',
-      'Lead Inbox & qualification',
-      'Email Sequences & Company Sequences',
-      'Newsletter Series (drip campaigns)',
-      'Per-recipient personalised email import',
+      'Everything in CRM',
+      'Autopilot: up to 500 new leads a month',
+      '1 target persona',
+      'Personal AI email for every lead, sent and followed up',
+      'AI enrichment, scoring & auto-replies',
     ],
     highlight: true,
     cta: 'Start free trial',
     badge: 'Most popular',
   },
   {
-    name: 'LeadBoosters CRM',
-    price: '29',
-    desc: 'Full AI suite: enrichment, autopilot, and auto-responses.',
+    id: 'autopilot_pro',
+    name: 'Autopilot Pro',
+    price: '249',
+    desc: 'More reach, more audiences, more channels.',
     features: [
-      'Everything in Pro',
-      'AI Company Enrichment',
-      'Autopilot (autonomous lead discovery)',
-      'Auto-Response Hub (AI-powered replies)',
-      'AI email writer & lead scoring',
-      'Priority support',
+      'Everything in Autopilot',
+      'Up to 2,000 new leads a month',
+      '3 target personas',
+      'Several sending accounts',
+      'Claude / ChatGPT connection & API keys',
+    ],
+    highlight: false,
+    cta: 'Start free trial',
+    badge: null,
+  },
+  {
+    id: 'agency',
+    name: 'Agency',
+    price: '499',
+    desc: 'For agencies and multi-brand teams.',
+    features: [
+      'Everything in Autopilot Pro',
+      'Up to 10,000 new leads a month',
+      'Up to 20 personas for brands or clients',
+      'Priority onboarding & support',
     ],
     highlight: false,
     cta: 'Start free trial',
@@ -152,23 +167,25 @@ const PLANS = [
 const FAQS = [
   {
     q: 'Is there a free trial?',
-    a: 'Yes — every new account gets 7 days of full LeadBoosters access for free. No credit card required to start.',
+    a: 'Yes. Every new account gets 7 days of Autopilot for free, with up to 100 new leads. No credit card is needed to start.',
   },
   {
     q: 'Can I upgrade or downgrade later?',
-    a: 'Absolutely. Plans are billed monthly and you can switch tiers at any time via the billing portal. Changes take effect immediately.',
+    a: 'Yes. Plans are billed monthly or yearly (yearly gives 2 months free) and you can switch at any time from the billing page.',
   },
   {
     q: 'Do I need to import my own contacts?',
-    a: 'No. The Lead Finder and Autopilot (Pro/LeadBoosters) discover contacts for you. You can also import CSVs or add contacts manually.',
+    a: 'No. Lead Finder (every plan) and Autopilot (Autopilot plans) find businesses for you. You can also import a CSV or add contacts by hand.',
   },
   {
     q: 'Which email providers are supported?',
-    a: 'We support Gmail, custom SMTP, SendGrid, Resend, and multiple sending accounts per workspace.',
+    a: 'Gmail, Outlook, custom SMTP, SendGrid and Resend. Autopilot Pro and Agency can connect several sending accounts.',
   },
 ];
 
 const TIER_COLOR: Record<string, string> = {
+  CRM: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800',
+  Autopilot: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800',
   Individual: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800',
   Pro: 'text-violet-600 bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800',
   LeadBoosters: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800',
@@ -573,10 +590,10 @@ export default function Auth() {
           <div className="text-center mb-10">
             <h2 className="text-2xl sm:text-3xl font-bold mb-2">Simple, transparent pricing</h2>
             <p className="text-muted-foreground text-sm">
-              Start free for 7 days. No credit card. Cancel any time.
+              Every new account starts with 7 days of Autopilot free. Cancel any time.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {PLANS.map((plan) => (
               <div
                 key={plan.name}
@@ -609,7 +626,7 @@ export default function Auth() {
                   className="w-full"
                   variant={plan.highlight ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => navigate(`/auth?mode=signup&returnTo=${encodeURIComponent('/subscription?checkout=true')}`)}
+                  onClick={() => navigate(`/auth?mode=signup&returnTo=${encodeURIComponent(`/subscription?checkout=true&plan=${plan.id}`)}`)}
                 >
                   {plan.cta}
                 </Button>

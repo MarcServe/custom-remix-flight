@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { size, geography, industry, steps = 3, tone = "professional", provider, model, customInstructions, productContext, autoRespond = false, use_email_branding = true, name: requestedName } = await req.json();
+    const { size, geography, industry, steps = 3, tone = "professional", provider, model, customInstructions, productContext, autoRespond = false, use_email_branding = true, name: requestedName, followUpOf } = await req.json();
 
     console.log("Sequence generation request:", { size, geography, industry, steps, tone, provider, model, hasProductContext: !!productContext });
 
@@ -74,7 +74,30 @@ Create emails that connect YOUR business offerings to the prospect's needs in th
     // Create trace for observability
     const trace = createTrace('generate-sequence', undefined, { size, geography, industry, steps, tone });
 
-    const sequencePrompt = `Generate a ${steps}-step cold email outreach sequence for reaching out to ${industry} companies in ${geography} with ${size} employees.
+    // Follow-up mode: write no-reply follow-ups to ONE specific email the user already wrote.
+    // The email itself is the brief, so the product, offer and links stay exactly the same.
+    const fu = followUpOf && String(followUpOf.body || "").trim()
+      ? { subject: String(followUpOf.subject || "").trim().slice(0, 300), body: String(followUpOf.body).trim().slice(0, 6000), campaignName: String(followUpOf.campaignName || "").trim().slice(0, 120) }
+      : null;
+    const followUpPrompt = fu ? `Below is an email we have already sent. Write exactly 3 short follow-up emails for recipients who did NOT reply, sent 1, 3 and 5 days after it.
+
+ORIGINAL EMAIL
+Subject: ${fu.subject || "(no subject)"}
+
+${fu.body}
+
+RULES
+- Follow up on THIS email only: the same product, the same offer and the same call to action. Never introduce another product, company or offer, and never invent features, prices or claims that are not in the original.
+- Reuse the original's link(s) exactly as written when you include a call to action.
+- Each follow-up is 40 to 90 words, adds one fresh angle (a benefit from the original, a quick question, then a polite last note) and reads like a person wrote it. Tone: ${tone}.
+- Follow-up 3 is a brief, friendly final note that says it is the last one.
+- Greet with "Hi {{firstName}}," and use only the placeholders {{firstName}} and {{company}}.
+- Subjects: short and natural; follow-up 1 may be "Re: " plus the original subject.
+- Do NOT include a sign-off, signature, sender name or company name: the platform adds the signature.
+
+Return ONLY a valid JSON array (no markdown) of exactly 3 objects, each with "subject" (string) and "body" (string, plain text with \\n line breaks).` : null;
+
+    const sequencePrompt = followUpPrompt ?? `Generate a ${steps}-step cold email outreach sequence for reaching out to ${industry} companies in ${geography} with ${size} employees.
 
 Tone: ${tone}
 ${pitchContext}
@@ -159,6 +182,17 @@ Return ONLY the JSON array.`;
       throw new Error("AI response is not an array");
     }
 
+    if (fu) {
+      // Fixed cadence: day 1, 3 and 5 after the campaign email
+      const gaps = [1, 2, 2];
+      sequence = sequence.slice(0, 3).map((st: any, i: number) => ({
+        subject: String(st?.subject || "Following up").replace(/\{\{\s*first_name\s*\}\}/gi, "{{firstName}}").replace(/\{\{\s*company_name\s*\}\}/gi, "{{company}}"),
+        body: String(st?.body || "").replace(/\{\{\s*first_name\s*\}\}/gi, "{{firstName}}").replace(/\{\{\s*company_name\s*\}\}/gi, "{{company}}"),
+        delayDays: gaps[i],
+      })).filter((st: any) => st.body.trim());
+      if (sequence.length < 3) throw new Error("The AI did not return three follow-ups. Please try again.");
+    }
+
     console.log("Generated sequence steps:", sequence.length);
 
     // Save the sequence to the database
@@ -167,18 +201,20 @@ Return ONLY the JSON array.`;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const sequenceName = (requestedName && String(requestedName).trim()) || `${industry} in ${geography} (${size}) - ${tone}`;
+    const sequenceName = (requestedName && String(requestedName).trim())
+      || (fu ? `${fu.campaignName || fu.subject || "Campaign"} · follow-ups (Day 1 / 3 / 5)`.slice(0, 160) : `${industry} in ${geography} (${size}) - ${tone}`);
 
     const { data: savedSequence, error: sequenceError } = await supabase
       .from("email_sequences")
       .insert({
         name: sequenceName,
         steps: sequence,
-        segment_filters: {
+        segment_filters: fu ? {} : {
           size,
           geography,
           industry,
         },
+        ...(fu ? { description: "Follow-ups written from the campaign email. Stops as soon as the recipient replies.", repeat_sequence: false, repeat_only_for: "no_reply" } : {}),
         provider: aiResult.provider,
         model: aiResult.model,
         langfuse_trace_id: aiResult.traceId,
