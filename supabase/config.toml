@@ -136,3 +136,6 @@ verify_jwt = false  # service role (cron) or owner JWT, checked inside
 
 [functions.learn-business]
 verify_jwt = false  # owner JWT or service role + x-user-id, checked inside
+
+[functions.stripe-webhook]
+verify_jwt = false
