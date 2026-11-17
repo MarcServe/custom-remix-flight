@@ -97,11 +97,13 @@ Deno.serve(async (req) => {
         users.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         const rows = await effectiveTiers(users.slice(0, 200));
         const limits = await loadLimits(db);
+        const { data: admins } = await db.from("platform_admins").select("user_id");
+        const adminIds = new Set((admins || []).map((a: any) => a.user_id));
         const out = [];
         for (const r of rows) {
           const used = await leadsUsedThisMonth(db, r.user.id);
           out.push({
-            id: r.user.id, email: r.user.email, created_at: r.user.created_at, last_sign_in_at: r.user.last_sign_in_at,
+            id: r.user.id, email: r.user.email, is_admin: adminIds.has(r.user.id), created_at: r.user.created_at, last_sign_in_at: r.user.last_sign_in_at,
             tier: r.tier, source: r.source, leads_used_this_month: used, leads_limit: (limits as any)[r.tier]?.leadsPerMonth ?? 0,
             override: r.override, subscription: r.plan ? { tier: r.plan.tier, status: r.plan.status, renews: r.plan.current_period_end, id: r.plan.stripe_subscription_id } : null,
           });
@@ -112,6 +114,9 @@ Deno.serve(async (req) => {
       case "set_override": {
         const userId = String(body.user_id || "");
         if (!userId) return json({ error: "user_id required" }, 400);
+        // Platform admins can never be downgraded or have their access removed from the console.
+        const { data: targetAdmin } = await db.from("platform_admins").select("user_id").eq("user_id", userId).maybeSingle();
+        if (targetAdmin && body.tier !== "agency") return json({ error: "Admin accounts always keep full (Agency) access and can't be changed here." }, 400);
         if (!body.tier) {
           await db.from("plan_overrides").delete().eq("user_id", userId);
           await audit("remove_override", { user_id: userId });

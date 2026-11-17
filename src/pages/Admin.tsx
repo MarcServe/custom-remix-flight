@@ -174,7 +174,7 @@ function Users() {
                     <TableCell className="text-right tabular-nums">{u.leads_used_this_month} / {u.leads_limit.toLocaleString("en-GB")}</TableCell>
                     <TableCell className="text-xs">{fmtDate(u.created_at)}</TableCell>
                     <TableCell className="text-xs">{fmtDate(u.last_sign_in_at)}</TableCell>
-                    <TableCell><Button size="sm" variant="outline" onClick={() => setEditing(u)}>Plan…</Button></TableCell>
+                    <TableCell>{u.is_admin ? <Badge variant="secondary">Admin</Badge> : <Button size="sm" variant="outline" onClick={() => setEditing(u)}>Plan…</Button>}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
