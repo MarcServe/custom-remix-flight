@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
+import { useQueryClient } from "@tanstack/react-query";
+import { claimLocalAppData, clearLocalAppData } from "@/lib/localPersistence";
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -96,6 +98,7 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -158,6 +161,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        // Browser-stored drafts and cached data belong to one user: clear them on sign-out
+        // or when a different user signs in on this browser.
+        if (claimLocalAppData(session?.user?.id ?? null) || event === 'SIGNED_OUT') queryClient.clear();
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -267,6 +273,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const signOut = async () => {
     try {
+      clearLocalAppData();
+      queryClient.clear();
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     } catch (error: any) {

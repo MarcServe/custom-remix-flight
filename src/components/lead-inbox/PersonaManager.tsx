@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePersistentState } from "@/lib/localPersistence";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -73,8 +74,8 @@ export function PersonaManager() {
   
   const [dialogOpen, setDialogOpen] = useState(false);
   // AI persona builder
-  const [aiUrl, setAiUrl] = useState('');
-  const [aiNotes, setAiNotes] = useState('');
+  const [aiUrl, setAiUrl] = usePersistentState('persona:aiUrl', '');
+  const [aiNotes, setAiNotes] = usePersistentState('persona:aiNotes', '');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiPagesRead, setAiPagesRead] = useState<number | null>(null);
 

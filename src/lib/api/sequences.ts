@@ -12,6 +12,8 @@ export interface SequenceRequest {
   autoRespond?: boolean;
   /** When true (default), sequence emails use the same email branding template as campaigns for consistent look. */
   use_email_branding?: boolean;
+  /** Optional name; defaults to "<industry> in <geography> (<size>) - <tone>". */
+  name?: string;
 }
 
 export interface SequenceResponse {

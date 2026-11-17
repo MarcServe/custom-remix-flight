@@ -2,7 +2,10 @@ import { Analytics } from "@vercel/analytics/react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { QUERY_CACHE_KEY } from "@/lib/localPersistence";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ResearchChatProvider } from "./contexts/ResearchChatContext";
@@ -56,7 +59,23 @@ import NewsletterSeries from "./pages/NewsletterSeries";
 import RecipientGroups from "./pages/RecipientGroups";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+// Keep fetched data for a day so a refresh or Back shows the page instantly from the browser
+// cache, then refreshes in the background (staleTime 0 = always revalidate on mount).
+const CACHE_MAX_AGE = 1000 * 60 * 60 * 24;
+const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: CACHE_MAX_AGE } } });
+
+// localStorage holds ~5 MB: skip the biggest datasets and anything over ~400 KB.
+const NEVER_PERSIST = new Set(["companies-full", "companies-filtered-full", "people-full", "email-threads", "conversations"]);
+const sizeOf = new WeakMap<object, number>();
+const persistable = (data: unknown) => {
+  if (data == null || typeof data !== "object") return true;
+  let n = sizeOf.get(data as object);
+  if (n === undefined) { try { n = JSON.stringify(data).length; } catch { n = Infinity; } sizeOf.set(data as object, n); }
+  return n < 400_000;
+};
+const persister = typeof window !== "undefined"
+  ? createSyncStoragePersister({ storage: window.localStorage, key: QUERY_CACHE_KEY, throttleTime: 2000 })
+  : undefined;
 
 // Component to handle realtime subscriptions and notifications
 const RealtimeProvider = ({ children }: { children: React.ReactNode }) => {
@@ -66,7 +85,18 @@ const RealtimeProvider = ({ children }: { children: React.ReactNode }) => {
 };
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
+  <PersistQueryClientProvider
+    client={queryClient}
+    persistOptions={{
+      persister: persister!,
+      maxAge: CACHE_MAX_AGE,
+      buster: "lb-cache-v1",
+      dehydrateOptions: {
+        shouldDehydrateQuery: (q) =>
+          q.state.status === "success" && !NEVER_PERSIST.has(String(q.queryKey[0])) && persistable(q.state.data),
+      },
+    }}
+  >
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -145,7 +175,7 @@ const App = () => (
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
-  </QueryClientProvider>
+  </PersistQueryClientProvider>
 );
 
 export default function AppWithAnalytics() {

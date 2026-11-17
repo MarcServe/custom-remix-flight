@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users, Eye, Building2, CalendarDays } from "lucide-react";
-import { useGenerateSequence, useSequences, useDeleteSequence } from "@/hooks/use-sequences";
+import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users, Eye, Building2, CalendarDays, Pencil } from "lucide-react";
+import { useGenerateSequence, useSequences, useDeleteSequence, useUpdateSequence } from "@/hooks/use-sequences";
+import { usePersistentState } from "@/lib/localPersistence";
 import { useCompanySequences, useUpdateSequenceStatus, useDeleteCompanySequence } from "@/hooks/use-company-sequences";
 import { useProviderStore } from "@/stores/provider-store";
 import { Badge } from "@/components/ui/badge";
@@ -25,14 +26,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 
 export default function Sequences() {
-  const [size, setSize] = useState("");
-  const [geography, setGeography] = useState("");
-  const [industry, setIndustry] = useState("");
-  const [steps, setSteps] = useState("3");
-  const [tone, setTone] = useState<"professional" | "casual" | "technical">("professional");
-  const [customInstructions, setCustomInstructions] = useState("");
-  const [autoRespond, setAutoRespond] = useState(false);
-  const [useEmailBranding, setUseEmailBranding] = useState(true);
+  // Form drafts survive a refresh or Back (kept in this browser, cleared on sign-out)
+  const [seqName, setSeqName] = usePersistentState("sequences:name", "");
+  const [size, setSize] = usePersistentState("sequences:size", "");
+  const [geography, setGeography] = usePersistentState("sequences:geography", "");
+  const [industry, setIndustry] = usePersistentState("sequences:industry", "");
+  const [steps, setSteps] = usePersistentState("sequences:steps", "3");
+  const [tone, setTone] = usePersistentState<"professional" | "casual" | "technical">("sequences:tone", "professional");
+  const [customInstructions, setCustomInstructions] = usePersistentState("sequences:instructions", "");
+  const [autoRespond, setAutoRespond] = usePersistentState("sequences:autoRespond", false);
+  const [useEmailBranding, setUseEmailBranding] = usePersistentState("sequences:branding", true);
+  // The last generated sequence stays on screen after a refresh
+  const [lastResult, setLastResult, clearLastResult] = usePersistentState<any>("sequences:lastResult", null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [sendImmediately, setSendImmediately] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<number[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
@@ -106,12 +113,15 @@ export default function Sequences() {
       customInstructions: customInstructions || undefined,
       autoRespond,
       use_email_branding: useEmailBranding,
+      name: seqName.trim() || undefined,
     });
 
     if (data) {
       // Expand all steps by default
       setExpandedSteps(data.sequence.map((_, idx) => idx));
+      setLastResult(data);
       // Reset form
+      setSeqName("");
       setSize("");
       setGeography("");
       setIndustry("");
@@ -142,7 +152,15 @@ export default function Sequences() {
 
   const isFormValid = size && geography && industry;
   const isGenerating = generateMutation.isPending;
-  const result = generateMutation.data?.data;
+  const result = generateMutation.data?.data ?? lastResult;
+
+  const updateSequenceMutation = useUpdateSequence();
+  const saveRename = async (id: string) => {
+    const name = renameValue.trim();
+    setRenamingId(null);
+    if (!name) return;
+    await updateSequenceMutation.mutateAsync({ id, updates: { name } });
+  };
   const sequences = sequencesData?.data || [];
   const companySequences = companySequencesData?.data || [];
 
@@ -200,6 +218,19 @@ export default function Sequences() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-5">
+                {/* Sequence name */}
+                <div className="space-y-2">
+                  <Label htmlFor="seq-name" className="text-sm font-medium">Sequence name (optional)</Label>
+                  <Input
+                    id="seq-name"
+                    placeholder="e.g. GrantsCopilot charities, January push"
+                    value={seqName}
+                    onChange={(e) => setSeqName(e.target.value)}
+                    maxLength={120}
+                  />
+                  <p className="text-xs text-muted-foreground">Leave blank to name it from the industry, place, size and tone.</p>
+                </div>
+
                 {/* Company Selector */}
                 <div className="space-y-2">
                   <Label htmlFor="seq-company" className="text-sm font-medium flex items-center gap-2">
@@ -697,10 +728,31 @@ export default function Sequences() {
                             <Mail className="h-6 w-6 text-white" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <CardTitle className="text-base truncate mb-1 flex items-center gap-2">
-                              {sequence.name}
-                              <Eye className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </CardTitle>
+                            {renamingId === sequence.id ? (
+                              <Input
+                                autoFocus
+                                value={renameValue}
+                                maxLength={120}
+                                className="h-8 mb-1"
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') saveRename(sequence.id); if (e.key === 'Escape') setRenamingId(null); }}
+                                onBlur={() => saveRename(sequence.id)}
+                              />
+                            ) : (
+                              <CardTitle className="text-base truncate mb-1 flex items-center gap-2">
+                                {sequence.name}
+                                <button
+                                  type="button"
+                                  title="Rename"
+                                  className="opacity-60 hover:opacity-100"
+                                  onClick={(e) => { e.stopPropagation(); setRenamingId(sequence.id); setRenameValue(sequence.name || ''); }}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <Eye className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </CardTitle>
+                            )}
                             {sequence.segment_filters && (
                               <div className="flex flex-wrap gap-1.5">
                                 <Badge variant="secondary" className="text-xs">

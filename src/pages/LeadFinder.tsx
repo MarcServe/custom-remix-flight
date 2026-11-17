@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { usePersistentState } from "@/lib/localPersistence";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,18 +58,18 @@ function isRealCompanyWebsite(url: string | null | undefined): boolean {
 }
 
 export default function LeadFinder() {
-  const [sizes, setSizes] = useState<string[]>([]);
-  const [geography, setGeography] = useState("");
-  const [industryCategories, setIndustryCategories] = useState<string[]>([]);
-  const [industrySubcategories, setIndustrySubcategories] = useState<string[]>([]);
+  const [sizes, setSizes] = usePersistentState<string[]>("leadfinder:sizes", []);
+  const [geography, setGeography] = usePersistentState("leadfinder:geography", "");
+  const [industryCategories, setIndustryCategories] = usePersistentState<string[]>("leadfinder:categories", []);
+  const [industrySubcategories, setIndustrySubcategories] = usePersistentState<string[]>("leadfinder:subcategories", []);
   const [subcategorySearch, setSubcategorySearch] = useState("");
-  const [customSearchText, setCustomSearchText] = useState("");
+  const [customSearchText, setCustomSearchText] = usePersistentState("leadfinder:custom", "");
   const [dryRun, setDryRun] = useState(true);
   const [enrichWithPerplexity, setEnrichWithPerplexity] = useState(true);
   const [useSerpApi, setUseSerpApi] = useState(false);
   const [useApify, setUseApify] = useState(false);
   /** Target number of leads to fetch per search (25–100). More = more API calls / results. */
-  const [maxResults, setMaxResults] = useState<number>(50);
+  const [maxResults, setMaxResults] = usePersistentState<number>("leadfinder:max", 50);
   const [selectedCompany, setSelectedCompany] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedCompanyIndices, setSelectedCompanyIndices] = useState<Set<number>>(new Set());
