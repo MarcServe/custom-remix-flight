@@ -381,12 +381,15 @@ serve(async (req) => {
             (Date.now() - new Date(lastActivity.sent_at).getTime()) / (1000 * 60 * 60 * 24)
           );
 
-          if (daysSinceLastEmail >= nextStep.delayDays) {
+          // A follow-up is never sent on the same day as the email before it: a step saved with
+          // 0 days (common in AI-written cold sequences) waits at least one day.
+          const minDays = Math.max(1, Number(nextStep.delayDays) || 0);
+          if (daysSinceLastEmail >= minDays) {
             shouldSendNext = true;
-            triggerReason = `time_delay (${nextStep.delayDays} days elapsed)`;
+            triggerReason = `time_delay (${minDays} days elapsed)`;
           } else {
             console.log(
-              `Sequence ${sequence.id}: Not enough time passed (${daysSinceLastEmail}/${nextStep.delayDays} days)`
+              `Sequence ${sequence.id}: Not enough time passed (${daysSinceLastEmail}/${minDays} days)`
             );
             continue;
           }
