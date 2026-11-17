@@ -16,6 +16,8 @@ export interface MarketingPersona {
   talking_points: string[] | null;
   call_to_action: string | null;
   email_signature_override: string | null;
+  target_industries?: string[] | null;
+  target_geographies?: string[] | null;
 }
 
 interface PersonaSelectorProps {
@@ -32,7 +34,7 @@ export function PersonaSelector({ value, onChange, disabled }: PersonaSelectorPr
     queryFn: async () => {
       const { data, error } = await supabase
         .from('discovery_personas')
-        .select('id, name, description, product_focus, value_proposition, email_tone, talking_points, call_to_action, email_signature_override')
+        .select('id, name, description, product_focus, value_proposition, email_tone, talking_points, call_to_action, email_signature_override, target_industries, target_geographies')
         .eq('user_id', user?.id)
         .eq('is_active', true)
         .order('name');

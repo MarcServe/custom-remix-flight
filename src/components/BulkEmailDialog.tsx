@@ -364,7 +364,16 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
   const [sending, setSending] = useState(false);
   const [aiContext, setAiContext] = useState("");
   const [generatingAi, setGeneratingAi] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(true);
+  const [aiProduct, setAiProduct] = useState("");
+  const { data: productSuggestions = [] } = useQuery({
+    queryKey: ["persona-product-suggestions"],
+    queryFn: async () => {
+      const { data } = await supabase.from("discovery_personas").select("product_focus").not("product_focus", "is", null);
+      return Array.from(new Set((data || []).map((r: any) => String(r.product_focus || "").trim()).filter(Boolean))).slice(0, 20);
+    },
+    staleTime: 5 * 60_000,
+  });
   const [testEmailDialogOpen, setTestEmailDialogOpen] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
@@ -1901,56 +1910,46 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     }
   };
 
+  /** Writes ONE ready-to-send email for the whole campaign (merge tokens, no recipient names),
+   *  for the chosen persona and/or product, grounded in the business profile + knowledge base.
+   *  Works before any recipients are picked. */
   const handleGenerateWithAI = async () => {
-    if (recipientsToUse.length === 0) {
+    const brief = aiContext.trim();
+    if (!selectedPersona && !aiProduct.trim() && !brief) {
+      setAiOpen(true);
       toast({
-        title: "No recipients",
-        description: "Please select at least one person to generate email for",
+        title: "Tell the AI what to write",
+        description: "Pick a persona, type a product or offer, or describe the email in the AI Email Writer above.",
         variant: "destructive",
       });
       return;
     }
-
     try {
       setGeneratingAi(true);
-      const firstPerson = recipientsToUse[0];
-      const companyData = firstPerson.company_id && companiesData?.[firstPerson.company_id];
-      
       const { data, error } = await supabase.functions.invoke('generate-email-with-ai', {
         body: {
-          recipientName: `${firstPerson.first_name} ${firstPerson.last_name}`.trim(),
-          recipientEmail: firstPerson.email,
-          companyId: firstPerson.company_id,
-          companyData: companyData ? {
-            name: companyData.name,
-            description: companyData.description,
-            industry: companyData.industry,
-            website: companyData.website,
-            enrichment_data: companyData.enrichment_data,
-            recent_news: companyData.recent_news,
-            funding_stage: companyData.funding_stage,
-            funding_total: companyData.funding_total,
-            employee_count: companyData.employee_count,
-            tech_stack: companyData.tech_stack,
-            key_executives: companyData.key_executives,
-          } : undefined,
-          context: aiContext || undefined,
+          context: 'persona_campaign',
           persona: selectedPersona ? {
+            name: selectedPersona.name,
+            description: selectedPersona.description,
             product_focus: selectedPersona.product_focus,
             value_proposition: selectedPersona.value_proposition,
             email_tone: selectedPersona.email_tone,
             talking_points: selectedPersona.talking_points,
             call_to_action: selectedPersona.call_to_action,
-            email_signature_override: selectedPersona.email_signature_override,
+            target_industries: selectedPersona.target_industries,
+            target_geographies: selectedPersona.target_geographies,
           } : undefined,
+          product: aiProduct.trim() || undefined,
+          brief: brief || undefined,
         },
       });
-
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       if (data?.subject && data?.body) {
         setSubject(data.subject);
-        setBodyHtml(`<p>${escapeHtml(data.body).replace(/\n/g, '</p><p>')}</p>`);
+        setBodyHtml(`<p>${escapeHtml(data.body).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`);
         setBodyText(data.body);
         if (abTestEnabled) {
           setAbSubjectB(data.subject);
@@ -3863,7 +3862,8 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 >
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-5 w-5 text-primary" />
-                    <span className="font-medium">AI Email Generator</span>
+                    <span className="font-medium">AI Email Writer</span>
+                    <span className="hidden sm:inline text-xs text-muted-foreground">pick a persona or product, get a ready-to-send email</span>
                   </div>
                   <ChevronDown className={`h-4 w-4 transition-transform ${aiOpen ? 'rotate-180' : ''}`} />
                 </Button>
@@ -3877,7 +3877,22 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 />
 
                 <div className="space-y-2">
-                  <Label htmlFor="ai_context">Additional Context {selectedPersona ? '(auto-filled from persona)' : '(Optional)'}</Label>
+                  <Label htmlFor="ai_product">Product or offer to lead with {selectedPersona?.product_focus ? '(persona default shown)' : '(optional)'}</Label>
+                  <Input
+                    id="ai_product"
+                    list="ai-product-suggestions"
+                    value={aiProduct}
+                    onChange={(e) => setAiProduct(e.target.value)}
+                    placeholder={selectedPersona?.product_focus || "e.g. TalkWeb AI receptionist, free AI audit, GrantsCopilot"}
+                    className="bg-background"
+                  />
+                  <datalist id="ai-product-suggestions">
+                    {productSuggestions.map((p) => <option key={p} value={p} />)}
+                  </datalist>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="ai_context">What should this email do? {selectedPersona ? '(auto-filled from persona)' : '(optional)'}</Label>
                   <Textarea
                     id="ai_context"
                     value={aiContext}
@@ -3903,7 +3918,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 <div className="space-y-2">
                 <Button
                   onClick={handleGenerateWithAI}
-                    disabled={generatingAi || generatingPersonalized || recipientsToUse.length === 0}
+                    disabled={generatingAi || generatingPersonalized}
                   className="w-full"
                 >
                   {generatingAi ? (
@@ -3914,7 +3929,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                   ) : (
                     <>
                       <Sparkles className="h-4 w-4 mr-2" />
-                        Generate Email Template (Single)
+                        Write one email for everyone
                     </>
                   )}
                 </Button>
@@ -4744,7 +4759,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                 variant="outline"
                 size="sm"
                 onClick={handleGenerateWithAI}
-                disabled={generatingAi || sending || recipientsToUse.length === 0}
+                disabled={generatingAi || sending}
               >
                 {generatingAi ? (
                   <>

@@ -76,7 +76,7 @@ serve(async (req) => {
     // Fetch business profile
     const { data: businessProfile, error: businessError } = await supabaseAdmin
       .from('business_profiles')
-      .select('company_name, website, phone')
+      .select('company_name, website, phone, services_description, value_proposition, target_audience, tone_preference, knowledge_base')
       .eq('user_id', user.id)
       .single();
 
@@ -173,6 +173,70 @@ Each edition should feel fresh: vary opening hook, section titles, and examples 
       console.log('Newsletter generated, length:', htmlContent.length);
 
       return new Response(JSON.stringify({ generatedEmail: htmlContent }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Persona / product campaign email: one ready-to-send email for everyone in a campaign,
+    // written for a chosen persona and/or product, grounded in the business knowledge base.
+    if (requestBody.context === 'persona_campaign') {
+      const p = requestBody.persona || {};
+      const product = String(requestBody.product || p.product_focus || '').trim();
+      const brief = String(requestBody.brief || '').trim();
+      const tone = String(requestBody.tone || p.email_tone || (businessProfile as any)?.tone_preference || 'professional');
+      const kb = String((businessProfile as any)?.knowledge_base || '').slice(0, 3500);
+      if (!product && !brief && !p.name && !p.description) {
+        return new Response(JSON.stringify({ error: 'Choose a persona or a product, or describe what the email should do.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      const list = (v: unknown) => Array.isArray(v) ? v.filter(Boolean).join('; ') : (v ? String(v) : '');
+      const sys = `You are a senior B2B outreach copywriter. Write ONE cold email that will be sent to MANY recipients who fit the persona below.
+Rules:
+- 90-150 words. Plain text with line breaks; no HTML, no markdown, no emojis.
+- Use these EXACT merge tokens and no others: {{firstName}} in the greeting, and {{company}} once. {{company}} is the RECIPIENT's organisation, never ours: write e.g. "teams like {{company}}" or "for {{company}}", never "At {{company}}, we".
+- Refer to our side as "we" or by the product name; do not open sentences with "In today's world" or similar filler.
+- Open with a line about the recipient's world (their sector's pressure, obligation or goal), not about us.
+- Pitch ONE product or offer and tie it to that pressure. Use only facts from BUSINESS FACTS and PERSONA; never invent numbers, clients, awards or prices.
+- End with ONE clear, low-friction call to action. If the persona's call to action contains a link or email address, include it exactly.
+- Do NOT include a sign-off or signature; the system appends the sender's signature.
+- Subject: under 60 characters, specific, no clickbait, no ALL CAPS.
+Tone: ${tone}.
+Return ONLY JSON: {"subject": string, "body": string, "preview": string}  // preview = one sentence the inbox shows after the subject`;
+      const usr = `SENDER: ${senderCompany || 'our company'}${senderTitle ? ' (' + senderTitle + ')' : ''}
+WHAT WE DO: ${(businessProfile as any)?.services_description || ''}
+OUR VALUE: ${(businessProfile as any)?.value_proposition || ''}
+BUSINESS FACTS: ${kb || '(none provided)'}
+
+PERSONA: ${p.name || '(none)'}
+WHO THEY ARE: ${p.description || ''}
+THEIR SECTORS: ${list(p.target_industries)}
+WHERE: ${list(p.target_geographies)}
+PERSONA VALUE PROPOSITION: ${p.value_proposition || ''}
+TALKING POINTS: ${list(p.talking_points)}
+CALL TO ACTION: ${p.call_to_action || ''}
+
+PRODUCT / OFFER TO LEAD WITH: ${product || '(choose the best fit from BUSINESS FACTS)'}
+WHAT THIS EMAIL SHOULD DO: ${brief || 'Introduce the offer and get a reply or a short call booked.'}`;
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [{ role: 'system', content: sys }, { role: 'user', content: usr }],
+          temperature: 0.6, max_tokens: 800, response_format: { type: 'json_object' },
+        }),
+      });
+      if (!response.ok) {
+        const t = await response.text();
+        if (response.status === 429) throw new Error('Rate limit exceeded. Please try again later.');
+        throw new Error(`OpenAI API error: ${response.status} ${t.slice(0, 200)}`);
+      }
+      const data = await response.json();
+      let parsed: { subject?: string; body?: string; preview?: string } = {};
+      try { parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}'); } catch { parsed = {}; }
+      // Keep only the two supported merge tokens
+      const clean = (t: string) => t.replace(/\{\{\s*(first[_ ]?name|firstname)\s*\}\}/gi, '{{firstName}}').replace(/\{\{\s*(company[_ ]?name|company)\s*\}\}/gi, '{{company}}')
+        .replace(/\{\{(?!firstName\}\}|company\}\})[^}]*\}\}/g, '');
+      return new Response(JSON.stringify({ subject: clean(parsed.subject || ''), body: clean(parsed.body || ''), preview: parsed.preview || '' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
