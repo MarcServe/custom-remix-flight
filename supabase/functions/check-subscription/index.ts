@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { tierForStripe, better, getUserPlan, LIMITS, type Tier } from "../_shared/plans.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,60 +45,46 @@ serve(async (req) => {
     logStep("User authenticated", { userId: user.id, email: user.email });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    
-    if (customers.data.length === 0) {
-      logStep("No customer found, updating unsubscribed state");
-      return new Response(JSON.stringify({ subscribed: false }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
-    }
 
-    const customerId = customers.data[0].id;
-    logStep("Found Stripe customer", { customerId });
-
-    // Check both 'active' and 'trialing' — new subscribers start on a 7-day trial
-    // which has status 'trialing', not 'active'. Only querying 'active' was locking
-    // out brand-new subscribers immediately after they paid.
-    const [activeSubs, trialingSubs] = await Promise.all([
-      stripe.subscriptions.list({ customer: customerId, status: "active", limit: 1 }),
-      stripe.subscriptions.list({ customer: customerId, status: "trialing", limit: 1 }),
-    ]);
-    const allSubs = [...activeSubs.data, ...trialingSubs.data];
-    const hasActiveSub = allSubs.length > 0;
-    let productId = null;
-    let subscriptionEnd = null;
-
-    if (hasActiveSub) {
-      const subscription = allSubs[0];
-      logStep("Active subscription found", { subscriptionId: subscription.id });
-      
-      // Safely handle subscription end date
-      if (subscription.current_period_end) {
-        try {
-          subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
-          logStep("Subscription end date set", { endDate: subscriptionEnd });
-        } catch (dateError) {
-          logStep("Error parsing subscription end date", { error: dateError, timestamp: subscription.current_period_end });
+    // The Stripe account is shared with other Biz Boosters products (ROUT£, GrantsCopilot,
+    // Securar…): only LeadBoosters subscriptions count, and the best one wins.
+    const customers = await stripe.customers.list({ email: user.email, limit: 10 });
+    let tier: Tier = "free";
+    let best: { sub: any; price: any } | null = null;
+    for (const c of customers.data) {
+      for (const status of ["active", "trialing"] as const) {
+        const subs = await stripe.subscriptions.list({ customer: c.id, status, limit: 20, expand: ["data.items.data.price.product"] });
+        for (const sub of subs.data) {
+          const price: any = sub.items?.data?.[0]?.price;
+          const t = tierForStripe(price);
+          if (!t) continue;
+          if (!best || better(tier, t) !== tier) { tier = better(tier, t); best = { sub, price }; }
         }
       }
-      
-      // Safely extract product ID
-      if (subscription.items?.data?.[0]?.price?.product) {
-        productId = subscription.items.data[0].price.product;
-        logStep("Determined subscription product", { productId });
-      } else {
-        logStep("Could not determine product ID from subscription");
-      }
-    } else {
-      logStep("No active subscription found");
     }
+    logStep("LeadBoosters plan resolved", { tier, subscriptionId: best?.sub?.id });
+
+    const periodEnd = best?.sub ? ((best.sub as any).current_period_end ?? (best.sub as any).items?.data?.[0]?.current_period_end) : null;
+    const subscriptionEnd = periodEnd ? new Date(periodEnd * 1000).toISOString() : null;
+    const productId = best ? (typeof best.price.product === "string" ? best.price.product : best.price.product?.id) : null;
+
+    await supabaseClient.from("user_plans").upsert({
+      user_id: user.id, tier, stripe_customer_id: best ? String(best.sub.customer) : (customers.data[0]?.id ?? null),
+      stripe_subscription_id: best?.sub?.id ?? null, product_id: productId, price_id: best?.price?.id ?? null,
+      status: best?.sub?.status ?? null, current_period_end: subscriptionEnd, updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" });
+
+    // Manual grants (owner, partners, comped accounts) override what Stripe says.
+    const plan = await getUserPlan(supabaseClient, user.id);
+    const effective = plan.source === "override" ? plan.tier : tier;
 
     return new Response(JSON.stringify({
-      subscribed: hasActiveSub,
+      subscribed: effective !== "free" && effective !== "trial",
+      tier: effective,
+      plan_source: plan.source === "override" ? "override" : (best ? "stripe" : "none"),
+      limits: plan.source === "override" ? plan.limits : LIMITS[tier],
       product_id: productId,
-      subscription_end: subscriptionEnd
+      subscription_end: subscriptionEnd,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,

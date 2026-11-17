@@ -3,6 +3,7 @@
 import { knownCompanies, isKnown, searchWithLeadFinder, searchWithPerplexity, searchWithApifyMaps, dedupeLeads, domainOf, type SourceLead } from "../_shared/discovery-sources.ts";
 import { cleanTerm } from "../_shared/discovery-planner.ts";
 import { promoteLeadToCompany } from "../_shared/lead-promote.ts";
+import { getUserPlan, leadsUsedThisMonth, LIMITS } from "../_shared/plans.ts";
 import { sourceTag } from "./crm.ts";
 
 const json = (obj: unknown, status = 200) => new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
@@ -27,7 +28,13 @@ export async function handleLeadAction(db: any, userId: string, action: string, 
       const query = str(body.query);
       if (!query) return json({ error: "query is required, e.g. 'independent dental clinics' or 'housing associations needing accessible websites'" }, 400);
       const geography = cleanTerm(body.geography); const industry = cleanTerm(body.industry); const size = cleanTerm(body.size);
-      const max = lim(body.max, 25, 100);
+      // Plan allowance: new leads per month are shared between Autopilot and find_leads
+      const plan = await getUserPlan(db, userId);
+      const remaining = Math.max(0, plan.limits.leadsPerMonth - await leadsUsedThisMonth(db, userId));
+      if (remaining <= 0) return json({ error: plan.limits.leadsPerMonth === 0
+        ? `Finding new leads isn't included in the ${plan.tier} plan. Upgrade at ${Deno.env.get("APP_URL") || "https://leadboosters.bizboosters.co.uk"}/subscription.`
+        : `This month's ${plan.limits.leadsPerMonth.toLocaleString()} new leads on the ${plan.tier} plan are used up. It resets on the 1st, or upgrade for more.`, plan: plan.tier }, 402);
+      const max = Math.min(lim(body.max, 25, 100), remaining);
       const save = body.save !== false;
       const sources = Array.isArray(body.sources) && body.sources.length ? body.sources.map(String) : ["web", "perplexity"];
       const [known, { data: settings }] = await Promise.all([knownCompanies(db, userId), db.from("autonomous_discovery_settings").select("*").eq("user_id", userId).maybeSingle()]);
@@ -122,7 +129,9 @@ export async function handleLeadAction(db: any, userId: string, action: string, 
         db.from("autonomous_discovery_settings").select("enabled, discovery_frequency, preferred_discovery_hour, timezone, daily_lead_target, max_leads_per_run, queries_per_run, use_ai_planner, use_perplexity_search, use_serp_api, use_apify, full_auto_mode, auto_approve_threshold, auto_enroll_enabled, auto_enroll_sequence_id, auto_create_campaign, target_industries, target_geographies, target_company_sizes, custom_search_query, avoid_industries, avoid_keywords, last_run_at, next_run_at, total_approved, total_rejected").eq("user_id", userId).maybeSingle(),
         db.from("discovery_personas").select("id, name, is_active, description, target_industries, target_geographies, target_keywords, target_company_sizes, custom_search_query, exclude_industries, exclude_keywords, auto_approve_threshold, auto_enroll_sequence_id, total_leads_found, total_approved").eq("user_id", userId).order("priority"),
       ]);
-      return json({ settings: s, personas: personas || [], sources: { web_search: "Exa (always on)", google: s?.use_serp_api !== false ? "on (SerpAPI, small quota)" : "off", perplexity: s?.use_perplexity_search !== false ? "on" : "off", google_maps: s?.use_apify ? "on (Apify)" : "off", planner: s?.use_ai_planner !== false ? "AI plans fresh angles each run" : "rotation" } });
+      const plan = await getUserPlan(db, userId);
+      const used = await leadsUsedThisMonth(db, userId);
+      return json({ plan: { tier: plan.tier, source: plan.source, leads_per_month: plan.limits.leadsPerMonth, leads_used_this_month: used, personas_allowed: plan.limits.personas, autopilot_included: plan.limits.autopilot }, settings: s, personas: personas || [], sources: { web_search: "Exa (always on)", google: s?.use_serp_api !== false ? "on (SerpAPI, small quota)" : "off", perplexity: s?.use_perplexity_search !== false ? "on" : "off", google_maps: s?.use_apify ? "on (Apify)" : "off", planner: s?.use_ai_planner !== false ? "AI plans fresh angles each run" : "rotation" } });
     }
 
     case "update_autopilot": {

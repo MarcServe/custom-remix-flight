@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { tierForStripe } from "../_shared/plans.ts";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -26,7 +27,7 @@ serve(async (req) => {
   let event: Stripe.Event;
   try {
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-    event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
+    event = await stripe.webhooks.constructEventAsync(body, sig, webhookSecret);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Invalid signature";
     console.error("Webhook signature verification failed:", msg);
@@ -48,23 +49,21 @@ serve(async (req) => {
         const sub = event.data.object as Stripe.Subscription;
         logStep("Subscription upsert", { subId: sub.id, status: sub.status });
 
-        const { error } = await supabase.from("subscribers").upsert(
-          {
-            stripe_customer_id: sub.customer as string,
-            stripe_subscription_id: sub.id,
-            subscribed: sub.status === "active" || sub.status === "trialing",
-            subscription_tier: "premium",
-            subscription_end: new Date(
-              (sub as unknown as { current_period_end: number }).current_period_end * 1000
-            ).toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "stripe_customer_id" }
-        );
-
-        if (error) {
-          logStep("Upsert failed — no subscribers table, logging only", { error: error.message });
-          // Non-fatal: check-subscription queries Stripe live anyway
+        // Record LeadBoosters plans only (the Stripe account is shared with other products).
+        const price: any = sub.items?.data?.[0]?.price;
+        const tier = tierForStripe(price);
+        const userId = (sub.metadata as any)?.user_id;
+        if (tier && userId) {
+          const end = (sub as any).current_period_end ?? (sub as any).items?.data?.[0]?.current_period_end;
+          const live = sub.status === "active" || sub.status === "trialing";
+          const { error } = await supabase.from("user_plans").upsert({
+            user_id: userId, tier: live ? tier : "free", stripe_customer_id: String(sub.customer), stripe_subscription_id: sub.id,
+            product_id: typeof price.product === "string" ? price.product : price.product?.id, price_id: price.id, status: sub.status,
+            current_period_end: end ? new Date(end * 1000).toISOString() : null, updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id" });
+          if (error) logStep("user_plans upsert failed", { error: error.message });
+        } else {
+          logStep("Not a LeadBoosters subscription or no user_id; skipped", { tier, userId });
         }
         break;
       }
@@ -73,14 +72,10 @@ serve(async (req) => {
         const sub = event.data.object as Stripe.Subscription;
         logStep("Subscription cancelled", { subId: sub.id, customer: sub.customer });
 
-        const { error } = await supabase
-          .from("subscribers")
-          .update({ subscribed: false, updated_at: new Date().toISOString() })
-          .eq("stripe_customer_id", sub.customer as string);
-
-        if (error) {
-          logStep("Cancel update failed — no subscribers table, logging only", { error: error.message });
-        }
+        const { error } = await supabase.from("user_plans")
+          .update({ tier: "free", status: "canceled", updated_at: new Date().toISOString() })
+          .eq("stripe_subscription_id", sub.id);
+        if (error) logStep("Cancel update failed", { error: error.message });
         break;
       }
 
@@ -88,14 +83,9 @@ serve(async (req) => {
         const invoice = event.data.object as Stripe.Invoice;
         logStep("Payment failed", { customer: invoice.customer, invoiceId: invoice.id });
 
-        const { error } = await supabase
-          .from("subscribers")
-          .update({ subscribed: false, updated_at: new Date().toISOString() })
-          .eq("stripe_customer_id", invoice.customer as string);
-
-        if (error) {
-          logStep("Payment-failed update failed — no subscribers table, logging only", { error: error.message });
-        }
+        // Stripe retries failed payments; the subscription moves to past_due and then fires
+        // customer.subscription.updated/deleted, which update the plan. Only log here.
+        logStep("Payment failed; awaiting subscription status change", { customer: invoice.customer });
         break;
       }
 

@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { planDiscoveryQueries, type PlannedQuery } from "../_shared/discovery-planner.ts";
+import { getUserPlan, leadsUsedThisMonth } from "../_shared/plans.ts";
 import { knownCompanies, recentQueries, isKnown, searchWithLeadFinder, searchWithPerplexity, searchWithApifyMaps, dedupeLeads } from "../_shared/discovery-sources.ts";
 
 const corsHeaders = {
@@ -82,11 +83,15 @@ async function handleDiscovery(req: Request): Promise<Response> {
   // Check if this is a manual trigger for a specific user
   let manualUserId: string | null = null;
   let forceRun = false;
+  let onlyPersonaId: string | null = null;     // set when this invocation handles one persona
+  let triggerOverride: string | null = null;
   
   try {
     const body = await req.json().catch(() => ({}));
     manualUserId = body.userId || null;
     forceRun = body.forceRun || false;
+    onlyPersonaId = body.personaId || null;
+    triggerOverride = body.trigger || null;
     
     if (manualUserId) {
       console.log(`[super-discovery] Manual trigger for user: ${manualUserId}`);
@@ -247,8 +252,51 @@ async function handleDiscovery(req: Request): Promise<Response> {
           console.error(`[super-discovery] Error fetching personas for user ${setting.user_id}:`, personasError);
         }
 
-        const activePersonas = (personas || []) as Persona[];
+        let activePersonas = (personas || []) as Persona[];
         console.log(`[super-discovery] Found ${activePersonas.length} active personas for user ${setting.user_id}`);
+
+        // ── Plan limits (LeadBoosters plans): Autopilot access, personas per run, leads per month ──
+        const plan = await getUserPlan(supabase, setting.user_id);
+        const remainingThisMonth = Math.max(0, plan.limits.leadsPerMonth - await leadsUsedThisMonth(supabase, setting.user_id));
+        if (!plan.limits.autopilot || remainingThisMonth <= 0) {
+          const reason = !plan.limits.autopilot
+            ? `Autopilot isn't included in your plan (${plan.tier}). Upgrade to Autopilot to keep finding leads automatically.`
+            : `You've used this month's ${plan.limits.leadsPerMonth.toLocaleString()} new leads on your plan. Autopilot resumes on the 1st, or upgrade for more.`;
+          console.log(`[super-discovery] Skipping user ${setting.user_id}: ${reason}`);
+          await supabase.from('discovery_runs').insert({ user_id: setting.user_id, discovery_run_id: crypto.randomUUID(), status: 'completed', completed_at: new Date().toISOString(), trigger_type: manualUserId ? 'manual' : 'scheduled', errors: [reason], persona_name: 'Plan limit' });
+          const nr = calculateNextRun(setting.discovery_frequency, setting.preferred_discovery_hour ?? 9, setting.timezone || 'Europe/London');
+          await supabase.from('autonomous_discovery_settings').update({ last_run_at: new Date().toISOString(), next_run_at: nr.toISOString() }).eq('user_id', setting.user_id);
+          await supabase.from('notifications').insert({ user_id: setting.user_id, type: 'automation_failed', title: 'Autopilot paused by your plan', body: reason, link: '/subscription' }).then(() => {}, () => {});
+          continue;
+        }
+        if (activePersonas.length > plan.limits.personas) {
+          console.log(`[super-discovery] Plan ${plan.tier} allows ${plan.limits.personas} persona(s); using the first ${plan.limits.personas} of ${activePersonas.length}`);
+          activePersonas = activePersonas.slice(0, plan.limits.personas);
+        }
+        // Never find more new leads than the month has left (shared across this run's personas)
+        const perPersonaCap = Math.max(1, Math.floor(remainingThisMonth / Math.max(1, activePersonas.length)));
+        setting.max_leads_per_run = Math.min(Number(setting.max_leads_per_run ?? 100) || 100, perPersonaCap);
+        setting.daily_lead_target = Math.min(Number(setting.daily_lead_target || 50), setting.max_leads_per_run);
+
+        // ── One persona per invocation: a run has ~150 s, a persona takes ~100 s ──
+        if (onlyPersonaId) {
+          activePersonas = activePersonas.filter((p) => p.id === onlyPersonaId);
+          if (!activePersonas.length) { console.log(`[super-discovery] Persona ${onlyPersonaId} not active/allowed; nothing to do`); continue; }
+        } else if (activePersonas.length > 1) {
+          const trig = manualUserId ? 'manual' : (forceRun ? 'catch_up' : 'scheduled');
+          for (const p of activePersonas) {
+            background(fetch(`${SUPABASE_URL}/functions/v1/autonomous-lead-discovery`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: setting.user_id, forceRun: true, personaId: p.id, trigger: trig }),
+            }));
+          }
+          const nr = calculateNextRun(setting.discovery_frequency, setting.preferred_discovery_hour ?? 9, setting.timezone || 'Europe/London');
+          await supabase.from('autonomous_discovery_settings').update({ last_run_at: new Date().toISOString(), next_run_at: nr.toISOString() }).eq('user_id', setting.user_id);
+          console.log(`[super-discovery] Dispatched ${activePersonas.length} persona runs for user ${setting.user_id}`);
+          processedCount++;
+          continue;
+        }
 
         // Generate discovery run ID
         const discoveryRunId = crypto.randomUUID();
@@ -269,7 +317,7 @@ async function handleDiscovery(req: Request): Promise<Response> {
         };
 
         // Determine trigger type for run tracking
-        const triggerType = manualUserId ? 'manual' : (forceRun ? 'catch_up' : 'scheduled');
+        const triggerType = triggerOverride || (manualUserId ? 'manual' : (forceRun ? 'catch_up' : 'scheduled'));
 
         // Create discovery run record
         const { error: runError } = await supabase
@@ -279,6 +327,8 @@ async function handleDiscovery(req: Request): Promise<Response> {
             discovery_run_id: discoveryRunId,
             status: 'running',
             trigger_type: triggerType,
+            persona_id: activePersonas.length === 1 ? activePersonas[0].id : null,
+            persona_name: activePersonas.length === 1 ? activePersonas[0].name : null,
             settings_snapshot: {
               full_auto_mode: setting.full_auto_mode,
               auto_extract_emails: setting.auto_extract_emails,

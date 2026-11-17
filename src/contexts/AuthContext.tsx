@@ -10,30 +10,46 @@ export const INDIVIDUAL_PRODUCT_ID = 'prod_TUNeoAZWiDngEH'; // £9.99/month
 export const PRO_PRODUCT_ID        = 'prod_UbJKukbTXsTZ8Z'; // £19.99/month
 // LeadBoosters CRM (£29/month) = any other active subscription
 
-export type PlanTier = 'free' | 'trial' | 'individual' | 'pro' | 'leadboosters';
+export type PlanTier = 'free' | 'trial' | 'individual' | 'pro' | 'leadboosters' | 'crm' | 'autopilot' | 'autopilot_pro' | 'agency' | 'legacy_full';
 
+// Rank gates routes: 2 = CRM features (sequences, Lead Finder, Lead Inbox), 3 = AI/Autopilot features.
 export const TIER_RANK: Record<PlanTier, number> = {
   free: 0,
-  trial: 3,          // trial = full access so users can see all features
   individual: 1,
   pro: 2,
+  crm: 2,
+  trial: 3,          // trial = full access (Autopilot capped at 100 leads) so users can see everything
   leadboosters: 3,
+  autopilot: 3,
+  legacy_full: 3,
+  autopilot_pro: 4,
+  agency: 5,
 };
 
 export const PLAN_LABELS: Record<PlanTier, string> = {
   free: 'Free',
   trial: 'Free Trial',
   individual: 'Individual',
-  pro: 'Pro',
-  leadboosters: 'LeadBoosters CRM',
+  pro: 'CRM',
+  leadboosters: 'Autopilot',
+  crm: 'CRM',
+  autopilot: 'Autopilot',
+  autopilot_pro: 'Autopilot Pro',
+  agency: 'Agency',
+  legacy_full: 'LeadBoosters (legacy plan)',
 };
 
 export const PLAN_PRICES: Record<PlanTier, string> = {
   free: '£0',
   trial: '£0',
   individual: '£9.99/mo',
-  pro: '£19.99/mo',
-  leadboosters: '£29/mo',
+  pro: '£29/mo',
+  leadboosters: '£99/mo',
+  crm: '£29/mo',
+  autopilot: '£99/mo',
+  autopilot_pro: '£249/mo',
+  agency: '£499/mo',
+  legacy_full: '£29/mo',
 };
 
 // Features unlocked at each tier (cumulative)
@@ -46,20 +62,18 @@ export const TIER_FEATURES: Record<'individual' | 'pro' | 'leadboosters', string
     'Team conversations',
   ],
   pro: [
-    'Everything in Individual',
-    'Email Sequences & Company Sequences',
-    'Lead Finder & Lead Inbox',
-    'Newsletter Series (automated drip)',
-    'Per-recipient personalised email import',
-    'Unified campaign analytics',
+    'People, Companies & Deals CRM',
+    'Email & SMS campaigns, newsletters',
+    'Email sequences with automatic follow-ups',
+    'Lead Finder & Lead Inbox (manual)',
+    'AI email writer',
   ],
   leadboosters: [
-    'Everything in Pro',
-    'AI Company Enrichment',
-    'Autopilot (autonomous lead discovery)',
+    'Everything in CRM',
+    'Autopilot: finds, writes to and follows up new leads daily',
+    'Up to 500 new leads a month, 1 target persona',
+    'AI company enrichment & lead scoring',
     'Auto-Response Hub (AI-powered replies)',
-    'AI email writer & lead scoring',
-    'Full AI feature suite',
   ],
 };
 
@@ -109,6 +123,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [productId, setProductId] = useState<string | null>(null);
   const [subscriptionEnd, setSubscriptionEnd] = useState<string | null>(null);
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
+  const [serverTier, setServerTier] = useState<PlanTier | null>(null);
   // false until we know this user's plan (from the cached last-known plan or a completed check).
   // Gates wait on it so a paid user never sees a "Subscribe" card flash while the check runs.
   const [planResolved, setPlanResolved] = useState(false);
@@ -129,6 +144,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setSubscribed(!!c.subscribed);
     setProductId(c.productId ?? null);
     setSubscriptionEnd(c.subscriptionEnd ?? null);
+    if (c.tier) setServerTier(c.tier);
     if (c.trialEndsAt) setTrialEndsAt(c.trialEndsAt);
     setPlanResolved(true);
     setTrialChecked(true);
@@ -141,7 +157,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // Derive plan tier from subscription state
   const planTier: PlanTier = (() => {
-    if (subscribed) {
+    // The server knows the plan (LeadBoosters products only, plus manual overrides)
+    if (serverTier && serverTier !== 'free' && serverTier !== 'trial') return serverTier;
+    if (subscribed && !serverTier) {
       if (productId === INDIVIDUAL_PRODUCT_ID) return 'individual';
       if (productId === PRO_PRODUCT_ID) return 'pro';
       return 'leadboosters'; // any other active subscription = full plan
@@ -207,6 +225,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setSubscribed(false);
           setProductId(null);
           setSubscriptionEnd(null);
+          setServerTier(null);
           setPlanResolved(true); // signed out: nothing to wait for
         }
 
@@ -369,7 +388,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setSubscribed(data?.subscribed || false);
       setProductId(data?.product_id || null);
       setSubscriptionEnd(data?.subscription_end || null);
-      if (uid) writePlanCache(uid, { subscribed: !!data?.subscribed, productId: data?.product_id || null, subscriptionEnd: data?.subscription_end || null });
+      setServerTier((data?.tier as PlanTier) || null);
+      if (uid) writePlanCache(uid, { subscribed: !!data?.subscribed, productId: data?.product_id || null, subscriptionEnd: data?.subscription_end || null, tier: data?.tier || null });
     } catch (error) {
       console.error('[AUTH] Error in checkSubscription:', error);
       toast.error('Could not refresh subscription status', {

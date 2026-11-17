@@ -7,8 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// LeadBoosters Premium — £29/month GBP
-const PRICE_ID = "price_1TZECTP8zypO5fiCk3voBln5";
+// Plans are looked up by Stripe lookup_key: lb_<plan>_<monthly|yearly>
+const PLANS = ["crm", "autopilot", "autopilot_pro", "agency"] as const;
 const TRIAL_DAYS = 7;
 
 const logStep = (step: string, details?: any) => {
@@ -45,6 +45,15 @@ serve(async (req) => {
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
 
+    const reqBody = await req.json().catch(() => ({}));
+    const plan = (PLANS as readonly string[]).includes(reqBody?.plan) ? reqBody.plan : "autopilot";
+    const interval = reqBody?.interval === "yearly" ? "yearly" : "monthly";
+    const lookupKey = `lb_${plan}_${interval}`;
+    const prices = await stripe.prices.list({ lookup_keys: [lookupKey], active: true, limit: 1 });
+    const PRICE_ID = prices.data[0]?.id;
+    if (!PRICE_ID) throw new Error(`No active price for ${lookupKey}`);
+    logStep("Plan selected", { plan, interval, priceId: PRICE_ID });
+
     // Reuse existing Stripe customer if one exists
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     let customerId: string | undefined;
@@ -80,7 +89,7 @@ serve(async (req) => {
       mode: "subscription",
       subscription_data: {
         ...(trialDays ? { trial_period_days: trialDays } : {}),
-        metadata: { user_id: user.id },
+        metadata: { user_id: user.id, app: "leadboosters", plan },
       },
       allow_promotion_codes: true,
       success_url: `${origin}/subscription?success=true`,

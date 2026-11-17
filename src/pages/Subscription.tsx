@@ -1,6 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth, INDIVIDUAL_PRODUCT_ID, PRO_PRODUCT_ID, PLAN_LABELS, TIER_FEATURES } from "@/contexts/AuthContext";
+import { useAuth, PLAN_LABELS, TIER_FEATURES } from "@/contexts/AuthContext";
+
+type PlanId = "crm" | "autopilot" | "autopilot_pro" | "agency";
+const PLAN_IDS: PlanId[] = ["crm", "autopilot", "autopilot_pro", "agency"];
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -117,25 +120,26 @@ const FEATURE_GROUPS = [
 ];
 
 export default function Subscription() {
-  const { subscribed, productId, subscriptionEnd, trialEndsAt, isInTrial, checkSubscription } = useAuth();
+  const { subscribed, productId, subscriptionEnd, trialEndsAt, isInTrial, checkSubscription, planTier } = useAuth();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const autoCheckoutStarted = useRef(false);
 
-  const handleSubscribe = async () => {
+  const [interval, setInterval_] = useState<'monthly' | 'yearly'>('monthly');
+  const handleSubscribe = async (plan: PlanId = 'autopilot') => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.functions.invoke('create-checkout');
+      const { data, error } = await supabase.functions.invoke('create-checkout', { body: { plan, interval } });
       if (error) throw error;
       if (data?.url) {
         window.location.assign(data.url);
       } else {
-        throw new Error('No checkout URL returned');
+        throw new Error(data?.error || 'No checkout URL returned');
       }
     } catch (error: unknown) {
       const raw = error instanceof Error ? error.message : String(error);
-      const msg = raw.includes('No such price')
+      const msg = raw.includes('No such price') || raw.includes('No active price')
         ? 'Stripe price not found — contact support.'
         : raw.includes('Invalid API Key') || raw.includes('No API key')
         ? 'Stripe is misconfigured — contact support.'
@@ -152,7 +156,8 @@ export default function Subscription() {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('checkout');
     setSearchParams(nextParams, { replace: true });
-    void handleSubscribe();
+    const wanted = searchParams.get('plan') as PlanId | null;
+    void handleSubscribe(wanted && PLAN_IDS.includes(wanted) ? wanted : 'autopilot');
   }, [searchParams, setSearchParams, subscribed]);
 
   const handleManageSubscription = async () => {
@@ -181,49 +186,41 @@ export default function Subscription() {
     }
   };
 
-  const isIndividualActive   = subscribed && productId === INDIVIDUAL_PRODUCT_ID;
-  const isProActive          = subscribed && productId === PRO_PRODUCT_ID;
-  const isLeadBoostersActive = subscribed && !isIndividualActive && !isProActive;
-
-  // 3-tier plan cards config
+  const legacyPlan = ['individual', 'pro', 'leadboosters', 'legacy_full'].includes(planTier) && subscribed;
+  const yearly = interval === 'yearly';
   const plans = [
     {
-      id: 'individual',
-      name: 'Individual',
-      price: '£9.99',
-      description: 'Core CRM for solo users and small teams',
-      features: TIER_FEATURES.individual,
-      isCurrent: isIndividualActive,
-      highlight: false,
-      btnLabel: 'Get Individual',
-      color: 'border-sky-500',
-      badgeCls: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400',
+      id: 'crm' as PlanId, name: 'CRM', monthly: 29,
+      description: 'Your CRM, campaigns and follow-ups in one place',
+      features: ['People, Companies & Deals CRM', 'Email & SMS campaigns, newsletters', 'Sequences with automatic follow-ups', 'AI email writer', 'Lead Finder (manual, 100 new leads/month)'],
+      highlight: false, color: 'border-sky-500', badgeCls: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400',
     },
     {
-      id: 'pro',
-      name: 'Pro',
-      price: '£19.99',
-      description: 'Lead generation + outreach automation',
-      features: TIER_FEATURES.pro,
-      isCurrent: isProActive,
-      highlight: true,
-      btnLabel: 'Get Pro',
-      color: 'border-violet-500',
-      badgeCls: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400',
+      id: 'autopilot' as PlanId, name: 'Autopilot', monthly: 99,
+      description: 'An AI sales rep that finds, writes to and follows up new leads every day',
+      features: ['Everything in CRM', 'Autopilot: up to 500 new leads a month', '1 target persona', 'Personal AI email for every lead, sent and followed up', 'AI enrichment, scoring & auto-replies'],
+      highlight: true, color: 'border-primary', badgeCls: 'bg-primary/10 text-primary',
     },
     {
-      id: 'leadboosters',
-      name: 'LeadBoosters CRM',
-      price: '£29',
-      description: 'Full AI-powered suite — unlimited everything',
-      features: TIER_FEATURES.leadboosters,
-      isCurrent: isLeadBoostersActive,
-      highlight: false,
-      btnLabel: 'Get LeadBoosters',
-      color: 'border-primary',
-      badgeCls: 'bg-primary/10 text-primary',
+      id: 'autopilot_pro' as PlanId, name: 'Autopilot Pro', monthly: 249,
+      description: 'More reach, more audiences, more channels',
+      features: ['Everything in Autopilot', 'Up to 2,000 new leads a month', '3 target personas', 'SMS outreach & multiple sending accounts', 'Claude / ChatGPT connection'],
+      highlight: false, color: 'border-violet-500', badgeCls: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400',
     },
-  ] as const;
+    {
+      id: 'agency' as PlanId, name: 'Agency', monthly: 499,
+      description: 'For agencies and multi-brand teams',
+      features: ['Everything in Autopilot Pro', 'Up to 10,000 new leads a month', 'Up to 20 personas for brands or clients', 'Priority onboarding & support'],
+      highlight: false, color: 'border-amber-500', badgeCls: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
+    },
+  ].map((p) => ({
+    ...p,
+    price: yearly ? `£${(p.monthly * 10).toLocaleString()}` : `£${p.monthly}`,
+    per: yearly ? '/year' : '/month',
+    note: yearly ? `2 months free (£${Math.round((p.monthly * 10) / 12)}/month)` : null,
+    isCurrent: planTier === p.id,
+    btnLabel: `Choose ${p.name}`,
+  }));
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
@@ -255,7 +252,7 @@ export default function Subscription() {
                   )}
                 </div>
               </div>
-              <Button onClick={handleSubscribe} disabled={loading} size="sm">
+              <Button onClick={() => handleSubscribe('autopilot')} disabled={loading} size="sm">
                 {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 Subscribe Now
               </Button>
@@ -273,7 +270,7 @@ export default function Subscription() {
                 <ShieldCheck className="h-5 w-5 text-primary shrink-0" />
                 <div>
                   <p className="font-semibold text-primary">
-                    Active — {isIndividualActive ? 'Individual' : isProActive ? 'Pro' : 'LeadBoosters CRM'} plan
+                    Active — {PLAN_LABELS[planTier] || 'LeadBoosters'} plan
                   </p>
                   {subscriptionEnd && (
                     <p className="text-sm text-muted-foreground">
@@ -291,8 +288,24 @@ export default function Subscription() {
         </Card>
       )}
 
-      {/* 3-column plan grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+      {legacyPlan && (
+        <div className="mb-4 rounded-lg border bg-muted/40 p-3 text-sm">
+          You're on a legacy plan ({PLAN_LABELS[planTier]}). It stays at your current price with everything you have today; switch below whenever you like.
+        </div>
+      )}
+
+      {/* Monthly / yearly */}
+      <div className="mb-4 flex items-center justify-center gap-1 rounded-full border bg-muted/40 p-1 w-fit mx-auto">
+        {(['monthly', 'yearly'] as const).map((iv) => (
+          <button key={iv} type="button" onClick={() => setInterval_(iv)}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${interval === iv ? 'bg-background shadow text-foreground' : 'text-muted-foreground'}`}>
+            {iv === 'monthly' ? 'Monthly' : 'Yearly · 2 months free'}
+          </button>
+        ))}
+      </div>
+
+      {/* Plan grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-10">
         {plans.map((plan) => (
           <Card
             key={plan.id}
@@ -317,7 +330,7 @@ export default function Subscription() {
               <CardDescription className="text-xs">{plan.description}</CardDescription>
               <div className="flex items-baseline gap-1 mt-2">
                 <span className="text-3xl font-extrabold">{plan.price}</span>
-                <span className="text-muted-foreground text-sm">/mo</span>
+                <span className="text-sm text-muted-foreground">{plan.per}</span>
               </div>
             </CardHeader>
             <CardContent className="flex flex-col flex-1 gap-4 pt-0">
@@ -334,11 +347,11 @@ export default function Subscription() {
                   size="sm"
                   variant={plan.highlight ? 'default' : 'outline'}
                   disabled={loading}
-                  onClick={subscribed ? handleManageSubscription : handleSubscribe}
+                  onClick={subscribed && !legacyPlan ? handleManageSubscription : () => handleSubscribe(plan.id)}
                   className="w-full"
                 >
                   {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                  {subscribed ? `Switch to ${plan.name}` : plan.btnLabel}
+                  {subscribed && !legacyPlan ? `Switch to ${plan.name}` : plan.btnLabel}
                 </Button>
               )}
               {plan.isCurrent && (
@@ -385,10 +398,10 @@ export default function Subscription() {
       {/* Bottom CTA — only show when not subscribed */}
       {!subscribed && (
         <div className="mt-8 text-center">
-          <Button onClick={handleSubscribe} size="lg" disabled={loading} className="px-10">
+          <Button onClick={() => handleSubscribe('autopilot')} size="lg" disabled={loading} className="px-10">
             {loading
               ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</>
-              : <><Sparkles className="mr-2 h-4 w-4" />Start with LeadBoosters — £29/mo</>}
+              : <><Sparkles className="mr-2 h-4 w-4" />Start your 7-day free trial of Autopilot</>}
           </Button>
           <p className="text-xs text-muted-foreground mt-2">New accounts start with a 7-day free trial. Cancel any time.</p>
         </div>
