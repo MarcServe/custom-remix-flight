@@ -177,7 +177,7 @@ async function enrollFollowUp(
   campaign: any,
   campaignId: string,
   sentAt: string,
-  messageId: string | null,,
+  messageId: string | null,
   sendMeta: { provider?: string; tracking_enabled?: boolean | null } = {}) {
   if (!campaign.auto_follow_up_enabled) return;
   try {
