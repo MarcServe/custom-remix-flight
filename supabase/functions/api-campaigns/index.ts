@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchAllRows } from "../_shared/fetch-all.ts";
 import { handleCrmAction, CRM_ACTIONS } from "./crm.ts";
 
 const corsHeaders = {
@@ -214,8 +215,10 @@ Deno.serve(async (req) => {
       const ids = (groups || []).map((g: any) => g.id);
       const counts: Record<string, number> = {};
       if (ids.length) {
-        const { data: members } = await db.from("recipient_group_members").select("group_id").in("group_id", ids).limit(100000);
-        for (const m of members || []) counts[m.group_id] = (counts[m.group_id] || 0) + 1;
+        for (const gid of ids) {
+          const { count } = await db.from("recipient_group_members").select("id", { count: "exact", head: true }).eq("group_id", gid);
+          counts[gid] = count || 0;
+        }
       }
       return json({ groups: (groups || []).map((g: any) => ({ id: g.id, name: g.name, description: g.description, channel: g.channel || "email", members: counts[g.id] || 0 })) });
     }
@@ -305,9 +308,9 @@ Deno.serve(async (req) => {
         const allowed = new Set((ownGroups || []).map((g: any) => g.id));
         const scoped = groupIds.filter((g) => allowed.has(g));
         if (scoped.length) {
-          const { data: members } = await db.from("recipient_group_members")
-            .select("email, first_name, last_name, company").in("group_id", scoped);
-          for (const m of members || []) fromGroups.push(m);
+          const members = await fetchAllRows(() => db.from("recipient_group_members")
+            .select("email, first_name, last_name, company, person_id").in("group_id", scoped).order("id"));
+          for (const m of members) fromGroups.push(m);
         }
       }
 
@@ -318,7 +321,7 @@ Deno.serve(async (req) => {
         const email = String(r?.email || "").trim().toLowerCase();
         if (!EMAIL_RE.test(email) || seen.has(email)) continue;
         seen.add(email);
-        recips.push({ email, first_name: r.first_name || r.firstName || "", last_name: r.last_name || r.lastName || "", company: r.company || "", name: r.name || "" });
+        recips.push({ email, first_name: r.first_name || r.firstName || "", last_name: r.last_name || r.lastName || "", company: r.company || "", name: r.name || "", ...(r.person_id ? { person_id: r.person_id } : {}) } as any);
       }
       if (recips.length === 0) return json({ error: "No valid recipient emails (provide 'recipients' and/or 'group_ids')" }, 400);
 
@@ -330,7 +333,8 @@ Deno.serve(async (req) => {
       const linkPeople = body.link_people !== false && body.linkPeople !== false;
       let linkedCount = 0;
       if (linkPeople) {
-        const ids = await mapPool(recips, 8, (r) => ensurePersonCompany(db, userId, r).catch(() => null));
+        // Group members often already point at their CRM person: reuse it instead of re-resolving.
+        const ids = await mapPool(recips, 8, (r) => (r as any).person_id ? Promise.resolve((r as any).person_id as string) : ensurePersonCompany(db, userId, r).catch(() => null));
         recips.forEach((r, i) => { (r as any).person_id = ids[i] || null; if (ids[i]) linkedCount++; });
       }
 

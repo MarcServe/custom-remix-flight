@@ -1,4 +1,5 @@
 import { ensurePersonCompany, parseSteps } from "../_shared/followup.ts";
+import { fetchAllRows } from "../_shared/fetch-all.ts";
 import { sendOneSms, activePhoneConnection, isOptedOut, senderNumberOf, logSms, nameForNumber, normalizePhone as normalizeE164 } from "../_shared/sms-send.ts";
 
 // CRM actions for the public API (api-campaigns). Each action is scoped to the
@@ -360,7 +361,7 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
       }
       if (!incoming.length) return json({ error: "Provide recipients[], contact_ids[] or company_ids[]" }, 400);
 
-      const { data: existing } = await db.from("recipient_group_members").select("email, phone").eq("group_id", g.id).limit(100000);
+      const existing = await fetchAllRows(() => db.from("recipient_group_members").select("email, phone").eq("group_id", g.id).order("id"));
       const seenE = new Set((existing || []).map((m: any) => (m.email || "").toLowerCase()).filter(Boolean));
       const seenP = new Set((existing || []).map((m: any) => digits(m.phone)).filter(Boolean));
       const rows: any[] = []; let skipped = 0; let hasEmail = false; let hasPhone = false;
