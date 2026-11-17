@@ -338,6 +338,15 @@ serve(async (req) => {
       if (rest.length) {
         console.log(`[bulk-extract-emails] Chaining ${rest.length} remaining leads`);
         background(fetch(`${SUPABASE_URL}/functions/v1/bulk-extract-emails`, { method: 'POST', headers: { Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ leadIds: rest.map((l: any) => l.id), createContact, stream: false, promote, chain: true, chunk: size }) }));
+      } else if (promote) {
+        // End of the chain: every lead that could get an email has one, so the Autopilot run can
+        // build its campaign and send the summary now (it claims the run, so a repeat is harmless).
+        const runs = new Map<string, string>();
+        for (const l of leads) if (l.discovery_run_id && l.user_id && !runs.has(l.discovery_run_id)) runs.set(l.discovery_run_id, l.user_id);
+        for (const [discoveryRunId, userId] of runs) {
+          console.log(`[bulk-extract-emails] Chain complete → post phase for run ${discoveryRunId}`);
+          background(fetch(`${SUPABASE_URL}/functions/v1/autonomous-lead-discovery`, { method: 'POST', headers: { Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ phase: 'post', userId, discoveryRunId }) }));
+        }
       }
       return res;
     }

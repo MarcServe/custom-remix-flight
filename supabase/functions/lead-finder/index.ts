@@ -1468,7 +1468,13 @@ Deno.serve(async (req) => {
         console.log(`Apify added ${apifyResultCount} results`);
       }
 
-      const deduplicatedResults = deduplicateResults(allResults);
+      // Cap what goes through AI extraction: each batch of 10 costs ~5–8 s, and a manual search
+      // must finish inside the function's time limit. Perplexity/Maps rows (already companies) first.
+      const extractionCap = Math.max(60, Math.min(120, targetLeads * 2));
+      const dedupedAll = deduplicateResults(allResults);
+      const rank = (r: any) => (r.source === 'perplexity' || r.source === 'apify' || r.source === 'google_maps') ? 0 : 1;
+      const deduplicatedResults = dedupedAll.length > extractionCap ? [...dedupedAll].sort((a, b) => rank(a) - rank(b)).slice(0, extractionCap) : dedupedAll;
+      if (dedupedAll.length > extractionCap) console.log(`Lead Finder: ${dedupedAll.length} results, extracting the best ${extractionCap}`);
       const exaCount = deduplicatedResults.filter((r: any) => r.source === 'exa' || !r.source).length;
       console.log(`Found ${deduplicatedResults.length} unique companies (Exa: ${exaCount}, SerpAPI: ${serpApiResultCount}, Maps: ${googleMapsResultCount}, Apify: ${apifyResultCount})`);
       await endSpan(exaSpan, { totalResults: allResults.length, uniqueResults: deduplicatedResults.length, serpApiResults: serpApiResultCount, googleMapsResults: googleMapsResultCount, apifyResults: apifyResultCount });

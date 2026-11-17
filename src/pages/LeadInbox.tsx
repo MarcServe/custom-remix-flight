@@ -71,10 +71,16 @@ export default function LeadInbox() {
   const queryClient = useQueryClient();
   
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<LeadStatus | 'all'>('pending');
+  // Deep links from the run-summary email / notifications: ?tab=auto_approved&range=today
+  const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const tabParam = urlParams.get('tab');
+  const rangeParam = urlParams.get('range');
+  const validTabs: (LeadStatus | 'all')[] = ['pending', 'approved', 'rejected', 'auto_approved', 'all'];
+  const validRanges: DateFilter[] = ['today', 'last7days', 'last30days', 'all'];
+  const [activeTab, setActiveTab] = useState<LeadStatus | 'all'>(validTabs.includes(tabParam as any) ? (tabParam as LeadStatus | 'all') : 'pending');
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dateFilter, setDateFilter] = useState<DateFilter>('today');
+  const [dateFilter, setDateFilter] = useState<DateFilter>(validRanges.includes(rangeParam as any) ? (rangeParam as DateFilter) : 'today');
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set(['today']));
   const [groupBy, setGroupBy] = useState<GroupBy>('date');
   const [personaFilter, setPersonaFilter] = useState<string>('all');

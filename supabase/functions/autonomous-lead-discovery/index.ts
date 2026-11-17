@@ -397,10 +397,11 @@ async function handleDiscovery(req: Request): Promise<Response> {
         processedCount++;
         console.log(`[super-discovery] Completed processing for user ${setting.user_id}. Stats:`, JSON.stringify(userStats));
 
-        // Campaign creation, alerts and the summary email get their own invocation (fresh time budget),
-        // a little later so the background email lookup has had time to find addresses.
+        // Campaign creation, alerts and the summary email get their own invocation (fresh time budget).
+        // The email-lookup chain triggers it as soon as it finishes; this is the 5-minute fallback
+        // in case that chain never completes. The post phase claims the run so it runs only once.
         if (userStats.totalLeads > 0) {
-          background(new Promise((res) => setTimeout(res, 20_000)).then(() => fetch(`${SUPABASE_URL}/functions/v1/autonomous-lead-discovery`, {
+          background(new Promise((res) => setTimeout(res, 300_000)).then(() => fetch(`${SUPABASE_URL}/functions/v1/autonomous-lead-discovery`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ phase: 'post', userId: setting.user_id, discoveryRunId }),
@@ -456,6 +457,10 @@ async function runPostPhase(userId: string, discoveryRunId: string): Promise<Res
     supabase.from('discovery_runs').select('*').eq('discovery_run_id', discoveryRunId).maybeSingle(),
   ]);
   if (!setting || !run) return ok({ success: false, error: 'setting or run not found' });
+  // Claim: first caller (extractor chain or fallback timer) wins; later calls are no-ops.
+  const { data: claimed } = await supabase.from('discovery_runs').update({ post_phase_at: new Date().toISOString() })
+    .eq('discovery_run_id', discoveryRunId).is('post_phase_at', null).select('discovery_run_id');
+  if (!claimed || claimed.length === 0) return ok({ success: true, phase: 'post', skipped: 'already run' });
   const stats: DiscoveryStats = {
     totalLeads: run.total_leads_found || 0, bySource: run.source_breakdown || {}, autoApproved: run.leads_auto_approved || 0, pending: run.leads_pending || 0,
     enriched: run.leads_enriched || 0, campaignsCreated: run.campaigns_created || 0, emailsExtracted: run.emails_extracted || 0, contactsCreated: run.contacts_created || 0,
