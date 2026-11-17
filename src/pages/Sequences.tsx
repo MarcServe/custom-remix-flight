@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users, Eye, Building2 } from "lucide-react";
+import { Mail, Layers, Sparkles, Loader2, ExternalLink, TrendingUp, Trash2, Clock, Copy, ChevronDown, ChevronUp, Users, Eye, Building2, CalendarDays } from "lucide-react";
 import { useGenerateSequence, useSequences, useDeleteSequence } from "@/hooks/use-sequences";
 import { useCompanySequences, useUpdateSequenceStatus, useDeleteCompanySequence } from "@/hooks/use-company-sequences";
 import { useProviderStore } from "@/stores/provider-store";
@@ -716,9 +716,20 @@ export default function Sequences() {
                       </CardHeader>
                       <CardContent className="space-y-3">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="flex items-center gap-2 text-sm font-medium">
-                            <Layers className="h-4 w-4 text-primary" />
-                            {sequence.steps?.length || 0} steps
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                            <span className="flex items-center gap-2 font-medium">
+                              <Layers className="h-4 w-4 text-primary" />
+                              {sequence.steps?.length || 0} steps
+                            </span>
+                            {sequence.created_at && (
+                              <span
+                                className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                                title={new Date(sequence.created_at).toLocaleString('en-GB', { timeZone: 'Europe/London' })}
+                              >
+                                <CalendarDays className="h-3.5 w-3.5" />
+                                Added {new Date(sequence.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/London' })}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-1">
                             <Button
