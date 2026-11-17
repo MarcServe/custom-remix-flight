@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -216,13 +217,23 @@ export default function Auth() {
   const rawReturnTo = searchParams.get('returnTo');
   const returnTo = rawReturnTo?.startsWith('/') && !rawReturnTo.startsWith('//') ? rawReturnTo : '/';
 
-  const goToAuth = (signupMode: boolean) => {
-    navigate(`/auth?mode=${signupMode ? 'signup' : 'signin'}`, { replace: false });
-    setTimeout(() => {
-      const el = document.getElementById('auth');
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 50);
+  // On laptop-size screens the form sits beside the page. On smaller screens it opens as a
+  // pop-up, so nobody is scrolled to the bottom of a long page to find it.
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const isWide = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
+  const openAuth = (target: string) => {
+    navigate(target, { replace: false });
+    if (!isWide()) setAuthDialogOpen(true);
   };
+  const goToAuth = (signupMode: boolean) => openAuth(`/auth?mode=${signupMode ? 'signup' : 'signin'}`);
+
+  // Arriving with a reason to sign in (a protected page, an invitation, a sign-up link):
+  // show the form straight away on small screens.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (!isWide() && (p.get('returnTo') || p.get('invitation') || p.get('mode'))) setAuthDialogOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Navigate away ONLY in an effect — never during render.
   // Calling navigate() during render causes React 18 to throw
@@ -465,7 +476,7 @@ export default function Auth() {
           <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block">Pricing</a>
           <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block mr-2">Features</a>
           <span className="text-sm text-muted-foreground hidden sm:block">|</span>
-          <button type="button" onClick={() => goToAuth(false)} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors sm:block hidden ml-2">Sign in</button>
+          <button type="button" onClick={() => goToAuth(false)} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors ml-2">Sign in</button>
           <Button size="sm" className="gap-1.5" onClick={() => goToAuth(true)}>
             Get started free <ArrowRight className="h-3.5 w-3.5" />
           </Button>
@@ -626,7 +637,7 @@ export default function Auth() {
                   className="w-full"
                   variant={plan.highlight ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => navigate(`/auth?mode=signup&returnTo=${encodeURIComponent(`/subscription?checkout=true&plan=${plan.id}`)}`)}
+                  onClick={() => openAuth(`/auth?mode=signup&returnTo=${encodeURIComponent(`/subscription?checkout=true&plan=${plan.id}`)}`)}
                 >
                   {plan.cta}
                 </Button>
@@ -716,9 +727,13 @@ export default function Auth() {
       {/* Mobile: marketing hero first (image at top), then auth */}
       <div className="lg:hidden flex flex-col">
         {marketingContent}
-        <div id="auth" className="px-6 py-10 border-t bg-card/40 scroll-mt-16">
-          {authPanel}
-        </div>
+        <Dialog open={authDialogOpen} onOpenChange={setAuthDialogOpen}>
+          <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md max-h-[92vh] overflow-y-auto p-6">
+            <DialogTitle className="sr-only">{mode === 'signup' ? 'Create your account' : 'Sign in'}</DialogTitle>
+            <DialogDescription className="sr-only">Sign in or create a LeadBoosters account.</DialogDescription>
+            {authPanel}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
