@@ -30,6 +30,7 @@ import { TemplateStyleSelector, type EmailTemplateStyle } from "@/components/ema
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/email/RichTextEditor";
 import { replaceNthImage } from "@/lib/replace-nth-image-html";
 import { parseRecipientRowsFromCSVText } from "@/lib/recipient-group-csv";
+import { resolveRecipients, allCompanyIds } from "@/lib/recipients";
 import { createRecipientGroupWithMembers } from "@/lib/recipient-group-mutations";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -1274,6 +1275,50 @@ Return ONLY the HTML body content.`,
     return imported;
   };
 
+  // Every person and every company with an email, de-duplicated. Existing subscribers are
+  // left untouched, so anyone who unsubscribed stays unsubscribed.
+  const [addingEveryone, setAddingEveryone] = useState(false);
+  const [addEveryoneStatus, setAddEveryoneStatus] = useState("");
+  const handleAddEveryoneFromCrm = async () => {
+    if (!user) return;
+    if (!window.confirm("Add every person and company with an email in your CRM as a newsletter subscriber?\n\nDuplicates are removed and anyone who unsubscribed stays unsubscribed. Only add people you're allowed to email.")) return;
+    setAddingEveryone(true);
+    try {
+      setAddEveryoneStatus("Reading your CRM…");
+      const personIds: string[] = [];
+      for (let from = 0; from < 200_000; from += 1000) {
+        const { data, error } = await supabase.from("people").select("id").eq("user_id", user.id).not("email", "is", null).order("created_at").range(from, from + 999);
+        if (error) throw error;
+        personIds.push(...(data || []).map((r: any) => r.id));
+        if (!data || data.length < 1000) break;
+      }
+      const companyIds = await allCompanyIds();
+      const everyone = await resolveRecipients({ personIds, companyIds }, setAddEveryoneStatus);
+      const rows = everyone
+        .map((r) => ({ email: String(r.email).toLowerCase().trim(), r }))
+        .filter((x) => isValidNewsletterEmail(x.email))
+        .map(({ email, r }) => ({
+          user_id: user.id, email,
+          first_name: r.first_name || null, last_name: r.last_name || null,
+          company: r.companies?.name || null, source: "crm_all",
+        }));
+      const { count: before } = await supabase.from("newsletter_subscribers").select("id", { count: "exact", head: true }).eq("user_id", user.id);
+      for (let i = 0; i < rows.length; i += 500) {
+        setAddEveryoneStatus(`Adding ${Math.min(i + 500, rows.length).toLocaleString()} of ${rows.length.toLocaleString()}…`);
+        const { error } = await supabase.from("newsletter_subscribers").upsert(rows.slice(i, i + 500), { onConflict: "user_id,email", ignoreDuplicates: true });
+        if (error) throw error;
+      }
+      const { count: after } = await supabase.from("newsletter_subscribers").select("id", { count: "exact", head: true }).eq("user_id", user.id);
+      const added = Math.max(0, (after || 0) - (before || 0));
+      queryClient.invalidateQueries({ queryKey: ["newsletter-subscribers"] });
+      toast({ title: "Subscribers added", description: `${added.toLocaleString()} new subscribers from ${rows.length.toLocaleString()} CRM emails. ${(rows.length - added).toLocaleString()} were already on the list.` });
+    } catch (err: any) {
+      toast({ title: "Couldn't add everyone", description: err.message, variant: "destructive" });
+    } finally {
+      setAddingEveryone(false); setAddEveryoneStatus("");
+    }
+  };
+
   const handleImportAllFromPeople = async () => {
     try {
       setImporting(true);
@@ -1910,6 +1955,10 @@ Return ONLY the HTML body content.`,
             </Button>
             <Button variant="outline" onClick={() => setShowImportDialog(true)}>
               <Upload className="h-4 w-4 mr-1.5" />Import from CRM
+            </Button>
+            <Button variant="outline" onClick={handleAddEveryoneFromCrm} disabled={addingEveryone}>
+              {addingEveryone ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Users className="h-4 w-4 mr-1.5" />}
+              {addingEveryone ? (addEveryoneStatus || "Adding…") : "Add everyone from CRM"}
             </Button>
             <Button variant="outline" onClick={() => setShowImportFromGroupDialog(true)} disabled={recipientGroups.length === 0}>
               <FolderInput className="h-4 w-4 mr-1.5" />Import from group

@@ -299,7 +299,10 @@ Return ONLY the HTML body content.`;
           throw new Error(genData.error || "AI generation failed");
         }
 
-        const subject = `${series.name} – Day ${dayNum}`;
+        // Subject = the edition's own headline (a far better open rate than "Series – Day N").
+        const headline = String(bodyHtml).match(/<h[12][^>]*>([\s\S]*?)<\/h[12]>/i)?.[1]
+          ?.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&nbsp;/g, " ").replace(/&#39;|&rsquo;/g, "'").replace(/\s+/g, " ").trim();
+        const subject = headline && headline.length >= 8 ? headline.slice(0, 120) : `${series.name} – Day ${dayNum}`;
         const headerUrls = Array.isArray(series.header_image_urls) ? series.header_image_urls.filter((u: unknown) => u && String(u).trim()) : [];
 
         // Images for this edition, grounded in the sender's business:
