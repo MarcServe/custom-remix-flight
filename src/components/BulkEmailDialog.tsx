@@ -2726,6 +2726,13 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
   type Recipient = { id: string; first_name: string; last_name: string; email: string; company_id?: string; companies?: { id?: string; name?: string; tags?: string[] } };
 
+  const hasSelectionInLocalStorage = () => {
+    try {
+      return ['leadboosters_draft_recipients', 'leadboosters_selected_people_ids', 'leadboosters_selected_company_ids']
+        .some((k) => { const v = localStorage.getItem(k); return !!v && v !== '[]'; });
+    } catch { return false; }
+  };
+
   const resolveRecipientsFromLocalStorage = async (): Promise<Recipient[] | null> => {
     const preparedRaw = localStorage.getItem('leadboosters_draft_recipients');
     if (preparedRaw) {
@@ -2781,22 +2788,47 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         .select('id, name, tags, general_email, contacts(*)')
         .in('id', ids));
       if (companiesData) {
+        // Company emails that aren't a person yet. Resolved in a few batched queries
+        // (one lookup + one insert per chunk), not one or two requests per company:
+        // with thousands of companies that took minutes and looked like nothing happened.
+        const pending: { company: any; email: string; contactName?: string }[] = [];
         for (const company of companiesData as any[]) {
           const contactWithEmail = company.contacts?.find((c: any) => c.email);
-          const companyEmail = contactWithEmail?.email || company.general_email;
-          if (!companyEmail || seen.has(companyEmail.toLowerCase().trim())) continue;
-          // Try to find or create a person record for this email
-          const { data: existPerson } = await supabase.from('people').select('id, first_name, last_name, email, company_id, companies(id, name, tags)').ilike('email', companyEmail).maybeSingle();
-          if (existPerson) {
-            if (existPerson.company_id !== company.id) await supabase.from('people').update({ company_id: company.id }).eq('id', existPerson.id);
-            seen.add(existPerson.email.toLowerCase().trim());
-            merged.push({ id: existPerson.id, first_name: existPerson.first_name ?? '', last_name: existPerson.last_name ?? '', email: existPerson.email, company_id: company.id, companies: existPerson.companies ?? { id: company.id, name: company.name, tags: company.tags || [] } });
-          } else if (user) {
-            const nameParts = contactWithEmail?.name ? contactWithEmail.name.trim().split(' ') : company.name.trim().split(' ');
-            const { data: newP } = await supabase.from('people').insert({ first_name: nameParts[0] || company.name, last_name: nameParts.slice(1).join(' ') || '', email: companyEmail, company_id: company.id, user_id: user.id }).select('id, first_name, last_name, email, company_id').single();
-            if (newP) {
-              seen.add(newP.email.toLowerCase().trim());
-              merged.push({ id: newP.id, first_name: newP.first_name ?? '', last_name: newP.last_name ?? '', email: newP.email, company_id: company.id, companies: { id: company.id, name: company.name, tags: company.tags || [] } });
+          const companyEmail = String(contactWithEmail?.email || company.general_email || '').trim();
+          const key = companyEmail.toLowerCase();
+          if (!companyEmail || seen.has(key)) continue;
+          seen.add(key);
+          pending.push({ company, email: companyEmail, contactName: contactWithEmail?.name });
+        }
+        if (pending.length > 0) {
+          const lookup = [...new Set(pending.flatMap((p) => [p.email, p.email.toLowerCase()]))];
+          const existing = await selectInChunks(lookup, (ids) => supabase
+            .from('people')
+            .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
+            .in('email', ids), 100);
+          const byEmail = new Map<string, any>();
+          for (const p of existing as any[]) if (p.email) byEmail.set(p.email.toLowerCase().trim(), p);
+
+          const toCreate: { row: any; company: any }[] = [];
+          for (const { company, email, contactName } of pending) {
+            const found = byEmail.get(email.toLowerCase());
+            const companyInfo = { id: company.id, name: company.name, tags: company.tags || [] };
+            if (found) {
+              merged.push({ id: found.id, first_name: found.first_name ?? '', last_name: found.last_name ?? '', email: found.email, company_id: company.id, companies: found.companies ?? companyInfo });
+            } else if (user) {
+              const nameParts = (contactName ? String(contactName) : String(company.name || '')).trim().split(' ');
+              toCreate.push({ company, row: { first_name: nameParts[0] || company.name, last_name: nameParts.slice(1).join(' ') || '', email, company_id: company.id, user_id: user.id } });
+            }
+          }
+          for (let i = 0; i < toCreate.length; i += 200) {
+            const batch = toCreate.slice(i, i + 200);
+            const { data: created, error } = await supabase.from('people').insert(batch.map((b) => b.row))
+              .select('id, first_name, last_name, email, company_id');
+            if (error) throw error;
+            const companyById = new Map(batch.map((b) => [b.company.id, b.company]));
+            for (const n of (created || []) as any[]) {
+              const c = companyById.get(n.company_id);
+              merged.push({ id: n.id, first_name: n.first_name ?? '', last_name: n.last_name ?? '', email: n.email, company_id: n.company_id, companies: c ? { id: c.id, name: c.name, tags: c.tags || [] } : undefined });
             }
           }
         }
@@ -2808,8 +2840,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
   const replaceRecipientsWithSelection = async () => {
     setReplacingRecipients(true);
+    const loading = hasSelectionInLocalStorage() ? toast({ title: "Replacing recipients…", description: "Loading your selection. Large selections take a few seconds." }) : null;
     try {
       const resolved = await resolveRecipientsFromLocalStorage();
+      loading?.dismiss();
       if (resolved === null) {
         toast({
           title: "Open Companies or People to select recipients",
@@ -2910,8 +2944,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
 
   const addRecipientsFromSelection = async () => {
     setReplacingRecipients(true);
+    const loading = hasSelectionInLocalStorage() ? toast({ title: "Adding recipients…", description: "Loading your selection. Large selections take a few seconds." }) : null;
     try {
       const resolved = await resolveRecipientsFromLocalStorage();
+      loading?.dismiss();
       if (resolved === null) {
         toast({
           title: "Select recipients first",

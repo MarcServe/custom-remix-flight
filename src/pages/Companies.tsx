@@ -2982,11 +2982,11 @@ export default function Companies() {
                                   // localStorage (not sessionStorage) so the campaign tab that opened
                                   // this one can read the selection — sessionStorage is per-tab.
                                   localStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
-                                  window.opener?.postMessage?.(
-                                    { type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" },
-                                    window.location.origin
-                                  );
-                                  toast({ title: "Added to campaign", description: "Return to the campaign tab to see the updated recipient list." });
+                                  const campaignTab = window.opener && !window.opener.closed ? window.opener : null;
+                                  campaignTab?.postMessage({ type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" }, window.location.origin);
+                                  toast(campaignTab
+                                    ? { title: "Added to campaign", description: "Switch back to the campaign tab: the recipients are being added there now (large selections take a few seconds)." }
+                                    : { title: "Selection saved", description: "Go back to your campaign and click Add under Selected Recipients to load it." });
                                 } catch {
                                   toast({ title: "Could not reach campaign tab", variant: "destructive" });
                                 }
@@ -3012,11 +3012,11 @@ export default function Companies() {
                                   localStorage.removeItem('leadboosters_selected_people_ids');
                                   // localStorage (not sessionStorage) so the campaign tab can read it cross-tab.
                                   localStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
-                                  window.opener?.postMessage?.(
-                                    { type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" },
-                                    window.location.origin
-                                  );
-                                  toast({ title: "Campaign list replaced", description: "Return to the campaign tab to see the updated recipient list." });
+                                  const campaignTab = window.opener && !window.opener.closed ? window.opener : null;
+                                  campaignTab?.postMessage({ type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" }, window.location.origin);
+                                  toast(campaignTab
+                                    ? { title: "Campaign list replaced", description: "Switch back to the campaign tab: the recipients are being loaded there now (large selections take a few seconds)." }
+                                    : { title: "Selection saved", description: "Go back to your campaign and click Replace All under Selected Recipients to load it." });
                                 } catch {
                                   toast({ title: "Could not reach campaign tab", variant: "destructive" });
                                 }
