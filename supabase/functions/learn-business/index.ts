@@ -133,10 +133,86 @@ Deno.serve(async (req) => {
       for (const p of extra) if (p && plainLen(p.text) > 200) pages.push({ url: p.url, title: p.title, text: p.text.slice(0, 5000) });
     }
     const corpus = [pastedText ? `PASTED DESCRIPTION:\n${pastedText.slice(0, 8000)}` : "", ...pages.map((p) => `PAGE ${p.url}\nTITLE: ${p.title}\n${p.text}`)].filter(Boolean).join("\n\n").slice(0, 28_000);
-    if (corpus.replace(/\s+/g, " ").length < 200) return json({ error: "The site returned almost no readable text (it may be fully script-rendered). Paste a description of the business instead." }, 400);
+    const personaMode = body.mode === "persona";
+    if (!personaMode && corpus.replace(/\s+/g, " ").length < 200) return json({ error: "The site returned almost no readable text (it may be fully script-rendered). Paste a description of the business instead." }, 400);
 
     // ── Current profile (so we fill gaps, not stomp on hand-written text unless asked)
     const { data: current } = await db.from("business_profiles").select("*").eq("user_id", userId).maybeSingle();
+
+    // ── Persona mode: draft an Autopilot target persona (who to find and how to pitch them)
+    //    from the website (usually the product being sold), the user's description of the
+    //    audience, and the business profile. Nothing is saved; the app fills the form.
+    if (personaMode) {
+      const SIZES = ["1-10", "11-50", "51-200", "201-500", "501-1000", "1001-5000", "5000+"];
+      const ourBusiness = current ? [
+        current.company_name && `Company: ${current.company_name}`,
+        current.services_description && `What we do: ${current.services_description}`,
+        current.value_proposition && `Value proposition: ${current.value_proposition}`,
+        current.target_audience && `Usual audience: ${current.target_audience}`,
+        current.knowledge_base && `Facts: ${String(current.knowledge_base).slice(0, 3000)}`,
+      ].filter(Boolean).join("\n") : "";
+      const pp = `You design a lead-discovery persona for a B2B sales team. The persona tells an AI prospecting engine WHICH organisations to find and HOW to pitch them.
+
+Inputs:
+- WEBSITE CONTENT: usually the product or service being sold (sometimes the prospect type's own site).
+- AUDIENCE NOTES from the user: who they want to reach and why. Treat these as the priority; the website fills in specifics.
+- OUR BUSINESS: the seller's profile.
+
+Return STRICT JSON:
+{
+ "name": string,                       // short, specific label, e.g. "UK housing associations: accessibility compliance"
+ "description": string,                // 2-4 sentences: who to target, the problem we solve for them, why now
+ "target_industries": string[],        // 3-8 specific sectors/niches a search engine understands (e.g. "Housing associations", "NHS trusts", "Dental clinics")
+ "target_geographies": string[],       // 2-8 concrete places: countries AND key cities/regions (e.g. "United Kingdom", "Manchester", "Bristol")
+ "target_company_sizes": string[],     // subset of ${JSON.stringify(SIZES)}
+ "target_keywords": string[],          // 4-10 search hooks: problems, regulations, roles, triggers (e.g. "WCAG 2.2", "European Accessibility Act", "digital inclusion lead")
+ "exclude_industries": string[],       // sectors that look similar but are wrong fits (may be empty)
+ "exclude_keywords": string[],         // words that signal a bad fit, e.g. competitors, agencies, job boards (may be empty)
+ "custom_search_query": string,        // one plain-English search sentence summarising the ideal prospect
+ "product_focus": string,              // the product/service to lead with
+ "value_proposition": string,          // 1-2 sentences in the buyer's terms
+ "email_tone": "professional"|"casual"|"technical"|"persuasive",
+ "talking_points": string[],           // 3-6 short points for outreach copy, grounded in the inputs
+ "call_to_action": string              // one clear next step (keep any booking link or email the user gave)
+}
+Use only facts in the inputs for product claims; never invent statistics or clients. Plain text, no markdown.
+
+AUDIENCE NOTES:
+${pastedText || "(none given: infer the best-fit audience from the website and our business)"}
+
+OUR BUSINESS:
+${ourBusiness || "(no profile yet)"}
+
+WEBSITE CONTENT:
+${pages.length ? pages.map((p) => `PAGE ${p.url}\nTITLE: ${p.title}\n${p.text}`).join("\n\n").slice(0, 22_000) : "(no website given)"}`;
+      if (!pastedText && !pages.length) return json({ error: "Give a website link, a description of who you want to reach, or both." }, 400);
+      const pr = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST", headers: { Authorization: `Bearer ${OPENAI_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "gpt-4o", temperature: 0.3, response_format: { type: "json_object" }, messages: [{ role: "system", content: "You design precise B2B prospecting personas. Output JSON only." }, { role: "user", content: pp }] }),
+      });
+      if (!pr.ok) return json({ error: `AI error: ${(await pr.text()).slice(0, 300)}` }, 502);
+      const pd = await pr.json();
+      let persona: any = {};
+      try { persona = JSON.parse(pd.choices?.[0]?.message?.content || "{}"); } catch { return json({ error: "AI returned something unreadable; try again." }, 502); }
+      const arr = (v: unknown, max = 10) => (Array.isArray(v) ? v.map((x) => String(x || "").trim()).filter(Boolean).slice(0, max) : []);
+      const clean = {
+        name: String(persona.name || "").trim().slice(0, 80),
+        description: String(persona.description || "").trim(),
+        target_industries: arr(persona.target_industries, 8),
+        target_geographies: arr(persona.target_geographies, 8),
+        target_company_sizes: arr(persona.target_company_sizes, 7).filter((s) => SIZES.includes(s)),
+        target_keywords: arr(persona.target_keywords, 10),
+        exclude_industries: arr(persona.exclude_industries, 8),
+        exclude_keywords: arr(persona.exclude_keywords, 10),
+        custom_search_query: String(persona.custom_search_query || "").trim(),
+        product_focus: String(persona.product_focus || "").trim(),
+        value_proposition: String(persona.value_proposition || "").trim(),
+        email_tone: ["professional", "casual", "technical", "persuasive"].includes(persona.email_tone) ? persona.email_tone : "professional",
+        talking_points: arr(persona.talking_points, 6),
+        call_to_action: String(persona.call_to_action || "").trim(),
+      };
+      return json({ persona: clean, pages_read: pages.map((p) => p.url) });
+    }
 
     const prompt = `You are setting up a CRM for a business from its website content. Return STRICT JSON with these keys:
 {

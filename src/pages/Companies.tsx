@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { selectInChunks } from "@/lib/chunkedIn";
+import { AddToGroupDialog } from "@/components/companies/AddToGroupDialog";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,7 +8,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2, Search, Plus, RefreshCw, CalendarDays, Send, Megaphone, FolderPlus } from "lucide-react";
+import { Building2, MapPin, Users2, Mail, Eye, Briefcase, Globe, Phone, Upload, Filter, X, Trash2, Loader2, Sparkles, UserPlus, CheckCircle2, Wand2, Search, Plus, RefreshCw, CalendarDays, Send, Megaphone, FolderPlus, FolderInput } from "lucide-react";
 import { CompanyDetailsDialog } from "@/components/CompanyDetailsDialog";
 import { SendEmailDialog } from "@/components/SendEmailDialog";
 import { CampaignGroupingDialog, type CompanyForGrouping } from "@/components/CampaignGroupingDialog";
@@ -622,6 +624,12 @@ export default function Companies() {
     const companyEmail = company.general_email || (company as any).generalEmail;
     if (companyEmail) {
       return { type: "company" as const, contact: null, email: companyEmail };
+    }
+    // People saved against the company (imports, the AI assistant, Autopilot) count too
+    const personWithEmail = ((company as any).people || []).find((p: any) => p?.email && /@/.test(p.email));
+    if (personWithEmail?.email) {
+      const name = [personWithEmail.first_name, personWithEmail.last_name].filter(Boolean).join(" ") || null;
+      return { type: "contact" as const, contact: { ...personWithEmail, name }, email: personWithEmail.email };
     }
     return null;
   };
@@ -1654,6 +1662,66 @@ export default function Companies() {
     setGroupingDialogOpen(true);
   };
 
+  // Resolve the recipients for a set of companies: every person with an email at those
+  // companies, plus the company's own contact/general email when no person covers it.
+  const buildGroupMembers = async (companiesWithEmail: Company[]) => {
+      const companyIds = companiesWithEmail.map((c) => c.id);
+      const seen = new Set<string>();
+      const members: Array<{ group_id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; person_id: string | null }> = [];
+      // Chunked: a single .in() with thousands of ids overflows the request URL.
+      const existingPeople: any[] = [];
+      for (let i = 0; i < companyIds.length; i += 150) {
+        const { data: chunk } = await supabase
+          .from("people")
+          .select("id, first_name, last_name, email, company_id, companies(name)")
+          .in("company_id", companyIds.slice(i, i + 150))
+          .not("email", "is", null);
+        if (chunk) existingPeople.push(...chunk);
+      }
+      if (existingPeople) {
+        for (const p of existingPeople as any[]) {
+          if (p.email && !seen.has(p.email.toLowerCase().trim())) {
+            seen.add(p.email.toLowerCase().trim());
+            members.push({
+              group_id: "",
+              email: p.email.trim().toLowerCase(),
+              first_name: p.first_name || null,
+              last_name: p.last_name || null,
+              company: p.companies?.name || null,
+              person_id: p.id,
+            });
+          }
+        }
+      }
+      for (const company of companiesWithEmail) {
+        const emailMatch = getCompanyEmailContact(company);
+        if (emailMatch?.email && !seen.has(emailMatch.email.toLowerCase().trim())) {
+          seen.add(emailMatch.email.toLowerCase().trim());
+          const nameParts = emailMatch.type === "contact" && emailMatch.contact?.name ? emailMatch.contact.name.trim().split(" ") : company.name?.trim().split(" ") || [];
+          members.push({
+            group_id: "",
+            email: emailMatch.email.trim().toLowerCase(),
+            first_name: nameParts[0] || null,
+            last_name: nameParts.length > 1 ? nameParts.slice(1).join(" ") : null,
+            company: company.name || null,
+            person_id: null,
+          });
+        }
+      }
+      return members;
+  };
+
+  const [addToGroupOpen, setAddToGroupOpen] = useState(false);
+  const selectedCompaniesWithEmail = () =>
+    (filteredCompanies || []).filter((c) => selectedCompanyIds.has(c.id) && !!getCompanyEmailContact(c)?.email);
+
+  /** Select every company (within the current filters) that has an email address. */
+  const selectAllWithEmail = () => {
+    const withEmail = (filteredCompanies || []).filter((c) => !!getCompanyEmailContact(c)?.email);
+    setSelectedCompanyIds(new Set(withEmail.map((c) => c.id)));
+    toast({ title: `Selected ${withEmail.length} companies with an email`, description: "Use Send Bulk Email, Create group or Add to group." });
+  };
+
   const openCreateGroupFromCompanies = () => {
     const selectedCompanies = filteredCompanies?.filter((c) => selectedCompanyIds.has(c.id)) || [];
     const companiesWithEmail = selectedCompanies.filter((company) => {
@@ -1691,51 +1759,14 @@ export default function Companies() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
-      const companyIds = companiesWithEmail.map((c) => c.id);
-      const seen = new Set<string>();
-      const members: Array<{ group_id: string; email: string; first_name: string | null; last_name: string | null; company: string | null; person_id: string | null }> = [];
-      const { data: existingPeople } = await supabase
-        .from("people")
-        .select("id, first_name, last_name, email, company_id, companies(name)")
-        .in("company_id", companyIds)
-        .not("email", "is", null);
-      if (existingPeople) {
-        for (const p of existingPeople as any[]) {
-          if (p.email && !seen.has(p.email.toLowerCase().trim())) {
-            seen.add(p.email.toLowerCase().trim());
-            members.push({
-              group_id: "",
-              email: p.email.trim().toLowerCase(),
-              first_name: p.first_name || null,
-              last_name: p.last_name || null,
-              company: p.companies?.name || null,
-              person_id: p.id,
-            });
-          }
-        }
-      }
-      for (const company of companiesWithEmail) {
-        const emailMatch = getCompanyEmailContact(company);
-        if (emailMatch?.email && !seen.has(emailMatch.email.toLowerCase().trim())) {
-          seen.add(emailMatch.email.toLowerCase().trim());
-          const nameParts = emailMatch.type === "contact" && emailMatch.contact?.name ? emailMatch.contact.name.trim().split(" ") : company.name?.trim().split(" ") || [];
-          members.push({
-            group_id: "",
-            email: emailMatch.email.trim().toLowerCase(),
-            first_name: nameParts[0] || null,
-            last_name: nameParts.length > 1 ? nameParts.slice(1).join(" ") : null,
-            company: company.name || null,
-            person_id: null,
-          });
-        }
-      }
+      const members = await buildGroupMembers(companiesWithEmail);
       if (members.length === 0) {
         toast({ title: "No recipients", description: "Could not resolve any email addresses.", variant: "destructive" });
         return;
       }
       const { data: group, error: groupError } = await supabase
         .from("recipient_groups")
-        .insert({ user_id: user.id, name: createGroupName.trim(), description: createGroupDescription.trim() || null })
+        .insert({ user_id: user.id, name: createGroupName.trim(), description: createGroupDescription.trim() || null, channel: "email" })
         .select("id")
         .single();
       if (groupError || !group) throw groupError || new Error("Failed to create group");
@@ -2921,6 +2952,17 @@ export default function Companies() {
                           Create group ({companiesWithEmail.length})
                         </Button>
                       )}
+                      {companiesWithEmail.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setAddToGroupOpen(true)}
+                          title="Add the selected companies to a group you already have"
+                        >
+                          <FolderInput className="h-4 w-4 mr-1" />
+                          Add to group ({companiesWithEmail.length})
+                        </Button>
+                      )}
                       {/* When campaign dialog is open (context) or opened as popup: prioritize Add/Replace */}
                       {(bulkEmailDialogOpen || openedFromDraft) ? (
                         <>
@@ -3018,11 +3060,11 @@ export default function Companies() {
                                 if (!user) throw new Error('Not authenticated');
                                 const prepared: Array<{ id: string; first_name: string; last_name: string; email: string; company_id?: string; companies?: { id?: string; name?: string; tags?: string[] } }> = [];
                                 const seen = new Set<string>();
-                                const { data: existingPeople } = await supabase
+                                const existingPeople = await selectInChunks(companyIds, (ids) => supabase
                                   .from('people')
                                   .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
-                                  .in('company_id', companyIds)
-                                  .not('email', 'is', null);
+                                  .in('company_id', ids)
+                                  .not('email', 'is', null));
                                 if (existingPeople) {
                                   for (const p of existingPeople as any[]) {
                                     if (p.email && !seen.has(p.email.toLowerCase().trim())) {
@@ -3197,6 +3239,17 @@ export default function Companies() {
             {filteredCompanies!.length > 0 && [...filteredCompanies].every(c => selectedCompanyIds.has(c.id))
               ? 'Deselect all filtered'
               : `Select all filtered (${filteredCompanies!.length})`}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-auto py-1 px-2 text-xs"
+            onClick={selectAllWithEmail}
+            title="Select every company in the current view that has an email address"
+          >
+            <Mail className="h-3.5 w-3.5 mr-1" />
+            Select all with email ({filteredCompanies!.filter(c => !!getCompanyEmailContact(c)?.email).length})
           </Button>
         </div>
       )}
@@ -3526,6 +3579,12 @@ export default function Companies() {
       />
 
       {/* Create group from selection */}
+      <AddToGroupDialog
+        open={addToGroupOpen}
+        onOpenChange={setAddToGroupOpen}
+        companyCount={addToGroupOpen ? selectedCompaniesWithEmail().length : 0}
+        buildMembers={() => buildGroupMembers(selectedCompaniesWithEmail())}
+      />
       <Dialog open={createGroupDialogOpen} onOpenChange={setCreateGroupDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

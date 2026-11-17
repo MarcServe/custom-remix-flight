@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
+import { selectInChunks } from "@/lib/chunkedIn";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -1150,13 +1151,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     queryFn: async () => {
       if (companyIds.length === 0) return [];
       
-      const { data, error } = await supabase
+      return await selectInChunks(companyIds, (ids) => supabase
         .from('companies')
         .select('id, name, description, industry, website, enrichment_data, recent_news, funding_stage, funding_total, employee_count, tech_stack, key_executives, tags')
-        .in('id', companyIds);
-      
-      if (error) throw error;
-      return data || [];
+        .in('id', ids));
     },
     enabled: companyIds.length > 0,
   });
@@ -2765,11 +2763,11 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     if (companyIds.length > 0) {
       const { data: { user } } = await supabase.auth.getUser();
       // Fetch people already linked to these companies
-      const { data: byCompany } = await supabase
+      const byCompany = await selectInChunks(companyIds, (ids) => supabase
         .from('people')
         .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
-        .in('company_id', companyIds)
-        .not('email', 'is', null);
+        .in('company_id', ids)
+        .not('email', 'is', null));
       if (byCompany) {
         for (const p of byCompany as any[]) {
           if (p.email && !seen.has(p.email.toLowerCase().trim())) {
@@ -2779,10 +2777,10 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         }
       }
       // Also resolve company-level emails (general_email / contacts) that don't have person records yet
-      const { data: companiesData } = await supabase
+      const companiesData = await selectInChunks(companyIds, (ids) => supabase
         .from('companies')
         .select('id, name, tags, general_email, contacts(*)')
-        .in('id', companyIds);
+        .in('id', ids));
       if (companiesData) {
         for (const company of companiesData as any[]) {
           const contactWithEmail = company.contacts?.find((c: any) => c.email);

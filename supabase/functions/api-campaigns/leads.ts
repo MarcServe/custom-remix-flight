@@ -13,7 +13,7 @@ const background = (p: Promise<unknown>) => { const rt = (globalThis as any).Edg
 
 export const LEAD_ACTIONS = [
   "find_leads", "list_discovered_leads", "approve_leads", "reject_leads",
-  "run_discovery", "list_discovery_runs", "get_autopilot", "update_autopilot", "list_personas", "upsert_persona",
+  "run_discovery", "list_discovery_runs", "get_autopilot", "update_autopilot", "list_personas", "upsert_persona", "draft_persona",
 ];
 
 const leadView = (l: any) => {
@@ -136,6 +136,19 @@ export async function handleLeadAction(db: any, userId: string, action: string, 
     case "list_personas": {
       const { data } = await db.from("discovery_personas").select("id, name, is_active, priority, description, target_industries, target_geographies, target_keywords, target_company_sizes, custom_search_query, exclude_industries, exclude_keywords, auto_approve_threshold, auto_enroll_sequence_id, total_leads_found, total_approved, updated_at").eq("user_id", userId).order("priority");
       return json({ personas: data || [] });
+    }
+
+    case "draft_persona": {
+      // Draft (not save) a persona from a website + a description of the audience, via learn-business.
+      if (!str(body.url) && !str(body.description)) return json({ error: "Give url (e.g. the product's site), description (who to reach), or both" }, 400);
+      const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/learn-business`, {
+        method: "POST", headers: { Authorization: `Bearer ${key}`, "x-user-id": userId, "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "persona", url: str(body.url) || undefined, text: str(body.description) || undefined }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.error) return json({ error: d.error || `Persona draft failed (${r.status})` }, r.ok ? 400 : 502);
+      return json({ ...d, note: "Draft only. Review it with the user, then save with upsert_persona (pass the fields you want)." });
     }
 
     case "upsert_persona": {

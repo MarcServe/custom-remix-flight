@@ -96,6 +96,7 @@ export default function CompanySequences() {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [selectedSeqIds, setSelectedSeqIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkUpdating, setBulkUpdating] = useState<null | 'active' | 'paused' | 'completed'>(null);
 
   // Real-time updates for company sequences
   useEffect(() => {
@@ -251,8 +252,47 @@ export default function CompanySequences() {
     }
   };
 
+  /** Pause, resume or stop many enrolments at once. Resume never restarts a thread that got a reply. */
+  const handleBulkStatus = async (status: 'active' | 'paused' | 'completed') => {
+    if (selectedSeqIds.size === 0) return;
+    const chosen = (filteredSequences || []).filter(s => selectedSeqIds.has(s.id));
+    const replied = (s: CompanySequence) => (s.email_activities || []).some(a => a.replied_at);
+    let targets = chosen;
+    let skippedReplied = 0;
+    if (status === 'active') {
+      targets = chosen.filter(s => !replied(s) && s.status !== 'completed');
+      skippedReplied = chosen.filter(replied).length;
+    }
+    if (status === 'completed' && !confirm(`Stop ${targets.length} sequence(s)? No further follow-ups will be sent to them. You can't resume a stopped sequence.`)) return;
+    if (targets.length === 0) {
+      toast.info(status === 'active' ? 'Nothing to resume: the selected sequences have replies or are already finished.' : 'Nothing to update');
+      return;
+    }
+    setBulkUpdating(status);
+    try {
+      const ids = targets.map(s => s.id);
+      for (let i = 0; i < ids.length; i += 150) {
+        const { error } = await supabase.from('company_sequences')
+          .update({ status, updated_at: new Date().toISOString() })
+          .in('id', ids.slice(i, i + 150));
+        if (error) throw error;
+      }
+      const verb = status === 'active' ? 'Resumed' : status === 'paused' ? 'Paused' : 'Stopped';
+      toast.success(`${verb} ${ids.length} sequence(s)${skippedReplied ? `; ${skippedReplied} with a reply left alone` : ''}`);
+      setSelectedSeqIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['company-sequences-page'] });
+      queryClient.invalidateQueries({ queryKey: ['company-sequences'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-counts'] });
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to update sequences');
+    } finally {
+      setBulkUpdating(null);
+    }
+  };
+
   const handleStatusChange = async (id: string, status: 'draft' | 'active' | 'paused' | 'completed') => {
     await updateStatusMutation.mutateAsync({ id, status });
+    queryClient.invalidateQueries({ queryKey: ['company-sequences-page'] });
   };
 
   const handleSendNext = async (sequence: CompanySequence) => {
@@ -456,16 +496,39 @@ export default function CompanySequences() {
 
         {/* Sequences List */}
         <div className="space-y-4">
-          {selectedSeqIds.size > 0 && (
-            <div className="flex items-center gap-2 rounded-lg border bg-muted/50 p-2 sticky top-2 z-10 backdrop-blur">
-              <span className="text-sm font-medium px-1">{selectedSeqIds.size} selected</span>
-              <Button size="sm" variant="destructive" onClick={handleBulkDeleteSequences} disabled={bulkDeleting}>
-                <Trash2 className="h-4 w-4 mr-1.5" />
-                {bulkDeleting ? 'Deleting…' : 'Delete selected'}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setSelectedSeqIds(new Set())} disabled={bulkDeleting}>
-                Clear
-              </Button>
+          {(filteredSequences?.length || 0) > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/50 p-2 sticky top-2 z-10 backdrop-blur">
+              <Checkbox
+                checked={(filteredSequences || []).length > 0 && (filteredSequences || []).every(s => selectedSeqIds.has(s.id))}
+                onCheckedChange={() => toggleGroup(filteredSequences || [])}
+                aria-label="Select all shown"
+              />
+              <span className="text-sm font-medium px-1">
+                {selectedSeqIds.size > 0 ? `${selectedSeqIds.size} selected` : `Select all (${filteredSequences?.length || 0})`}
+              </span>
+              {selectedSeqIds.size > 0 && (
+                <>
+                  <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => handleBulkStatus('active')} disabled={!!bulkUpdating || bulkDeleting}>
+                    <Play className="h-4 w-4 mr-1.5" />
+                    {bulkUpdating === 'active' ? 'Resuming…' : 'Resume'}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handleBulkStatus('paused')} disabled={!!bulkUpdating || bulkDeleting}>
+                    <Pause className="h-4 w-4 mr-1.5" />
+                    {bulkUpdating === 'paused' ? 'Pausing…' : 'Pause'}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handleBulkStatus('completed')} disabled={!!bulkUpdating || bulkDeleting}>
+                    <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                    {bulkUpdating === 'completed' ? 'Stopping…' : 'Stop'}
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={handleBulkDeleteSequences} disabled={bulkDeleting || !!bulkUpdating}>
+                    <Trash2 className="h-4 w-4 mr-1.5" />
+                    {bulkDeleting ? 'Deleting…' : 'Delete'}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setSelectedSeqIds(new Set())} disabled={bulkDeleting || !!bulkUpdating}>
+                    Clear
+                  </Button>
+                </>
+              )}
             </div>
           )}
           {filteredSequences?.length === 0 ? (

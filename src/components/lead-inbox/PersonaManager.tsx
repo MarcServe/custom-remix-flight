@@ -26,7 +26,8 @@ import {
   XCircle,
   Mail,
   Megaphone,
-  Briefcase
+  Briefcase,
+  Sparkles
 } from "lucide-react";
 
 interface Persona {
@@ -71,6 +72,52 @@ export function PersonaManager() {
   const queryClient = useQueryClient();
   
   const [dialogOpen, setDialogOpen] = useState(false);
+  // AI persona builder
+  const [aiUrl, setAiUrl] = useState('');
+  const [aiNotes, setAiNotes] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiPagesRead, setAiPagesRead] = useState<number | null>(null);
+
+  const buildWithAi = async () => {
+    const notes = (aiNotes || formData.description || '').trim();
+    if (!aiUrl.trim() && !notes) {
+      toast({ title: 'Add a website or a description', description: 'Give the AI a link, a few lines about who you want to reach, or both.', variant: 'destructive' });
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('learn-business', {
+        body: { mode: 'persona', url: aiUrl.trim() || undefined, text: notes || undefined },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      const p = data?.persona || {};
+      const list = (v: unknown) => (Array.isArray(v) ? v.join(', ') : '');
+      setFormData(prev => ({
+        ...prev,
+        name: prev.name.trim() ? prev.name : (p.name || prev.name),
+        description: p.description || prev.description,
+        target_industries: list(p.target_industries) || prev.target_industries,
+        target_geographies: list(p.target_geographies) || prev.target_geographies,
+        target_company_sizes: Array.isArray(p.target_company_sizes) && p.target_company_sizes.length ? p.target_company_sizes : prev.target_company_sizes,
+        target_keywords: list(p.target_keywords) || prev.target_keywords,
+        exclude_industries: list(p.exclude_industries) || prev.exclude_industries,
+        exclude_keywords: list(p.exclude_keywords) || prev.exclude_keywords,
+        custom_search_query: p.custom_search_query || prev.custom_search_query,
+        product_focus: p.product_focus || prev.product_focus,
+        value_proposition: p.value_proposition || prev.value_proposition,
+        email_tone: p.email_tone || prev.email_tone,
+        talking_points: list(p.talking_points) || prev.talking_points,
+        call_to_action: p.call_to_action || prev.call_to_action,
+      }));
+      setAiPagesRead(Array.isArray(data?.pages_read) ? data.pages_read.length : 0);
+      toast({ title: 'Persona drafted', description: 'Review the fields below, adjust anything, then save.' });
+    } catch (e: any) {
+      toast({ title: 'Could not build the persona', description: e?.message || 'Try again, or add a short description.', variant: 'destructive' });
+    } finally {
+      setAiLoading(false);
+    }
+  };
   const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -201,6 +248,7 @@ export function PersonaManager() {
   });
 
   const resetForm = () => {
+    setAiUrl(''); setAiNotes(''); setAiPagesRead(null);
     setFormData({
       name: '',
       description: '',
@@ -291,6 +339,39 @@ export function PersonaManager() {
             
             <ScrollArea className="max-h-[60vh] pr-4">
               <div className="space-y-6 py-4">
+                {/* AI persona builder */}
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="h-4 w-4 text-primary mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium">Build this persona with AI</p>
+                      <p className="text-xs text-muted-foreground">Paste the website of what you're selling (or of a typical customer) and say who you want to reach. The AI reads the site, combines it with your business profile and fills in everything below.</p>
+                    </div>
+                  </div>
+                  <Input
+                    placeholder="Website, e.g. www.talkweb.io"
+                    value={aiUrl}
+                    onChange={(e) => setAiUrl(e.target.value)}
+                    disabled={aiLoading}
+                  />
+                  <Textarea
+                    placeholder="Who do you want to reach? e.g. Housing associations and councils in the North West that must meet accessibility rules"
+                    value={aiNotes}
+                    onChange={(e) => setAiNotes(e.target.value)}
+                    rows={2}
+                    disabled={aiLoading}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="button" size="sm" onClick={buildWithAi} disabled={aiLoading}>
+                      {aiLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                      {aiLoading ? 'Reading and drafting…' : 'Build persona'}
+                    </Button>
+                    {aiPagesRead !== null && !aiLoading && (
+                      <span className="text-xs text-muted-foreground">{aiPagesRead > 0 ? `Read ${aiPagesRead} page${aiPagesRead === 1 ? '' : 's'}; fields filled below` : 'Drafted from your description'}</span>
+                    )}
+                  </div>
+                </div>
+
                 {/* Basic Info */}
                 <div className="space-y-4">
                   <div className="space-y-2">
