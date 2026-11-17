@@ -181,9 +181,8 @@ Deno.serve(async (req) => {
       case "webhook_status": {
         const list = await stripe("GET", "webhook_endpoints?limit=100");
         const ep = (list.data || []).find((w: any) => String(w.url).includes("kgndpwzqohepotahnfeo.supabase.co/functions/v1/stripe-webhook"));
-        const ev = await stripe("GET", "events?limit=10&types[]=customer.subscription.updated&types[]=customer.subscription.created&types[]=customer.subscription.deleted");
-        const undelivered = (ev.data || []).filter((e: any) => e.pending_webhooks > 0).length;
-        return json({ endpoint: ep ? { id: ep.id, status: ep.status, events: ep.enabled_events } : null, recent_events: (ev.data || []).length, undelivered_recent: undelivered });
+        const { data: lastSync } = await db.from("user_plans").select("updated_at").not("stripe_subscription_id", "is", null).order("updated_at", { ascending: false }).limit(1).maybeSingle();
+        return json({ endpoint: ep ? { id: ep.id, status: ep.status, events: ep.enabled_events } : null, last_plan_sync: lastSync?.updated_at ?? null });
       }
 
       case "audit": {

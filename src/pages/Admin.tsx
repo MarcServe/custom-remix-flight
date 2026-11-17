@@ -55,7 +55,7 @@ function Overview() {
   if (q.error) return <p className="text-sm text-destructive">{(q.error as Error).message}</p>;
   const o: any = q.data;
   const w: any = wh.data;
-  const healthy = w?.endpoint?.status === "enabled" && !w?.undelivered_recent;
+  const healthy = w?.endpoint?.status === "enabled";
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -94,8 +94,8 @@ function Overview() {
             {w && (
               <>
                 <div>Endpoint: {w.endpoint ? <Badge variant={w.endpoint.status === "enabled" ? "default" : "destructive"}>{w.endpoint.status}</Badge> : <Badge variant="destructive">missing</Badge>}</div>
-                <div>Recent subscription events not yet delivered: <b>{w.undelivered_recent}</b> of {w.recent_events}</div>
-                {!healthy && <p className="text-muted-foreground pt-1">If events stay undelivered, the signing secret in Supabase doesn't match the one in Stripe. Plans still update when users open the app.</p>}
+                <div>Last plan update from Stripe: <b>{fmtTime(w.last_plan_sync)}</b> (UK)</div>
+                {!healthy && <p className="text-muted-foreground pt-1">Stripe has disabled the endpoint. Re-enable it in Stripe → Developers → Webhooks. Plans still update when users open the app.</p>}
               </>
             )}
           </CardContent>
