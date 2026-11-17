@@ -177,8 +177,8 @@ async function enrollFollowUp(
   campaign: any,
   campaignId: string,
   sentAt: string,
-  messageId: string | null,
-) {
+  messageId: string | null,,
+  sendMeta: { provider?: string; tracking_enabled?: boolean | null } = {}) {
   if (!campaign.auto_follow_up_enabled) return;
   try {
     if (!campaign.follow_up_sequence_id) {
@@ -271,6 +271,9 @@ async function enrollFollowUp(
           to: recipientEmail || undefined,
           to_email: recipientEmail || undefined,
           recipient_email: recipientEmail || undefined,
+          // Sequence pages read these to decide whether opens/clicks are tracked for this thread
+          provider: sendMeta.provider,
+          tracking_enabled: sendMeta.tracking_enabled ?? undefined,
         },
       });
     }
@@ -674,7 +677,7 @@ serve(async (req) => {
           await Promise.allSettled(
             successUpsertRows.map(row => {
               const rec = recipientLookup.get(row.id);
-              return rec ? enrollFollowUp(supabaseClient, rec, campaign, campaignId, sentAt, row.external_message_id) : Promise.resolve();
+              return rec ? enrollFollowUp(supabaseClient, rec, campaign, campaignId, sentAt, row.external_message_id, { provider: emailProvider, tracking_enabled: optimalConnection?.tracking_enabled }) : Promise.resolve();
             })
           );
           console.log(`[Resend BG] DB writes done. ${sentCount} sent, ${failedCount} failed`);
@@ -839,7 +842,7 @@ serve(async (req) => {
             },
           });
 
-          await enrollFollowUp(supabaseClient, recipient, campaign, campaignId, lockSentAt, messageId);
+          await enrollFollowUp(supabaseClient, recipient, campaign, campaignId, lockSentAt, messageId, { provider: emailProvider, tracking_enabled: optimalConnection?.tracking_enabled });
 
           sentCount++;
           // 1-second gap between Gmail sends to stay within rate limits
@@ -997,7 +1000,7 @@ serve(async (req) => {
             },
           });
 
-          await enrollFollowUp(supabaseClient, recipient, campaign, campaignId, lockSentAt, messageId);
+          await enrollFollowUp(supabaseClient, recipient, campaign, campaignId, lockSentAt, messageId, { provider: emailProvider, tracking_enabled: optimalConnection?.tracking_enabled });
 
           sentCount++;
 
