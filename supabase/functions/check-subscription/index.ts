@@ -53,7 +53,7 @@ serve(async (req) => {
     let best: { sub: any; price: any } | null = null;
     for (const c of customers.data) {
       for (const status of ["active", "trialing"] as const) {
-        const subs = await stripe.subscriptions.list({ customer: c.id, status, limit: 20, expand: ["data.items.data.price.product"] });
+        const subs = await stripe.subscriptions.list({ customer: c.id, status, limit: 20, expand: ["data.items.data.price"] });
         for (const sub of subs.data) {
           const price: any = sub.items?.data?.[0]?.price;
           const t = tierForStripe(price);
@@ -67,6 +67,7 @@ serve(async (req) => {
     const periodEnd = best?.sub ? ((best.sub as any).current_period_end ?? (best.sub as any).items?.data?.[0]?.current_period_end) : null;
     const subscriptionEnd = periodEnd ? new Date(periodEnd * 1000).toISOString() : null;
     const productId = best ? (typeof best.price.product === "string" ? best.price.product : best.price.product?.id) : null;
+
 
     await supabaseClient.from("user_plans").upsert({
       user_id: user.id, tier, stripe_customer_id: best ? String(best.sub.customer) : (customers.data[0]?.id ?? null),

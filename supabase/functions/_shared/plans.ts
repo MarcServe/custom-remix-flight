@@ -34,6 +34,8 @@ export function tierForStripe(price: any): Tier | null {
   const product = typeof price?.product === "string" ? price.product : price?.product?.id;
   const metaTier = price?.metadata?.app === "leadboosters" ? price?.metadata?.tier : (price?.product?.metadata?.app === "leadboosters" ? price.product.metadata.tier : null);
   if (metaTier && metaTier in LIMITS) return metaTier as Tier;
+  const lk = String(price?.lookup_key || "").match(/^lb_(crm|autopilot_pro|autopilot|agency)_(monthly|yearly)$/);
+  if (lk) return lk[1] as Tier;
   if (product && LEGACY_PRODUCTS[product]) return LEGACY_PRODUCTS[product];
   return null;
 }
