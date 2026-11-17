@@ -12,8 +12,17 @@ interface TrialGateProps {
 }
 
 export function TrialGate({ children, feature = 'this feature' }: TrialGateProps) {
-  const { hasAccess, isInTrial, trialEndsAt, subscribed } = useAuth();
+  const { hasAccess, isInTrial, trialEndsAt, subscribed, planResolved } = useAuth();
   const navigate = useNavigate();
+
+  // Still finding out which plan this user is on: show a quiet placeholder, never the paywall.
+  if (!planResolved) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center" aria-busy="true" aria-label="Loading">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+      </div>
+    );
+  }
 
   if (hasAccess) {
     return <>{children}</>;

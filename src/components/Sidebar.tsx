@@ -164,12 +164,13 @@ const getPendingCount = (href: string, pendingCounts: any, pendingReviewsCount?:
 export const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, signOut, planTier } = useAuth();
+  const { user, signOut, planTier, planResolved } = useAuth();
 
   // Returns true if the user's current plan can access the given route
   const canAccess = (href: string) => {
     const required = ROUTE_TIER[href];
     if (!required) return true; // no restriction
+    if (!planResolved) return true; // don't flash lock icons while the plan is loading
     return TIER_RANK[planTier] >= TIER_RANK[required];
   };
   const { setOpen: openResearchPanel } = useResearchChat();

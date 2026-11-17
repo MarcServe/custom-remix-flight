@@ -73,6 +73,8 @@ interface AuthContextType {
   subscriptionEnd: string | null;
   trialEndsAt: string | null;
   hasAccess: boolean;
+  /** true once the user's plan is known (cached or checked); gates wait for it */
+  planResolved: boolean;
   isInTrial: boolean;
   planTier: PlanTier;
   isAtLeast: (tier: PlanTier) => boolean;
@@ -107,7 +109,31 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [productId, setProductId] = useState<string | null>(null);
   const [subscriptionEnd, setSubscriptionEnd] = useState<string | null>(null);
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
+  // false until we know this user's plan (from the cached last-known plan or a completed check).
+  // Gates wait on it so a paid user never sees a "Subscribe" card flash while the check runs.
+  const [planResolved, setPlanResolved] = useState(false);
+  const [trialChecked, setTrialChecked] = useState(false);
   const initialLoadRef = useRef(true);
+
+  const PLAN_CACHE_PREFIX = 'lb:plan:';
+  const readPlanCache = (uid: string) => {
+    try { const raw = localStorage.getItem(PLAN_CACHE_PREFIX + uid); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  };
+  const writePlanCache = (uid: string, patch: Record<string, unknown>) => {
+    try { localStorage.setItem(PLAN_CACHE_PREFIX + uid, JSON.stringify({ ...(readPlanCache(uid) || {}), ...patch, at: Date.now() })); } catch { /* storage full or blocked */ }
+  };
+  /** Apply the last known plan for this user immediately (then refresh in the background). */
+  const hydratePlan = (uid: string) => {
+    const c = readPlanCache(uid);
+    if (!c) return false;
+    setSubscribed(!!c.subscribed);
+    setProductId(c.productId ?? null);
+    setSubscriptionEnd(c.subscriptionEnd ?? null);
+    if (c.trialEndsAt) setTrialEndsAt(c.trialEndsAt);
+    setPlanResolved(true);
+    setTrialChecked(true);
+    return true;
+  };
 
   // Calculate if user is in trial period
   const isInTrial = trialEndsAt ? new Date(trialEndsAt) > new Date() : false;
@@ -149,13 +175,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             const trialEnd = new Date(data.created_at);
             trialEnd.setDate(trialEnd.getDate() + 7);
             setTrialEndsAt(trialEnd.toISOString());
+            writePlanCache(user.id, { trialEndsAt: trialEnd.toISOString() });
           }
-        });
+        }, () => {})
+        .then(() => setTrialChecked(true));
     } else {
       setUserRole(null);
       setTrialEndsAt(null);
+      setTrialChecked(true);
     }
-  }, [user]);
+    // Keyed on the user id: token refreshes hand us a new user object for the same person.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -168,13 +199,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(session?.user ?? null);
         setLoading(false);
 
-        // Check subscription when user signs in
+        // Check subscription when user signs in (last known plan applies instantly meanwhile)
         if (session?.user) {
-          checkSubscription();
+          hydratePlan(session.user.id);
+          checkSubscription(session.user.id);
         } else {
           setSubscribed(false);
           setProductId(null);
           setSubscriptionEnd(null);
+          setPlanResolved(true); // signed out: nothing to wait for
         }
 
         // Only show toasts after initial load is complete to avoid showing on page refresh
@@ -199,9 +232,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setUser(session?.user ?? null);
       setLoading(false);
       
-      // Check subscription for existing session
+      // Check subscription for existing session (last known plan applies instantly meanwhile)
       if (session?.user) {
-        checkSubscription();
+        hydratePlan(session.user.id);
+        checkSubscription(session.user.id);
+      } else {
+        setPlanResolved(true);
       }
 
       // Mark initial load as complete after session check
@@ -312,7 +348,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const checkSubscription = async () => {
+  const checkSubscription = async (uidArg?: string) => {
+    const uid = uidArg || user?.id || (await supabase.auth.getUser()).data.user?.id || null;
     try {
       console.log('[AUTH] Checking subscription status...');
       const { data, error } = await supabase.functions.invoke('check-subscription');
@@ -332,11 +369,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setSubscribed(data?.subscribed || false);
       setProductId(data?.product_id || null);
       setSubscriptionEnd(data?.subscription_end || null);
+      if (uid) writePlanCache(uid, { subscribed: !!data?.subscribed, productId: data?.product_id || null, subscriptionEnd: data?.subscription_end || null });
     } catch (error) {
       console.error('[AUTH] Error in checkSubscription:', error);
       toast.error('Could not refresh subscription status', {
         description: error instanceof Error ? error.message : 'Please try again from Subscription settings.',
       });
+    } finally {
+      setPlanResolved(true);
     }
   };
 
@@ -344,6 +384,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     user,
     session,
     loading,
+    planResolved: planResolved && trialChecked,
     userRole,
     subscribed,
     productId,

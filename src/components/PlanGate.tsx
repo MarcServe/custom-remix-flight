@@ -39,8 +39,17 @@ const BUTTON_CLASS: Record<'individual' | 'pro' | 'leadboosters', string> = {
 };
 
 export function PlanGate({ requiredTier, feature, children }: PlanGateProps) {
-  const { planTier, isAtLeast } = useAuth();
+  const { planTier, isAtLeast, planResolved } = useAuth();
   const navigate = useNavigate();
+
+  // Still finding out which plan this user is on: show a quiet placeholder, never the paywall.
+  if (!planResolved) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center" aria-busy="true" aria-label="Loading">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+      </div>
+    );
+  }
 
   if (isAtLeast(requiredTier)) {
     return <>{children}</>;
