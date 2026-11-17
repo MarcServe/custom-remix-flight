@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { resolveRecipients } from "@/lib/recipients";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -821,46 +822,17 @@ export default function Campaigns() {
         localStorage.removeItem('leadboosters_draft_recipients');
       }
       if (resolved.length === 0) {
-        const personIdsRaw = localStorage.getItem('leadboosters_selected_people_ids');
-        const companyIdsRaw = localStorage.getItem('leadboosters_selected_company_ids');
-        const personIds: string[] = personIdsRaw ? JSON.parse(personIdsRaw) : [];
-        const companyIds: string[] = companyIdsRaw ? JSON.parse(companyIdsRaw) : [];
-        if (personIds.length > 0) {
-          const { data } = await supabase.from('people').select('id, first_name, last_name, email, company_id').in('id', personIds).not('email', 'is', null);
-          if (data) resolved.push(...data.map((p: any) => ({ id: p.id, first_name: p.first_name ?? '', last_name: p.last_name ?? '', email: p.email, company_id: p.company_id })));
-        }
-        if (companyIds.length > 0) {
-          const { data: { user } } = await supabase.auth.getUser();
-          const { data: byCompany } = await supabase.from('people').select('id, first_name, last_name, email, company_id').in('company_id', companyIds).not('email', 'is', null);
-          if (byCompany) resolved.push(...byCompany.map((p: any) => ({ id: p.id, first_name: p.first_name ?? '', last_name: p.last_name ?? '', email: p.email, company_id: p.company_id })));
-          const seenEmails = new Set(resolved.map(r => r.email.toLowerCase().trim()));
-          const { data: companiesData } = await supabase.from('companies').select('id, name, tags, general_email, contacts(*)').in('id', companyIds);
-          if (companiesData && user) {
-            for (const company of companiesData as any[]) {
-              const contactWithEmail = company.contacts?.find((c: any) => c.email);
-              // Split general_email by comma/semicolon to handle multiple addresses per company
-              const rawEmail = contactWithEmail?.email || company.general_email || '';
-              const companyEmails = rawEmail
-                .split(/[,;]+/)
-                .map((e: string) => e.trim().toLowerCase())
-                .filter((e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
-              for (const companyEmail of companyEmails) {
-                if (!companyEmail || seenEmails.has(companyEmail)) continue;
-                const { data: existP } = await supabase.from('people').select('id, first_name, last_name, email').ilike('email', companyEmail).maybeSingle();
-                if (existP) {
-                  seenEmails.add(existP.email.toLowerCase().trim());
-                  resolved.push({ id: existP.id, first_name: existP.first_name ?? '', last_name: existP.last_name ?? '', email: existP.email, company_id: company.id });
-                } else {
-                  const nameParts = contactWithEmail?.name ? contactWithEmail.name.trim().split(' ') : company.name.trim().split(' ');
-                  const { data: newP } = await supabase.from('people').insert({ first_name: nameParts[0] || company.name, last_name: nameParts.slice(1).join(' ') || '', email: companyEmail, company_id: company.id, user_id: user.id }).select('id, first_name, last_name, email, company_id').single();
-                  if (newP) {
-                    seenEmails.add(newP.email.toLowerCase().trim());
-                    resolved.push({ id: newP.id, first_name: newP.first_name ?? '', last_name: newP.last_name ?? '', email: newP.email, company_id: newP.company_id });
-                  }
-                }
-              }
-            }
-          }
+        let personIds: string[] = []; let companyIds: string[] = [];
+        try {
+          personIds = JSON.parse(localStorage.getItem('leadboosters_selected_people_ids') || '[]') || [];
+          companyIds = JSON.parse(localStorage.getItem('leadboosters_selected_company_ids') || '[]') || [];
+        } catch { /* ignore */ }
+        if (personIds.length || companyIds.length) {
+          const tid = toast.loading("Adding recipients…");
+          const got = await resolveRecipients({ personIds, companyIds }, (m) => toast.loading(m, { id: tid }));
+          toast.dismiss(tid);
+          resolved.push(...got.map((r) => ({ id: r.id, first_name: r.first_name, last_name: r.last_name, email: r.email, company_id: r.company_id, company: r.companies?.name || '' } as any)));
+          try { ['leadboosters_selected_people_ids', 'leadboosters_selected_company_ids'].forEach((k) => localStorage.removeItem(k)); } catch { /* ignore */ }
         }
       }
       if (resolved.length === 0) {
@@ -868,7 +840,13 @@ export default function Campaigns() {
         return;
       }
       // Deduplicate against existing recipients
-      const existingEmails = new Set((recipients ?? []).map(r => r.email?.toLowerCase().trim()));
+      const existingRows: any[] = [];
+      for (let from = 0; from < 200000; from += 1000) {
+        const { data: page } = await supabase.from('email_campaign_recipients').select('email').eq('campaign_id', selectedCampaign).range(from, from + 999);
+        existingRows.push(...(page || []));
+        if (!page || page.length < 1000) break;
+      }
+      const existingEmails = new Set(existingRows.map((r: any) => r.email?.toLowerCase().trim()));
       const newRecipients = resolved.filter(r => r.email && !existingEmails.has(r.email.toLowerCase().trim()));
       if (newRecipients.length === 0) {
         toast.info("All selected recipients are already in this campaign.");
@@ -880,22 +858,26 @@ export default function Campaigns() {
       const rows = newRecipients.map(r => {
         const name = [r.first_name, r.last_name].filter(Boolean).join(' ') || r.email;
         const personalizedSubject = subjectTemplate
+          .replace(/\{\{company\}\}/gi, (r as any).company || 'your team')
           .replace(/\{\{firstName\}\}/gi, r.first_name || '')
           .replace(/\{\{lastName\}\}/gi, r.last_name || '')
           .replace(/\{\{fullName\}\}/gi, name)
           .replace(/\{\{email\}\}/gi, r.email || '') || '(subject pending)';
         const personalizedBodyHtml = bodyHtmlTemplate
+          .replace(/\{\{company\}\}/gi, (r as any).company || 'your team')
           .replace(/\{\{firstName\}\}/gi, r.first_name || '')
           .replace(/\{\{lastName\}\}/gi, r.last_name || '')
           .replace(/\{\{fullName\}\}/gi, name)
           .replace(/\{\{email\}\}/gi, r.email || '') || '<p>(body pending)</p>';
         const personalizedBodyText = bodyTextTemplate
+          .replace(/\{\{company\}\}/gi, (r as any).company || 'your team')
           .replace(/\{\{firstName\}\}/gi, r.first_name || '')
           .replace(/\{\{lastName\}\}/gi, r.last_name || '')
           .replace(/\{\{fullName\}\}/gi, name)
           .replace(/\{\{email\}\}/gi, r.email || '') || '(body pending)';
         return {
           campaign_id: selectedCampaign,
+          person_id: r.id || null,
           email: r.email,
           name,
           personalized_subject: personalizedSubject,
@@ -904,9 +886,11 @@ export default function Campaigns() {
           status: 'pending',
         };
       });
-      const { error: insertError } = await supabase.from('email_campaign_recipients').insert(rows);
-      if (insertError) throw insertError;
-      const newTotal = (recipients?.length ?? 0) + newRecipients.length;
+      for (let i = 0; i < rows.length; i += 500) {
+        const { error: insertError } = await supabase.from('email_campaign_recipients').insert(rows.slice(i, i + 500));
+        if (insertError) throw insertError;
+      }
+      const newTotal = existingEmails.size + newRecipients.length;
       await supabase.from('email_campaigns').update({ total_recipients: newTotal }).eq('id', selectedCampaign);
       toast.success(`Added ${newRecipients.length} recipient(s) to campaign.`);
       await Promise.all([

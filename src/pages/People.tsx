@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { sendSelectionToCampaign } from "@/lib/recipients";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -1054,20 +1055,7 @@ export default function People() {
                           toast({ title: "No emails", description: "None of the selected people have email addresses.", variant: "destructive" });
                           return;
                         }
-                        const prepared = selected.map((p: any) => ({
-                          id: p.id,
-                          first_name: p.first_name ?? '',
-                          last_name: p.last_name ?? '',
-                          email: p.email,
-                          company_id: p.company_id,
-                          companies: p.companies ? { id: p.companies.id, name: p.companies.name, tags: p.companies.tags || [] } : undefined,
-                        }));
-                        localStorage.setItem('leadboosters_draft_recipients', JSON.stringify(prepared));
-                        const campaignTab = window.opener && !window.opener.closed ? window.opener : null;
-                                  campaignTab?.postMessage({ type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" }, window.location.origin);
-                                  toast(campaignTab
-                                    ? { title: "Added to campaign", description: "Switch back to the campaign tab: the recipients are being added there now (large selections take a few seconds)." }
-                                    : { title: "Selection saved", description: "Go back to your campaign and click Add under Selected Recipients to load it." });
+                        void sendSelectionToCampaign(toast as any, { personIds: selected.map((p: any) => p.id) }, 'add', `${selected.length.toLocaleString()} people`);
                       } catch {
                         toast({ title: "Could not reach campaign tab", variant: "destructive" });
                       }
@@ -1087,20 +1075,7 @@ export default function People() {
                           toast({ title: "No emails", description: "None of the selected people have email addresses.", variant: "destructive" });
                           return;
                         }
-                        const prepared = selected.map((p: any) => ({
-                          id: p.id,
-                          first_name: p.first_name ?? '',
-                          last_name: p.last_name ?? '',
-                          email: p.email,
-                          company_id: p.company_id,
-                          companies: p.companies ? { id: p.companies.id, name: p.companies.name, tags: p.companies.tags || [] } : undefined,
-                        }));
-                        localStorage.setItem('leadboosters_draft_recipients', JSON.stringify(prepared));
-                        const campaignTab = window.opener && !window.opener.closed ? window.opener : null;
-                                  campaignTab?.postMessage({ type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" }, window.location.origin);
-                                  toast(campaignTab
-                                    ? { title: "Campaign list replaced", description: "Switch back to the campaign tab: the recipients are being loaded there now (large selections take a few seconds)." }
-                                    : { title: "Selection saved", description: "Go back to your campaign and click Replace All under Selected Recipients to load it." });
+                        void sendSelectionToCampaign(toast as any, { personIds: selected.map((p: any) => p.id) }, 'replace', `${selected.length.toLocaleString()} people`);
                       } catch {
                         toast({ title: "Could not reach campaign tab", variant: "destructive" });
                       }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
+import { resolveRecipients, allCompanyIds, listenForDeliveries } from "@/lib/recipients";
 import { selectInChunks } from "@/lib/chunkedIn";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -14,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, User, Users, Info, Sparkles, Mail, ChevronDown, ChevronLeft, ChevronRight, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, CalendarClock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical, ExternalLink, Edit2, Upload, ImagePlus, Trash2, FileType } from "lucide-react";
+import { Loader2, Send, User, Users, Info, Sparkles, Mail, ChevronDown, ChevronLeft, ChevronRight, Tag, Code, Eye, Bot, Calendar as CalendarIcon, Clock, CalendarClock, X, Save, FileText, RefreshCw, Plus, Minus, Filter, FlaskConical, ExternalLink, Edit2, Upload, ImagePlus, Trash2, FileType, Building2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUpdateSequence } from "@/hooks/use-sequences";
@@ -2733,140 +2734,118 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     } catch { return false; }
   };
 
-  const resolveRecipientsFromLocalStorage = async (): Promise<Recipient[] | null> => {
-    const preparedRaw = localStorage.getItem('leadboosters_draft_recipients');
-    if (preparedRaw) {
-      let list: Recipient[] = [];
-      try { list = JSON.parse(preparedRaw); } catch { list = []; }
-      if (list.length > 0) return list;
-    }
+  const SELECTION_KEYS = ['leadboosters_draft_recipients', 'leadboosters_selected_people_ids', 'leadboosters_selected_company_ids'];
+  const clearStoredSelection = () => { try { SELECTION_KEYS.forEach((k) => localStorage.removeItem(k)); } catch { /* ignore */ } };
 
-    const personIdsRaw = localStorage.getItem('leadboosters_selected_people_ids');
-    const companyIdsRaw = localStorage.getItem('leadboosters_selected_company_ids');
-    const personIds: string[] = personIdsRaw ? JSON.parse(personIdsRaw) : [];
-    const companyIds: string[] = companyIdsRaw ? JSON.parse(companyIdsRaw) : [];
-
+  const resolveRecipientsFromLocalStorage = async (onProgress?: (msg: string) => void): Promise<Recipient[] | null> => {
+    let prepared: Recipient[] = [];
+    let personIds: string[] = [];
+    let companyIds: string[] = [];
+    try {
+      const preparedRaw = localStorage.getItem('leadboosters_draft_recipients');
+      if (preparedRaw) prepared = JSON.parse(preparedRaw) || [];
+      personIds = JSON.parse(localStorage.getItem('leadboosters_selected_people_ids') || '[]') || [];
+      companyIds = JSON.parse(localStorage.getItem('leadboosters_selected_company_ids') || '[]') || [];
+    } catch { /* unreadable storage = no selection */ }
+    if (prepared.length > 0) { clearStoredSelection(); return prepared; }
     if (personIds.length === 0 && companyIds.length === 0) return null;
-
-    const merged: Recipient[] = [];
-    const seen = new Set<string>();
-
-    if (personIds.length > 0) {
-      const { data: byPerson } = await supabase
-        .from('people')
-        .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
-        .in('id', personIds);
-      if (byPerson) {
-        for (const p of byPerson as any[]) {
-          if (p.email && !seen.has(p.email.toLowerCase().trim())) {
-            seen.add(p.email.toLowerCase().trim());
-            merged.push({ id: p.id, first_name: p.first_name ?? '', last_name: p.last_name ?? '', email: p.email, company_id: p.company_id, companies: p.companies });
-          }
-        }
-      }
-    }
-
-    if (companyIds.length > 0) {
-      const { data: { user } } = await supabase.auth.getUser();
-      // Fetch people already linked to these companies
-      const byCompany = await selectInChunks(companyIds, (ids) => supabase
-        .from('people')
-        .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
-        .in('company_id', ids)
-        .not('email', 'is', null));
-      if (byCompany) {
-        for (const p of byCompany as any[]) {
-          if (p.email && !seen.has(p.email.toLowerCase().trim())) {
-            seen.add(p.email.toLowerCase().trim());
-            merged.push({ id: p.id, first_name: p.first_name ?? '', last_name: p.last_name ?? '', email: p.email, company_id: p.company_id, companies: p.companies });
-          }
-        }
-      }
-      // Also resolve company-level emails (general_email / contacts) that don't have person records yet
-      const companiesData = await selectInChunks(companyIds, (ids) => supabase
-        .from('companies')
-        .select('id, name, tags, general_email, contacts(*)')
-        .in('id', ids));
-      if (companiesData) {
-        // Company emails that aren't a person yet. Resolved in a few batched queries
-        // (one lookup + one insert per chunk), not one or two requests per company:
-        // with thousands of companies that took minutes and looked like nothing happened.
-        const pending: { company: any; email: string; contactName?: string }[] = [];
-        for (const company of companiesData as any[]) {
-          const contactWithEmail = company.contacts?.find((c: any) => c.email);
-          const companyEmail = String(contactWithEmail?.email || company.general_email || '').trim();
-          const key = companyEmail.toLowerCase();
-          if (!companyEmail || seen.has(key)) continue;
-          seen.add(key);
-          pending.push({ company, email: companyEmail, contactName: contactWithEmail?.name });
-        }
-        if (pending.length > 0) {
-          const lookup = [...new Set(pending.flatMap((p) => [p.email, p.email.toLowerCase()]))];
-          const existing = await selectInChunks(lookup, (ids) => supabase
-            .from('people')
-            .select('id, first_name, last_name, email, company_id, companies(id, name, tags)')
-            .in('email', ids), 100);
-          const byEmail = new Map<string, any>();
-          for (const p of existing as any[]) if (p.email) byEmail.set(p.email.toLowerCase().trim(), p);
-
-          const toCreate: { row: any; company: any }[] = [];
-          for (const { company, email, contactName } of pending) {
-            const found = byEmail.get(email.toLowerCase());
-            const companyInfo = { id: company.id, name: company.name, tags: company.tags || [] };
-            if (found) {
-              merged.push({ id: found.id, first_name: found.first_name ?? '', last_name: found.last_name ?? '', email: found.email, company_id: company.id, companies: found.companies ?? companyInfo });
-            } else if (user) {
-              const nameParts = (contactName ? String(contactName) : String(company.name || '')).trim().split(' ');
-              toCreate.push({ company, row: { first_name: nameParts[0] || company.name, last_name: nameParts.slice(1).join(' ') || '', email, company_id: company.id, user_id: user.id } });
-            }
-          }
-          for (let i = 0; i < toCreate.length; i += 200) {
-            const batch = toCreate.slice(i, i + 200);
-            const { data: created, error } = await supabase.from('people').insert(batch.map((b) => b.row))
-              .select('id, first_name, last_name, email, company_id');
-            if (error) throw error;
-            const companyById = new Map(batch.map((b) => [b.company.id, b.company]));
-            for (const n of (created || []) as any[]) {
-              const c = companyById.get(n.company_id);
-              merged.push({ id: n.id, first_name: n.first_name ?? '', last_name: n.last_name ?? '', email: n.email, company_id: n.company_id, companies: c ? { id: c.id, name: c.name, tags: c.tags || [] } : undefined });
-            }
-          }
-        }
-      }
-    }
-
-    return merged;
+    const resolved = await resolveRecipients({ personIds, companyIds }, onProgress);
+    clearStoredSelection(); // consumed: a later Add must not re-add a stale selection
+    return resolved;
   };
 
-  const replaceRecipientsWithSelection = async () => {
-    setReplacingRecipients(true);
-    const loading = hasSelectionInLocalStorage() ? toast({ title: "Replacing recipients…", description: "Loading your selection. Large selections take a few seconds." }) : null;
-    try {
-      const resolved = await resolveRecipientsFromLocalStorage();
-      loading?.dismiss();
-      if (resolved === null) {
-        toast({
-          title: "Open Companies or People to select recipients",
-          description: "A new tab will open. Select companies or people there, then return here and click Replace again to load them.",
-        });
-        const path = window.location.pathname;
-        const basePath = path !== '/' && path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-        const companiesUrl = window.location.origin + (basePath ? basePath + '/' : '/') + 'companies';
-        window.open(companiesUrl, '_blank');
-        return;
-      }
+  /** Merge (or replace) resolved recipients into the list; returns how many were new and the new total. */
+  const applyRecipients = (resolved: Recipient[], mode: 'add' | 'replace'): { added: number; total: number } => {
+    if (mode === 'replace') {
       setFilteredRecipients(resolved);
       unfilteredRecipientsRef.current = resolved;
       setSelectedTags([]);
-      toast({
-        title: "Recipients updated",
-        description: `Replaced with ${resolved.length} recipient(s) from your current selection. Save draft to keep this list.`,
-      });
+      return { added: resolved.length, total: resolved.length };
+    }
+    const current: any[] = (unfilteredRecipientsRef.current && unfilteredRecipientsRef.current.length) ? unfilteredRecipientsRef.current : filteredRecipients;
+    const existing = new Set(current.map((p: any) => p.email?.toLowerCase().trim()));
+    const fresh = resolved.filter((p) => !existing.has(p.email?.toLowerCase().trim()));
+    const updated = fresh.length === 0 ? current : [...current, ...fresh];
+    setFilteredRecipients(updated as any);
+    unfilteredRecipientsRef.current = updated as any;
+    return { added: fresh.length, total: updated.length };
+  };
+
+  /** One-click: every company in the CRM that has an email address. */
+  const addAllCompaniesWithEmail = async () => {
+    setReplacingRecipients(true);
+    const t = toast({ title: "Adding all companies…", description: "Loading your companies." });
+    try {
+      const ids = await allCompanyIds();
+      const resolved = await resolveRecipients({ companyIds: ids }, (m) => t.update({ id: t.id, title: "Adding all companies…", description: m }));
+      const { added, total } = applyRecipients(resolved, 'add');
+      t.update({ id: t.id, title: "All companies added", description: `${added.toLocaleString()} new recipient(s) from ${ids.length.toLocaleString()} companies; ${total.toLocaleString()} in this campaign now. Duplicate emails were removed. Save the draft to keep them.` });
     } catch (e: any) {
-      toast({ title: "Error", description: e?.message ?? "Failed to load selection", variant: "destructive" });
+      t.update({ id: t.id, title: "Could not add companies", description: e?.message ?? "Please try again.", variant: "destructive" } as any);
     } finally {
       setReplacingRecipients(false);
     }
+  };
+
+  // Deliveries from a Companies / People tab (BroadcastChannel, acknowledged, with progress back)
+  const applyRef = useRef(applyRecipients);
+  applyRef.current = applyRecipients;
+  useEffect(() => {
+    if (!open) return;
+    return listenForDeliveries(() => campaignName || 'your campaign', async (msg, report) => {
+      setReplacingRecipients(true);
+      const label = msg.mode === 'replace' ? 'Replacing recipients…' : 'Adding recipients…';
+      const count = (msg.companyIds?.length || 0) + (msg.personIds?.length || 0);
+      const t = toast({ title: label, description: `Received ${count.toLocaleString()} selected record(s) from your other tab.` });
+      const progress = (m: string) => { t.update({ id: t.id, title: label, description: m }); report.progress(m); };
+      try {
+        const resolved = await resolveRecipients({ companyIds: msg.companyIds, personIds: msg.personIds }, progress);
+        const { added, total } = applyRef.current(resolved, msg.mode);
+        const summary = msg.mode === 'replace' ? `Recipient list replaced: ${total.toLocaleString()} recipient(s).` : `${added.toLocaleString()} new recipient(s) added; ${total.toLocaleString()} in this campaign now.`;
+        t.update({ id: t.id, title: 'Recipients updated', description: `${summary} Duplicate emails were removed. Save the draft to keep them.` });
+        report.done(added, total);
+      } catch (e: any) {
+        t.update({ id: t.id, title: 'Could not add recipients', description: e?.message ?? 'Please try again.', variant: 'destructive' } as any);
+        report.failed(e?.message ?? 'Failed');
+      } finally {
+        setReplacingRecipients(false);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, campaignName]);
+
+  const openCompaniesTab = () => {
+    // Must run synchronously inside the click, or the browser blocks the new tab as a pop-up.
+    window.open(window.location.origin + '/companies', '_blank');
+    toast({ title: "Companies opened in a new tab", description: "Select companies there and click \"Add to campaign\". They'll appear here automatically, with progress." });
+  };
+
+  const runSelection = async (mode: 'add' | 'replace') => {
+    setReplacingRecipients(true);
+    const label = mode === 'replace' ? 'Replacing recipients…' : 'Adding recipients…';
+    const t = toast({ title: label, description: 'Loading your selection.' });
+    try {
+      const resolved = await resolveRecipientsFromLocalStorage((m) => t.update({ id: t.id, title: label, description: m }));
+      if (resolved === null) { t.dismiss(); return; }
+      const { added, total } = applyRecipients(resolved, mode);
+      t.update({ id: t.id, title: 'Recipients updated', description: mode === 'replace'
+        ? `Replaced with ${total.toLocaleString()} recipient(s). Save the draft to keep this list.`
+        : added ? `Added ${added.toLocaleString()} recipient(s); ${total.toLocaleString()} in this campaign now.` : 'No new recipients (all were already in the list).' });
+    } catch (e: any) {
+      t.update({ id: t.id, title: 'Could not load your selection', description: e?.message ?? 'Please try again.', variant: 'destructive' } as any);
+    } finally {
+      setReplacingRecipients(false);
+    }
+  };
+
+  /** Click handlers: open Companies immediately when nothing is waiting (no pop-up blocking). */
+  const replaceRecipientsWithSelection = async () => {
+    if (!hasSelectionInLocalStorage()) { openCompaniesTab(); return; }
+    await runSelection('replace');
+  };
+  const addRecipientsFromSelection = async () => {
+    if (!hasSelectionInLocalStorage()) { openCompaniesTab(); return; }
+    await runSelection('add');
   };
 
   const removeRecipient = (personId: string) => {
@@ -2941,43 +2920,6 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     });
     return unsub;
   }, [open]);
-
-  const addRecipientsFromSelection = async () => {
-    setReplacingRecipients(true);
-    const loading = hasSelectionInLocalStorage() ? toast({ title: "Adding recipients…", description: "Loading your selection. Large selections take a few seconds." }) : null;
-    try {
-      const resolved = await resolveRecipientsFromLocalStorage();
-      loading?.dismiss();
-      if (resolved === null) {
-        toast({
-          title: "Select recipients first",
-          description: "Open Companies or People, select contacts, then return here and click Add.",
-        });
-        const path = window.location.pathname;
-        const basePath = path !== '/' && path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-        const companiesUrl = window.location.origin + (basePath ? basePath + '/' : '/') + 'companies';
-        window.open(companiesUrl, '_blank');
-        return;
-      }
-      const existingEmails = new Set(filteredRecipients.map((p) => p.email?.toLowerCase().trim()));
-      const newRecipients = resolved.filter((p) => !existingEmails.has(p.email?.toLowerCase().trim()));
-      setFilteredRecipients((prev) => {
-        const updated = newRecipients.length === 0 ? prev : [...prev, ...newRecipients];
-        unfilteredRecipientsRef.current = updated;
-        return updated;
-      });
-      toast({
-        title: "Recipients added",
-        description: newRecipients.length
-          ? `Added ${newRecipients.length} recipient(s) from your selection.`
-          : "No new recipients (all were already in the list).",
-      });
-    } catch (e: any) {
-      toast({ title: "Error", description: e?.message ?? "Failed to load selection", variant: "destructive" });
-    } finally {
-      setReplacingRecipients(false);
-    }
-  };
 
   // Add a whole recipient group's members to the composer list (dedupe by email)
   const addRecipientsFromGroup = async (groupId: string) => {
@@ -5102,12 +5044,20 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                   variant="ghost"
                   size="sm"
                   className="text-muted-foreground"
-                  onClick={() => {
-                    window.open(window.location.origin + '/companies', '_blank');
-                    toast({ title: "Companies page opened", description: "Select companies, then return here and click Add or Replace All." });
-                  }}
+                  onClick={openCompaniesTab}
                 >
                   Open Companies
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addAllCompaniesWithEmail}
+                  disabled={replacingRecipients}
+                  title="Add every company in your CRM that has an email address (duplicates removed)"
+                >
+                  <Building2 className="h-4 w-4 mr-1" />
+                  Add all companies
                 </Button>
                 <Button
                   type="button"
@@ -5116,7 +5066,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                   className="text-muted-foreground"
                   onClick={() => {
                     window.open(window.location.origin + '/people', '_blank');
-                    toast({ title: "People page opened", description: "Select people, then return here and click Add or Replace All." });
+                    toast({ title: "People opened in a new tab", description: "Select people there and click \"Add to campaign\". They'll appear here automatically, with progress." });
                   }}
                 >
                   Open People

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { sendSelectionToCampaign, watchForOpenCampaign } from "@/lib/recipients";
 import { selectInChunks } from "@/lib/chunkedIn";
 import { AddToGroupDialog } from "@/components/companies/AddToGroupDialog";
 import { useNavigate } from "react-router-dom";
@@ -1089,6 +1090,9 @@ export default function Companies() {
   const SELECTED_COMPANY_IDS_KEY = 'leadboosters_selected_company_ids';
   const hasRestoredCompanySelection = useRef(false);
   const [openedFromDraft, setOpenedFromDraft] = useState(false);
+  // A campaign composer open in another tab (found via the recipient channel) also enables Add/Replace
+  const [openCampaignName, setOpenCampaignName] = useState<string | null>(null);
+  useEffect(() => watchForOpenCampaign(setOpenCampaignName), []);
   useEffect(() => {
     setOpenedFromDraft(!!window.opener);
   }, []);
@@ -2964,7 +2968,7 @@ export default function Companies() {
                         </Button>
                       )}
                       {/* When campaign dialog is open (context) or opened as popup: prioritize Add/Replace */}
-                      {(bulkEmailDialogOpen || openedFromDraft) ? (
+                      {(bulkEmailDialogOpen || openedFromDraft || !!openCampaignName) ? (
                         <>
                           <Button
                             variant="default"
@@ -2976,20 +2980,7 @@ export default function Companies() {
                                 // Direct context integration — no popup/postMessage needed
                                 openBulkEmailForCompanyIds(companyIds, 'add');
                               } else {
-                                try {
-                                  localStorage.removeItem('leadboosters_draft_recipients');
-                                  localStorage.removeItem('leadboosters_selected_people_ids');
-                                  // localStorage (not sessionStorage) so the campaign tab that opened
-                                  // this one can read the selection — sessionStorage is per-tab.
-                                  localStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
-                                  const campaignTab = window.opener && !window.opener.closed ? window.opener : null;
-                                  campaignTab?.postMessage({ type: "LEADGENIE_ADD_RECIPIENTS_TO_DRAFT" }, window.location.origin);
-                                  toast(campaignTab
-                                    ? { title: "Added to campaign", description: "Switch back to the campaign tab: the recipients are being added there now (large selections take a few seconds)." }
-                                    : { title: "Selection saved", description: "Go back to your campaign and click Add under Selected Recipients to load it." });
-                                } catch {
-                                  toast({ title: "Could not reach campaign tab", variant: "destructive" });
-                                }
+                                void sendSelectionToCampaign(toast as any, { companyIds: companyIds }, 'add', `${companyIds.length.toLocaleString()} companies`);
                               }
                             }}
                             disabled={companiesWithEmail.length === 0}
@@ -3007,19 +2998,7 @@ export default function Companies() {
                                 // Direct context integration — replaces recipient list
                                 openBulkEmailForCompanyIds(companyIds, 'replace');
                               } else {
-                                try {
-                                  localStorage.removeItem('leadboosters_draft_recipients');
-                                  localStorage.removeItem('leadboosters_selected_people_ids');
-                                  // localStorage (not sessionStorage) so the campaign tab can read it cross-tab.
-                                  localStorage.setItem('leadboosters_selected_company_ids', JSON.stringify(companyIds));
-                                  const campaignTab = window.opener && !window.opener.closed ? window.opener : null;
-                                  campaignTab?.postMessage({ type: "LEADGENIE_REPLACE_RECIPIENTS_TO_DRAFT" }, window.location.origin);
-                                  toast(campaignTab
-                                    ? { title: "Campaign list replaced", description: "Switch back to the campaign tab: the recipients are being loaded there now (large selections take a few seconds)." }
-                                    : { title: "Selection saved", description: "Go back to your campaign and click Replace All under Selected Recipients to load it." });
-                                } catch {
-                                  toast({ title: "Could not reach campaign tab", variant: "destructive" });
-                                }
+                                void sendSelectionToCampaign(toast as any, { companyIds: companyIds }, 'replace', `${companyIds.length.toLocaleString()} companies`);
                               }
                             }}
                             disabled={companiesWithEmail.length === 0}

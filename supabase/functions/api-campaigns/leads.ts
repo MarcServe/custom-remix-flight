@@ -139,7 +139,7 @@ export async function handleLeadAction(db: any, userId: string, action: string, 
     }
 
     case "list_personas": {
-      const { data } = await db.from("discovery_personas").select("id, name, is_active, priority, description, target_industries, target_geographies, target_keywords, target_company_sizes, custom_search_query, exclude_industries, exclude_keywords, auto_approve_threshold, auto_enroll_sequence_id, total_leads_found, total_approved, updated_at").eq("user_id", userId).order("priority");
+      const { data } = await db.from("discovery_personas").select("id, name, is_active, priority, description, target_industries, target_geographies, target_keywords, target_company_sizes, custom_search_query, exclude_industries, exclude_keywords, product_focus, value_proposition, email_tone, talking_points, call_to_action, auto_approve_threshold, auto_enroll_sequence_id, total_leads_found, total_approved, updated_at").eq("user_id", userId).order("priority");
       return json({ personas: data || [] });
     }
 
@@ -164,7 +164,13 @@ export async function handleLeadAction(db: any, userId: string, action: string, 
       if (body.is_active !== undefined) fields.is_active = !!body.is_active;
       if (body.auto_approve_threshold !== undefined) fields.auto_approve_threshold = Number(body.auto_approve_threshold) || null;
       if (body.auto_enroll_sequence_id !== undefined) fields.auto_enroll_sequence_id = str(body.auto_enroll_sequence_id) || null;
-      for (const k of ["email_tone", "call_to_action", "talking_points", "value_proposition", "product_focus"]) if (body[k] !== undefined) fields[k] = str(body[k]) || null;
+      for (const k of ["email_tone", "call_to_action", "value_proposition", "product_focus"]) if (body[k] !== undefined) fields[k] = str(body[k]) || null;
+      // talking_points is a text[] column: accept an array, or text split on new lines / ; / bullets
+      if (body.talking_points !== undefined) {
+        const tp = Array.isArray(body.talking_points) ? body.talking_points : String(body.talking_points || "").split(/\n|;|\u2022|^- /m);
+        const items = tp.map((x: unknown) => String(x || "").replace(/^[-*\u2022\s]+/, "").trim()).filter(Boolean).slice(0, 12);
+        fields.talking_points = items.length ? items : null;
+      }
       const id = str(body.persona_id); const name = str(body.name);
       let existing: any = null;
       if (id) ({ data: existing } = await db.from("discovery_personas").select("id, name").eq("user_id", userId).eq("id", id).maybeSingle());
