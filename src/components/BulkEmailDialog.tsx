@@ -452,9 +452,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
         .from('email_campaigns')
         .select('id, name, created_at, total_recipients')
         .eq('user_id', user.id)
-        .in('status', ['completed', 'scheduled', 'sending'])
+        .in('status', ['completed', 'scheduled', 'sending', 'paused'])
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(100);
 
       if (error) {
         console.error('Error fetching campaigns:', error);
@@ -2921,6 +2921,65 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     return unsub;
   }, [open]);
 
+  // Add the recipients of a previous campaign (optionally only those who opened / clicked / didn't open)
+  const [campaignSegment, setCampaignSegment] = useState<'reached' | 'opened' | 'clicked' | 'not_opened'>('reached');
+  const addRecipientsFromCampaign = async (campaignId: string, segment: typeof campaignSegment = campaignSegment) => {
+    if (!campaignId) return;
+    setReplacingRecipients(true);
+    const source = (previousCampaigns || []).find((c: any) => c.id === campaignId);
+    const t = toast({ title: 'Adding recipients…', description: `Loading "${source?.name || 'campaign'}".` });
+    try {
+      const rows: any[] = [];
+      for (let from = 0; from < 200000; from += 1000) {
+        const { data, error } = await supabase
+          .from('email_campaign_recipients')
+          .select('email, name, person_id, status, opened_at, clicked_at, people(first_name, last_name, company_id, companies(id, name, tags))')
+          .eq('campaign_id', campaignId)
+          .order('created_at')
+          .range(from, from + 999);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < 1000) break;
+      }
+      const reached = (r: any) => ['sent', 'delivered', 'opened', 'clicked'].includes(String(r.status));
+      const opened = (r: any) => !!r.opened_at || ['opened', 'clicked'].includes(String(r.status));
+      const clicked = (r: any) => !!r.clicked_at || String(r.status) === 'clicked';
+      const pick = rows.filter((r) => reached(r) && (
+        segment === 'reached' ? true : segment === 'opened' ? opened(r) : segment === 'clicked' ? clicked(r) : !opened(r)));
+      const current: any[] = (unfilteredRecipientsRef.current && unfilteredRecipientsRef.current.length) ? unfilteredRecipientsRef.current : filteredRecipients;
+      const existing = new Set(current.map((p: any) => p.email?.toLowerCase().trim()));
+      const seen = new Set<string>();
+      const fresh = pick.filter((r) => {
+        const e = String(r.email || '').toLowerCase().trim();
+        if (!e || existing.has(e) || seen.has(e)) return false;
+        seen.add(e); return true;
+      }).map((r) => {
+        const parts = String(r.name || '').trim().split(' ');
+        const p = r.people || {};
+        return {
+          id: r.person_id || `campaign-${campaignId}-${r.email}`,
+          first_name: p.first_name ?? parts[0] ?? '',
+          last_name: p.last_name ?? parts.slice(1).join(' ') ?? '',
+          email: String(r.email).trim(),
+          company_id: p.company_id || undefined,
+          companies: p.companies ? { id: p.companies.id, name: p.companies.name, tags: p.companies.tags || [] } : undefined,
+        };
+      }) as any;
+      const updated = fresh.length ? [...current, ...fresh] : current;
+      setFilteredRecipients(updated as any);
+      unfilteredRecipientsRef.current = updated as any;
+      const segLabel = segment === 'reached' ? 'everyone it reached' : segment === 'opened' ? 'people who opened' : segment === 'clicked' ? 'people who clicked' : "people who didn't open";
+      t.update({ id: t.id, title: fresh.length ? 'Campaign recipients added' : 'No new recipients',
+        description: fresh.length
+          ? `Added ${fresh.length.toLocaleString()} (${segLabel}) from "${source?.name || 'campaign'}"; ${updated.length.toLocaleString()} in this campaign now. Failed/bounced addresses and duplicates were skipped.`
+          : `Nobody new: everyone matching (${segLabel}) is already in the list, or none matched.` });
+    } catch (e: any) {
+      t.update({ id: t.id, title: 'Could not load that campaign', description: e?.message ?? 'Please try again.', variant: 'destructive' } as any);
+    } finally {
+      setReplacingRecipients(false);
+    }
+  };
+
   // Add a whole recipient group's members to the composer list (dedupe by email)
   const addRecipientsFromGroup = async (groupId: string) => {
     if (!groupId) return;
@@ -5060,6 +5119,33 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
                       ))}
                     </SelectContent>
                   </Select>
+                )}
+                {(previousCampaigns || []).length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <Select value={campaignSegment} onValueChange={(v) => setCampaignSegment(v as any)} disabled={replacingRecipients}>
+                      <SelectTrigger className="h-8 w-[130px]" title="Which of that campaign's recipients to add">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="reached">Everyone reached</SelectItem>
+                        <SelectItem value="opened">Opened</SelectItem>
+                        <SelectItem value="clicked">Clicked</SelectItem>
+                        <SelectItem value="not_opened">Didn't open</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value="" onValueChange={(v) => { if (v) void addRecipientsFromCampaign(v); }} disabled={replacingRecipients}>
+                      <SelectTrigger className="h-8 w-[170px]" title="Add the recipients of a previous campaign">
+                        <SelectValue placeholder="Add from campaign" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(previousCampaigns || []).filter((c: any) => c.id !== draftId).map((c: any) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}{c.total_recipients ? ` (${Number(c.total_recipients).toLocaleString()})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
                 <Button
                   type="button"
