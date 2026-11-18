@@ -785,7 +785,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       if (!user) return [];
       const { data, error } = await supabase
         .from('email_sequences')
-        .select('id, name, steps')
+        .select('id, name, steps, segment_filters')
         .order('name');
       if (error) return [];
       return data || [];
@@ -793,8 +793,9 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
     enabled: open,
   });
 
+  // Only follow-ups written from an email are shown: anything else is replaced at send time.
   const selectedFollowUpSequence = followUpSequenceId
-    ? followUpSequences.find((s: { id: string }) => s.id === followUpSequenceId)
+    ? followUpSequences.find((s: { id: string; segment_filters?: any }) => s.id === followUpSequenceId && s.segment_filters?.from_email === true)
     : null;
 
   const [editingFollowUpSequenceName, setEditingFollowUpSequenceName] = useState(false);
@@ -2684,7 +2685,7 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
       // Put the new sequence in the list before selecting it, so the selector shows it straight away.
       queryClient.setQueryData(['email-sequences-follow-up'], (prev: any) => {
         const list = Array.isArray(prev) ? prev.filter((x: any) => x.id !== data.sequenceId) : [];
-        return [...list, { id: data.sequenceId, name: data.name, steps: data.sequence }].sort((x: any, y: any) => String(x.name).localeCompare(String(y.name)));
+        return [...list, { id: data.sequenceId, name: data.name, steps: data.sequence, segment_filters: { from_email: true } }].sort((x: any, y: any) => String(x.name).localeCompare(String(y.name)));
       });
       setAutoFollowUpEnabled(true);
       setFollowUpSequenceId(data.sequenceId);
@@ -4515,69 +4516,29 @@ const BulkEmailDialog = forwardRef<BulkEmailDialogHandle, BulkEmailDialogProps>(
             </div>
             {autoFollowUpEnabled && (
               <div className="space-y-2 pt-2">
-                <Label>Follow-up sequence</Label>
-                <Select
-                  value={followUpSequenceId || "none"}
-                  onValueChange={(v) => setFollowUpSequenceId(v === "none" ? "" : v)}
-                  disabled={sending || generatingAi}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select sequence for reminders..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No follow-up sequence</SelectItem>
-                    {followUpSequences.map((seq: { id: string; name: string }) => (
-                      <SelectItem key={seq.id} value={seq.id}>
-                        {seq.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Recipients who don&apos;t reply will get follow-up steps from this sequence (no-reply rules apply).
-                </p>
-                <div className="rounded-md border border-primary/40 bg-primary/5 p-2.5">
+                <Label>Follow-ups</Label>
+                <div className="rounded-md border border-primary/40 bg-primary/5 p-3 space-y-2">
+                  <p className="text-sm">
+                    Follow-ups are written from this email: three short notes on day 1, 3 and 5 about the same offer, with the same links. They stop the moment someone replies.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    They're created automatically when the campaign sends. Preview them now if you'd like to read or edit them first. Preview again after changing the email.
+                  </p>
                   <Button
                     type="button"
-                    variant="default"
+                    variant="outline"
                     size="sm"
-                    onClick={create135FollowUp}
-                    disabled={creating135FollowUp || sending || generatingAi}
-                    className="w-full"
+                    onClick={createSequenceFromEmailBody}
+                    disabled={creatingSequenceFromBody || sending || generatingAi || !(bodyText?.trim() || (bodyHtml && bodyHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()))}
+                    className="w-full border-primary/50 hover:bg-primary/10"
                   >
-                    {creating135FollowUp ? (
-                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Setting up…</>
+                    {creatingSequenceFromBody ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Writing follow-ups…</>
                     ) : (
-                      <><CalendarClock className="h-4 w-4 mr-2" />Follow up if no reply — Day 1 / 3 / 5</>
+                      <><Sparkles className="h-4 w-4 mr-2" />{selectedFollowUpSequence ? 'Rewrite follow-ups from this email' : 'Preview follow-ups'}</>
                     )}
                   </Button>
-                  <p className="text-[11px] text-muted-foreground mt-1.5 text-center">
-                    One click: 3 gentle nudges on day 1, 3 &amp; 5 — automatically stops the moment they reply.
-                  </p>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={createSequenceFromEmailBody}
-                  disabled={creatingSequenceFromBody || sending || generatingAi || !(bodyText?.trim() || (bodyHtml && bodyHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()))}
-                  className="mt-2 border-primary/50 hover:bg-primary/10"
-                >
-                  {creatingSequenceFromBody ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Creating sequence...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Create sequence from email body
-                    </>
-                  )}
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  AI will infer audience and steps from your email content and add the new sequence above.
-                </p>
                 {selectedFollowUpSequence && (
                   <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
                     <div className="flex items-center justify-between gap-2">

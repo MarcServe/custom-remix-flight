@@ -1,3 +1,4 @@
+import { resendFromAddress } from "../_shared/resend-from.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.78.0';
 import { corsHeaders } from '../_shared/cors.ts';
 import { renderEmailTemplate } from '../_shared/professional-template.ts';
@@ -454,7 +455,7 @@ If you're satisfied with how this looks, you're all set! Your auto-responses wil
           throw new Error('Email provider not configured. Please set up Gmail, Resend, or SendGrid.');
         }
         
-        const resendFrom = (overrideSenderEmail?.trim() || apiKeyConnection?.from_email || connection?.from_email);
+        const resendFrom = (await resendFromAddress(overrideSenderEmail?.trim() || apiKeyConnection?.from_email || connection?.from_email)).email;
         if (!resendFrom) {
           throw new Error('No verified sending domain configured for Resend. Add a verified domain at https://resend.com/domains or switch to Gmail in Settings > Email Provider.');
         }

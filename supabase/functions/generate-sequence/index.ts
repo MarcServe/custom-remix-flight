@@ -87,6 +87,7 @@ Subject: ${fu.subject || "(no subject)"}
 ${fu.body}
 
 RULES
+- The original may have been personalised for one particular recipient. Never repeat a specific company name, person's name, place or detail about the recipient from it: every follow-up goes to many different recipients, so refer to them only as {{company}} (or "your team") and greet with {{firstName}}.
 - Follow up on THIS email only: the same product, the same offer and the same call to action. Never introduce another product, company or offer, and never invent features, prices or claims that are not in the original.
 - Reuse the original's link(s) exactly as written when you include a call to action.
 - Each follow-up is 40 to 90 words, adds one fresh angle (a benefit from the original, a quick question, then a polite last note) and reads like a person wrote it. Tone: ${tone}.
@@ -187,7 +188,10 @@ Return ONLY the JSON array.`;
       const gaps = [1, 2, 2];
       sequence = sequence.slice(0, 3).map((st: any, i: number) => ({
         subject: String(st?.subject || "Following up").replace(/\{\{\s*first_name\s*\}\}/gi, "{{firstName}}").replace(/\{\{\s*company_name\s*\}\}/gi, "{{company}}"),
-        body: String(st?.body || "").replace(/\{\{\s*first_name\s*\}\}/gi, "{{firstName}}").replace(/\{\{\s*company_name\s*\}\}/gi, "{{company}}"),
+        body: String(st?.body || "").replace(/\{\{\s*first_name\s*\}\}/gi, "{{firstName}}").replace(/\{\{\s*company_name\s*\}\}/gi, "{{company}}")
+          // The signature is added by the platform: drop a trailing sign-off line the AI may still add.
+          .replace(/\n+\s*(best|kind|warm|many)?\s*(regards|wishes)[!.,]?\s*$/i, "")
+          .replace(/\n+\s*(cheers|best|thanks|thank you|thanks again|all the best|speak soon)[!.,]?\s*$/i, "").trim(),
         delayDays: gaps[i],
       })).filter((st: any) => st.body.trim());
       if (sequence.length < 3) throw new Error("The AI did not return three follow-ups. Please try again.");
@@ -209,7 +213,7 @@ Return ONLY the JSON array.`;
       .insert({
         name: sequenceName,
         steps: sequence,
-        segment_filters: fu ? {} : {
+        segment_filters: fu ? { from_email: true } : {
           size,
           geography,
           industry,

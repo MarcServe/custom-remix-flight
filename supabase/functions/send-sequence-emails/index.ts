@@ -1,3 +1,4 @@
+import { resendFromAddress } from "../_shared/resend-from.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.78.0';
 import { corsHeaders } from '../_shared/cors.ts';
 import { renderEmailTemplate } from '../_shared/professional-template.ts';
@@ -303,7 +304,7 @@ Deno.serve(async (req) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              from: `${senderName} <${fromEmail}>`,
+              from: `${senderName} <${(await resendFromAddress(fromEmail)).email}>`,
               to: [contact.email],
               subject: emailData.subject,
               text: emailData.body,

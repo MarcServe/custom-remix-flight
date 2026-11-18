@@ -1,3 +1,4 @@
+import { followUpSequenceFromBody } from "../_shared/followups-from-body.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -55,8 +56,19 @@ serve(async (req) => {
       // Verify campaign ownership, then attach the sequence
       const { data: campaign } = await db.from('email_campaigns').select('id, user_id, sender_profile_id').eq('id', campaignId).single();
       if (!campaign || campaign.user_id !== user.id) throw new Error('Campaign not found');
+      // Follow-ups for a campaign are written from that campaign's own email.
+      const fromBody = await followUpSequenceFromBody(db, { id: campaignId, user_id: user.id }).catch(() => null);
+      if (fromBody) sequenceId = fromBody;
       await db.from('email_campaigns').update({ auto_follow_up_enabled: true, follow_up_sequence_id: sequenceId }).eq('id', campaignId);
       attachedToCampaign = true;
+
+      // The steps actually attached (written from the campaign email, or the standard ones)
+      const { data: seqRow } = await db.from('email_sequences').select('steps').eq('id', sequenceId).maybeSingle();
+      const seqSteps: { subject: string; body: string; delayDays: number }[] = (Array.isArray(seqRow?.steps) ? seqRow!.steps : [])
+        .map((x: unknown) => { try { return typeof x === 'string' ? JSON.parse(x) : x; } catch { return null; } })
+        .filter((x: any) => x && x.body)
+        .map((x: any, i: number) => ({ subject: String(x.subject || 'Following up'), body: String(x.body), delayDays: Number(x.delayDays) || (i === 0 ? 1 : 2) }));
+      if (!seqSteps.length) seqSteps.push(...FOLLOWUP_STEPS);
 
       if (enrollExisting === true) {
         // Emails that already replied to this campaign — exclude them
@@ -95,7 +107,7 @@ serve(async (req) => {
         const enrolledSet = new Set((alreadyEnrolled || []).map((c: any) => c.company_id));
 
         const personalizedEmails = [{ stepNumber: 0, subject: '(Campaign)', body: '', delayDays: 0 },
-          ...FOLLOWUP_STEPS.map((s, i) => ({ stepNumber: i + 1, subject: s.subject, body: s.body, delayDays: s.delayDays }))];
+          ...seqSteps.map((s, i) => ({ stepNumber: i + 1, subject: s.subject, body: s.body, delayDays: s.delayDays }))];
 
         const nowIso = new Date().toISOString();
         const seenCompany = new Set<string>();

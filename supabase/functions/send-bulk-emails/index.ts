@@ -4,18 +4,15 @@ import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { renderEmailTemplate, resolveRecipientBodyHtml } from "../_shared/professional-template.ts";
 import { stripTrailingDuplicateSignoffHtml } from "../_shared/strip-trailing-signoff.ts";
 import { personalizeEmailTemplate, mergeContextFromRecipient } from "../_shared/email-personalize.ts";
-import { ensurePersonCompany, ensureNoReplySequence } from "../_shared/followup.ts";
+import { ensurePersonCompany } from "../_shared/followup.ts";
+import { followUpSequenceFromBody } from "../_shared/followups-from-body.ts";
+import { resendFromAddress } from "../_shared/resend-from.ts";
 
-// A campaign with follow-ups on but no sequence chosen gets the default
-// "No-reply follow-up (Day 1 / 3 / 5)". Resolved once per campaign per run.
+// Follow-ups are always written from the campaign's own email. Resolved once per campaign per run.
 const followUpSeqCache = new Map<string, Promise<string | null>>();
-function defaultFollowUpSequenceId(db: any, campaign: any): Promise<string | null> {
+function campaignFollowUpSequenceId(db: any, campaign: any): Promise<string | null> {
   if (!followUpSeqCache.has(campaign.id)) {
-    followUpSeqCache.set(campaign.id, (async () => {
-      const id = await ensureNoReplySequence(db, campaign.user_id).catch(() => null);
-      if (id) await db.from('email_campaigns').update({ follow_up_sequence_id: id }).eq('id', campaign.id);
-      return id;
-    })());
+    followUpSeqCache.set(campaign.id, followUpSequenceFromBody(db, campaign).catch(() => null));
   }
   return followUpSeqCache.get(campaign.id)!;
 }
@@ -181,10 +178,8 @@ async function enrollFollowUp(
   sendMeta: { provider?: string; tracking_enabled?: boolean | null } = {}) {
   if (!campaign.auto_follow_up_enabled) return;
   try {
-    if (!campaign.follow_up_sequence_id) {
-      campaign.follow_up_sequence_id = await defaultFollowUpSequenceId(supabaseClient, campaign);
-      if (!campaign.follow_up_sequence_id) return;
-    }
+    campaign.follow_up_sequence_id = await campaignFollowUpSequenceId(supabaseClient, campaign);
+    if (!campaign.follow_up_sequence_id) return;
     // Follow-ups hang off a company. Recipients added in the app usually have no
     // person_id, so link (or create) the CRM person + company here instead of
     // silently skipping — this is what made follow-ups never fire.
@@ -496,7 +491,9 @@ serve(async (req) => {
       if (!resendApiKey) throw new Error('Resend not configured. Please add RESEND_API_KEY.');
 
       const senderName = branding.senderName || branding.companyName || userProfile?.full_name || 'CRM';
-      const fromEmail = branding.senderEmail || effectiveConnection.from_email || userProfile?.email || 'onboarding@resend.dev';
+      const requestedFrom = branding.senderEmail || effectiveConnection.from_email || userProfile?.email || '';
+      const { email: fromEmail, fallback: usedDefaultFrom } = await resendFromAddress(requestedFrom);
+      if (usedDefaultFrom) console.log(`[send-bulk-emails] ${requestedFrom || '(no sender address)'} is not on a verified Resend domain; sending from ${fromEmail}`);
 
       console.log(`[Resend] Building ${allPendingRecipients.length} email payloads…`);
 

@@ -1,3 +1,4 @@
+import { resendFromAddress } from "../_shared/resend-from.ts";
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
@@ -358,6 +359,9 @@ serve(async (req) => {
       const gmailData = await sendGmailMessage(supabase, gmailConn as any, rawB64Url);
       externalMessageId = gmailData?.id || `gmail-${crypto.randomUUID()}`;
     } else if (RESEND_API_KEY) {
+      const resendFrom = await resendFromAddress(fromEmail);
+      if (resendFrom.fallback) console.log(`[send-sequence-email] ${fromEmail || '(no sender address)'} is not on a verified Resend domain; sending from ${resendFrom.email}`);
+      fromEmail = resendFrom.email;
       const resendResponse = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {

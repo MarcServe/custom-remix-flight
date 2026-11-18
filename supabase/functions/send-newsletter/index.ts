@@ -1,3 +1,4 @@
+import { resendFromAddress } from "../_shared/resend-from.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderEmailTemplate } from "../_shared/professional-template.ts";
@@ -775,13 +776,13 @@ serve(async (req) => {
           const resendApiKey = Deno.env.get('RESEND_API_KEY');
           if (!resendApiKey) throw new Error('No email provider configured');
 
-          const fromEmail = senderEmail;
+          const fromEmail = (await resendFromAddress(senderEmail)).email;
           const resendPayload = JSON.stringify({
               from: `${senderName} <${fromEmail}>`,
               to: [subscriber.email],
               subject: personalizedSubject,
               html: finalHtml,
-              reply_to: fromEmail,
+              reply_to: senderEmail || fromEmail,
               headers: {
                 'List-Unsubscribe': `<${unsubscribeUrl}>`,
                 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
