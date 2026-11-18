@@ -56,6 +56,7 @@ interface Persona {
   talking_points: string[] | null;
   call_to_action: string | null;
   email_signature_override: string | null;
+  sender_profile_id?: string | null;
 }
 
 const EMAIL_TONES = [
@@ -138,6 +139,20 @@ export function PersonaManager() {
     talking_points: '',
     call_to_action: '',
     email_signature_override: '',
+    sender_profile_id: '',
+  });
+
+  // Sender profiles for "Send as"
+  const { data: senderProfiles = [] } = useQuery({
+    queryKey: ['sender-profiles-persona', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase.from('sender_profiles')
+        .select('id, name, sender_name, sender_email')
+        .eq('user_id', user!.id)
+        .order('sort_order', { ascending: true }).order('name', { ascending: true });
+      return (data || []) as { id: string; name: string; sender_name: string | null; sender_email: string | null }[];
+    },
   });
 
   // Fetch personas
@@ -193,6 +208,7 @@ export function PersonaManager() {
         talking_points: data.talking_points ? data.talking_points.split(',').map(s => s.trim()).filter(Boolean) : null,
         call_to_action: data.call_to_action || null,
         email_signature_override: data.email_signature_override || null,
+        sender_profile_id: data.sender_profile_id || null,
       };
 
       if (data.id) {
@@ -270,6 +286,7 @@ export function PersonaManager() {
       talking_points: '',
       call_to_action: '',
       email_signature_override: '',
+      sender_profile_id: '',
     });
     setEditingPersona(null);
   };
@@ -293,6 +310,7 @@ export function PersonaManager() {
       talking_points: persona.talking_points?.join(', ') || '',
       call_to_action: persona.call_to_action || '',
       email_signature_override: persona.email_signature_override || '',
+      sender_profile_id: persona.sender_profile_id || '',
     });
     setDialogOpen(true);
   };
@@ -597,6 +615,25 @@ export function PersonaManager() {
                       value={formData.call_to_action}
                       onChange={(e) => setFormData(prev => ({ ...prev, call_to_action: e.target.value }))}
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Send as</Label>
+                    <Select
+                      value={formData.sender_profile_id || 'default'}
+                      onValueChange={(v) => setFormData(prev => ({ ...prev, sender_profile_id: v === 'default' ? '' : v }))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Your default business profile" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Your default business profile</SelectItem>
+                        {senderProfiles.map((sp) => (
+                          <SelectItem key={sp.id} value={sp.id}>
+                            {sp.name}{sp.sender_email ? ` (${sp.sender_name || sp.name} <${sp.sender_email}>)` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Autopilot emails for this persona use this sender's name, From address, logo and signature.</p>
                   </div>
 
                   <div className="space-y-2">

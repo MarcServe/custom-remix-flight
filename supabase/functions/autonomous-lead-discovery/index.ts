@@ -1640,7 +1640,7 @@ async function createAutoCampaigns(
       if (personaId) {
         const { data: personaData } = await supabase
           .from('discovery_personas')
-          .select('name, value_proposition, email_tone, talking_points, product_focus, call_to_action, email_signature_override')
+          .select('name, value_proposition, email_tone, talking_points, product_focus, call_to_action, email_signature_override, sender_profile_id')
           .eq('id', personaId)
           .single();
         
@@ -1746,6 +1746,28 @@ async function createAutoCampaigns(
       // Full-auto mode schedules the send at campaign_send_time (user's timezone); otherwise a draft.
       // (email_campaigns has no `metadata` column — the old insert failed silently on every run.)
       const autoSendAt = setting.full_auto_mode ? calculateCampaignSendTime(setting) : null;
+
+      // Send under the persona's own brand: its sender profile (name, From address, logo,
+      // signature) and an active Resend account, preferring one on the same domain.
+      let senderProfileId: string | null = persona?.sender_profile_id || null;
+      let senderConnectionId: string | null = null;
+      {
+        const { data: conns } = await supabase.from('crm_connections').select('id, provider, from_email')
+          .eq('user_id', setting.user_id).eq('status', 'active').in('provider', ['resend', 'sendgrid']);
+        let profileEmail = '';
+        if (senderProfileId) {
+          const { data: sp } = await supabase.from('sender_profiles').select('id, sender_email')
+            .eq('id', senderProfileId).eq('user_id', setting.user_id).maybeSingle();
+          if (sp) profileEmail = String(sp.sender_email || '').toLowerCase();
+          else senderProfileId = null;
+        }
+        const domain = profileEmail.split('@')[1] || '';
+        const list = (conns || []) as { id: string; provider: string; from_email: string | null }[];
+        const pick = (domain && list.find((c) => c.provider === 'resend' && String(c.from_email || '').toLowerCase().endsWith('@' + domain)))
+          || list.find((c) => c.provider === 'resend') || list[0];
+        senderConnectionId = pick?.id || null;
+      }
+
       const { data: campaign, error: campaignError } = await supabase
         .from('email_campaigns')
         .insert({
@@ -1758,6 +1780,8 @@ async function createAutoCampaigns(
           body_html_template: bodyHtmlTemplate,
           total_recipients: contacts.length,
           tags: ['autopilot', ...(personaName ? [personaName] : [])],
+          sender_profile_id: senderProfileId,
+          sender_connection_id: senderConnectionId,
           merge_vars: { ai_generated: true, persona_id: personaId, discovery_run_id: discoveryRunId, leads_count: leads.length },
         })
         .select('id, scheduled_at')
@@ -1856,10 +1880,13 @@ async function createAutoCampaigns(
               .limit(1);
 
             if (connections && connections.length > 0) {
-              await supabase
-                .from('email_campaigns')
-                .update({ sender_connection_id: connections[0].id })
-                .eq('id', campaign.id);
+              // Keep the persona's sending account when one was set above.
+              if (!senderConnectionId) {
+                await supabase
+                  .from('email_campaigns')
+                  .update({ sender_connection_id: connections[0].id })
+                  .eq('id', campaign.id);
+              }
 
               const sendResponse = await fetch(`${SUPABASE_URL}/functions/v1/send-bulk-emails`, {
                 method: 'POST',
