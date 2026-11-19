@@ -3,6 +3,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { renderEmailTemplate } from '../_shared/professional-template.ts';
+import { emailRejectReason, loadSuppressedEmails, normalizeEmail, greetingFirstName } from '../_shared/email-quality.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY');
@@ -51,6 +52,17 @@ serve(async (req) => {
 
     if (!emailStep) {
       throw new Error(`Step ${stepNumber} not found`);
+    }
+
+    // The campaign enrolment stores step 0 as a '(Campaign)' stub with no body —
+    // the campaign email itself already went out. Never send a stub or an empty step.
+    const stepBody = String(emailStep.body || '').trim();
+    if (!stepBody || emailStep.subject === '(Campaign)') {
+      console.warn(`Sequence ${companySequenceId}: step ${stepNumber} has no content (placeholder) — not sending`);
+      return new Response(
+        JSON.stringify({ success: false, skipped: true, reason: 'empty_or_placeholder_step' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
     }
 
     // Fetch contacts for this company. Campaign enrollments often only create
@@ -124,18 +136,38 @@ serve(async (req) => {
     const company = companySequence.company as { id: string; name: string; website?: string; user_id?: string } | null;
     const userId = authUser?.id ?? company?.user_id ?? null;
 
+    // Stop before sending to junk or previously bounced addresses, and pause the
+    // sequence so it does not retry every tick.
+    {
+      const to = normalizeEmail((contact as any).email);
+      const junk = emailRejectReason(to);
+      const suppressed = !junk && (await loadSuppressedEmails(supabase, userId)).has(to);
+      if (junk || suppressed) {
+        const reason = junk ? `invalid recipient: ${junk}` : 'recipient previously bounced';
+        console.warn(`Sequence ${companySequenceId}: not sending to ${to} (${reason}) — pausing`);
+        await supabase.from('contacts').update({ email_verified: false }).eq('id', (contact as any).id);
+        await supabase.from('company_sequences')
+          .update({ status: 'paused', next_action: 'paused', updated_at: new Date().toISOString() })
+          .eq('id', companySequenceId);
+        return new Response(
+          JSON.stringify({ success: false, skipped: true, reason }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      }
+    }
+
     // Personalize the step's subject/body with the recipient contact's details.
     // The follow-up templates carry {{firstName}} etc. verbatim, so substitute here
     // (send-sequence-email never did, which is why literal {{firstName}} shipped).
     {
       const cname = String((contact as any).name || '').trim();
-      const cfirst = cname ? cname.split(/\s+/)[0] : '';
+      const cfirst = greetingFirstName(cname, { company: company?.name, email: (contact as any).email });
       const clast = cname ? cname.split(/\s+/).slice(1).join(' ') : '';
       const cfull = cname || String((contact as any).email || '');
       const ccompany = String(company?.name || '').trim();
       const cemail = String((contact as any).email || '');
       const fill = (tpl: string): string => (tpl || '')
-        .replace(/\{\{\s*first[_ ]?name\s*\}\}/gi, cfirst || 'there')
+        .replace(/\{\{\s*first[_ ]?name\s*\}\}/gi, cfirst)
         .replace(/\{\{\s*last[_ ]?name\s*\}\}/gi, clast)
         .replace(/\{\{\s*full[_ ]?name\s*\}\}/gi, cfull)
         .replace(/\{\{\s*name\s*\}\}/gi, cfull)

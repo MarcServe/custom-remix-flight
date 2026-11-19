@@ -4,6 +4,7 @@ import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { renderEmailTemplate, resolveRecipientBodyHtml } from "../_shared/professional-template.ts";
 import { stripTrailingDuplicateSignoffHtml } from "../_shared/strip-trailing-signoff.ts";
 import { personalizeEmailTemplate, mergeContextFromRecipient } from "../_shared/email-personalize.ts";
+import { isProspectableEmail, loadSuppressedEmails, normalizeEmail } from "../_shared/email-quality.ts";
 import { ensurePersonCompany } from "../_shared/followup.ts";
 import { followUpSequenceFromBody } from "../_shared/followups-from-body.ts";
 import { resendFromAddress } from "../_shared/resend-from.ts";
@@ -28,11 +29,16 @@ const RESEND_INBOUND_EMAIL = Deno.env.get('RESEND_INBOUND_EMAIL') || 'leadgenie@
 // A recipient's email cell may hold several addresses ("a@x.com, b@y.com", or
 // separated by ; or whitespace). Return the first syntactically valid one so the
 // send reaches the primary address instead of bouncing the whole row.
-function firstValidEmail(raw: string): string | null {
+// Junk (image names, placeholders, non-sales inboxes) and addresses that have
+// hard-bounced or complained before are skipped.
+function firstValidEmail(raw: string, suppressed?: Set<string>): string | null {
   if (!raw) return null;
   for (const p of String(raw).split(/[,;\s]+/)) {
     const e = p.trim();
-    if (/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(e)) return e;
+    if (!/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(e)) continue;
+    if (!isProspectableEmail(e)) continue;
+    if (suppressed?.has(normalizeEmail(e))) continue;
+    return e;
   }
   return null;
 }
@@ -353,6 +359,9 @@ serve(async (req) => {
 
     if (recipientsError) throw new Error('Failed to fetch recipients');
 
+    // Hard bounces / complaints from earlier sends (Resend webhooks + Gmail bounce notices).
+    const suppressedEmails = await loadSuppressedEmails(supabaseClient, userId);
+
     if (!allPendingRecipients || allPendingRecipients.length === 0) {
       await supabaseClient.from('email_campaigns').update({
         status: 'completed',
@@ -504,9 +513,9 @@ serve(async (req) => {
       const invalidEmailRows: any[] = [];
 
       for (const recipient of allPendingRecipients) {
-        const primaryEmail = firstValidEmail(recipient.email || '');
+        const primaryEmail = firstValidEmail(recipient.email || '', suppressedEmails);
         if (!primaryEmail) {
-          invalidEmailRows.push({ id: recipient.id, status: 'failed', error_message: 'Invalid email address' });
+          invalidEmailRows.push({ id: recipient.id, status: 'failed', error_message: 'Invalid, placeholder or previously bounced email address' });
           failedCount++;
           continue;
         }
@@ -772,10 +781,10 @@ serve(async (req) => {
 
       for (const recipient of recipients) {
         try {
-          const gmailPrimary = firstValidEmail(recipient.email || '');
+          const gmailPrimary = firstValidEmail(recipient.email || '', suppressedEmails);
           if (!gmailPrimary) {
             await supabaseClient.from('email_campaign_recipients').update({
-              status: 'failed', error_message: 'Invalid email address',
+              status: 'failed', error_message: 'Invalid, placeholder or previously bounced email address',
             }).eq('id', recipient.id);
             failedCount++;
             continue;
@@ -862,10 +871,10 @@ serve(async (req) => {
       // ═══════════════════════════════════════════════════════════════
       for (const recipient of allPendingRecipients) {
         try {
-          const sgPrimary = firstValidEmail(recipient.email || '');
+          const sgPrimary = firstValidEmail(recipient.email || '', suppressedEmails);
           if (!sgPrimary) {
             await supabaseClient.from('email_campaign_recipients').update({
-              status: 'failed', error_message: 'Invalid email address',
+              status: 'failed', error_message: 'Invalid, placeholder or previously bounced email address',
             }).eq('id', recipient.id);
             failedCount++;
             continue;

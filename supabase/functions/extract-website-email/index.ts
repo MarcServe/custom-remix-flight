@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { isProspectableEmail } from "../_shared/email-quality.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.46.2";
 
 const corsHeaders = {
@@ -34,6 +35,8 @@ const SPAM_PATTERNS = [
 
 function isValidBusinessEmail(email: string): boolean {
   if (!email || email.length > 100) return false;
+  // Shared junk filter: image names (logo@2x.png), placeholders, non-sales inboxes.
+  if (!isProspectableEmail(email)) return false;
   
   // Check against spam patterns
   for (const pattern of SPAM_PATTERNS) {

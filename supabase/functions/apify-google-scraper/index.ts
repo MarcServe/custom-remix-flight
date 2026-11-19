@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { isProspectableEmail } from "../_shared/email-quality.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -213,14 +214,7 @@ async function extractEmailFromWebsite(websiteUrl: string): Promise<string | nul
       while ((match = pattern.exec(html)) !== null) {
         const email = match[1].toLowerCase().replace(/[<>"']/g, "");
         // Filter out common non-business emails
-        if (
-          !email.includes("example.com") &&
-          !email.includes("wixpress.com") &&
-          !email.includes("sentry.io") &&
-          !email.endsWith(".png") &&
-          !email.endsWith(".jpg") &&
-          email.length < 100
-        ) {
+        if (email.length < 100 && isProspectableEmail(email)) {
           foundEmails.add(email);
         }
       }

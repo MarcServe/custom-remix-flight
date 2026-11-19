@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { isProspectableEmail } from "../_shared/email-quality.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.46.2";
 
 const corsHeaders = {
@@ -43,6 +44,8 @@ const USER_AGENTS = [
 
 function isValidBusinessEmail(email: string): boolean {
   if (!email || email.length > 100) return false;
+  // Shared junk filter: image names (logo@2x.png), placeholders, non-sales inboxes.
+  if (!isProspectableEmail(email)) return false;
   
   for (const pattern of SPAM_PATTERNS) {
     if (pattern.test(email)) return false;
@@ -187,7 +190,7 @@ async function findEmailWithPerplexity(companyName: string, websiteUrl: string):
     const m = content.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
     if (!m) return null;
     const email = m[0].toLowerCase();
-    if (GENERIC_MAIL_HOSTS.test(email) || NON_SALES_MAILBOX.test(email)) return null;
+    if (GENERIC_MAIL_HOSTS.test(email) || NON_SALES_MAILBOX.test(email) || !isProspectableEmail(email)) return null;
     // Only trust it when it is on the company's own domain (or a close parent/child of it)
     const host = email.split('@')[1];
     if (domain && !(host === domain || host.endsWith('.' + domain) || domain.endsWith('.' + host))) return null;

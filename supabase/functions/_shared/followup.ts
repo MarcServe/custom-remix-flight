@@ -3,6 +3,8 @@
 // "No-reply follow-up (Day 1 / 3 / 5)" sequence. Used by send-bulk-emails at
 // send time and by the public API (api-campaigns).
 
+import { isProspectableEmail, greetingFirstName } from "./email-quality.ts";
+
 // Free-mail domains never represent a shared company, so contacts on them get a
 // distinct company (their own email) → each enrols in its own follow-up thread.
 const FREEMAIL = new Set([
@@ -32,10 +34,15 @@ export async function ensurePersonCompany(
   r: { email?: string | null; first_name?: string | null; last_name?: string | null; name?: string | null; company?: string | null },
 ): Promise<{ personId: string | null; companyId: string | null }> {
   const email = firstEmail(r.email);
-  if (!email) return { personId: null, companyId: null };
+  // Never enrol (or mark "verified") an address that is junk: image names
+  // scraped from pages, placeholders, non-sales inboxes.
+  if (!email || !isProspectableEmail(email)) return { personId: null, companyId: null };
   const nameParts = String(r.name || "").trim().split(/\s+/).filter(Boolean);
-  const first = String(r.first_name || nameParts[0] || "Contact");
-  const last = String(r.last_name || nameParts.slice(1).join(" ") || "");
+  // r.name is often the company ("Reiss", "Head Office") — only treat it as a
+  // person's name when it doesn't look like the company or an email fragment.
+  const guessedFirst = greetingFirstName(r.name, { company: r.company, email });
+  const first = String(r.first_name || (guessedFirst !== "there" ? nameParts[0] : "") || "Contact");
+  const last = String(r.last_name || (guessedFirst !== "there" ? nameParts.slice(1).join(" ") : "") || "");
   const fullName = [first, last].filter(Boolean).join(" ") || email;
 
   const { data: person } = await db.from("people").select("id, company_id").eq("user_id", userId).eq("email", email).maybeSingle();

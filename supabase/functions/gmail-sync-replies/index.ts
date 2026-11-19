@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { parseBounce } from "../_shared/email-quality.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,8 +10,133 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+const b64url = (data: string): string => {
+  try {
+    const bin = atob(data.replace(/-/g, '+').replace(/_/g, '/'));
+    return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+  } catch { return ''; }
+};
+
+/** Plain text of a Gmail message, including the machine-readable part of a bounce (DSN). */
 // deno-lint-ignore no-explicit-any
-async function syncRepliesForUser(supabase: SupabaseClient<any, "public", any>, userId: string): Promise<{ repliesFound: number }> {
+function messageText(message: any): string {
+  const chunks: string[] = [];
+  // deno-lint-ignore no-explicit-any
+  const walk = (part: any): void => {
+    if (!part) return;
+    const mt = String(part.mimeType || '');
+    if (part.body?.data && (mt === 'text/plain' || mt === 'message/delivery-status' || mt === '')) chunks.push(b64url(part.body.data));
+    (part.parts || []).forEach(walk);
+  };
+  walk(message.payload);
+  return chunks.join('\n') || String(message.snippet || '');
+}
+
+/**
+ * Read bounce notices (mailer-daemon / postmaster) from the user's Gmail and
+ * record them: email_bounce_events (the suppression list every sender checks),
+ * the matching campaign recipients and sequence emails marked bounced, and any
+ * active follow-up sequence to that address paused. Delay notices are ignored
+ * until Gmail gives up and sends the permanent failure.
+ */
+async function syncBouncesForUser(
+  // deno-lint-ignore no-explicit-any
+  supabase: SupabaseClient<any, "public", any>,
+  userId: string,
+  accessToken: string,
+  ownEmail: string,
+): Promise<number> {
+  const q = encodeURIComponent('from:(mailer-daemon OR postmaster) newer_than:14d');
+  const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100`, {
+    headers: { 'Authorization': `Bearer ${accessToken}` },
+  });
+  if (!listRes.ok) {
+    console.log(`User ${userId}: could not list bounce notices:`, await listRes.text());
+    return 0;
+  }
+  const ids: string[] = ((await listRes.json()).messages || []).map((m: { id: string }) => m.id);
+  if (!ids.length) return 0;
+
+  const { data: seen } = await supabase
+    .from('email_bounce_events')
+    .select('external_message_id')
+    .eq('user_id', userId)
+    .in('external_message_id', ids);
+  const already = new Set((seen || []).map((r: { external_message_id: string }) => r.external_message_id));
+
+  let recorded = 0;
+  for (const id of ids) {
+    if (already.has(id)) continue;
+    const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+    if (!res.ok) continue;
+    const message = await res.json();
+    const headers = message.payload?.headers || [];
+    const h = (name: string) => headers.find((x: { name: string; value: string }) => x.name.toLowerCase() === name.toLowerCase())?.value || '';
+    const bounce = parseBounce({ from: h('From'), subject: h('Subject'), body: messageText(message) }, [ownEmail]);
+    if (!bounce || !bounce.permanent) continue;
+    // Case-insensitive exact match: escape LIKE wildcards in the address.
+    const emailLike = bounce.recipient.replace(/[\\%_]/g, (c) => '\\' + c);
+
+    const occurredAt = message.internalDate ? new Date(Number(message.internalDate)).toISOString() : new Date().toISOString();
+    const { error: insErr } = await supabase.from('email_bounce_events').insert({
+      user_id: userId,
+      recipient_email: bounce.recipient,
+      bounce_type: 'hard',
+      bounce_reason: bounce.reason,
+      external_message_id: id,
+      occurred_at: occurredAt,
+      metadata: { source: 'gmail_dsn', subject: h('Subject'), gmail_thread_id: message.threadId },
+    });
+    if (insErr) {
+      console.error(`User ${userId}: could not record bounce for ${bounce.recipient}:`, insErr.message);
+      continue;
+    }
+    recorded++;
+
+    // Campaign recipients of this user with that address → bounced.
+    const { data: campaigns } = await supabase.from('email_campaigns').select('id').eq('user_id', userId).limit(5000);
+    const campaignIds = (campaigns || []).map((c: { id: string }) => c.id);
+    if (campaignIds.length) {
+      await supabase.from('email_campaign_recipients')
+        .update({ status: 'bounced', error_message: bounce.reason.slice(0, 300) })
+        .in('campaign_id', campaignIds)
+        .ilike('email', emailLike);
+    }
+
+    // The user's companies that have this contact → stop their follow-ups.
+    const { data: contactRows } = await supabase
+      .from('contacts')
+      .select('id, company_id, companies!inner(user_id)')
+      .ilike('email', emailLike)
+      .eq('companies.user_id', userId);
+    const companyIds = [...new Set((contactRows || []).map((c: { company_id: string }) => c.company_id))];
+    if (contactRows?.length) {
+      await supabase.from('contacts').update({ email_verified: false }).in('id', contactRows.map((c: { id: string }) => c.id));
+    }
+    if (companyIds.length) {
+      const { data: seqs } = await supabase
+        .from('company_sequences')
+        .update({ status: 'paused', next_action: 'paused', updated_at: new Date().toISOString() })
+        .in('company_id', companyIds)
+        .eq('status', 'active')
+        .select('id');
+      const seqIds = (seqs || []).map((s: { id: string }) => s.id);
+      if (seqIds.length) {
+        await supabase.from('email_activities')
+          .update({ status: 'bounced', bounced_at: occurredAt })
+          .in('company_sequence_id', seqIds)
+          .eq('status', 'sent');
+      }
+    }
+    console.log(`User ${userId}: recorded bounce for ${bounce.recipient} (${bounce.reason.slice(0, 80)})`);
+  }
+  return recorded;
+}
+
+// deno-lint-ignore no-explicit-any
+async function syncRepliesForUser(supabase: SupabaseClient<any, "public", any>, userId: string): Promise<{ repliesFound: number; bouncesFound: number }> {
   // Get the Gmail connection
   const { data: connection, error: connError } = await supabase
     .from('crm_connections')
@@ -45,6 +171,14 @@ async function syncRepliesForUser(supabase: SupabaseClient<any, "public", any>, 
 
   if (!accessToken) {
     throw new Error('Gmail access token not found');
+  }
+
+  // Bounces first, so the suppression list is current before anything else runs.
+  let bouncesFound = 0;
+  try {
+    bouncesFound = await syncBouncesForUser(supabase, userId, accessToken, String(connection.from_email || ''));
+  } catch (e) {
+    console.error(`User ${userId}: bounce sync failed:`, e);
   }
 
   // Get email activities that were sent via Gmail (to find thread IDs)
@@ -163,6 +297,9 @@ async function syncRepliesForUser(supabase: SupabaseClient<any, "public", any>, 
         // Skip if this message is from us
         if (fromEmail.toLowerCase() === userEmail) continue;
 
+        // A bounce notice is not a reply from the prospect — syncBouncesForUser handles it.
+        if (parseBounce({ from, subject, body: messageText(message) }, [userEmail || ''])) continue;
+
         // Extract body
         let bodyText = '';
         let bodyHtml = '';
@@ -266,7 +403,7 @@ async function syncRepliesForUser(supabase: SupabaseClient<any, "public", any>, 
     }
   }
 
-  return { repliesFound };
+  return { repliesFound, bouncesFound };
 }
 
 serve(async (req: Request) => {
@@ -294,14 +431,15 @@ serve(async (req: Request) => {
       console.log('Syncing Gmail replies for user:', user.id);
 
       try {
-        const { repliesFound } = await syncRepliesForUser(supabase, user.id);
-        console.log(`Sync complete. Found ${repliesFound} new replies.`);
+        const { repliesFound, bouncesFound } = await syncRepliesForUser(supabase, user.id);
+        console.log(`Sync complete. Found ${repliesFound} new replies, ${bouncesFound} new bounces.`);
 
         return new Response(
           JSON.stringify({
             success: true,
             repliesFound,
-            message: `Synced ${repliesFound} new replies from Gmail`
+            bouncesFound,
+            message: `Synced ${repliesFound} new replies and ${bouncesFound} bounces from Gmail`
           }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },

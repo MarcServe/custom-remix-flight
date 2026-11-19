@@ -1,4 +1,5 @@
 import { getUserPlan, leadsUsedThisMonth } from "../_shared/plans.ts";
+import { isProspectableEmail } from "../_shared/email-quality.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { planDiscoveryQueries } from "../_shared/discovery-planner.ts";
 import { searchWithPerplexity } from "../_shared/discovery-sources.ts";
@@ -665,6 +666,7 @@ function extractEmailsFromHtml(html: string): string[] {
     .filter(email => !excludePatterns.test(email))
     .filter(email => !excludeDomains.test(email))
     .filter(email => email.length < 50) // Reasonable email length
+    .filter(email => isProspectableEmail(email))
     .map(email => email.toLowerCase());
   
   // Deduplicate and prioritize business emails
