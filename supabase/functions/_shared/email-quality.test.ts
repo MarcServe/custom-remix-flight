@@ -12,6 +12,9 @@ Deno.test("rejects scraped junk, placeholders and non-sales inboxes", () => {
     "filler@godaddy.com", "impallari@gmail.com",
     "jobs@fdrsocialcare.co.uk", "press@longtallsally.com", "recruitment@passion4care.co.uk",
     "noreply@x.com", "a@b", "",
+    // Sent through Resend on 19 Nov:
+    "user@domain.com", "hi@mystore.com", "info@mysite.com",
+    "8c4075d5481d476e945486754f783364@sentry.io", "605a7baede844d278b89dc95ae0a9123@sentry-next.wixpress.com",
   ]) {
     assertEquals(emailRejectReason(e) !== null, true, `should reject ${e}`);
   }

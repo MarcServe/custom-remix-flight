@@ -199,16 +199,59 @@ serve(async (req) => {
       emailProvider = businessProfile?.email_provider || 'resend';
       senderName = businessProfile?.company_name || 'Your Company';
       fromEmail = (await (async () => {
-        const { data: connection } = await supabase
+        // limit(1), not maybeSingle(): with several senders on one provider (e.g. two
+        // Resend addresses) maybeSingle() errors and the From fell back to the login email.
+        const { data: rows } = await supabase
           .from('crm_connections')
           .select('from_email')
           .eq('user_id', userId)
           .in('provider', [emailProvider, 'smtp'])
           .eq('status', 'active')
           .order('provider', { ascending: emailProvider === 'smtp' })
-          .maybeSingle();
-        return connection?.from_email || userProfile?.email || 'noreply@yourdomain.com';
+          .limit(1);
+        return rows?.[0]?.from_email || userProfile?.email || 'noreply@yourdomain.com';
       })()) as string;
+
+      // Follow-ups go out through the same account as the campaign that started the
+      // sequence. Previously they always used Business Profile → Email Provider, so a
+      // campaign sent via Resend had its follow-ups sent from the user's Gmail.
+      const campaignId = (companySequence as { campaign_id?: string | null }).campaign_id;
+      if (campaignId) {
+        const { data: camp } = await supabase
+          .from('email_campaigns')
+          .select('sender_connection_id')
+          .eq('id', campaignId)
+          .eq('user_id', userId)
+          .maybeSingle();
+        let conn: { provider: string; from_email: string | null } | null = null;
+        if (camp?.sender_connection_id) {
+          const { data } = await supabase
+            .from('crm_connections')
+            .select('provider, from_email')
+            .eq('id', camp.sender_connection_id)
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .maybeSingle();
+          conn = data;
+        }
+        if (!conn) {
+          // Campaign had no explicit sender: send-bulk-emails prefers an active Resend /
+          // SendGrid account, so mirror that rather than dropping to Gmail.
+          const { data: apiConns } = await supabase
+            .from('crm_connections')
+            .select('provider, from_email, tracking_enabled')
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .in('provider', ['resend', 'sendgrid'])
+            .order('tracking_enabled', { ascending: false })
+            .limit(1);
+          conn = apiConns?.[0] ?? null;
+        }
+        if (conn) {
+          emailProvider = conn.provider;
+          if (conn.from_email) fromEmail = conn.from_email;
+        }
+      }
 
       const useBranding = (companySequence.sequence as { use_email_branding?: boolean } | null)?.use_email_branding !== false;
       if (useBranding && businessProfile) {

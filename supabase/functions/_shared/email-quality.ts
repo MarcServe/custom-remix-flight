@@ -17,7 +17,10 @@ const PLACEHOLDER_DOMAINS = new Set([
   "domain.com", "yourdomain.com", "email.com", "youremail.com", "yourcompany.com",
   "company.com", "test.com", "abc.xyz", "sentry.io", "wixpress.com",
   "sentry.wixpress.com", "sentry-next.wixpress.com", "godaddy.com",
+  "mysite.com", "mystore.com", "yoursite.com", "yourwebsite.com", "website.com", "yourstore.com",
 ]);
+// Wix error-tracking addresses on any subdomain, e.g. 605a…@sentry-next.wixpress.com
+const TOOLING_DOMAIN = /(^|\.)(sentry\.io|wixpress\.com)$/i;
 const RESERVED_TLD = /\.(example|test|invalid|localhost|local)$/i;
 
 // Local parts that are placeholders in website templates and form hints.
@@ -67,7 +70,7 @@ export function emailRejectReason(raw: unknown): string | null {
   // Retina asset suffixes ("logo@2x-foo...") even when the extension was cut off.
   if (/^\d+(\.\d+)?x\b/.test(domain)) return "image or file name, not an email address";
   if (KNOWN_JUNK.has(email)) return "address copied from page boilerplate";
-  if (PLACEHOLDER_DOMAINS.has(domain) || RESERVED_TLD.test(domain)) return "placeholder address";
+  if (PLACEHOLDER_DOMAINS.has(domain) || TOOLING_DOMAIN.test(domain) || RESERVED_TLD.test(domain)) return "placeholder address";
   if (PLACEHOLDER_LOCALS.has(local)) return "placeholder address";
   if (NON_SALES_LOCAL.test(local)) return "non-sales mailbox";
   return null;
