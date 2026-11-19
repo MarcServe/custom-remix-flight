@@ -199,7 +199,7 @@ serve(async (req) => {
         }
 
         // Get last email activity (most recent for this step)
-        const { data: lastActivity } = await supabase
+        const { data: foundActivity } = await supabase
           .from('email_activities')
           .select('*')
           .eq('company_sequence_id', sequence.id)
@@ -207,6 +207,26 @@ serve(async (req) => {
           .order('sent_at', { ascending: false })
           .limit(1)
           .maybeSingle();
+
+        // deno-lint-ignore no-explicit-any
+        let lastActivity: any = foundActivity;
+
+        // Campaign enrolments store step 0 as a '(Campaign)' stub: the campaign email
+        // already went out (send-bulk-emails records it in metadata.first_email_sent_at),
+        // not as an email_activities row. Time the follow-ups from that send instead of
+        // "recovering" step 0 — which used to mail the empty '(Campaign)' stub.
+        if (!lastActivity?.sent_at && sequence.current_step === 0) {
+          const stub = sequence.personalized_emails?.[0];
+          const isStub = !!stub && (stub.subject === '(Campaign)' || !String(stub.body || '').trim());
+          if (isStub) {
+            const firstSentAt = (sequence.metadata as { first_email_sent_at?: string } | null)?.first_email_sent_at;
+            if (!firstSentAt) {
+              console.warn(`Sequence ${sequence.id}: step 0 is the campaign stub but no first_email_sent_at — skipping`);
+              continue;
+            }
+            lastActivity = { sent_at: firstSentAt, opened_at: null, replied_at: null, metadata: {} };
+          }
+        }
 
         if (!lastActivity?.sent_at) {
           // If stuck at step 0 with no activity, the initial email was never sent or never recorded.
@@ -254,7 +274,9 @@ serve(async (req) => {
         if (replyActivity) {
           await supabase
             .from('company_sequences')
-            .update({ status: 'completed', next_action: 'replied', updated_at: new Date().toISOString() })
+            // next_action is CHECK-constrained (send_next_step|wait_for_response|personalized_response|completed|paused);
+            // 'replied' made this update fail, so sequences kept following up after a reply.
+            .update({ status: 'completed', next_action: 'completed', updated_at: new Date().toISOString() })
             .eq('id', sequence.id);
           console.log(`Sequence ${sequence.id}: contact replied — follow-ups stopped`);
           processed.push({ sequenceId: sequence.id, stepNumber: sequence.current_step, trigger: 'stopped_on_reply' });

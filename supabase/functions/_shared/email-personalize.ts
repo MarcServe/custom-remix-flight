@@ -1,3 +1,5 @@
+import { greetingFirstName } from './email-quality.ts';
+
 /** Merge-token context for campaign email personalization (edge). */
 export type EmailMergeContext = {
   firstName?: string | null;
@@ -65,7 +67,8 @@ export function mergeContextFromRecipient(
   const fullName = (recipient.name || recipient.email || '').trim();
   const parts = fullName.split(/\s+/);
   return {
-    firstName: parts[0] || '',
+    // recipient.name is often the company ("Reiss") or an email — greet "there" then.
+    firstName: greetingFirstName(recipient.name, { company: recipient.company_name, email: recipient.email }),
     lastName: parts.slice(1).join(' ') || '',
     fullName,
     email: recipient.email || '',

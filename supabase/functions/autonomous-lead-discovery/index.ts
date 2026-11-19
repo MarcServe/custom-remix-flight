@@ -1,3 +1,4 @@
+import { greetingFirstName } from "../_shared/email-quality.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { planDiscoveryQueries, type PlannedQuery } from "../_shared/discovery-planner.ts";
 import { getUserPlan, leadsUsedThisMonth } from "../_shared/plans.ts";
@@ -1813,7 +1814,7 @@ async function createAutoCampaigns(
         }));
       }
       const genericSubject = `Quick question for {{company}}`;
-      const genericBody = `Hi {{name}},\n\nI came across {{company}} and wanted to reach out.\n\n${persona?.value_proposition || businessProfile?.services_description || 'We help organisations like yours.'}\n\n${persona?.call_to_action || 'Would a short call be useful?'}\n\nBest regards,\n${senderProfile?.full_name || ''}`;
+      const genericBody = `Hi {{firstName}},\n\nI came across {{company}} and wanted to reach out.\n\n${persona?.value_proposition || businessProfile?.services_description || 'We help organisations like yours.'}\n\n${persona?.call_to_action || 'Would a short call be useful?'}\n\nBest regards,\n${senderProfile?.full_name || ''}`;
       for (const contact of contacts) {
         const person = peopleMap.get(contact.email.toLowerCase());
         if (!person) continue;
@@ -1824,10 +1825,11 @@ async function createAutoCampaigns(
         let personalizedSubject = own ? own.subject : genericSubject;
         let personalizedBodyText = own ? own.body : genericBody;
         let personalizedBodyHtml = `<p>${personalizedBodyText.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`;
-        const first = contactName.split(' ')[0];
+        const first = greetingFirstName(contactName, { company: lead?.company_name, email: contact.email });
         const company = lead?.company_name || 'your company';
         const fill = (t: string) => t.replace(/\{\{name\}\}/g, contactName).replace(/\{\{firstName\}\}/g, first).replace(/\{\{company\}\}/g, company);
-        personalizedSubject = fill(personalizedSubject).replace(contactName, first);
+        personalizedSubject = fill(personalizedSubject);
+        if (first !== 'there') personalizedSubject = personalizedSubject.replace(contactName, first);
         personalizedBodyHtml = fill(personalizedBodyHtml);
         personalizedBodyText = fill(personalizedBodyText);
         recipientInserts.push({

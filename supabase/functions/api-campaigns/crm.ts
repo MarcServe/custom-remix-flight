@@ -1,4 +1,5 @@
 import { ensurePersonCompany, parseSteps } from "../_shared/followup.ts";
+import { greetingFirstName } from "../_shared/email-quality.ts";
 import { fetchAllRows } from "../_shared/fetch-all.ts";
 import { sendOneSms, activePhoneConnection, isOptedOut, senderNumberOf, logSms, nameForNumber, normalizePhone as normalizeE164 } from "../_shared/sms-send.ts";
 
@@ -51,7 +52,7 @@ function personalize(tpl: string, r: any): string {
   if (!tpl) return "";
   const full = [r.first_name, r.last_name].filter(Boolean).join(" ") || r.name || r.email || "";
   return tpl
-    .replace(/\{\{\s*firstName\s*\}\}/gi, r.first_name || (full.split(" ")[0] || ""))
+    .replace(/\{\{\s*firstName\s*\}\}/gi, greetingFirstName(r.first_name || full, { company: r.company, email: r.email }))
     .replace(/\{\{\s*lastName\s*\}\}/gi, r.last_name || full.split(" ").slice(1).join(" ") || "")
     .replace(/\{\{\s*fullName\s*\}\}/gi, full)
     .replace(/\{\{\s*name\s*\}\}/gi, full)

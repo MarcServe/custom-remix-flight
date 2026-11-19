@@ -3,6 +3,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { renderEmailTemplate } from '../_shared/professional-template.ts';
+import { emailRejectReason, loadSuppressedEmails, normalizeEmail, greetingFirstName } from '../_shared/email-quality.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const SENDGRID_API_KEY = Deno.env.get('SENDGRID_API_KEY');
@@ -51,6 +52,17 @@ serve(async (req) => {
 
     if (!emailStep) {
       throw new Error(`Step ${stepNumber} not found`);
+    }
+
+    // The campaign enrolment stores step 0 as a '(Campaign)' stub with no body —
+    // the campaign email itself already went out. Never send a stub or an empty step.
+    const stepBody = String(emailStep.body || '').trim();
+    if (!stepBody || emailStep.subject === '(Campaign)') {
+      console.warn(`Sequence ${companySequenceId}: step ${stepNumber} has no content (placeholder) — not sending`);
+      return new Response(
+        JSON.stringify({ success: false, skipped: true, reason: 'empty_or_placeholder_step' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
     }
 
     // Fetch contacts for this company. Campaign enrollments often only create
@@ -124,18 +136,38 @@ serve(async (req) => {
     const company = companySequence.company as { id: string; name: string; website?: string; user_id?: string } | null;
     const userId = authUser?.id ?? company?.user_id ?? null;
 
+    // Stop before sending to junk or previously bounced addresses, and pause the
+    // sequence so it does not retry every tick.
+    {
+      const to = normalizeEmail((contact as any).email);
+      const junk = emailRejectReason(to);
+      const suppressed = !junk && (await loadSuppressedEmails(supabase, userId)).has(to);
+      if (junk || suppressed) {
+        const reason = junk ? `invalid recipient: ${junk}` : 'recipient previously bounced';
+        console.warn(`Sequence ${companySequenceId}: not sending to ${to} (${reason}) — pausing`);
+        await supabase.from('contacts').update({ email_verified: false }).eq('id', (contact as any).id);
+        await supabase.from('company_sequences')
+          .update({ status: 'paused', next_action: 'paused', updated_at: new Date().toISOString() })
+          .eq('id', companySequenceId);
+        return new Response(
+          JSON.stringify({ success: false, skipped: true, reason }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      }
+    }
+
     // Personalize the step's subject/body with the recipient contact's details.
     // The follow-up templates carry {{firstName}} etc. verbatim, so substitute here
     // (send-sequence-email never did, which is why literal {{firstName}} shipped).
     {
       const cname = String((contact as any).name || '').trim();
-      const cfirst = cname ? cname.split(/\s+/)[0] : '';
+      const cfirst = greetingFirstName(cname, { company: company?.name, email: (contact as any).email });
       const clast = cname ? cname.split(/\s+/).slice(1).join(' ') : '';
       const cfull = cname || String((contact as any).email || '');
       const ccompany = String(company?.name || '').trim();
       const cemail = String((contact as any).email || '');
       const fill = (tpl: string): string => (tpl || '')
-        .replace(/\{\{\s*first[_ ]?name\s*\}\}/gi, cfirst || 'there')
+        .replace(/\{\{\s*first[_ ]?name\s*\}\}/gi, cfirst)
         .replace(/\{\{\s*last[_ ]?name\s*\}\}/gi, clast)
         .replace(/\{\{\s*full[_ ]?name\s*\}\}/gi, cfull)
         .replace(/\{\{\s*name\s*\}\}/gi, cfull)
@@ -167,16 +199,59 @@ serve(async (req) => {
       emailProvider = businessProfile?.email_provider || 'resend';
       senderName = businessProfile?.company_name || 'Your Company';
       fromEmail = (await (async () => {
-        const { data: connection } = await supabase
+        // limit(1), not maybeSingle(): with several senders on one provider (e.g. two
+        // Resend addresses) maybeSingle() errors and the From fell back to the login email.
+        const { data: rows } = await supabase
           .from('crm_connections')
           .select('from_email')
           .eq('user_id', userId)
           .in('provider', [emailProvider, 'smtp'])
           .eq('status', 'active')
           .order('provider', { ascending: emailProvider === 'smtp' })
-          .maybeSingle();
-        return connection?.from_email || userProfile?.email || 'noreply@yourdomain.com';
+          .limit(1);
+        return rows?.[0]?.from_email || userProfile?.email || 'noreply@yourdomain.com';
       })()) as string;
+
+      // Follow-ups go out through the same account as the campaign that started the
+      // sequence. Previously they always used Business Profile → Email Provider, so a
+      // campaign sent via Resend had its follow-ups sent from the user's Gmail.
+      const campaignId = (companySequence as { campaign_id?: string | null }).campaign_id;
+      if (campaignId) {
+        const { data: camp } = await supabase
+          .from('email_campaigns')
+          .select('sender_connection_id')
+          .eq('id', campaignId)
+          .eq('user_id', userId)
+          .maybeSingle();
+        let conn: { provider: string; from_email: string | null } | null = null;
+        if (camp?.sender_connection_id) {
+          const { data } = await supabase
+            .from('crm_connections')
+            .select('provider, from_email')
+            .eq('id', camp.sender_connection_id)
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .maybeSingle();
+          conn = data;
+        }
+        if (!conn) {
+          // Campaign had no explicit sender: send-bulk-emails prefers an active Resend /
+          // SendGrid account, so mirror that rather than dropping to Gmail.
+          const { data: apiConns } = await supabase
+            .from('crm_connections')
+            .select('provider, from_email, tracking_enabled')
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .in('provider', ['resend', 'sendgrid'])
+            .order('tracking_enabled', { ascending: false })
+            .limit(1);
+          conn = apiConns?.[0] ?? null;
+        }
+        if (conn) {
+          emailProvider = conn.provider;
+          if (conn.from_email) fromEmail = conn.from_email;
+        }
+      }
 
       const useBranding = (companySequence.sequence as { use_email_branding?: boolean } | null)?.use_email_branding !== false;
       if (useBranding && businessProfile) {

@@ -4,6 +4,7 @@
 // more in the background ("small now, more later"). Auth via the caller's Supabase
 // session (user JWT). Mirrors api-campaigns' CRM linking + no-reply follow-up.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isProspectableEmail } from "../_shared/email-quality.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -143,7 +144,7 @@ function extractBusinessEmail(html: string, siteDomain: string): string | null {
   const found = html.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || [];
   for (const raw of found) {
     const email = raw.toLowerCase();
-    if (!EMAIL_RE.test(email)) continue;
+    if (!EMAIL_RE.test(email) || !isProspectableEmail(email)) continue;
     const [local, domain] = email.split("@");
     if (GENERIC_LOCAL.test(local)) continue;
     if (/\.(png|jpg|jpeg|gif|webp|svg|css|js)$/i.test(email)) continue;
@@ -154,7 +155,7 @@ function extractBusinessEmail(html: string, siteDomain: string): string | null {
   // Fall back to the first non-generic, non-freemail email.
   for (const raw of found) {
     const email = raw.toLowerCase();
-    if (!EMAIL_RE.test(email)) continue;
+    if (!EMAIL_RE.test(email) || !isProspectableEmail(email)) continue;
     const [local, domain] = email.split("@");
     if (GENERIC_LOCAL.test(local) || FREEMAIL.has(domain) || /\.(png|jpg|jpeg|gif|webp|svg|css|js)$/i.test(email)) continue;
     return email;
