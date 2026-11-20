@@ -10,6 +10,28 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
  * Webhook handler for email events (opens, clicks, bounces, replies)
  * This handles events from Resend or similar email providers
  */
+// Records a hard bounce / spam complaint on the suppression list every sender checks.
+// Resend marks temporary failures "Transient": those are soft and never suppress.
+async function recordBounce(db: any, opts: { userId: string | null | undefined; email: string | null | undefined; eventType: string; eventData: any; emailId: string | null; activityId?: string | null }) {
+  const email = String(opts.email || '').trim().toLowerCase();
+  if (!opts.userId || !email.includes('@')) return;
+  const complaint = opts.eventType === 'email.spam' || opts.eventType === 'email.complained';
+  const bounceInfo = opts.eventData?.bounce || {};
+  const transient = /transient|soft|temporary/i.test(String(bounceInfo.type || opts.eventData?.bounce_type || ''));
+  const bounceType = complaint ? 'complaint' : (transient ? 'soft' : 'hard');
+  const { error } = await db.from('email_bounce_events').insert({
+    user_id: opts.userId,
+    email_activity_id: opts.activityId ?? null,
+    recipient_email: email,
+    bounce_type: bounceType,
+    bounce_reason: complaint ? 'Marked as spam' : String(bounceInfo.message || opts.eventData?.reason || bounceInfo.subType || 'Bounced').slice(0, 500),
+    external_message_id: opts.emailId,
+    occurred_at: new Date().toISOString(),
+    metadata: { source: 'webhook', event: opts.eventType },
+  });
+  if (error) console.error('[email-webhook] could not record bounce:', error.message);
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -62,6 +84,7 @@ serve(async (req) => {
           eventType = payload.type;
           eventData = payload.data;
           emailId = eventData.email_id || eventData.id;
+          if (eventType === 'email.complained') eventType = 'email.spam';
           console.log('Detected Resend webhook format');
         } else if (payload.event && payload.sg_message_id) {
           // SendGrid format (individual event)
@@ -104,7 +127,7 @@ serve(async (req) => {
           // Try to find a campaign recipient directly by external_message_id
           let directRecipient = (await supabase
             .from('email_campaign_recipients')
-            .select('id, campaign_id')
+            .select('id, campaign_id, email')
             .eq('external_message_id', emailId)
             .maybeSingle()).data;
           if (!directRecipient && eventData?.to?.length > 0) {
@@ -114,7 +137,7 @@ serve(async (req) => {
             if (recipientEmail) {
               const { data: byEmail } = await supabase
                 .from('email_campaign_recipients')
-                .select('id, campaign_id')
+                .select('id, campaign_id, email')
                 .ilike('email', recipientEmail)
                 .eq('status', 'sent')
                 .order('sent_at', { ascending: false })
@@ -143,6 +166,10 @@ serve(async (req) => {
               recipientUpdates.status = 'bounced';
             } else if (eventType === 'email.delivered') {
               recipientUpdates.delivered_at = new Date().toISOString();
+            }
+            if (eventType === 'email.bounced' || eventType === 'email.spam') {
+              const { data: camp } = await supabase.from('email_campaigns').select('user_id').eq('id', directRecipient.campaign_id).maybeSingle();
+              await recordBounce(supabase, { userId: camp?.user_id, email: (directRecipient as any).email || eventData?.to?.[0], eventType, eventData, emailId });
             }
             if (Object.keys(recipientUpdates).length > 0) {
               await supabase
@@ -301,24 +328,11 @@ serve(async (req) => {
             // Track bounce event
             const { data: sequenceData } = await supabase
               .from('company_sequences')
-              .select('sequence:email_sequences(user_id)')
+              .select('company:companies(user_id)')
               .eq('id', activity.company_sequence_id)
               .single();
             
-            if (sequenceData) {
-              await supabase
-                .from('email_bounce_events')
-                .insert({
-                  user_id: (sequenceData.sequence as any)?.user_id,
-                  email_activity_id: activity.id,
-                  recipient_email: eventData.email || 'unknown',
-                  bounce_type: bounceType,
-                  bounce_reason: eventData.reason || eventData.type || 'No reason provided',
-                  external_message_id: emailId,
-                  occurred_at: new Date().toISOString(),
-                  metadata: eventData,
-                });
-            }
+            await recordBounce(supabase, { userId: (sequenceData?.company as any)?.user_id, email: eventData.email || eventData?.to?.[0] || activity.metadata?.to_email, eventType, eventData, emailId, activityId: activity.id });
             
             // Pause the sequence if email bounced
             await supabase
@@ -358,24 +372,11 @@ serve(async (req) => {
             // Track spam complaint as a bounce event
             const { data: spamSequenceData } = await supabase
               .from('company_sequences')
-              .select('sequence:email_sequences(user_id)')
+              .select('company:companies(user_id)')
               .eq('id', activity.company_sequence_id)
               .single();
             
-            if (spamSequenceData) {
-              await supabase
-                .from('email_bounce_events')
-                .insert({
-                  user_id: (spamSequenceData.sequence as any)?.user_id,
-                  email_activity_id: activity.id,
-                  recipient_email: eventData.email || 'unknown',
-                  bounce_type: 'complaint',
-                  bounce_reason: 'Marked as spam',
-                  external_message_id: emailId,
-                  occurred_at: new Date().toISOString(),
-                  metadata: eventData,
-                });
-            }
+            await recordBounce(supabase, { userId: (spamSequenceData?.company as any)?.user_id, email: eventData.email || eventData?.to?.[0] || activity.metadata?.to_email, eventType, eventData, emailId, activityId: activity.id });
             
             console.log(`Email marked as spam: ${emailId}`);
             

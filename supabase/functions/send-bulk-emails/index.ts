@@ -7,6 +7,7 @@ import { personalizeEmailTemplate, mergeContextFromRecipient } from "../_shared/
 import { isProspectableEmail, loadSuppressedEmails, normalizeEmail } from "../_shared/email-quality.ts";
 import { ensurePersonCompany } from "../_shared/followup.ts";
 import { followUpSequenceFromBody } from "../_shared/followups-from-body.ts";
+import { fetchAllRows } from "../_shared/fetch-all.ts";
 import { resendFromAddress } from "../_shared/resend-from.ts";
 
 // Follow-ups are always written from the campaign's own email. Resolved once per campaign per run.
@@ -299,12 +300,15 @@ serve(async (req) => {
 
     // Check if this is a service role request (from cron-trigger)
     const authHeader = req.headers.get('Authorization') || '';
-    const isServiceRole = authHeader.includes(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || 'invalid');
+    // Only the real service key unlocks the cron path. "triggeredByCron" in the body is
+    // caller-supplied, so on its own it must never bypass sign-in and ownership checks.
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const isServiceRole = serviceRoleKey.length > 0 && authHeader === `Bearer ${serviceRoleKey}`;
 
     let supabaseClient: any;
     let userId: string | null = null;
 
-    if (isServiceRole || triggeredByCron) {
+    if (isServiceRole) {
       supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -330,12 +334,12 @@ serve(async (req) => {
       .from('email_campaigns').select('*').eq('id', campaignId).single();
     if (campaignError || !campaign) throw new Error('Campaign not found');
 
-    if (!isServiceRole && !triggeredByCron && campaign.user_id !== userId) {
+    if (!isServiceRole && campaign.user_id !== userId) {
       throw new Error('Unauthorized: Campaign does not belong to user');
     }
 
     // After auth, use service role for all DB operations
-    if (!isServiceRole && !triggeredByCron) {
+    if (!isServiceRole) {
       supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -348,16 +352,21 @@ serve(async (req) => {
       started_at: new Date().toISOString()
     }).eq('id', campaignId);
 
-    // Get ALL pending recipients — no limit for Resend (handles thousands instantly)
-    const { data: allPendingRecipients, error: recipientsError } = await supabaseClient
-      .from('email_campaign_recipients')
-      .select('*')
-      .eq('campaign_id', campaignId)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: true })
-      .limit(100000);
-
-    if (recipientsError) throw new Error('Failed to fetch recipients');
+    // Get ALL pending recipients. The database returns at most 1,000 rows per read and
+    // ignores a larger .limit(), so page through them: a single read silently capped
+    // campaigns at 1,000 while the lock below marked everyone else "sent".
+    let allPendingRecipients: any[];
+    try {
+      allPendingRecipients = await fetchAllRows(() => supabaseClient
+        .from('email_campaign_recipients')
+        .select('*')
+        .eq('campaign_id', campaignId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true }));
+    } catch {
+      throw new Error('Failed to fetch recipients');
+    }
 
     // Hard bounces / complaints from earlier sends (Resend webhooks + Gmail bounce notices).
     const suppressedEmails = await loadSuppressedEmails(supabaseClient, userId);
@@ -381,13 +390,30 @@ serve(async (req) => {
     // ({id,status,sent_at}) violates NOT NULL and silently fails — which left
     // recipients stuck 'pending' and campaigns stuck 'sending' even after Resend
     // had sent everything. A single UPDATE by campaign + status avoids that.
+    // Lock exactly the recipients this run read (by id), never "everything pending".
     const lockSentAt = new Date().toISOString();
-    const { error: lockErr } = await supabaseClient.from('email_campaign_recipients')
-      .update({ status: 'sent', sent_at: lockSentAt })
-      .eq('campaign_id', campaignId)
-      .eq('status', 'pending');
+    const lockIds = allPendingRecipients.map((r: any) => r.id);
+    let lockErr: any = null;
+    for (let i = 0; i < lockIds.length; i += 500) {
+      const { error } = await supabaseClient.from('email_campaign_recipients')
+        .update({ status: 'sent', sent_at: lockSentAt })
+        .in('id', lockIds.slice(i, i + 500))
+        .eq('status', 'pending');
+      if (error) lockErr = error;
+    }
     if (lockErr) console.error('[Lock] Failed to optimistically mark recipients sent:', lockErr.message);
     else console.log(`[Lock] Optimistically marked ${allPendingRecipients.length} recipients as sent — cron cannot double-send now`);
+    // Anyone a daily limit holds back goes back to 'pending' so a later run sends them.
+    const releaseUnsent = async (rows: any[]) => {
+      const ids = rows.map((r: any) => r.id);
+      for (let i = 0; i < ids.length; i += 500) {
+        await supabaseClient.from('email_campaign_recipients')
+          .update({ status: 'pending', sent_at: null })
+          .in('id', ids.slice(i, i + 500))
+          .eq('sent_at', lockSentAt);
+      }
+      if (ids.length) console.log(`[Lock] Released ${ids.length} recipients back to pending for a later run`);
+    };
 
     let sentCount = 0;
     let failedCount = 0;
@@ -758,6 +784,7 @@ serve(async (req) => {
 
       const remainingQuota = Math.max(0, GMAIL_DAILY_LIMIT - (todaySentCount || 0));
       const recipients = allPendingRecipients.slice(0, remainingQuota);
+      await releaseUnsent(allPendingRecipients.slice(remainingQuota));
 
       console.log(`[Gmail] Daily quota: ${todaySentCount || 0} sent today, ${remainingQuota} remaining. Processing ${recipients.length} of ${allPendingRecipients.length} pending.`);
 

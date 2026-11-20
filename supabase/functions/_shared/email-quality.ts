@@ -88,17 +88,24 @@ export function isProspectableEmail(raw: unknown): boolean {
 export async function loadSuppressedEmails(db: any, userId: string | null | undefined): Promise<Set<string>> {
   const out = new Set<string>();
   if (!userId) return out;
-  const { data, error } = await db
-    .from("email_bounce_events")
-    .select("recipient_email")
-    .eq("user_id", userId)
-    .in("bounce_type", ["hard", "complaint"])
-    .limit(20000);
-  if (error) {
-    console.error("[email-quality] Could not load suppression list:", error.message);
-    return out;
+  // The database returns at most 1,000 rows per read (a larger .limit() is ignored), so page.
+  const data: { recipient_email?: string }[] = [];
+  for (let from = 0; from < 200_000; from += 1000) {
+    const { data: page, error } = await db
+      .from("email_bounce_events")
+      .select("recipient_email")
+      .eq("user_id", userId)
+      .in("bounce_type", ["hard", "complaint"])
+      .order("recipient_email", { ascending: true })
+      .range(from, from + 999);
+    if (error) {
+      console.error("[email-quality] Could not load suppression list:", error.message);
+      break;
+    }
+    data.push(...(page || []));
+    if (!page || page.length < 1000) break;
   }
-  for (const row of data || []) {
+  for (const row of data) {
     const e = normalizeEmail((row as { recipient_email?: string }).recipient_email);
     if (e) out.add(e);
   }
