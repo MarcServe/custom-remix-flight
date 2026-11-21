@@ -2098,16 +2098,18 @@ function shouldRunDiscovery(setting: any): boolean {
   const lastRun = setting.last_run_at ? new Date(setting.last_run_at) : null;
   const nextRun = setting.next_run_at ? new Date(setting.next_run_at) : null;
 
-  if (nextRun && nextRun > now) return false;
+  // next_run_at (set to the preferred local hour after every run) is the schedule.
+  if (nextRun) return nextRun.getTime() <= now.getTime() + 5 * 60 * 1000;
   if (!lastRun) return true;
 
+  // No next_run_at: fall back to time since the last run, with slack. A run takes a few
+  // minutes and records last_run_at when it finishes, so "24 hours later" arrives a minute
+  // or two after the next scheduled start; a strict >= 24h check skipped every other day.
   const hoursSinceLastRun = (now.getTime() - lastRun.getTime()) / (1000 * 60 * 60);
-
   switch (setting.discovery_frequency) {
-    case 'daily': return hoursSinceLastRun >= 24;
-    case 'twice_weekly': return hoursSinceLastRun >= 84;
-    case 'weekly': return hoursSinceLastRun >= 168;
-    default: return hoursSinceLastRun >= 24;
+    case 'twice_weekly': return hoursSinceLastRun >= 80;
+    case 'weekly': return hoursSinceLastRun >= 160;
+    default: return hoursSinceLastRun >= 20;
   }
 }
 
