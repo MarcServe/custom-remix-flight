@@ -142,3 +142,6 @@ verify_jwt = false
 
 [functions.admin-api]
 verify_jwt = true  # Signed-in platform admins only (checked again in code)
+
+[functions.support-assistant]
+verify_jwt = true  # Signed-in users only (checked again in code)

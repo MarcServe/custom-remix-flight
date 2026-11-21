@@ -18,6 +18,7 @@ import { CampaignDialogProvider } from "./contexts/CampaignDialogContext";
 import { GlobalCampaignDialog } from "./components/GlobalCampaignDialog";
 import { Sidebar } from "./components/Sidebar";
 import { ResearchChatSlideOut } from "./components/ResearchChatSlideOut";
+import { SupportAssistant } from "./components/SupportAssistant";
 import { useAllRealtime } from "./hooks/use-realtime";
 import { useAllEmailNotifications } from "./hooks/use-email-notifications";
 import Dashboard from "./pages/Dashboard";
@@ -167,6 +168,7 @@ const App = () => (
                         </main>
                       </div>
                       <ResearchChatSlideOut />
+                      <SupportAssistant />
                     </ResearchChatProvider>
                     </CampaignDialogProvider>
                   </ProtectedRoute>
