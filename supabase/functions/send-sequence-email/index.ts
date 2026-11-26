@@ -67,12 +67,26 @@ serve(async (req) => {
 
     // Fetch contacts for this company. Campaign enrollments often only create
     // `people` rows — ensure a verified contacts row exists so auto-sequence can send.
-    let { data: contacts, error: contactsError } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('company_id', companySequence.company_id)
-      .eq('email_verified', true)
-      .limit(1);
+    // An enrolment made for a specific address (enroll_in_sequence stores metadata.recipient_email)
+    // must go to that contact, not whichever verified contact on the company comes back first.
+    const recipientEmail = String(companySequence.metadata?.recipient_email || '').trim().toLowerCase();
+    let { data: contacts, error: contactsError } = recipientEmail
+      ? await supabase
+        .from('contacts')
+        .select('*')
+        .eq('company_id', companySequence.company_id)
+        .eq('email', recipientEmail)
+        .eq('email_verified', true)
+        .limit(1)
+      : { data: null, error: null };
+    if (!contactsError && !contacts?.length) {
+      ({ data: contacts, error: contactsError } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('company_id', companySequence.company_id)
+        .eq('email_verified', true)
+        .limit(1));
+    }
 
     if (contactsError) {
       throw new Error(`Failed to load contacts: ${contactsError.message}`);

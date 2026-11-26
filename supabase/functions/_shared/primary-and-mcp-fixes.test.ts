@@ -93,3 +93,10 @@ Deno.test("enroll: links an existing CRM company on the same domain instead of d
   const r = await ensurePersonCompany(db, "u1", { email: "info@wildyeastbakery.co.uk", company: "Wild Yeast" });
   assertEquals(r.companyId, "c-wild");
 });
+
+Deno.test("send-sequence-email sends to the enrolment's own recipient when it is known", () => {
+  const src = read("functions/send-sequence-email/index.ts");
+  const i = src.indexOf("metadata?.recipient_email");
+  assert(i > 0, "send-sequence-email ignores metadata.recipient_email");
+  assert(i < src.indexOf("const contact = contacts[0]"), "recipient lookup must happen before the contact is chosen");
+});
