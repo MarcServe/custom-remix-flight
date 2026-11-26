@@ -1,5 +1,5 @@
 import { ensurePersonCompany, parseSteps } from "../_shared/followup.ts";
-import { greetingFirstName, isPlaceholderName } from "../_shared/email-quality.ts";
+import { greetingFirstName, isPlaceholderName, emailRejectReason } from "../_shared/email-quality.ts";
 import { fetchAllRows } from "../_shared/fetch-all.ts";
 import { sendOneSms, activePhoneConnection, isOptedOut, senderNumberOf, logSms, nameForNumber, normalizePhone as normalizeE164 } from "../_shared/sms-send.ts";
 
@@ -740,14 +740,14 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
       if (!incoming.length) return json({ error: "Provide recipients[], contact_ids[], company_ids[] or group_id/group_name" }, 400);
 
       const sendFirstNow = body.send_first_now !== false;
-      const seen = new Set<string>(); const enrolled: any[] = []; let skippedInvalid = 0; let skippedAlready = 0;
+      const seen = new Set<string>(); const enrolled: any[] = []; let skippedInvalid = 0; let skippedAlready = 0; const skippedDetail: { email: string; reason: string }[] = [];
       const emails = incoming.map((r) => str(r?.email).toLowerCase()).filter((e) => EMAIL_RE.test(e));
-      const uniq = incoming.filter((r) => { const e = str(r?.email).toLowerCase(); if (!EMAIL_RE.test(e)) { skippedInvalid++; return false; } if (seen.has(e)) return false; seen.add(e); return true; });
+      const uniq = incoming.filter((r) => { const e = str(r?.email).toLowerCase(); if (!EMAIL_RE.test(e)) { skippedInvalid++; skippedDetail.push({ email: e, reason: "not an email address" }); return false; } if (seen.has(e)) return false; seen.add(e); return true; });
       for (const r of uniq) {
         const email = str(r.email).toLowerCase();
         const vars = { first_name: r.first_name || "", last_name: r.last_name || "", name: r.name || "", company: r.company || "", email };
         const { companyId } = await ensurePersonCompany(db, userId, { email, first_name: r.first_name, last_name: r.last_name, name: r.name, company: r.company });
-        if (!companyId) { skippedInvalid++; continue; }
+        if (!companyId) { skippedInvalid++; skippedDetail.push({ email, reason: emailRejectReason(email) || "could not link a CRM company" }); continue; }
         const { data: existing } = await db.from("company_sequences").select("id, status").eq("sequence_id", seq.id).eq("company_id", companyId).in("status", ["active", "paused"]).limit(1).maybeSingle();
         if (existing) { skippedAlready++; continue; }
         const personalized = steps.map((st, i) => ({
@@ -778,7 +778,7 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
         firstEmail = results;
       }
       return json({
-        sequence_id: seq.id, sequence: seq.name, enrolled: ok.length, skipped_already_enrolled: skippedAlready, skipped_invalid: skippedInvalid,
+        sequence_id: seq.id, sequence: seq.name, enrolled: ok.length, skipped_already_enrolled: skippedAlready, skipped_invalid: skippedInvalid, skipped_invalid_detail: skippedDetail.slice(0, 50),
         failed: enrolled.filter((e) => e.error), first_email: sendFirstNow ? { sent: firstEmail.filter((r) => r.sent).length, failed: firstEmail.filter((r) => !r.sent) } : "queued: the hourly sequence run sends step 1 within the hour",
         message: `${ok.length} enrolled in "${seq.name}". Follow-up steps are sent automatically by the hourly run and stop as soon as someone replies.`,
       });

@@ -59,10 +59,26 @@ export async function ensurePersonCompany(
 
     const { data: existingCo } = await db.from("companies").select("id").eq("user_id", userId).eq("name", companyName).limit(1).maybeSingle();
     if (existingCo?.id) companyId = existingCo.id;
-    else {
-      const { data: co, error } = await db.from("companies").insert({ user_id: userId, name: companyName, general_email: isFree ? email : null }).select("id").single();
+    if (!companyId && !isFree && domain) {
+      // Same business already in the CRM under another name (e.g. found by Autopilot): link it.
+      const { data: byDomain } = await db.from("companies").select("id, website").eq("user_id", userId).ilike("website", `%${domain}%`).limit(5);
+      const exact = ((byDomain || []) as { id: string; website: string | null }[]).filter((c) => String(c.website || "").toLowerCase().replace(/^https?:\/\/(www\.)?/, "").split(/[/#?]/)[0] === domain);
+      if (exact.length === 1) companyId = exact[0].id;
+    }
+    if (!companyId) {
+      // companies.website is UNIQUE NULLS NOT DISTINCT platform-wide: only ONE company may have a
+      // NULL website, so inserting without one always failed (23505) and every new recipient came back
+      // "skipped_invalid" from enroll_in_sequence. Use the email's domain, else a unique placeholder
+      // (same as Autopilot's "no-website-<uuid>").
+      const candidates = [...(!isFree && domain ? [`https://${domain}`] : []), `no-website-${crypto.randomUUID()}`];
+      let co: { id: string } | null = null; let error: { code?: string; message?: string } | null = null;
+      for (const website of candidates) {
+        ({ data: co, error } = await db.from("companies").insert({ user_id: userId, name: companyName, website, general_email: isFree ? email : null }).select("id").single());
+        if (co?.id || error?.code !== "23505") break;
+      }
       if (co?.id) companyId = co.id;
       else if (error) {
+        console.error("[followup] company insert failed", error?.message);
         const { data: retry } = await db.from("companies").select("id").eq("user_id", userId).eq("name", companyName).limit(1).maybeSingle();
         companyId = retry?.id ?? null;
       }
