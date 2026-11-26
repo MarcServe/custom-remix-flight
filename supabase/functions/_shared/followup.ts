@@ -3,7 +3,7 @@
 // "No-reply follow-up (Day 1 / 3 / 5)" sequence. Used by send-bulk-emails at
 // send time and by the public API (api-campaigns).
 
-import { isProspectableEmail, greetingFirstName } from "./email-quality.ts";
+import { isProspectableEmail, greetingFirstName, isPlaceholderName } from "./email-quality.ts";
 
 // Free-mail domains never represent a shared company, so contacts on them get a
 // distinct company (their own email) → each enrols in its own follow-up thread.
@@ -41,7 +41,9 @@ export async function ensurePersonCompany(
   // r.name is often the company ("Reiss", "Head Office") — only treat it as a
   // person's name when it doesn't look like the company or an email fragment.
   const guessedFirst = greetingFirstName(r.name, { company: r.company, email });
-  const first = String(r.first_name || (guessedFirst !== "there" ? nameParts[0] : "") || "Contact");
+  const givenFirst = r.first_name && !isPlaceholderName(r.first_name) ? String(r.first_name) : "";
+  // Role/placeholder labels ("Primary", "Info", "Contact") are left null so emails say "Hi there".
+  const first = givenFirst || (guessedFirst !== "there" ? nameParts[0] : "") || "";
   const last = String(r.last_name || (guessedFirst !== "there" ? nameParts.slice(1).join(" ") : "") || "");
   const fullName = [first, last].filter(Boolean).join(" ") || email;
 
@@ -57,10 +59,26 @@ export async function ensurePersonCompany(
 
     const { data: existingCo } = await db.from("companies").select("id").eq("user_id", userId).eq("name", companyName).limit(1).maybeSingle();
     if (existingCo?.id) companyId = existingCo.id;
-    else {
-      const { data: co, error } = await db.from("companies").insert({ user_id: userId, name: companyName, general_email: isFree ? email : null }).select("id").single();
+    if (!companyId && !isFree && domain) {
+      // Same business already in the CRM under another name (e.g. found by Autopilot): link it.
+      const { data: byDomain } = await db.from("companies").select("id, website").eq("user_id", userId).ilike("website", `%${domain}%`).limit(5);
+      const exact = ((byDomain || []) as { id: string; website: string | null }[]).filter((c) => String(c.website || "").toLowerCase().replace(/^https?:\/\/(www\.)?/, "").split(/[/#?]/)[0] === domain);
+      if (exact.length === 1) companyId = exact[0].id;
+    }
+    if (!companyId) {
+      // companies.website is UNIQUE NULLS NOT DISTINCT platform-wide: only ONE company may have a
+      // NULL website, so inserting without one always failed (23505) and every new recipient came back
+      // "skipped_invalid" from enroll_in_sequence. Use the email's domain, else a unique placeholder
+      // (same as Autopilot's "no-website-<uuid>").
+      const candidates = [...(!isFree && domain ? [`https://${domain}`] : []), `no-website-${crypto.randomUUID()}`];
+      let co: { id: string } | null = null; let error: { code?: string; message?: string } | null = null;
+      for (const website of candidates) {
+        ({ data: co, error } = await db.from("companies").insert({ user_id: userId, name: companyName, website, general_email: isFree ? email : null }).select("id").single());
+        if (co?.id || error?.code !== "23505") break;
+      }
       if (co?.id) companyId = co.id;
       else if (error) {
+        console.error("[followup] company insert failed", error?.message);
         const { data: retry } = await db.from("companies").select("id").eq("user_id", userId).eq("name", companyName).limit(1).maybeSingle();
         companyId = retry?.id ?? null;
       }
@@ -71,7 +89,7 @@ export async function ensurePersonCompany(
   if (personId) {
     if (!person?.company_id) await db.from("people").update({ company_id: companyId }).eq("id", personId);
   } else {
-    const { data: np, error: pErr } = await db.from("people").insert({ user_id: userId, email, first_name: first, last_name: last, company_id: companyId }).select("id").single();
+    const { data: np, error: pErr } = await db.from("people").insert({ user_id: userId, email, first_name: first || null, last_name: last || null, company_id: companyId }).select("id").single();
     if (np?.id) personId = np.id;
     else if (pErr) {
       const { data: retry } = await db.from("people").select("id, company_id").eq("user_id", userId).eq("email", email).maybeSingle();

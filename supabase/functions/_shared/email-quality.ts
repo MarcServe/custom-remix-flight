@@ -173,7 +173,18 @@ const NOT_A_FIRST_NAME = new Set([
   "support", "reception", "manager", "owner", "customer", "client", "group", "member", "manual",
   "footer", "header", "logo", "sharing", "access", "network", "the", "dr", "drs", "mr", "mrs",
   "ms", "dear", "sir", "madam", "there", "unknown", "null", "undefined",
+  // Role / placeholder labels used for a company's general inbox ("Primary" contact etc.)
+  "primary", "general", "main", "default", "placeholder", "mail", "email", "post", "bookings",
+  "booking", "accounts", "marketing", "careers", "jobs", "hr", "press", "media", "orders",
+  "service", "services", "events", "partners", "partnerships", "welcome", "hi", "n/a", "na", "none",
+  "hiring", "decision", "general enquiries",
 ]);
+
+/** True when a name field holds a role/placeholder label ("Primary", "Info", "Sales team") rather than a person. */
+export function isPlaceholderName(rawName: unknown): boolean {
+  const first = String(rawName ?? "").trim().split(/\s+/)[0]?.replace(/[.,;:!]+$/, "").toLowerCase() || "";
+  return !first || NOT_A_FIRST_NAME.has(first);
+}
 
 /**
  * The first name to put after "Hi". Falls back to "there" whenever the value
@@ -204,4 +215,19 @@ export function greetingFirstName(
   // A whole multi-word value equal to the company is a company, not a person.
   if (company && name.toLowerCase() === company) return "there";
   return first;
+}
+
+/**
+ * The value to store in people.first_name / last_name for a contact name.
+ * Returns nulls when the name is a role or placeholder ("Primary", "Info", "Sales")
+ * so emails greet "Hi there" instead of "Hi Primary".
+ */
+export function personNameParts(
+  rawName: unknown,
+  opts: { company?: string | null; email?: string | null } = {},
+): { first_name: string | null; last_name: string | null } {
+  const first = greetingFirstName(rawName, opts);
+  if (first === "there") return { first_name: null, last_name: null };
+  const rest = String(rawName ?? "").trim().split(/\s+/).slice(1).join(" ");
+  return { first_name: first, last_name: rest || null };
 }

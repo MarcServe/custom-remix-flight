@@ -1,5 +1,5 @@
 import { ensurePersonCompany, parseSteps } from "../_shared/followup.ts";
-import { greetingFirstName } from "../_shared/email-quality.ts";
+import { greetingFirstName, isPlaceholderName, emailRejectReason } from "../_shared/email-quality.ts";
 import { fetchAllRows } from "../_shared/fetch-all.ts";
 import { sendOneSms, activePhoneConnection, isOptedOut, senderNumberOf, logSms, nameForNumber, normalizePhone as normalizeE164 } from "../_shared/sms-send.ts";
 
@@ -243,7 +243,8 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
         return json({ contact: data, created: false });
       }
       if (Array.isArray(body.add_tags)) fields.tags = body.add_tags.map(str).filter(Boolean);
-      if (!fields.first_name) fields.first_name = email.split("@")[0];
+      if (fields.first_name && isPlaceholderName(fields.first_name)) fields.first_name = null;
+      if (!fields.first_name && !isPlaceholderName(email.split("@")[0])) fields.first_name = email.split("@")[0];
       if (sourceTag(body)) fields.tags = withSource(fields.tags, body);
       const { data, error } = await db.from("people").insert({ user_id: userId, email, ...fields }).select("id, first_name, last_name, email, phone, title, tags, company_id").single();
       if (error) return json({ error: error.message }, 500);
@@ -739,14 +740,14 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
       if (!incoming.length) return json({ error: "Provide recipients[], contact_ids[], company_ids[] or group_id/group_name" }, 400);
 
       const sendFirstNow = body.send_first_now !== false;
-      const seen = new Set<string>(); const enrolled: any[] = []; let skippedInvalid = 0; let skippedAlready = 0;
+      const seen = new Set<string>(); const enrolled: any[] = []; let skippedInvalid = 0; let skippedAlready = 0; const skippedDetail: { email: string; reason: string }[] = [];
       const emails = incoming.map((r) => str(r?.email).toLowerCase()).filter((e) => EMAIL_RE.test(e));
-      const uniq = incoming.filter((r) => { const e = str(r?.email).toLowerCase(); if (!EMAIL_RE.test(e)) { skippedInvalid++; return false; } if (seen.has(e)) return false; seen.add(e); return true; });
+      const uniq = incoming.filter((r) => { const e = str(r?.email).toLowerCase(); if (!EMAIL_RE.test(e)) { skippedInvalid++; skippedDetail.push({ email: e, reason: "not an email address" }); return false; } if (seen.has(e)) return false; seen.add(e); return true; });
       for (const r of uniq) {
         const email = str(r.email).toLowerCase();
         const vars = { first_name: r.first_name || "", last_name: r.last_name || "", name: r.name || "", company: r.company || "", email };
         const { companyId } = await ensurePersonCompany(db, userId, { email, first_name: r.first_name, last_name: r.last_name, name: r.name, company: r.company });
-        if (!companyId) { skippedInvalid++; continue; }
+        if (!companyId) { skippedInvalid++; skippedDetail.push({ email, reason: emailRejectReason(email) || "could not link a CRM company" }); continue; }
         const { data: existing } = await db.from("company_sequences").select("id, status").eq("sequence_id", seq.id).eq("company_id", companyId).in("status", ["active", "paused"]).limit(1).maybeSingle();
         if (existing) { skippedAlready++; continue; }
         const personalized = steps.map((st, i) => ({
@@ -777,7 +778,7 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
         firstEmail = results;
       }
       return json({
-        sequence_id: seq.id, sequence: seq.name, enrolled: ok.length, skipped_already_enrolled: skippedAlready, skipped_invalid: skippedInvalid,
+        sequence_id: seq.id, sequence: seq.name, enrolled: ok.length, skipped_already_enrolled: skippedAlready, skipped_invalid: skippedInvalid, skipped_invalid_detail: skippedDetail.slice(0, 50),
         failed: enrolled.filter((e) => e.error), first_email: sendFirstNow ? { sent: firstEmail.filter((r) => r.sent).length, failed: firstEmail.filter((r) => !r.sent) } : "queued: the hourly sequence run sends step 1 within the hour",
         message: `${ok.length} enrolled in "${seq.name}". Follow-up steps are sent automatically by the hourly run and stop as soon as someone replies.`,
       });
@@ -819,7 +820,9 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
       if (!id || !["active", "paused", "completed"].includes(status)) return json({ error: "enrollment_id and status (active|paused|completed) required" }, 400);
       const { data: cs } = await db.from("company_sequences").select("id, company:companies!inner(user_id)").eq("id", id).eq("company.user_id", userId).maybeSingle();
       if (!cs) return json({ error: "Enrollment not found" }, 404);
-      const { error } = await db.from("company_sequences").update({ status, updated_at: new Date().toISOString(), ...(status === "completed" ? { next_action: "stopped_manually" } : {}) }).eq("id", id);
+      // next_action is CHECK-constrained (send_next_step|wait_for_response|personalized_response|completed|paused);
+      // "stopped_manually" violated company_sequences_next_action_check, so completing always failed.
+      const { error } = await db.from("company_sequences").update({ status, updated_at: new Date().toISOString(), ...(status === "completed" ? { next_action: "completed" } : status === "paused" ? { next_action: "paused" } : {}) }).eq("id", id);
       if (error) return json({ error: error.message }, 500);
       return json({ enrollment_id: id, status });
     }

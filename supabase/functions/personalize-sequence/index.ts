@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.78.0';
 import { corsHeaders } from '../_shared/cors.ts';
+import { greetingFirstName } from '../_shared/email-quality.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -330,7 +331,7 @@ INSTRUCTIONS:
 1. Personalize the subject line to reference ${company.name} specifically
 2. Replace all placeholder variables:
    - {{company_name}} → ${company.name}
-   - {{first_name}} → ${contact.name.split(' ')[0]}
+   - {{first_name}} → ${greetingFirstName(contact.name, { company: company.name, email: contact.email })} (if this is "there", greet "Hi there,"; never use a role or label such as "Primary" as a name)
    - {{contact_name}} → ${contact.name}
    - {{title}} → ${contact.title || 'team member'}
 3. Add 1-2 sentences that show how YOUR services/products (from business context) can specifically help ${company.name} based on their situation

@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAllRows } from "../_shared/fetch-all.ts";
+import { greetingFirstName } from "../_shared/email-quality.ts";
 import { getUserPlan, canUseApi } from "../_shared/plans.ts";
 import { handleCrmAction, CRM_ACTIONS } from "./crm.ts";
 
@@ -17,7 +18,7 @@ function personalize(tpl: string, r: any): string {
   if (!tpl) return "";
   const full = [r.first_name, r.last_name].filter(Boolean).join(" ") || r.name || r.email || "";
   return tpl
-    .replace(/\{\{\s*firstName\s*\}\}/gi, r.first_name || (full.split(" ")[0] || ""))
+    .replace(/\{\{\s*firstName\s*\}\}/gi, greetingFirstName(r.first_name || full, { company: r.company, email: r.email }))
     .replace(/\{\{\s*lastName\s*\}\}/gi, r.last_name || full.split(" ").slice(1).join(" ") || "")
     .replace(/\{\{\s*fullName\s*\}\}/gi, full)
     .replace(/\{\{\s*name\s*\}\}/gi, full)
