@@ -49,7 +49,8 @@ export async function handleLeadAction(db: any, userId: string, action: string, 
       const fresh = dedupeLeads(all).filter((l) => !isKnown(l, known)).sort((a, b) => (b.qualityScore || 0) - (a.qualityScore || 0)).slice(0, max);
       const skippedKnown = dedupeLeads(all).length - fresh.length;
       if (!save || !fresh.length) return json({ found: fresh.length, already_in_crm: Math.max(0, skippedKnown), saved: 0, by_source: bySource, errors, leads: fresh.map((l) => ({ name: l.name, website: l.website, industry: l.industry, geography: l.geography, quality: l.qualityScore, email: l.generalEmail || null, phone: l.companyPhone || null, description: l.description ? String(l.description).slice(0, 200) : null, sources: l.sources_used })) });
-      const runId = `assistant-${Date.now()}`;
+      // autonomous_leads.discovery_run_id is a UUID column (same as Autopilot runs use).
+      const runId = crypto.randomUUID();
       const status = settings?.full_auto_mode ? "auto_approved" : (body.status === "approved" || body.status === "auto_approved") ? "auto_approved" : "pending";
       const rows = fresh.map((l) => ({
         user_id: userId, discovery_run_id: runId, persona_id: str(body.persona_id) || null, status, quality_score: Math.round(l.qualityScore || 0),

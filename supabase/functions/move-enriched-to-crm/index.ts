@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { personNameParts } from "../_shared/email-quality.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -116,8 +117,8 @@ Deno.serve(async (req) => {
         if (email && companyId) {
           const personData: any = {
             user_id: userId,
-            first_name: item.name.split(' ')[0] || 'Contact',
-            last_name: item.name.split(' ').slice(1).join(' ') || '',
+            // Role/placeholder names ("Primary", "Info", "Contact") are left null.
+            ...personNameParts(item.name, { email }),
             email: email,
             company_id: companyId,
             phone: item.phone || null,

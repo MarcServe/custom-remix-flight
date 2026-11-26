@@ -1,4 +1,4 @@
-import { greetingFirstName } from "../_shared/email-quality.ts";
+import { greetingFirstName, personNameParts } from "../_shared/email-quality.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { planDiscoveryQueries, type PlannedQuery } from "../_shared/discovery-planner.ts";
 import { getUserPlan, leadsUsedThisMonth } from "../_shared/plans.ts";
@@ -1485,7 +1485,12 @@ CRITICAL RULES:
 - Sound human and conversational, not salesy
 - Make a clear connection between their business needs and how you can help`;
 
-    const userPrompt = `Write a personalized cold outreach email to ${contact.name || 'the decision maker'}${contact.title ? ` (${contact.title})` : ''} at ${lead.company_name}.
+    // Only name the recipient when the contact name is a real person; general inboxes get "Hi there".
+    const greetName = greetingFirstName(contact.name, { company: lead.company_name, email: contact.email });
+    const recipientLine = greetName === 'there'
+      ? `the team at ${lead.company_name} (a general inbox, no named person: open with "Hi there," and never use a role or label such as "Primary" as a name)`
+      : `${contact.name}${contact.title ? ` (${contact.title})` : ''} at ${lead.company_name} (open with "Hi ${greetName},")`;
+    const userPrompt = `Write a personalized cold outreach email to ${recipientLine}.
 
 ${companyResearch}
 
@@ -1687,9 +1692,8 @@ async function createAutoCampaigns(
               .eq('id', existingPerson.id);
           }
         } else {
-          const nameParts = (contact.name || contact.email.split('@')[0]).trim().split(' ');
-          const firstName = nameParts[0] || contact.email.split('@')[0];
-          const lastName = nameParts.slice(1).join(' ') || '';
+          // Role/placeholder contact names ("Primary", "General enquiries", "Info") stay null.
+          const { first_name: firstName, last_name: lastName } = personNameParts(contact.name, { email: contact.email });
 
           const { data: newPerson } = await supabase
             .from('people')
@@ -2311,7 +2315,8 @@ async function saveLeadToCompanies(supabase: any, lead: any, userId: string): Pr
       if (email) {
         await supabase.from('contacts').insert({
           company_id: company.id,
-          name: 'Primary',
+          // A label, not a person: never 'Primary' (it became first_name and emails said "Hi Primary").
+          name: 'General enquiries',
           email,
           email_verified: false,
           linkedin_url: null,

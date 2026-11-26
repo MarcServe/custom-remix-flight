@@ -1,5 +1,5 @@
 import { ensurePersonCompany, parseSteps } from "../_shared/followup.ts";
-import { greetingFirstName } from "../_shared/email-quality.ts";
+import { greetingFirstName, isPlaceholderName } from "../_shared/email-quality.ts";
 import { fetchAllRows } from "../_shared/fetch-all.ts";
 import { sendOneSms, activePhoneConnection, isOptedOut, senderNumberOf, logSms, nameForNumber, normalizePhone as normalizeE164 } from "../_shared/sms-send.ts";
 
@@ -243,7 +243,8 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
         return json({ contact: data, created: false });
       }
       if (Array.isArray(body.add_tags)) fields.tags = body.add_tags.map(str).filter(Boolean);
-      if (!fields.first_name) fields.first_name = email.split("@")[0];
+      if (fields.first_name && isPlaceholderName(fields.first_name)) fields.first_name = null;
+      if (!fields.first_name && !isPlaceholderName(email.split("@")[0])) fields.first_name = email.split("@")[0];
       if (sourceTag(body)) fields.tags = withSource(fields.tags, body);
       const { data, error } = await db.from("people").insert({ user_id: userId, email, ...fields }).select("id, first_name, last_name, email, phone, title, tags, company_id").single();
       if (error) return json({ error: error.message }, 500);
@@ -819,7 +820,9 @@ export async function handleCrmAction(db: any, userId: string, action: string, b
       if (!id || !["active", "paused", "completed"].includes(status)) return json({ error: "enrollment_id and status (active|paused|completed) required" }, 400);
       const { data: cs } = await db.from("company_sequences").select("id, company:companies!inner(user_id)").eq("id", id).eq("company.user_id", userId).maybeSingle();
       if (!cs) return json({ error: "Enrollment not found" }, 404);
-      const { error } = await db.from("company_sequences").update({ status, updated_at: new Date().toISOString(), ...(status === "completed" ? { next_action: "stopped_manually" } : {}) }).eq("id", id);
+      // next_action is CHECK-constrained (send_next_step|wait_for_response|personalized_response|completed|paused);
+      // "stopped_manually" violated company_sequences_next_action_check, so completing always failed.
+      const { error } = await db.from("company_sequences").update({ status, updated_at: new Date().toISOString(), ...(status === "completed" ? { next_action: "completed" } : status === "paused" ? { next_action: "paused" } : {}) }).eq("id", id);
       if (error) return json({ error: error.message }, 500);
       return json({ enrollment_id: id, status });
     }
